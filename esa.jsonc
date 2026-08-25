@@ -1,0 +1,5 @@
+{
+  "name": "blog",
+  "buildType": "static",
+  "outputDirectory": "."
+}
