@@ -1,0 +1,2299 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenAI Triton · 从介绍到模型实战（完整版v2）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f5f8fc;
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, system-ui, sans-serif;
+            padding: 2rem 1.5rem;
+            color: #1e293b;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 28px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.05);
+            padding: 2.5rem 2.8rem 3rem;
+        }
+        h1 {
+            font-size: 2.4rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #0b1e33;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.2rem;
+        }
+        h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #64748b;
+            margin-left: 0.8rem;
+        }
+        .subhead {
+            font-size: 1.05rem;
+            color: #475569;
+            border-left: 4px solid #3b82f6;
+            padding-left: 1.2rem;
+            margin-top: 0.2rem;
+            margin-bottom: 2.2rem;
+            background: #f1f5f9;
+            border-radius: 0 12px 12px 0;
+            padding: 0.8rem 1.2rem;
+        }
+        .section {
+            margin-top: 2.8rem;
+            padding-top: 0.2rem;
+            border-top: 1px solid #e9edf2;
+        }
+        .section:first-of-type {
+            border-top: none;
+            margin-top: 0;
+        }
+        .section-title {
+            font-size: 1.8rem;
+            font-weight: 600;
+            color: #0b1e33;
+            margin-bottom: 0.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        .badge {
+            font-size: 0.7rem;
+            background: #3b82f6;
+            color: #fff;
+            padding: 0.1rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+        .badge-green {
+            font-size: 0.7rem;
+            background: #16a34a;
+            color: #fff;
+            padding: 0.1rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+        .badge-orange {
+            font-size: 0.7rem;
+            background: #ea580c;
+            color: #fff;
+            padding: 0.1rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+        .badge-purple {
+            font-size: 0.7rem;
+            background: #8b5cf6;
+            color: #fff;
+            padding: 0.1rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+        .badge-red {
+            font-size: 0.7rem;
+            background: #dc2626;
+            color: #fff;
+            padding: 0.1rem 0.9rem;
+            border-radius: 30px;
+            font-weight: 500;
+        }
+        .desc {
+            color: #334155;
+            font-size: 1rem;
+            margin-bottom: 1.2rem;
+            max-width: 860px;
+        }
+        .chart-box {
+            background: #ffffff;
+            border-radius: 18px;
+            border: 1px solid #e2e8f0;
+            padding: 1.8rem 1.2rem 1.2rem;
+            margin: 1.6rem 0 1.2rem;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+        }
+        .chart-box .chart-label {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: #475569;
+            margin-bottom: 0.6rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .chart-box .chart-label .num {
+            background: #e9edf2;
+            padding: 0.1rem 0.7rem;
+            border-radius: 30px;
+            font-size: 0.75rem;
+            color: #1e293b;
+        }
+        .mermaid svg {
+            background: #ffffff !important;
+            max-width: 100%;
+            height: auto;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0.2rem 0;
+        }
+        .concept-block {
+            background: #f1f5f9;
+            border-radius: 14px;
+            padding: 1.2rem 1.6rem;
+            margin: 1rem 0 0.4rem;
+            border-left: 5px solid #3b82f6;
+        }
+        .concept-block .concept-title {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #0b1e33;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .concept-block .concept-title::before {
+            content: "\1F4D8";
+            font-size: 1rem;
+        }
+        .concept-block ul {
+            margin: 0.4rem 0 0.2rem 1.2rem;
+            padding: 0;
+        }
+        .concept-block ul li {
+            margin-bottom: 0.2rem;
+            color: #1e293b;
+        }
+        .concept-block ul li strong {
+            color: #0b1e33;
+        }
+        .code-block {
+            background: #0b1e33;
+            border: 1px solid #1e293b;
+            color: #e2e8f0;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.88rem;
+            padding: 1.4rem 1.6rem;
+            border-radius: 14px;
+            margin: 1.2rem 0 0.6rem;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            line-height: 1.6;
+        }
+        .code-block .comment {
+            color: #94a3b8;
+        }
+        .code-block .keyword {
+            color: #f472b6;
+        }
+        .code-block .string {
+            color: #a3e635;
+        }
+        .code-block .func {
+            color: #60a5fa;
+        }
+        .code-block .var {
+            color: #fcd34d;
+        }
+        .code-block .number {
+            color: #fbbf24;
+        }
+        .code-block .type {
+            color: #67e8f9;
+        }
+        .footnote {
+            margin-top: 2.8rem;
+            padding-top: 1.2rem;
+            border-top: 1px solid #e9edf2;
+            font-size: 0.9rem;
+            color: #64748b;
+            text-align: center;
+        }
+        .highlight-box {
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 1rem 1.6rem;
+            border: 1px dashed #cbd5e1;
+            margin-top: 1rem;
+        }
+        .compare-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin: 1rem 0;
+        }
+        .compare-grid .col {
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 1rem 1.4rem;
+            border: 1px solid #e2e8f0;
+        }
+        .compare-grid .col h4 {
+            color: #0b1e33;
+            margin-bottom: 0.5rem;
+        }
+        /* 新增样式：版本卡片 */
+        .version-card {
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-radius: 16px;
+            padding: 1.5rem 1.8rem;
+            border: 2px solid #e2e8f0;
+            margin: 1rem 0;
+        }
+        .version-card.nvidia { border-color: #16a34a; }
+        .version-card.ascend { border-color: #dc2626; }
+        .version-card h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #0b1e33;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.8rem;
+        }
+        .version-card ul { margin: 0.5rem 0 0 1.5rem; padding: 0; }
+        .version-card li { margin-bottom: 0.3rem; color: #1e293b; }
+        /* 新增样式：特性表格 */
+        .feature-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.95rem;
+            margin: 1.2rem 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+        .feature-table th {
+            background: #f1f5f9;
+            padding: 0.8rem 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #0b1e33;
+            border-bottom: 2px solid #e2e8f0;
+        }
+        .feature-table td {
+            padding: 0.8rem 1rem;
+            border-bottom: 1px solid #e2e8f0;
+            color: #1e293b;
+        }
+        .feature-table tr:last-child td { border-bottom: none; }
+        .feature-table tr:nth-child(even) { background: #f8fafc; }
+        /* 新增样式：时间线 */
+        .timeline {
+            position: relative;
+            padding-left: 2rem;
+            margin: 1.5rem 0;
+        }
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, #3b82f6, #8b5cf6);
+            border-radius: 2px;
+        }
+        .timeline-item {
+            position: relative;
+            margin-bottom: 1.5rem;
+            padding-left: 1.5rem;
+        }
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -2rem;
+            top: 0.5rem;
+            width: 12px;
+            height: 12px;
+            background: #3b82f6;
+            border-radius: 50%;
+            border: 3px solid #ffffff;
+            box-shadow: 0 0 0 2px #3b82f6;
+        }
+        .timeline-item .date {
+            font-size: 0.85rem;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .timeline-item .content { color: #1e293b; }
+        /* 新增样式：IR 标签 */
+        .ir-tag {
+            display: inline-block;
+            background: #e0e7ff;
+            color: #3730a3;
+            padding: 0.15rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            font-weight: 600;
+            margin: 0 0.2rem;
+        }
+        @media (max-width: 720px) {
+            .compare-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 640px) {
+            body {
+                padding: 0.8rem;
+            }
+            .container {
+                padding: 1.2rem 1rem;
+                border-radius: 18px;
+            }
+            h1 {
+                font-size: 1.7rem;
+                flex-wrap: wrap;
+            }
+            .section-title {
+                font-size: 1.4rem;
+            }
+            .chart-box {
+                padding: 1rem 0.6rem;
+            }
+            .concept-block {
+                padding: 0.9rem 1rem;
+            }
+            .code-block {
+                font-size: 0.78rem;
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>
+            &#9889; OpenAI Triton
+            <small>从介绍到模型实战（完整版v2）</small>
+        </h1>
+        <div class="subhead">
+            起于 CUDA，不止于 CUDA &middot; 门槛低 &middot; 高效 &middot; 多平台<br/>
+            <span style="font-size:0.9rem; color:#64748b;">介绍 &rarr; 完整流程 &rarr; 核心 API &rarr; 生态 &rarr; 硬件适配 &rarr; 版本对比</span>
+        </div>
+
+            <div class="section-title">
+                1. 什么是 Triton
+                <span class="badge">概述</span>
+            </div>
+            <p class="desc">
+                <strong>Triton</strong> 是 OpenAI 推出的以 Python 为基础的编程语言和编译器，专门为深度学习和高性能计算设计。
+                它旨在 <strong>简化 GPU 编程</strong>，让开发者无需深入 CUDA 即可编写高效内核（kernel），
+                同时通过先进的编译技术实现接近手写 CUDA 的性能。
+            </p>
+            <p class="desc">
+                Triton 初期以 CUDA 为起点，现已支持 <strong>AMD ROCm</strong> 和 <strong>Intel CPU</strong>，
+                致力于构建"CUDA-free"的高层 kernel 编写方案，打破"天下苦 CUDA 久矣"的局面。
+            </p>
+            <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin: 1rem 0 1.5rem;">
+                <div style="flex:1; min-width:150px; background:#f1f5f9; border-radius:16px; padding:1rem 1.2rem; text-align:center;">
+                    <div style="font-size:2rem;">&#128201;</div>
+                    <div style="font-weight:600; color:#0b1e33;">门槛低</div>
+                    <div style="font-size:0.85rem; color:#475569;">基于 Python，无需 CUDA C++</div>
+                </div>
+                <div style="flex:1; min-width:150px; background:#f1f5f9; border-radius:16px; padding:1rem 1.2rem; text-align:center;">
+                    <div style="font-size:2rem;">&#9889;</div>
+                    <div style="font-weight:600; color:#0b1e33;">高效</div>
+                    <div style="font-size:0.85rem; color:#475569;">性能可媲美手写 CUDA</div>
+                </div>
+                <div style="flex:1; min-width:150px; background:#f1f5f9; border-radius:16px; padding:1rem 1.2rem; text-align:center;">
+                    <div style="font-size:2rem;">&#127760;</div>
+                    <div style="font-weight:600; color:#0b1e33;">多平台</div>
+                    <div style="font-size:0.85rem; color:#475569;">NVIDIA / AMD / CPU</div>
+                </div>
+            </div>
+
+            <!-- 图1：编译流程 -->
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 1</span> Triton 编译与执行流程
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        Py["Python Kernel ( @triton.jit )"] --> Parser["AST 解析"]
+                        Parser --> TTIR["Triton IR (TTIR) - 硬件无关"]
+                        TTIR --> TTGIR["TritonGPU IR (TTGIR) - GPU 布局优化"]
+                        TTGIR --> LLVM["LLVM IR"]
+                        LLVM --> PTX["PTX / SASS - NVIDIA GPU"]
+                        LLVM --> ROCm["AMD GCN / CDNA - ROCm"]
+                        LLVM --> CPU["机器码 - Intel / AMD CPU"]
+                        PTX --> Exec["在 GPU 上执行"]
+                        ROCm --> Exec
+                        CPU --> ExecCPU["在 CPU 上执行"]
+                </div>
+            </div>
+            <div class="concept-block">
+                <div class="concept-title">概念补课 &middot; 编译流程</div>
+                <ul>
+                    <li><strong>JIT (Just-In-Time)</strong>：Triton 在首次调用 kernel 时将其即时编译为目标平台代码。</li>
+                    <li><strong>Triton IR (TTIR)</strong>：硬件无关的中间表示，捕获张量操作和控制流。</li>
+                    <li><strong>TritonGPU IR (TTGIR)</strong>：引入布局编码（如 BlockedEncoding、MMAEncoding），描述张量如何在线程块和共享内存中分布。</li>
+                    <li><strong>多后端</strong>：通过 LLVM 后端生成 NVIDIA (PTX)、AMD (GCN) 或华为昇腾 (Ascend C) 的机器码。</li>
+                </ul>
+            </div>
+
+            <!-- 用户算子 vs Triton 平台协同 -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>用户算子 vs Triton 平台：谁做什么</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;核心是降低 CUDA 算子开发门槛</span>
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin: 1.5rem 0;">
+                <div style="background:#f0fdf4; border-radius:14px; padding:1.2rem; border:1px solid #bbf7d0;">
+                    <div style="font-weight:700; color:#166534; margin-bottom:0.8rem; font-size:1.05rem;">你负责的部分（用户算子）</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        <strong>业务逻辑</strong>：用 Python 定义计算"做什么"<br/>
+                        <strong>核心操作</strong>：<code>tl.load</code> / <code>tl.store</code> / <code>tl.dot</code> / <code>tl.softmax</code><br/>
+                        <strong>分块策略</strong>：选择 BLOCK_M / BLOCK_N 等参数<br/>
+                        <strong>调用方式</strong>：<code>kernel[grid](...)</code>
+                    </div>
+                </div>
+                <div style="background:#eff6ff; border-radius:14px; padding:1.2rem; border:1px solid #bfdbfe;">
+                    <div style="font-weight:700; color:#1e40af; margin-bottom:0.8rem; font-size:1.05rem;">Triton 平台负责的部分</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        <strong>内存管理</strong>：Shared Memory 分配、Bank Conflict 规避<br/>
+                        <strong>线程调度</strong>：Warp 分配、线程束执行<br/>
+                        <strong>硬件适配</strong>：自动生成 PTX / GCN / Ascend C<br/>
+                        <strong>性能优化</strong>：向量化、流水线、指令调度
+                    </div>
+                </div>
+            </div>
+
+            <div class="concept-block" style="border-left-color: #8b5cf6;">
+                <div class="concept-title" style="color: #8b5cf6;">Triton 核心解决的问题</div>
+                <p class="desc" style="margin:0.5rem 0;">
+                    以前算法工程师想优化一个算子，得先花几个月学 CUDA，手动管内存搬运、线程同步和共享内存分配，写出来的代码还很难改。Triton 把这些硬件细节封装成了 Python 接口，算法工程师可以直接用类似 NumPy 的方式描述计算逻辑，同时通过调整 block size、数据分块等参数控制性能。这意味着你不需要成为 GPU 系统专家，也能基于对算法数学结构的理解，快速写出接近手写 CUDA 性能的高性能算子。
+                </p>
+                <p class="desc" style="margin:0.5rem 0; font-size:0.9rem; color:#64748b;">
+                    <strong>关键区别</strong>：不是"不用管性能"，而是"管的层次从硬件指令变成了算法分块策略"。
+                </p>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 穿插 0.5：分工变化 -->
+        <!-- ============================================================ -->
+
+        <div class="section">
+
+            <div class="section-title">
+                1.1 分工变化：从硬件指令到计算语义
+                <span class="badge-purple">视角</span>
+            </div>
+            <p class="desc">
+                Triton 的核心价值是 <strong>"抽象层级的提升"</strong>——它让算法工程师以"算子语义"而非"硬件指令"为第一视角进行开发，
+                在保留对性能掌控力的同时，大幅跨越了底层硬件的认知鸿沟。
+            </p>
+
+            <!-- 前后对比表格 -->
+            <p class="desc" style="margin-top:1.5rem;">
+                <strong>传统 CUDA vs Triton：分工对比</strong>
+            </p>
+            <div style="overflow-x:auto; margin: 1rem 0; border: 1px solid #e2e8f0; border-radius: 14px;">
+                <table style="width:100%; border-collapse: collapse; font-size:0.9rem;">
+                    <thead style="background:#f1f5f9;">
+                        <tr>
+                            <th style="padding:0.8rem 1rem; text-align:left; width:25%;">维度</th>
+                            <th style="padding:0.8rem 1rem; text-align:left; width:37.5%;">传统 CUDA</th>
+                            <th style="padding:0.8rem 1rem; text-align:left; width:37.5%;">Triton</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-top:1px solid #e2e8f0;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">算法工程师关注</td>
+                            <td style="padding:0.8rem 1rem; color:#dc2626;">硬件指令调度<br/>（Shared Memory、Warp、Bank Conflict）</td>
+                            <td style="padding:0.8rem 1rem; color:#16a34a;">计算语义表达<br/>（数据怎么切分、块之间怎么复用）</td>
+                        </tr>
+                        <tr style="border-top:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">系统工程师关注</td>
+                            <td style="padding:0.8rem 1rem; color:#dc2626;">同上</td>
+                            <td style="padding:0.8rem 1rem; color:#16a34a;">硬件执行细节<br/>（内存分配、线程调度、指令发射）</td>
+                        </tr>
+                        <tr style="border-top:1px solid #e2e8f0;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">性能调优维度</td>
+                            <td style="padding:0.8rem 1rem; color:#dc2626;">汇编级技巧<br/>（寄存器分配、指令调度）</td>
+                            <td style="padding:0.8rem 1rem; color:#16a34a;">算法级数据布局<br/>（BLOCK_M/N、tiling 策略）</td>
+                        </tr>
+                        <tr style="border-top:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">代码可维护性</td>
+                            <td style="padding:0.8rem 1rem; color:#dc2626;">依赖特定架构，迁移成本高</td>
+                            <td style="padding:0.8rem 1rem; color:#16a34a;">硬件无关，重新编译即可</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 视角转换 -->
+            <p class="desc" style="margin-top:1.5rem;">
+                <strong>视角转换：从 Hardware-Centric 到 Algorithm-Centric</strong>
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin: 1rem 0;">
+                <div style="background:#fef2f2; border-radius:14px; padding:1.2rem; border:1px solid #fecaca;">
+                    <div style="font-weight:700; color:#991b1b; margin-bottom:0.8rem; font-size:1.05rem;">以前：Hardware-Centric</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        关注"怎么搬数据"<br/>
+                        Shared Memory 怎么分配？<br/>
+                        Warp 怎么调度？<br/>
+                        Bank Conflict 怎么避免？
+                    </div>
+                </div>
+                <div style="background:#f0fdf4; border-radius:14px; padding:1.2rem; border:1px solid #bbf7d0;">
+                    <div style="font-weight:700; color:#166534; margin-bottom:0.8rem; font-size:1.05rem;">现在：Algorithm-Centric</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        关注"数据怎么流动最符合数学直觉"<br/>
+                        数据怎么切分？<br/>
+                        块之间怎么复用？<br/>
+                        计算和访存的配比关系？
+                    </div>
+                </div>
+            </div>
+
+            <!-- 一句话总结 -->
+            <div class="concept-block" style="border-left-color: #8b5cf6;">
+                <div class="concept-title" style="color: #8b5cf6;">一句话总结</div>
+                <p class="desc" style="margin:0.5rem 0; font-size:1.1rem; font-weight:500;">
+                    "Triton 把算子开发的门槛从'掌握 GPU 系统编程'降低为'理解计算的并行结构'——前者是工程能力，后者本就是算法工程师的专业视角。"
+                </p>
+            </div>
+
+            <!-- 4个 High Level 例子 -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>计算语义表达的具体例子</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;不涉及 API，只讲"怎么切分、怎么复用"</span>
+            </p>
+
+            <!-- 例子1：矩阵乘法 -->
+            <div style="background:#f8fafc; border-radius:14px; padding:1.2rem; margin:1rem 0; border:1px solid #e2e8f0;">
+                <div style="font-weight:700; color:#0b1e33; margin-bottom:0.8rem; font-size:1rem;">例子 1：矩阵乘法的切分策略</div>
+                <p class="desc" style="margin:0.3rem 0;">
+                    <strong>问题</strong>：计算 C = A @ B，A 是 1024×512，B 是 512×1024
+                </p>
+                <p class="desc" style="margin:0.3rem 0; color:#dc2626;">
+                    <strong>为什么不能直接算？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>结果矩阵 C 是 1024×1024，占 4MB（1024×1024×4 bytes）</li>
+                    <li>SRAM 很小（几十 KB），<strong>无法一次性加载整个矩阵</strong></li>
+                    <li>需要多次从 Global Memory 加载数据，每次只处理一小块</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#dc2626;">
+                    <strong>传统 CUDA 怎么做？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>需要手动分配 Shared Memory（比如 48KB）</li>
+                    <li>需要设计 Warp 如何协作（32个线程怎么分工）</li>
+                    <li>需要考虑 Bank Conflict（避免多个线程同时访问同一 bank）</li>
+                    <li>代码复杂，容易出错，调试困难</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#16a34a;">
+                    <strong>Triton 的思考方式（分块策略）</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>把 A 按行切成 32 块，每块 32 行</li>
+                    <li>把 B 按列切成 32 块，每块 32 列</li>
+                    <li>每个块计算 C 的一部分，最后累加</li>
+                    <li>Shared Memory 分配、Warp 调度由编译器自动处理</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#3b82f6;">
+                    <strong>这样做的好处</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>代码简洁：只需要定义切分策略，不需要管底层细节</li>
+                    <li>易于维护：改变切分大小只需要修改常量</li>
+                    <li>性能可比手写 CUDA：编译器自动生成优化的内存访问模式</li>
+                </ul>
+            </div>
+
+            <!-- 例子2：Attention -->
+            <div style="background:#f8fafc; border-radius:14px; padding:1.2rem; margin:1rem 0; border:1px solid #e2e8f0;">
+                <div style="font-weight:700; color:#0b1e33; margin-bottom:0.8rem; font-size:1rem;">例子 2：Attention 的复用模式</div>
+                <p class="desc" style="margin:0.3rem 0;">
+                    <strong>问题</strong>：计算 Attention = softmax(Q @ K^T / √d) @ V，seq_len = 4096
+                </p>
+                <p class="desc" style="margin:0.3rem 0; color:#dc2626;">
+                    <strong>为什么不能直接算？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>中间结果 Q @ K^T 是 4096×4096 矩阵，占 64MB</li>
+                    <li>SRAM 只有几十 KB，<strong>根本放不下这么大的矩阵</strong></li>
+                    <li>如果物化完整矩阵，显存占用是 O(N²)，长序列直接 OOM</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#dc2626;">
+                    <strong>传统 CUDA 怎么做？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>物化完整的 N×N 注意力矩阵</li>
+                    <li>需要管理 Shared Memory 中的中间结果</li>
+                    <li>显存占用 O(N²)，长序列会 OOM</li>
+                    <li>需要手动优化内存访问模式</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#16a34a;">
+                    <strong>Triton 的思考方式（复用模式）</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>Q 按行切块，每块处理若干行</li>
+                    <li>K/V 按行切块，逐块与 Q 的块做点积</li>
+                    <li><strong>K/V 块可以复用</strong>，不需要每次都重新加载</li>
+                    <li>输出块累加所有 K/V 块的贡献</li>
+                    <li>不需要物化完整的 N×N 矩阵</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#3b82f6;">
+                    <strong>这样做的好处</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>显存 O(N) 而非 O(N²)：可以处理更长的序列</li>
+                    <li>减少 HBM 访问次数：K/V 块复用，只加载一次</li>
+                    <li>可以处理 64K 甚至更长的序列</li>
+                </ul>
+            </div>
+
+            <!-- 例子3：Softmax（重点解释为什么） -->
+            <div style="background:#f8fafc; border-radius:14px; padding:1.2rem; margin:1rem 0; border:1px solid #e2e8f0;">
+                <div style="font-weight:700; color:#0b1e33; margin-bottom:0.8rem; font-size:1rem;">例子 3：Softmax 的分块计算</div>
+                <p class="desc" style="margin:0.3rem 0;">
+                    <strong>问题</strong>：计算 softmax(logits)，logits 是 [batch, seq_len]，seq_len 可能很长（比如 4096）
+                </p>
+                <p class="desc" style="margin:0.3rem 0; color:#dc2626;">
+                    <strong>为什么不能直接算？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>SRAM（片上共享内存）很小，只有几十 KB</li>
+                    <li>如果 seq_len = 4096，整个 logits 矩阵占 16MB（4096×4096×4 bytes）</li>
+                    <li><strong>一次性加载整个序列到 SRAM 是不可能的</strong></li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#dc2626;">
+                    <strong>传统 CUDA 怎么做？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>需要两次遍历：第一次找 max，第二次计算 exp 和 sum</li>
+                    <li>需要管理 Shared Memory 中的中间结果</li>
+                    <li>需要处理数值稳定性（防止 exp 溢出）</li>
+                    <li>代码复杂，容易出错</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#16a34a;">
+                    <strong>Triton 的思考方式（分块策略）</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>把 seq_len 切成若干块（比如每块 256）</li>
+                    <li>每个块计算自己的 max 和 sum</li>
+                    <li>最后合并所有块的统计量，得到全局的 max 和 sum</li>
+                    <li>数值稳定性由编译器自动处理</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#3b82f6;">
+                    <strong>这样做的好处</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>显存 O(N) 而非 O(N²)：不需要物化完整的 N×N 矩阵</li>
+                    <li>可以处理更长的序列：从 2K 扩展到 64K</li>
+                    <li>减少 HBM 访问次数：数据只从 Global Memory 加载一次</li>
+                </ul>
+            </div>
+
+            <!-- 例子4：算子融合 -->
+            <div style="background:#f8fafc; border-radius:14px; padding:1.2rem; margin:1rem 0; border:1px solid #e2e8f0;">
+                <div style="font-weight:700; color:#0b1e33; margin-bottom:0.8rem; font-size:1rem;">例子 4：算子融合的数据流</div>
+                <p class="desc" style="margin:0.3rem 0;">
+                    <strong>问题</strong>：融合 LayerNorm + Linear + GELU 三个操作
+                </p>
+                <p class="desc" style="margin:0.3rem 0; color:#dc2626;">
+                    <strong>为什么不能直接算？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>每个操作单独写一个 kernel，需要 3 次 kernel launch</li>
+                    <li>中间结果需要写回 Global Memory，再被下一个 kernel 读取</li>
+                    <li><strong>HBM 访问次数多</strong>，带宽成为瓶颈</li>
+                    <li>多次 kernel launch 也有开销</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#dc2626;">
+                    <strong>传统 CUDA 怎么做？</strong>
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>每个算子单独写一个 kernel</li>
+                    <li>中间结果写回 Global Memory</li>
+                    <li>需要手动管理 Shared Memory 的生命周期</li>
+                    <li>算子融合需要手动实现，容易出错</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#16a34a;">
+                    <strong>Triton 的思考方式（融合策略）</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>在一个 kernel 里顺序写三个操作</li>
+                    <li>中间结果保留在寄存器中</li>
+                    <li><strong>数据流是算法层面的融合</strong></li>
+                    <li>编译器自动处理寄存器分配和指令调度</li>
+                </ul>
+                <p class="desc" style="margin:0.8rem 0 0.3rem 0; color:#3b82f6;">
+                    <strong>这样做的好处</strong>：
+                </p>
+                <ul style="font-size:0.9rem; color:#1e293b; margin:0.3rem 0 0 1.5rem;">
+                    <li>减少 HBM 访问：中间结果在寄存器中传递，不需要写回 Global Memory</li>
+                    <li>减少 kernel launch 开销：3 个操作合并成 1 个 kernel</li>
+                    <li>性能提升：带宽利用率提高，延迟降低</li>
+                </ul>
+            </div>
+
+            <!-- 关键区别 -->
+            <div class="concept-block" style="border-left-color: #ea580c; margin-top:1.5rem;">
+                <div class="concept-title" style="color: #ea580c;">关键区别</div>
+                <ul>
+                    <li><strong>不是"不用管性能"</strong>，而是"管的层次从硬件指令变成了算法分块策略"。</li>
+                    <li><strong>不是"Python 自动变快"</strong>，而是"用 Python 表达了原本只有 CUDA 才能表达的性能意图"。</li>
+                    <li><strong>门槛降低的具体体现</strong>：算法工程师不需要背 CUDA API，但需要理解"数据怎么分块对 GPU 友好"——这恰好是他们本就擅长的数学直觉，而非系统工程知识。</li>
+                </ul>
+            </div>
+
+            <!-- 小结 -->
+            <p class="desc" style="margin-top:1.5rem;">
+                <strong>小结</strong>：算法工程师的核心优势是"懂数学语义"和"懂业务迭代"，Triton 让他们能够以"算子语义"为第一视角进行开发，在保留对性能掌控力的同时，大幅跨越了底层硬件的认知鸿沟。
+            </p>
+        </div>
+
+        <!-- ============================================================ -->
+                <!-- ============================================================ -->
+        <!-- 穿插 A：编译原理深入 -->
+        <!-- ============================================================ -->
+
+        <div class="section">
+
+
+        <!-- ============================================================ -->
+        <!-- 第2章：从模型定义到 Triton 优化（完整流程） -->
+        <!-- ============================================================ -->
+
+        <div class="section">
+            <div class="section-title">
+                2. 从模型定义到 Triton 优化（完整流程）
+                <span class="badge-green">实战</span>
+            </div>
+            <p class="desc">
+                上面我们看了分工变化和编译流程的概览。现在从<strong>一个真实的 Transformer 模型</strong>出发，
+                一步步看到它如何被 Triton 优化。这是一个完整的故事：定义模型 &rarr; 发现瓶颈 &rarr; 用 Triton 优化 &rarr; 编译器如何处理。
+            </p>
+        </div>
+
+
+        <div class="concept-block" style="border-left-color: #16a34a; margin-top:1.5rem;">
+            <div class="concept-title" style="color: #16a34a;">完整流程概览</div>
+            <ul>
+                <li><strong>2.1 模型定义</strong>：先看一个标准的 Transformer 模型长什么样</li>
+                <li><strong>2.2 性能剖析</strong>：用 profiler 找到瓶颈在哪里</li>
+                <li><strong>2.3 用 Triton 改写</strong>：用 FlashAttention 替换原生 Attention</li>
+                <li><strong>2.4 编译原理深入</strong>：看 Triton 编译器如何把 Python 代码变成 GPU 机器码</li>
+            </ul>
+        </div>
+
+
+        <div class="section">
+            <div class="section-title">
+                2.1 实战：定义模型
+                <span class="badge">PyTorch 原生</span>
+            </div>
+            <p class="desc" style="margin-top:0.5rem;">
+                现在我们从 <strong>一个完整的模型</strong> 出发，展示 Triton 如何优化其中的瓶颈算子。
+                我们以一个 <strong>单头自注意力 + 前馈网络</strong> 的 Transformer 解码器层为例，
+                它同时用于 <strong>训练和推理</strong>。
+            </p>
+
+            <!-- 图3：模型结构 -->
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 3</span> Transformer 解码器层结构
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        X["输入 X"] --> LN1["LayerNorm"]
+                        LN1 --> QKV["QKV 投影"]
+                        QKV --> Split["拆分 Q, K, V"]
+                        Split --> Attn["自注意力<br/>Q @ K^T → Softmax → x V"]
+                        Attn --> Proj["输出投影"]
+                        Proj --> Add1["+ 残差"]
+                        X --> Add1
+                        Add1 --> LN2["LayerNorm"]
+                        LN2 --> FFN["FFN"]
+                        FFN --> Add2["+ 残差"]
+                        Add1 --> Add2
+                        Add2 --> Out["输出"]
+                </div>
+            </div>
+
+            <!-- 源码：模型定义 -->
+            <p class="desc" style="margin-top:1.2rem;"><strong>源码 1：</strong>PyTorch 模型定义（关键部分）</p>
+            <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+<span class="keyword">import</span> torch.nn.functional <span class="keyword">as</span> F
+
+<span class="keyword">class</span> <span class="func">TransformerDecoderLayer</span>(nn.Module):
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model, d_ff, n_head=<span class="number">1</span>):
+        <span class="keyword">super</span>().<span class="func">__init__</span>()
+        self.d_model = d_model
+        self.head_dim = d_model // n_head
+        self.q_proj = nn.Linear(d_model, d_model)
+        self.k_proj = nn.Linear(d_model, d_model)
+        self.v_proj = nn.Linear(d_model, d_model)
+        self.out_proj = nn.Linear(d_model, d_model)
+        self.ln1 = nn.LayerNorm(d_model)
+        self.ln2 = nn.LayerNorm(d_model)
+        self.ffn = nn.Sequential(
+            nn.Linear(d_model, d_ff), nn.ReLU(),
+            nn.Linear(d_ff, d_model),
+        )
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, x, mask=<span class="keyword">None</span>):
+        <span class="comment"># ---- 自注意力 ----</span>
+        residual = x
+        x = self.ln1(x)
+        q = self.q_proj(x)
+        k = self.k_proj(x)
+        v = self.v_proj(x)
+
+        <span class="comment"># 瓶颈：标准 Attention，物化 NxN 矩阵</span>
+        scores = torch.matmul(q, k.transpose(-<span class="number">2</span>, -<span class="number">1</span>)) / (self.head_dim ** <span class="number">0.5</span>)
+        <span class="keyword">if</span> mask <span class="keyword">is not</span> <span class="keyword">None</span>:
+            scores = scores.masked_fill(mask == <span class="number">0</span>, -<span class="number">1e9</span>)
+        attn = F.softmax(scores, dim=-<span class="number">1</span>)
+        out = torch.matmul(attn, v)
+        out = self.out_proj(out)
+        x = residual + out
+
+        <span class="comment"># ---- FFN ----</span>
+        residual = x
+        x = self.ln2(x)
+        x = self.ffn(x)
+        x = residual + x
+        <span class="keyword">return</span> x
+            </div>
+            <div class="concept-block">
+                <div class="concept-title">概念补课 &middot; 模型中的 Attention</div>
+                <ul>
+                    <li><strong>注意力计算</strong>：<code>Q @ K^T</code> → <code>Softmax</code> → <code>x V</code>。这是 <strong>Transformer 的核心</strong>，也是 <strong>训练和推理共同的性能瓶颈</strong>。</li>
+                    <li><strong>内存复杂度 O(N²)</strong>：<code>scores</code> 矩阵大小为 <code>seq_len × seq_len</code>，长序列下迅速占满显存。</li>
+                    <li><strong>训练 vs 推理</strong>：训练时需保存 <code>attn</code> 用于反向传播；推理时只做前向，但自回归生成仍需逐 token 计算。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="concept-block" style="border-left-color: #ea580c; margin-top:1.5rem;">
+            <div class="concept-title" style="color: #ea580c;">下一步：找瓶颈</div>
+            <p class="desc" style="margin:0.3rem 0;">
+                我们已经定义了一个标准的 Transformer 模型。现在用 <code>torch.profiler</code> 分析它的性能，
+                看看<strong>瓶颈在哪里</strong>。
+            </p>
+        </div>
+
+
+        <!-- 4. 性能剖析 -->
+        <div class="section">
+            <div class="section-title">
+                2.2 性能剖析
+                <span class="badge-orange">找瓶颈</span>
+            </div>
+            <p class="desc">
+                用 <code>torch.profiler</code> 分析模型性能。结果显示，<strong>注意力计算</strong> 占据了 60%–80% 的 GPU 时间，
+                是 <strong>训练和推理的共同瓶颈</strong>。
+            </p>
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 4</span> 性能剖析结果
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        subgraph Profile["torch.profiler 结果"]
+                            P1["QKV 投影 (15%)"] --> P2["Attention (72%)"]
+                            P2 --> P3["输出投影 (8%)"]
+                            P2 --> P4["FFN (5%)"]
+                        end
+                        subgraph Breakdown["Attention 内部"]
+                            B1["Q @ K^T (30%)"] --> B2["Softmax (10%)"]
+                            B2 --> B3["attn @ V (25%)"]
+                            B3 --> B4["NxN 矩阵物化"]
+                        end
+                        P2 --> Breakdown
+                </div>
+            </div>
+            <div class="concept-block">
+                <div class="concept-title">概念补课 · 为什么 Attention 是瓶颈</div>
+                <ul>
+                    <li><strong>训练</strong>：需要保存 <code>scores</code> 和 <code>attn</code> 用于反向传播，显存占用 O(N²)。</li>
+                    <li><strong>推理</strong>：自回归生成时，K/V 缓存不断增长，每次都需要计算 <code>1 × seq_len</code> 的分数，内存带宽成为瓶颈。</li>
+                    <li><strong>解决方案</strong>：用 Triton 实现 <strong>FlashAttention</strong>，分块计算，避免物化 N×N 矩阵。</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="concept-block" style="border-left-color: #16a34a; margin-top:1.5rem;">
+            <div class="concept-title" style="color: #16a34a;">下一步：用 Triton 优化</div>
+            <p class="desc" style="margin:0.3rem 0;">
+                profiler 显示 <strong>Attention 占了 72% 的 GPU 时间</strong>，是性能瓶颈。现在用 Triton 的 FlashAttention 来优化它。
+            </p>
+        </div>
+
+
+        <!-- 5. 用 Triton 改写 Attention -->
+        <div class="section">
+            <div class="section-title">
+                2.3 用 Triton 改写 Attention
+                <span class="badge-green">FlashAttention</span>
+            </div>
+            <p class="desc">
+                我们用 Triton 实现 <strong>FlashAttention 前向 kernel</strong>（支持训练和推理），
+                将 QK^T、Softmax、×V 融合成单次 kernel，分块计算，完全避免物化 N×N 矩阵。
+            </p>
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 5</span> FlashAttention 分块流式处理
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        Q["Q 块"] --> Init["初始化: m_i=-inf, l_i=0, O_i=0"]
+                        Init --> Loop["遍历 K/V 块"]
+                        Loop --> LoadKV["加载 K_block, V_block"]
+                        LoadKV --> S["S = Q @ K^T"]
+                        S --> m_new["更新 m_i = max(m_i, rowmax(S))"]
+                        m_new --> P["P = exp(S - m_new)"]
+                        P --> l_new["更新 l_i"]
+                        l_new --> O["累加 O = O*exp + P @ V"]
+                        O --> Loop
+                        Loop --> Final["O = O / l_i"]
+                        Final --> Store["输出 + LSE"]
+                </div>
+            </div>
+            <p class="desc" style="margin-top:1.2rem;">
+                <strong>源码 2：</strong>Triton FlashAttention 前向 kernel
+                <span style="font-size:0.8rem; color:#64748b;">（参考：third_party/amd/python/triton/flash_attention.py）</span>
+            </p>
+            <div class="code-block">
+@triton.jit
+def flash_attn_fwd_kernel(
+    q_ptr, k_ptr, v_ptr, o_ptr, lse_ptr,
+    seq_len, head_dim,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+):
+    batch_id = tl.program_id("0")
+    head_id = tl.program_id("1")
+    block_m = tl.program_id("2")
+
+    offs_m = block_m * BLOCK_M + tl.arange("0", BLOCK_M)
+    offs_d = tl.arange("0", head_dim)
+    mask_m = offs_m < seq_len
+
+    q = tl.load(q_ptr + offs_m[:, None]*stride_q + offs_d[None, :],
+                mask=mask_m[:, None])
+
+    m_i = -1e9 * tl.ones([BLOCK_M], dtype=tl.float32)
+    l_i = tl.zeros([BLOCK_M], dtype=tl.float32)
+    o_i = tl.zeros([BLOCK_M, head_dim], dtype=tl.float32)
+
+    for block_n in range(tl.cdiv(seq_len, BLOCK_N)):
+        offs_n = block_n * BLOCK_N + tl.arange("0", BLOCK_N)
+        mask_n = offs_n < seq_len
+
+        k = tl.load(k_ptr + offs_n[:, None]*stride_k + offs_d[None, :],
+                    mask=mask_n[:, None])
+        v = tl.load(v_ptr + offs_n[:, None]*stride_v + offs_d[None, :],
+                    mask=mask_n[:, None])
+
+        s = tl.dot(q, tl.transpose(k)) / tl.sqrt(head_dim)
+
+        m_old = m_i
+        m_new = tl.maximum(m_old, tl.max(s, axis=1))
+        p = tl.exp(s - m_new[:, None])
+        l_new = l_i * tl.exp(m_old - m_new) + tl.sum(p, axis=1)
+        o_i = o_i * tl.exp(m_old - m_new)[:, None] + tl.dot(p, v)
+
+        m_i, l_i = m_new, l_new
+
+    o_i = o_i / l_i[:, None]
+    tl.store(o_ptr + offs_m[:, None]*stride_o + offs_d[None, :], o_i, mask=mask_m[:, None])
+    tl.store(lse_ptr + offs_m, m_i + tl.log(l_i), mask=mask_m)
+            </div>
+            <div class="concept-block">
+                <div class="concept-title">概念补课 · Triton Kernel 关键点</div>
+                <ul>
+                    <li><strong>分块 (BLOCK_M, BLOCK_N)</strong>：Q 和 K/V 分别沿序列维度切分，逐块加载到 SRAM 中计算。</li>
+                    <li><strong>tl.dot</strong>：利用 GPU Tensor Core 加速矩阵乘法。</li>
+                    <li><strong>在线 Softmax</strong>：维护 <code>m_i</code>（最大值）和 <code>l_i</code>（归一化因子），无需保存完整 scores 矩阵。</li>
+                    <li><strong>LSE (Log-Sum-Exp)</strong>：显存从 O(N²) 降至 O(N)。</li>
+                </ul>
+            </div>
+
+            <!-- FlashAttention 改写后的性能对比 -->
+            <div style="overflow-x:auto; margin: 1.5rem 0; border: 1px solid #e2e8f0; border-radius: 14px;">
+                <table style="width:100%; border-collapse: collapse; font-size:0.95rem;">
+                    <thead style="background:#f1f5f9;">
+                        <tr>
+                            <th style="padding:0.8rem 1rem; text-align:left;">序列长度</th>
+                            <th style="padding:0.8rem 1rem; text-align:center;">PyTorch 显存</th>
+                            <th style="padding:0.8rem 1rem; text-align:center;">Triton 显存</th>
+                            <th style="padding:0.8rem 1rem; text-align:center;">PyTorch 耗时</th>
+                            <th style="padding:0.8rem 1rem; text-align:center;">Triton 耗时</th>
+                            <th style="padding:0.8rem 1rem; text-align:center;">加速比</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr style="border-top:1px solid #e2e8f0;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">512</td>
+                            <td style="padding:0.8rem 1rem; text-align:center;">4.2 GB</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">2.1 GB</td>
+                            <td style="padding:0.8rem 1rem; text-align:center;">12.4 ms</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">8.1 ms</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; font-weight:700;">1.5x</td>
+                        </tr>
+                        <tr style="border-top:1px solid #e2e8f0; background:#f8fafc;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">2048</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#dc2626;">OOM</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">8.7 GB</td>
+                            <td style="padding:0.8rem 1rem; text-align:center;">-</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">72.3 ms</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; font-weight:700;">-</td>
+                        </tr>
+                        <tr style="border-top:1px solid #e2e8f0;">
+                            <td style="padding:0.8rem 1rem; font-weight:600;">4096</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#dc2626;">OOM</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">14.5 GB</td>
+                            <td style="padding:0.8rem 1rem; text-align:center;">-</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; color:#16a34a;">156.8 ms</td>
+                            <td style="padding:0.8rem 1rem; text-align:center; font-weight:700;">-</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <!-- 集成回模型 -->
+        <div class="section">
+            <div class="section-title" style="margin-top:2rem;">
+                2.3 续：集成回模型
+                <span class="badge">替换 Attention</span>
+            </div>
+            <p class="desc">
+                将 Triton kernel 封装为 <code>torch.autograd.Function</code>（支持训练），然后在模型中替换原有的 Attention。
+            </p>
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 6</span> 原生 vs Triton 对比
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        subgraph Native["原生 PyTorch"]
+                            N1["Q, K, V"] --> N2["Q @ K^T (NxN)"]
+                            N2 --> N3["Softmax (NxN)"]
+                            N3 --> N4["attn @ V"]
+                        end
+                        subgraph Triton["Triton FlashAttention"]
+                            T1["Q, K, V"] --> T2["flash_attn_fwd_kernel (单次)"]
+                            T2 --> T3["输出 + LSE"]
+                        end
+                        Native --> R1["显存 O(N²) · 慢"]
+                        Triton --> R2["显存 O(N) · 快"]
+                </div>
+            </div>
+            <p class="desc" style="margin-top:1.2rem;">
+                <strong>源码 3：</strong>封装并集成 Triton kernel
+                <span style="font-size:0.8rem; color:#64748b;">（参考：python/triton/runtime/autotuner.py）</span>
+            </p>
+            <div class="code-block">
+class FlashAttnFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, q, k, v, causal):
+        o, lse = flash_attn_fwd(q, k, v, causal)
+        ctx.save_for_backward(q, k, v, o, lse)
+        return o
+
+    @staticmethod
+    def backward(ctx, do):
+        q, k, v, o, lse = ctx.saved_tensors
+        dq, dk, dv = flash_attn_bwd(q, k, v, o, do, lse)
+        return dq, dk, dv, None
+
+class TransformerDecoderLayerTriton(nn.Module):
+    def forward(self, x, mask=None):
+        # QKV 投影同前
+        out = FlashAttnFunction.apply(q, k, v, mask is not None)
+        out = self.out_proj(out)
+        # ... FFN 同前
+            </div>
+        </div>
+
+        <div class="concept-block" style="border-left-color: #8b5cf6; margin-top:1.5rem;">
+            <div class="concept-title" style="color: #8b5cf6;">下一步：看编译器如何处理</div>
+            <p class="desc" style="margin:0.3rem 0;">
+                我们已经用 Triton 写了 FlashAttention kernel。现在看看 Triton 编译器如何把这段 Python 代码变成 GPU 上跑的机器码。
+            </p>
+        </div>
+
+
+        <div class="section">
+            <div class="section-title">
+                2.4 编译原理深入
+                <span class="badge-orange">深入</span>
+            </div>
+            <p class="desc">
+                上面的流程图展示了高层视角。现在我们 <strong>从你自己写的 PyTorch kernel 代码出发</strong>，
+                一步步看到它如何变成 GPU 上跑的机器码。
+            </p>
+
+            <!-- 第1步：你写的代码 -->
+            <p class="desc" style="margin-top:1rem;">
+                <strong>第 1 步：你写的代码</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;先看一个真实的 Transformer 模型（NanoChat），再看如何用 Triton 优化 Attention</span>
+            </p>
+
+            <p class="desc">
+                这是一个真实的 Transformer 模型（参考 HuggingFace Transformers 中的 NanoChat）。
+                你通常不会直接写 Triton kernel，而是写标准的 PyTorch 模型，然后用 Triton 加速瓶颈部分：
+            </p>
+            <div class="code-block">
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+
+<span class="keyword">class</span> <span class="func">NanoChatAttention</span>(nn.Module):
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, config, layer_idx):
+        <span class="keyword">super</span>().<span class="func">__init__</span>()
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.q_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=<span class="keyword">False</span>)
+        self.k_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=<span class="keyword">False</span>)
+        self.v_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=<span class="keyword">False</span>)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=<span class="keyword">False</span>)
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, hidden_states, attention_mask=<span class="keyword">None</span>, past_key_values=<span class="keyword">None</span>):
+        <span class="comment"># 标准 QKV 投影</span>
+        query = self.q_proj(hidden_states).view(-<span class="number">1</span>, self.num_heads, self.head_dim)
+        key = self.k_proj(hidden_states).view(-<span class="number">1</span>, self.num_heads, self.head_dim)
+        value = self.v_proj(hidden_states).view(-<span class="number">1</span>, self.num_heads, self.head_dim)
+
+        <span class="comment"># ⚠️ 瓶颈在这里：标准 Attention，物化 NxN 矩阵</span>
+        <span class="comment"># scores = torch.matmul(query, key.transpose(-2, -1)) / sqrt(head_dim)</span>
+        <span class="comment"># attn = torch.softmax(scores, dim=-1)</span>
+        <span class="comment"># output = torch.matmul(attn, value)</span>
+
+        <span class="comment"># ✅ 用 Triton 优化的 FlashAttention 替换（后续章节会讲）</span>
+        <span class="keyword">from</span> flash_attn <span class="keyword">import</span> flash_attn_func
+        output = flash_attn_func(query, key, value)
+
+        <span class="keyword">return</span> self.o_proj(output)
+            </div>
+
+            <p class="desc" style="margin-top:1.5rem;">
+                <strong>flash_attn_func 内部的 Triton 实现</strong>：
+                <code>flash_attn_func</code> 不是魔法，它内部就是用 Triton 写的 kernel。
+                下面展示其核心逻辑（简化版）：
+            </p>
+
+            <!-- FlashAttention 分块计算流程图 -->
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 1-A</span> FlashAttention 分块计算流程（Triton 实现）
+                </div>
+                <p class="desc" style="margin-bottom:0.8rem;">
+                    <strong>颜色说明</strong>：<span style="color:#16a34a; font-weight:600;">绿色</span> = Triton API，<span style="color:#3b82f6; font-weight:600;">蓝色</span> = 算法逻辑，<span style="color:#dc2626; font-weight:600;">红色</span> = 为什么用 Triton
+                </p>
+                <div class="mermaid">
+                    flowchart TD
+                        subgraph Step1["第1步：获取块索引"]
+                            S1A["<span style='color:#16a34a'>tl.program_id(0)</span><br/>获取当前 program 处理 Q 的哪一块"]
+                            S1B["<span style='color:#3b82f6'>offs_m = block_m * BLOCK_M + tl.arange(0, BLOCK_M)</span><br/>计算本块负责的行范围"]
+                        end
+
+                        subgraph Step2["第2步：加载 Q 块"]
+                            S2A["<span style='color:#16a34a'>tl.load</span><br/>加载 Q 的一块 [BLOCK_M, head_dim]<br/>从 Global Memory 到 SRAM"]
+                            S2B["<span style='color:#dc2626'>为什么用 Triton？</span><br/>向量化加载，一次传 1024 个元素<br/>自动处理边界（mask 参数）"]
+                        end
+
+                        subgraph Step3["第3步：初始化统计量"]
+                            S3A["<span style='color:#3b82f6'>m_i = -inf, l_i = 0, o_i = 0</span><br/>在线 Softmax 需要逐块更新"]
+                        end
+
+                        subgraph Step4["第4步：加载 K/V 块（循环）"]
+                            S4A["<span style='color:#16a34a'>tl.load</span><br/>加载 K_block [BLOCK_N, head_dim]"]
+                            S4B["<span style='color:#16a34a'>tl.load</span><br/>加载 V_block [BLOCK_N, head_dim]"]
+                            S4C["<span style='color:#dc2626'>为什么用 Triton？</span><br/>逐块加载，显存 O(N) 而非 O(N²)<br/>只在 SRAM 中保留当前块"]
+                        end
+
+                        subgraph Step5["第5步：计算注意力分数"]
+                            S5A["<span style='color:#16a34a'>tl.dot</span><br/>计算 S = Q @ K^T<br/>利用 Tensor Core 加速矩阵乘"]
+                            S5B["<span style='color:#3b82f6'>除以 sqrt(head_dim)</span><br/>防止点积过大"]
+                            S5C["<span style='color:#dc2626'>为什么用 Triton？</span><br/>tl.dot 自动映射到 Tensor Core<br/>性能媲美手写 CUDA"]
+                        end
+
+                        subgraph Step6["第6步：在线 Softmax 更新"]
+                            S6A["<span style='color:#3b82f6'>m_new = max(m_i, rowmax(S))</span><br/>更新行最大值"]
+                            S6B["<span style='color:#3b82f6'>P = exp(S - m_new)</span><br/>计算当前块的概率"]
+                            S6C["<span style='color:#3b82f6'>l_new = l_i * exp(...) + sum(P)</span><br/>更新归一化因子"]
+                            S6D["<span style='color:#16a34a'>tl.dot</span><br/>o_i = o_i * exp(...) + P @ V"]
+                            S6E["<span style='color:#dc2626'>为什么用 Triton？</span><br/>逐块更新统计量<br/>避免物化完整的 scores 矩阵"]
+                        end
+
+                        subgraph Step7["第7步：输出"]
+                            S7A["<span style='color:#3b82f6'>o_i = o_i / l_i</span><br/>最终归一化"]
+                            S7B["<span style='color:#16a34a'>tl.store</span><br/>存储结果 [BLOCK_M, head_dim]"]
+                        end
+
+                        Step1 --> Step2 --> Step3 --> Loop
+                        Loop --> Step4 --> Step5 --> Step6
+                        Step6 -->|还有更多 K/V 块？| Step4
+                        Step6 -->|所有块处理完| Step7
+
+                        subgraph Loop["循环判断"]
+                            L1["遍历所有 K/V 块<br/>seq_len / BLOCK_N 次"]
+                        end
+                </div>
+            </div>
+
+            <p class="desc">
+                <strong>核心思想</strong>：传统 Attention 需要物化完整的 N×N 矩阵（显存 O(N²)），而 FlashAttention 逐块计算，只维护统计量（显存 O(N)）。
+            </p>
+            </p>
+
+            <div class="code-block">
+<span class="keyword">import</span> triton
+<span class="keyword">import</span> triton.language <span class="keyword">as</span> tl
+
+<span class="comment"># FlashAttention 的 Triton 实现（简化版）</span>
+<span class="comment"># 核心思想：分块计算，避免物化完整的 NxN 矩阵</span>
+@triton.jit
+<span class="keyword">def</span> <span class="func">flash_attn_fwd_kernel</span>(
+    q_ptr, k_ptr, v_ptr, o_ptr,
+    seq_len, head_dim,
+    BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr,
+):
+    <span class="comment"># 每个 program 处理 Q 的一块（BLOCK_M 行）</span>
+    block_m = tl.program_id(<span class="number">0</span>)
+    offs_m = block_m * BLOCK_M + tl.arange(<span class="number">0</span>, BLOCK_M)
+    offs_d = tl.arange(<span class="number">0</span>, head_dim)
+    mask_m = offs_m &lt; seq_len
+
+    <span class="comment"># 加载 Q 的一块</span>
+    q = tl.load(q_ptr + offs_m[:, <span class="keyword">None</span>] * head_dim + offs_d[<span class="keyword">None</span>, :], mask=mask_m[:, <span class="keyword">None</span>])
+
+    <span class="comment"># 初始化输出和在线 softmax 的统计量</span>
+    m_i = -<span class="number">1e9</span> * tl.ones([BLOCK_M], dtype=tl.float32)  <span class="comment"># 行最大值</span>
+    l_i = tl.zeros([BLOCK_M], dtype=tl.float32)          <span class="comment"># 求和因子</span>
+    o_i = tl.zeros([BLOCK_M, head_dim], dtype=tl.float32) <span class="comment"># 输出累加器</span>
+
+    <span class="comment"># 关键：逐块遍历 K/V，在线计算 Softmax</span>
+    <span class="keyword">for</span> block_n <span class="keyword">in</span> range(tl.cdiv(seq_len, BLOCK_N)):
+        offs_n = block_n * BLOCK_N + tl.arange(<span class="number">0</span>, BLOCK_N)
+        mask_n = offs_n &lt; seq_len
+
+        <span class="comment"># 加载 K、V 的一块</span>
+        k = tl.load(k_ptr + offs_n[:, <span class="keyword">None</span>] * head_dim + offs_d[<span class="keyword">None</span>, :], mask=mask_n[:, <span class="keyword">None</span>])
+        v = tl.load(v_ptr + offs_n[:, <span class="keyword">None</span>] * head_dim + offs_d[<span class="keyword">None</span>, :], mask=mask_n[:, <span class="keyword">None</span>])
+
+        <span class="comment"># 计算当前块的注意力分数：S = Q @ K^T</span>
+        s = tl.dot(q, tl.transpose(k)) / tl.sqrt(head_dim)
+
+        <span class="comment"># 在线 Softmax 更新</span>
+        m_old = m_i
+        m_new = tl.maximum(m_old, tl.max(s, axis=<span class="number">1</span>))
+        p = tl.exp(s - m_new[:, <span class="keyword">None</span>])
+        l_new = l_i * tl.exp(m_old - m_new) + tl.sum(p, axis=<span class="number">1</span>)
+        o_i = o_i * tl.exp(m_old - m_new)[:, <span class="keyword">None</span>] + tl.dot(p, v)
+
+        m_i, l_i = m_new, l_new
+
+    <span class="comment"># 归一化输出</span>
+    o_i = o_i / l_i[:, <span class="keyword">None</span>]
+    tl.store(o_ptr + offs_m[:, <span class="keyword">None</span>] * head_dim + offs_d[<span class="keyword">None</span>, :], o_i, mask=mask_m[:, <span class="keyword">None</span>])
+            </div>
+
+            <div class="concept-block">
+                <div class="concept-title">FlashAttention 的核心思想</div>
+                <ul>
+                    <li><strong>分块计算</strong>：Q、K、V 分别沿序列维度切分，逐块加载到 SRAM 中计算。</li>
+                    <li><strong>在线 Softmax</strong>：维护 <code>m_i</code>（最大值）和 <code>l_i</code>（归一化因子），无需保存完整 scores 矩阵。</li>
+                    <li><strong>显存优化</strong>：显存从 O(N²) 降至 O(N)，可以处理更长的序列。</li>
+                    <li><strong>这就是 flash_attn_func 的内部实现</strong>：你调用的函数，底层就是这样的 Triton kernel。</li>
+                </ul>
+            </div>
+
+            <!-- 第2步：TTIR -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>第 2 步：生成 TTIR（Triton IR）</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;硬件无关的中间表示，只关心"做什么"，不关心"在哪跑"</span>
+            </p>
+            <div class="code-block">
+<span class="comment">// TTIR：Triton 编译器生成的中间表示</span>
+<span class="comment">// 注意：这里已经不是 Python 了，是一种 SSA 格式的 IR</span>
+
+tt.func @softmax_kernel(
+    %arg0: !tt.ptr&lt;<span class="type">f32</span>&gt;,   <span class="comment">// output_ptr: 输出指针</span>
+    %arg1: !tt.ptr&lt;<span class="type">f32</span>&gt;,   <span class="comment">// input_ptr: 输入指针</span>
+    %arg2: <span class="type">i32</span>,             <span class="comment">// input_row_stride: 输入行步长</span>
+    %arg3: <span class="type">i32</span>,             <span class="comment">// output_row_stride: 输出行步长</span>
+    %arg4: <span class="type">i32</span>              <span class="comment">// n_cols: 列数</span>
+) {
+    <span class="comment">// %0 = tl.program_id(0) 的底层表示</span>
+    %0 = tt.get_program_id x : <span class="type">i32</span>
+
+    <span class="comment">// %1 = row_idx * input_row_stride (计算行起始偏移)</span>
+    %1 = arith.muli %0, %arg2 : <span class="type">i32</span>
+
+    <span class="comment">// %2 = tl.arange(0, 1024) 生成 [0,1,2,...,1023]</span>
+    %2 = tt.make_range {end = <span class="number">1024</span>, start = <span class="number">0</span>}
+         : tensor&lt;<span class="number">1024</span> x <span class="type">i32</span>&gt;
+
+    <span class="comment">// 加载一行数据</span>
+    %3 = tt.splat %1 : (<span class="type">i32</span>) -> tensor&lt;<span class="number">1024</span> x !tt.ptr&lt;<span class="type">f32</span>&gt;&gt;
+    %4 = arith.addi %3, %2 : tensor&lt;<span class="number">1024</span> x !tt.ptr&lt;<span class="type">f32</span>&gt;&gt;
+    %5 = tt.load %4 : tensor&lt;<span class="number">1024</span> x <span class="type">f32</span>&gt;  <span class="comment">// 一次加载 1024 个 float</span>
+
+    <span class="comment">// Softmax 计算：exp(x - max) / sum(exp(x - max))</span>
+    %6 = tt.reduce %5 axis=<span class="number">0</span> {
+    ^bb0(%arg5: <span class="type">f32</span>, %arg6: <span class="type">f32</span>):
+      %7 = arith.maxf %arg5, %arg6 : <span class="type">f32</span>
+      tt.reduce.return %7 : <span class="type">f32</span>
+    } : tensor&lt;<span class="number">1024</span> x <span class="type">f32</span>&gt;  <span class="comment">// 行最大值</span>
+
+    <span class="comment">// ... 后续 exp、sum 操作 ...</span>
+    tt.return
+}
+            </div>
+            <div class="concept-block" style="border-left-color: #8b5cf6;">
+                <div class="concept-title" style="color: #8b5cf6;">TTIR 的关键特征</div>
+                <ul>
+                    <li><strong>向量化</strong>：你的 <code>tl.load</code> 写的是"一行数据"，TTIR 里变成了一次加载 1024 个元素。</li>
+                    <li><strong>类型系统</strong>：有 <code>!tt.ptr&lt;f32&gt;</code>（指针类型）、<code>tensor&lt;1024 x f32&gt;</code>（张量类型）等。</li>
+                    <li><strong>硬件无关</strong>：TTIR 不知道目标是 NVIDIA 还是 AMD，只描述"做什么计算"。</li>
+                    <li><strong>Softmax 保留</strong>：softmax 的 max、exp、sum 操作在 TTIR 中都有对应的 IR 指令。</li>
+                </ul>
+            </div>
+
+            <!-- 第3步：TTGIR -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>第 3 步：转换为 TTGIR（TritonGPU IR）</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;引入 GPU 特定概念：线程块、共享内存、Tensor Core</span>
+            </p>
+            <p class="desc">
+                这一步是 Triton 编译器的核心。编译器需要决定：
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0;">
+                <div style="background:#f1f5f9; border-radius:12px; padding:1rem; border-left:4px solid #3b82f6;">
+                    <div style="font-weight:600; color:#0b1e33;">布局问题</div>
+                    <div style="font-size:0.9rem; color:#334155; margin-top:0.3rem;">
+                        256 个元素怎么分给 32 个线程？<br/>
+                        每个线程处理几个？<br/>
+                        数据怎么排列？
+                    </div>
+                </div>
+                <div style="background:#f1f5f9; border-radius:12px; padding:1rem; border-left:4px solid #3b82f6;">
+                    <div style="font-weight:600; color:#0b1e33;">内存问题</div>
+                    <div style="font-size:0.9rem; color:#334155; margin-top:0.3rem;">
+                        数据放共享内存还是寄存器？<br/>
+                        怎么合并内存访问？<br/>
+                        怎么避免 bank conflict？
+                    </div>
+                </div>
+            </div>
+            <p class="desc">
+                <strong>TTGIR 的样子：</strong>TTIR 中的 <code>tt.load</code> 操作，在 TTGIR 中变成了带 <strong>布局编码</strong> 的版本。
+                编译器自动为张量添加 <code>#ttg.blocked</code> 编码，描述线程如何处理数据：
+            </p>
+            <div class="code-block">
+<span class="comment">// TTGIR：引入了布局编码（Encoding）</span>
+<span class="comment">// 关键变化：张量从"普通的 [1024] x f32"变成了"带布局信息的张量"</span>
+
+<span class="comment">// TTIR 中的：</span>
+%5 = tt.load %4 : tensor&lt;<span class="number">1024</span> x <span class="type">f32</span>&gt;
+
+<span class="comment">// 变成 TTGIR 中的（伪代码，展示概念）：</span>
+<span class="comment">// 张量现在带了 #ttg.blocked 编码，描述了线程如何处理它</span>
+%5 = tt.load %4 : tensor&lt;<span class="number">1024</span> x <span class="type">f32</span>, #ttg.blocked&lt;
+    vec = <span class="number">4</span>,           <span class="comment">// 向量化宽度：每次加载 4 个元素</span>
+    numPerThread = [<span class="number">8</span>], <span class="comment">// 每个线程处理 8 个元素</span>
+    numThreads = [<span class="number">32</span>],  <span class="comment">// 32 个线程协作（一个 warp）</span>
+    order = [<span class="number">0</span>]         <span class="comment">// 沿第 0 维分布</span>
+&gt;&gt;
+
+<span class="comment">// 32 线程 x 8 元素/线程 = 256 元素</span>
+<span class="comment">// 4 个 warp 协作 = 1024 元素，刚好覆盖整个行</span>
+<span class="comment">// 编译器自动计算最优的 numPerThread 和 numThreads</span>
+            </div>
+            <div class="concept-block" style="border-left-color: #16a34a;">
+                <div class="concept-title" style="color: #16a34a;">BlockedEncoding 直觉理解</div>
+                <ul>
+                    <li>假设一行 1024 个元素：[0, 1, 2, ..., 1023]</li>
+                    <li>32 个线程（一个 warp）协作处理，每个线程处理 8 个连续元素</li>
+                    <li>线程 0 处理 [0..7]，线程 1 处理 [8..15]，...，线程 31 处理 [248..255]</li>
+                    <li>这就是 <strong>BlockedEncoding</strong> 的含义：把张量切成块，分给线程</li>
+                </ul>
+            </div>
+
+            <!-- 第4步：LLVM IR + PTX -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>第 4 步：生成最终机器码</strong>
+                <span style="font-size:0.85rem; color:#64748b;">&mdash;&mdash;TTGIR &rarr; LLVM IR &rarr; PTX/SASS（NVIDIA）或 GCN（AMD）</span>
+            </p>
+            <p class="desc">
+                最后一步，Triton 把 TTGIR 交给 LLVM，LLVM 负责生成目标平台的机器码。
+                对于 NVIDIA GPU，最终产物是 PTX（类似汇编），再由 <code>ptxas</code> 编译成 SASS（真正的机器码）。
+            </p>
+            <div class="code-block">
+<span class="comment">// 最终在 GPU 上执行的 PTX（NVIDIA 汇编，简化展示）</span>
+<span class="comment">// 你可以用 export TRITON_KERNEL_DUMP=1 查看</span>
+
+.visible .entry softmax_kernel(
+    .param .u64 output_ptr,
+    .param .u64 input_ptr,
+    .param .u32 input_row_stride,
+    .param .u32 output_row_stride,
+    .param .u32 n_cols
+) {
+    <span class="comment">// 获取 block ID（处理第几行）</span>
+    mov.u32 %r1, %ctaid.x;
+    <span class="comment">// 计算行起始偏移</span>
+    shl.b32 %r2, %r1, <span class="number">2</span>;   <span class="comment">// r2 = pid * 4 (stride 是字节数)</span>
+
+    <span class="comment">// 一次加载 128 字节（32 个 float，向量化）</span>
+    ld.global.v4.f32 { %f0, %f1, %f2, %f3 }, [%rd1+%r2];
+
+    <span class="comment">// Softmax: 先找最大值</span>
+    max.f32 %f4, %f0, %f1;
+    max.f32 %f4, %f4, %f2;
+    max.f32 %f4, %f4, %f3;
+
+    <span class="comment">// 减去最大值，计算 exp</span>
+    sub.f32 %f0, %f0, %f4;
+    ex2.approx.f32 %f0, %f0;
+    <span class="comment">// ... 后续 sum、除法 ...</span>
+
+    <span class="comment">// 存储结果</span>
+    st.global.v4.f32 [%rd3+%r2], { %f0, %f1, %f2, %f3 };
+    ret;
+}
+            </div>
+            <div class="concept-block" style="border-left-color: #ea580c;">
+                <div class="concept-title" style="color: #ea580c;">从 Python 到 GPU 的完整旅程</div>
+                <ul>
+                    <li><strong>你写的</strong>：Python 函数 + <code>@triton.jit</code>（Softmax kernel）</li>
+                    <li><strong>TTIR</strong>：硬件无关的 IR，描述"加载一行、找最大值、exp、求和、归一化"</li>
+                    <li><strong>TTGIR</strong>：引入布局编码，决定"32 个线程，每个处理 8 个，向量化宽度 4"</li>
+                    <li><strong>LLVM IR</strong>：标准 LLVM 中间表示</li>
+                    <li><strong>PTX/SASS</strong>：NVIDIA GPU 机器码，实际在 GPU 上执行</li>
+                </ul>
+            </div>
+
+            <!-- 调试 IR -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>动手调试：</strong>你可以亲眼看每一步生成的 IR。
+            </p>
+            <div class="code-block">
+<span class="comment"># 方法 1：查看编译过程中的所有 IR</span>
+<span class="keyword">export</span> MLIR_ENABLE_DUMP=1
+python your_kernel.py
+
+<span class="comment"># 你会看到类似这样的输出：</span>
+<span class="comment"># -----       ir failures      -----</span>
+<span class="comment"># module {   // TTIR</span>
+<span class="comment">#   tt.func @add_kernel ...</span>
+<span class="comment"># }</span>
+<span class="comment"># -----</span>
+<span class="comment"># module {   // TTGIR（加了布局编码）</span>
+<span class="comment">#   ttg.blocked_encoding ...</span>
+<span class="comment"># }</span>
+
+<span class="comment"># 方法 2：用解释器调试（不需要 GPU）</span>
+<span class="keyword">export</span> TRITON_INTERPRET=1
+python your_kernel.py
+<span class="comment"># 这时候可以用 Python 断点，逐行调试 kernel</span>
+
+<span class="comment"># 方法 3：查看最终 PTX</span>
+<span class="keyword">export</span> TRITON_KERNEL_DUMP=1
+<span class="keyword">export</span> TRITON_DUMP_DIR=./dump
+python your_kernel.py
+<span class="comment"># 生成的 PTX 保存在 ./dump/ 目录</span>
+            </div>
+
+            <div class="concept-block" style="border-left-color: #0b1e33;">
+                <div class="concept-title" style="color: #0b1e33;">小结 &middot; 为什么要理解编译原理</div>
+                <ul>
+                    <li><strong>性能调优</strong>：知道瓶颈在 TTIR 还是 TTGIR，才能针对性优化。</li>
+                    <li><strong>调试</strong>：kernel 跑不通时，dump IR 能看到是哪一步出的问题。</li>
+                    <li><strong>理解自动调优</strong>：不同的 BLOCK_SIZE 会生成不同的 TTGIR，性能差异来自布局选择。</li>
+                </ul>
+            </div>
+        </div>
+        <!-- 1.2 Triton vs CUDA -->
+        <div class="section">
+
+            <div class="section-title">
+                3. Triton vs 传统 CUDA
+                <span class="badge-purple">对比</span>
+            </div>
+            <p class="desc">
+                Triton 在保持高性能的同时，大幅降低了编程复杂度。以下对比展示了编写同一个向量加法 kernel 的代码量和关注点差异。
+            </p>
+
+            <!-- 图2：对比 -->
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 2</span> 开发流程对比 &middot; Triton vs CUDA
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        subgraph CUDA["传统 CUDA C++"]
+                            C1["手写 .cu 文件"] --> C2["手动管理 threadIdx / blockIdx"]
+                            C2 --> C3["手动管理共享内存<br/>避免 bank conflict"]
+                            C3 --> C4["手动调优<br/>线程块大小 / 网格形状"]
+                            C4 --> C5["编译为 PTX / 可执行文件"]
+                        end
+
+                        subgraph Triton["OpenAI Triton"]
+                            T1["Python 函数 + @jit"] --> T2["tl.program_id 获取块 ID<br/>tl.arange 生成偏移"]
+                            T2 --> T3["tl.load / tl.store 向量化访问<br/>编译器自动合并内存"]
+                            T3 --> T4["自动调优<br/>编译器选择最优配置"]
+                            T4 --> T5["JIT 编译并运行"]
+                        end
+
+                        CUDA --> Result1["高性能 &middot; 开发周期长<br/>代码量大 &middot; 调试困难"]
+                        Triton --> Result2["高性能 &middot; 开发周期短<br/>代码量少 &middot; 易于调试"]
+                </div>
+            </div>
+
+            <!-- 源码对比 -->
+            <p class="desc" style="margin-top:1.2rem;"><strong>代码量对比：</strong>同一个向量加法，Triton 代码量仅为 CUDA 的 <strong>1/3</strong>，且无需处理指针和线程索引的细节。</p>
+            <div class="compare-grid">
+                <div class="col">
+                    <h4>CUDA C++ (约 40 行)</h4>
+                    <div class="code-block" style="font-size:0.78rem; padding:0.8rem 1rem; margin:0.2rem 0;">
+<span class="comment">// vector_add.cu</span>
+<span class="keyword">__global__</span> <span class="keyword">void</span> <span class="func">vector_add</span>(
+    <span class="keyword">float</span>* x, <span class="keyword">float</span>* y, <span class="keyword">float</span>* out,
+    <span class="keyword">int</span> n
+) {
+    <span class="keyword">int</span> idx = blockIdx.x * blockDim.x + threadIdx.x;
+    <span class="keyword">if</span> (idx &lt; n) {
+        out[idx] = x[idx] + y[idx];
+    }
+}
+<span class="comment">// 调用:</span>
+<span class="keyword">int</span> block_size = <span class="number">256</span>;
+<span class="keyword">int</span> grid_size = (n + block_size - <span class="number">1</span>) / block_size;
+vector_add&lt;&lt;&lt;grid_size, block_size&gt;&gt;&gt;(x, y, out, n);
+cudaDeviceSynchronize();
+                    </div>
+                </div>
+                <div class="col">
+                    <h4>Triton (约 15 行)</h4>
+                    <div class="code-block" style="font-size:0.78rem; padding:0.8rem 1rem; margin:0.2rem 0;">
+@triton.jit
+<span class="keyword">def</span> <span class="func">add_kernel</span>(x_ptr, y_ptr, out_ptr, n, BLOCK_SIZE: tl.constexpr):
+    pid = tl.program_id(<span class="string">"0"</span>)
+    offsets = pid * BLOCK_SIZE + tl.arange(<span class="string">"0"</span>, BLOCK_SIZE)
+    mask = offsets &lt; n
+    x = tl.load(x_ptr + offsets, mask=mask)
+    y = tl.load(y_ptr + offsets, mask=mask)
+    tl.store(out_ptr + offsets, x + y, mask=mask)
+
+<span class="comment"># 调用:</span>
+grid = (triton.cdiv(n, BLOCK_SIZE), )
+add_kernel[grid](x, y, out, n, BLOCK_SIZE=<span class="number">256</span>)
+                    </div>
+                </div>
+            </div>
+            <div class="concept-block">
+                <div class="concept-title">概念补课 &middot; 差异总结</div>
+                <ul>
+                    <li><strong>CUDA</strong>：需要管理 <code>threadIdx</code>、<code>blockIdx</code>、<code>blockDim</code>，手动计算索引，手动调优线程块大小。</li>
+                    <li><strong>Triton</strong>：用 <code>tl.program_id</code> 获取块 ID，<code>tl.arange</code> 生成偏移，编译器自动处理内存合并和调优。</li>
+                    <li><strong>开发效率</strong>：Triton 代码量约为 CUDA 的 <strong>1/3</strong>，调试更容易，迭代更快。</li>
+                </ul>
+            </div>
+        </div>
+        <div class="section">
+            <div class="section-title">
+                3.1 核心 API 详解
+                <span class="badge-green">API</span>
+            </div>
+            <p class="desc">
+                理解 Triton 的核心 API 是编写高效 kernel 的基础。以下是 <code>tl</code> 命名空间下最常用的 API 及其用法。
+            </p>
+
+            <!-- 图2-A：API 分类 -->
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0;">
+                <div style="background:#f0fdf4; border-radius:14px; padding:1rem 1.2rem; border:1px solid #bbf7d0;">
+                    <div style="font-weight:700; color:#166534; margin-bottom:0.5rem;">内存操作</div>
+                    <div style="font-size:0.9rem; color:#1e293b;">
+                        <code>tl.load(ptr, mask)</code><br/>
+                        <code>tl.store(ptr, val, mask)</code>
+                    </div>
+                </div>
+                <div style="background:#eff6ff; border-radius:14px; padding:1rem 1.2rem; border:1px solid #bfdbfe;">
+                    <div style="font-weight:700; color:#1e40af; margin-bottom:0.5rem;">计算操作</div>
+                    <div style="font-size:0.9rem; color:#1e293b;">
+                        <code>tl.dot(a, b)</code><br/>
+                        <code>tl.exp / tl.log / tl.sqrt</code><br/>
+                        <code>tl.maximum / tl.minimum</code>
+                    </div>
+                </div>
+                <div style="background:#fefce8; border-radius:14px; padding:1rem 1.2rem; border:1px solid #fde68a;">
+                    <div style="font-weight:700; color:#854d0e; margin-bottom:0.5rem;">索引操作</div>
+                    <div style="font-size:0.9rem; color:#1e293b;">
+                        <code>tl.program_id(axis)</code><br/>
+                        <code>tl.arange(start, end)</code><br/>
+                        <code>tl.cdiv(a, b)</code>
+                    </div>
+                </div>
+                <div style="background:#faf5ff; border-radius:14px; padding:1rem 1.2rem; border:1px solid #e9d5ff;">
+                    <div style="font-weight:700; color:#6b21a8; margin-bottom:0.5rem;">形状操作</div>
+                    <div style="font-size:0.9rem; color:#1e293b;">
+                        <code>tl.splat(scalar, shape)</code><br/>
+                        <code>tl.reshape(tensor, shape)</code><br/>
+                        <code>tl.transpose(tensor)</code>
+                    </div>
+                </div>
+                <div style="background:#fff7ed; border-radius:14px; padding:1rem 1.2rem; border:1px solid #fed7aa;">
+                    <div style="font-weight:700; color:#9a3412; margin-bottom:0.5rem;">编译期常量</div>
+                    <div style="font-size:0.9rem; color:#1e293b;">
+                        <code>tl.constexpr</code>
+                    </div>
+                </div>
+            </div>
+
+            <!-- tl.load / tl.store 详解 -->
+            <p class="desc"><strong>tl.load / tl.store：向量化内存访问</strong></p>
+
+            <div class="code-block">
+<span class="comment"># tl.load - 从全局内存加载数据到寄存器</span>
+<span class="comment"># 基础用法</span>
+offsets = tl.arange(<span class="string">"0"</span>, BLOCK_SIZE)
+data = tl.load(ptr + offsets)
+
+<span class="comment"># 带掩码（处理越界）</span>
+mask = offsets &lt; n
+data = tl.load(ptr + offsets, mask=mask, other=<span class="number">0.0</span>)
+
+<span class="comment"># 二维加载（矩阵行）</span>
+row_idx = tl.arange(<span class="string">"0"</span>, BLOCK_M)
+col_idx = tl.arange(<span class="string">"0"</span>, BLOCK_K)
+<span class="comment"># ptr + row_idx[:, None] * stride + col_idx[None, :] 广播</span>
+block = tl.load(ptr + row_idx[:, None] * stride + col_idx[None, :],
+                mask=row_idx[:, None] &lt; M)
+
+<span class="comment"># tl.store - 从寄存器写回全局内存</span>
+tl.store(out_ptr + offsets, result, mask=mask)
+
+<span class="comment"># 关键点：</span>
+<span class="comment"># 1. mask 处理边界情况，避免越界访问</span>
+<span class="comment"># 2. other 指定 mask 为 false 时的填充值</span>
+<span class="comment"># 3. 向量化访问自动合并内存请求，提升带宽利用率</span>
+            </div>
+
+            <!-- tl.dot 详解 -->
+            <p class="desc"><strong>tl.dot：矩阵乘法（利用 Tensor Core）</strong></p>
+
+            <div class="code-block">
+<span class="comment"># tl.dot - 矩阵乘法，自动映射到 Tensor Core</span>
+<span class="comment"># 基础用法</span>
+c = tl.dot(a, b)  <span class="comment"># a: [M, K], b: [K, N] -> c: [M, N]</span>
+
+<span class="comment"># 带累加器</span>
+c = tl.dot(a, b, acc=c_prev)  <span class="comment"># c = a @ b + c_prev</span>
+
+<span class="comment"># 转置</span>
+s = tl.dot(q, tl.transpose(k))  <span class="comment"># Q @ K^T</span>
+
+<span class="comment"># 实际示例：FlashAttention 中的 S = Q @ K^T</span>
+<span class="comment"># q: [BLOCK_M, head_dim]</span>
+<span class="comment"># k: [BLOCK_N, head_dim]</span>
+s = tl.dot(q, tl.transpose(k)) / tl.sqrt(head_dim)
+<span class="comment"># s: [BLOCK_M, BLOCK_N] - 注意力分数</span>
+
+<span class="comment"># 关键点：</span>
+<span class="comment"># 1. tl.dot 自动利用 Tensor Core 加速</span>
+<span class="comment"># 2. 输入需要特定的布局（通过 Encoding 控制）</span>
+<span class="comment"># 3. 数据类型通常是 fp16 或 bf16</span>
+            </div>
+
+            <!-- tl.program_id / tl.arange 详解 -->
+            <p class="desc"><strong>tl.program_id / tl.arange：线程块索引</strong></p>
+
+            <div class="code-block">
+<span class="comment"># tl.program_id - 获取当前线程块的索引</span>
+pid = tl.program_id(<span class="string">"0"</span>)  <span class="comment"># 第 0 维的块索引（标量）</span>
+
+<span class="comment"># 多维索引（如 batch x head x seq）</span>
+batch_id = tl.program_id(<span class="string">"0"</span>)
+head_id = tl.program_id(<span class="string">"1"</span>)
+block_m = tl.program_id(<span class="string">"2"</span>)
+
+<span class="comment"># tl.arange - 生成连续整数序列</span>
+offsets = tl.arange(<span class="string">"0"</span>, BLOCK_SIZE)  <span class="comment"># [0, 1, 2, ..., BLOCK_SIZE-1]</span>
+
+<span class="comment"># 计算全局偏移</span>
+global_offsets = pid * BLOCK_SIZE + tl.arange(<span class="string">"0"</span>, BLOCK_SIZE)
+
+<span class="comment"># tl.cdiv - 向上取整除法（计算 grid size）</span>
+n_blocks = tl.cdiv(n, BLOCK_SIZE)  <span class="comment"># ceil(n / BLOCK_SIZE)</span>
+
+<span class="comment"># 关键点：</span>
+<span class="comment"># 1. program_id 是标量，arange 是向量</span>
+<span class="comment"># 2. 组合使用实现"每个线程块处理一段数据"</span>
+<span class="comment"># 3. tl.constexpr 标记编译期常量，可作为 arange 的参数</span>
+            </div>
+
+            <!-- tl.constexpr 详解 -->
+            <p class="desc"><strong>tl.constexpr：编译期常量</strong></p>
+
+            <div class="code-block">
+<span class="comment"># tl.constexpr - 编译期确定的值</span>
+@triton.jit
+<span class="keyword">def</span> <span class="func">my_kernel</span>(
+    ...,
+    BLOCK_M: tl.constexpr,  <span class="comment"># 编译期常量，可作为维度大小</span>
+    BLOCK_N: tl.constexpr,
+):
+    <span class="comment"># BLOCK_M 在编译时确定，可用于：</span>
+    <span class="comment"># 1. tl.arange 的维度</span>
+    offsets = tl.arange(<span class="string">"0"</span>, BLOCK_M)
+
+    <span class="comment"># 2. tl.cdiv 的除数</span>
+    n_blocks = tl.cdiv(seq_len, BLOCK_N)
+
+    <span class="comment"># 3. 循环展开</span>
+    <span class="keyword">for</span> i <span class="keyword">in</span> range(BLOCK_M):  <span class="comment"># 编译时展开为固定次数</span>
+        ...
+
+<span class="comment"># 调用时指定</span>
+my_kernel[grid](..., BLOCK_M=<span class="number">128</span>, BLOCK_N=<span class="number">64</span>)
+
+<span class="comment"># 关键点：</span>
+<span class="comment"># 1. constexpr 值在编译时确定，生成专用代码</span>
+<span class="comment"># 2. 不同的 constexpr 值会生成不同的 kernel 版本</span>
+<span class="comment"># 3. 自动调优会尝试不同的 constexpr 组合</span>
+            </div>
+
+            <!-- 自动调优 -->
+            <p class="desc"><strong>自动调优 (autotuning)：</strong>Triton 内置自动调优机制，自动选择最优配置。</p>
+
+            <div class="code-block">
+<span class="comment"># 使用 @triton.autotune 自动调优</span>
+@triton.autotune(
+    configs=[
+        triton.Config({<span class="string">'BLOCK_M'</span>: <span class="number">128</span>, <span class="string">'BLOCK_N'</span>: <span class="number">128</span>, <span class="string">'BLOCK_K'</span>: <span class="number">64</span>}),
+        triton.Config({<span class="string">'BLOCK_M'</span>: <span class="number">256</span>, <span class="string">'BLOCK_N'</span>: <span class="number">128</span>, <span class="string">'BLOCK_K'</span>: <span class="number">32</span>}),
+        triton.Config({<span class="string">'BLOCK_M'</span>: <span class="number">128</span>, <span class="string">'BLOCK_N'</span>: <span class="number">256</span>, <span class="string">'BLOCK_K'</span>: <span class="number">32</span>}),
+    ],
+    key=[<span class="string">'M'</span>, <span class="string">'N'</span>, <span class="string">'K'</span>],  <span class="comment"># 根据这些参数选择配置</span>
+)
+@triton.jit
+<span class="keyword">def</span> <span class="func">matmul_kernel</span>(
+    ...,
+    BLOCK_M: tl.constexpr,
+    BLOCK_N: tl.constexpr,
+    BLOCK_K: tl.constexpr,
+):
+    <span class="comment"># kernel 实现</span>
+    ...
+
+<span class="comment"># 调用时无需指定 BLOCK_*，自动调优会选择最优配置</span>
+matmul_kernel[grid](a, b, c, M, N, K, ...)
+            </div>
+
+            <div class="concept-block" style="border-left-color: #16a34a;">
+                <div class="concept-title" style="color: #16a34a;">小结 &middot; 核心 API 要点</div>
+                <ul>
+                    <li><strong>内存</strong>：<code>tl.load</code>/<code>tl.store</code> 是向量化访问，必须用 <code>mask</code> 处理边界。</li>
+                    <li><strong>计算</strong>：<code>tl.dot</code> 自动映射到 Tensor Core，是高性能的关键。</li>
+                    <li><strong>索引</strong>：<code>tl.program_id</code> + <code>tl.arange</code> 组合实现分块处理。</li>
+                    <li><strong>常量</strong>：<code>tl.constexpr</code> 标记编译期常量，不同值生成不同 kernel。</li>
+                    <li><strong>调优</strong>：<code>@triton.autotuning</code> 自动搜索最优配置。</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 第三部分：模型实战 -->
+        <!-- ============================================================ -->
+
+        <div class="section">
+            <div class="section-title">
+                4. 生态与应用
+                <span class="badge-purple">生态</span>
+            </div>
+            <p class="desc">
+                FlashAttention 只是 Triton 生态中的一个经典案例。Triton 已被广泛应用于大模型训练、推理框架、算子库等各个领域。
+            </p>
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 5-A</span> Triton 生态全景
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        subgraph Frameworks["推理框架"]
+                            F1["vLLM"]
+                            F2["SGLang"]
+                        end
+                        subgraph Models["大模型"]
+                            M1["DeepSeek-V2/V3"]
+                            M2["LLaMA 系列"]
+                            M3["Qwen 系列"]
+                        end
+                        subgraph Libraries["算子库"]
+                            L1["FlashAttention"]
+                            L2["FlashInfer"]
+                        end
+                        subgraph Framework["PyTorch"]
+                            P1["torch.compile"]
+                            P2["TorchInductor"]
+                        end
+                        Frameworks --> Framework
+                        Models --> Framework
+                        Libraries --> Framework
+                </div>
+            </div>
+            <p class="desc"><strong>案例：DeepSeek-V2 的 MLA (Multi-head Latent Attention)</strong></p>
+            <div class="code-block">
+<span class="comment"># DeepSeek 的 MLA 核心思想：将 KV 压缩到低维空间</span>
+<span class="comment"># 推理时 KV Cache 减少 90%+，通过 Triton 实现高效解压计算</span>
+
+<span class="keyword">@triton.jit</span>
+<span class="keyword">def</span> <span class="func">mla_decode_kernel</span>(q_ptr, kv_cache_ptr, output_ptr, ...):
+    <span class="comment"># 从 KV Cache 加载压缩的 KV</span>
+    kv_compressed = <span class="func">tl.load</span>(kv_cache_ptr + ...)
+    <span class="comment"># 解压 KV（通过下投影矩阵）</span>
+    k = <span class="func">tl.dot</span>(kv_compressed, w_k)
+    v = <span class="func">tl.dot</span>(kv_compressed, w_v)
+    <span class="comment"># 标准 Attention 计算</span>
+    score = <span class="func">tl.dot</span>(q, <span class="func">tl.transpose</span>(k)) / <span class="func">tl.sqrt</span>(head_dim)
+    attn = <span class="func">tl.softmax</span>(score)
+    out = <span class="func">tl.dot</span>(attn, v)
+    <span class="func">tl.store</span>(output_ptr + ..., out)
+            </div>
+            <p class="desc"><strong>常用 Triton kernel 库：</strong></p>
+            <div style="overflow-x:auto; margin: 1.2rem 0;">
+                <table class="feature-table">
+                    <thead>
+                        <tr><th>库名</th><th>内容</th><th>适用场景</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><code>triton-kernels</code></td><td>官方 kernel 合集</td><td>矩阵乘、归约、扫描等</td></tr>
+                        <tr><td><code>flash-attn</code></td><td>FlashAttention 1/2/3</td><td>Transformer 训练和推理</td></tr>
+                        <tr><td><code>flashinfer</code></td><td>高效 Attention 库</td><td>vLLM/SGLang 推理后端</td></tr>
+                        <tr><td><code>torchao</code></td><td>量化 kernel</td><td>INT4/INT8/FP8 量化推理</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">
+                5. 硬件适配原理
+                <span class="badge-red">硬件</span>
+            </div>
+            <p class="desc">
+                Triton 能够支持多种硬件，核心在于其编译器架构的灵活性。不同硬件的计算单元、内存层次、编程模型差异巨大，
+                Triton 通过 Dialect 和 Backend 抽象这些差异。
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.2rem; margin: 1.5rem 0;">
+                <div style="background:#f0fdf4; border-radius:14px; padding:1.2rem; border:1px solid #bbf7d0;">
+                    <div style="font-weight:700; color:#166534; margin-bottom:0.8rem; font-size:1.05rem;">NVIDIA GPU</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        <strong>SM</strong> (流式多处理器)<br/>
+                        ├─ CUDA Cores (标量/向量)<br/>
+                        ├─ Tensor Cores (矩阵加速)<br/>
+                        ├─ Shared Memory (164KB)<br/>
+                        └─ Registers (64KB/SM)
+                    </div>
+                </div>
+                <div style="background:#eff6ff; border-radius:14px; padding:1.2rem; border:1px solid #bfdbfe;">
+                    <div style="font-weight:700; color:#1e40af; margin-bottom:0.8rem; font-size:1.05rem;">AMD GPU</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        <strong>CU</strong> (计算单元)<br/>
+                        ├─ SIMD (向量单元)<br/>
+                        ├─ Matrix Core (矩阵加速)<br/>
+                        ├─ LDS (本地数据共享)<br/>
+                        └─ VGPR (向量寄存器)
+                    </div>
+                </div>
+                <div style="background:#fef2f2; border-radius:14px; padding:1.2rem; border:1px solid #fecaca;">
+                    <div style="font-weight:700; color:#991b1b; margin-bottom:0.8rem; font-size:1.05rem;">华为昇腾 NPU</div>
+                    <div style="font-size:0.9rem; color:#1e293b; line-height:1.8;">
+                        <strong>Da Vinci 核心</strong><br/>
+                        ├─ Cube Unit (矩阵加速)<br/>
+                        ├─ Vector Unit (向量)<br/>
+                        ├─ Scalar Unit (标量)<br/>
+                        └─ UB (Unified Buffer)
+                    </div>
+                </div>
+            </div>
+            <div style="overflow-x:auto; margin: 1.5rem 0;">
+                <table class="feature-table">
+                    <thead>
+                        <tr><th>维度</th><th>NVIDIA GPU</th><th>AMD GPU</th><th>华为昇腾 NPU</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>计算单元</strong></td><td>SM → CUDA Core + Tensor Core</td><td>CU → SIMD + Matrix Core</td><td>Da Vinci → Cube + Vector</td></tr>
+                        <tr><td><strong>内存层次</strong></td><td>Global → Shared → Registers</td><td>Global → LDS → VGPR</td><td>Global → UB → Registers</td></tr>
+                        <tr><td><strong>编程模型</strong></td><td>SIMT (32 线程 warp)</td><td>SIMD (64 宽 wave)</td><td>任务并行 + Cube/Vector 协作</td></tr>
+                        <tr><td><strong>软件栈</strong></td><td>CUDA / cuDNN / NCCL</td><td>ROCm / MIOpen / RCCL</td><td>CANN / TorchNPU</td></tr>
+                        <tr><td><strong>Triton 后端</strong></td><td>LLVM → PTX/SASS</td><td>LLVM → GCN/CDNA</td><td>LLVM → Ascend C</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- 源码讲解：同一 kernel 不同后端 -->
+            <p class="desc" style="margin-top:1.5rem;">
+                <strong>源码讲解：同一个 kernel，不同后端如何适配</strong>
+                <span style="font-size:0.85rem; color:#64748b;">——以向量加法为例，看 Triton 如何为不同硬件生成不同的机器码</span>
+            </p>
+
+            <p class="desc">
+                你写的 Python kernel 只有一份，但 Triton 会根据目标硬件生成不同的代码。
+                下面展示同一个 <code>add_kernel</code> 在 NVIDIA 和 AMD 上的最终产物差异：
+            </p>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.2rem; margin: 1rem 0;">
+                <div>
+                    <div style="background:#f0fdf4; border-radius:10px; padding:0.6rem 1rem; font-weight:600; color:#166534; margin-bottom:0.5rem;">NVIDIA 后端（PTX）</div>
+                    <div class="code-block" style="margin:0; font-size:0.8rem;">
+<span class="comment">// NVIDIA GPU 上执行的 PTX 汇编</span>
+.visible .entry add_kernel(
+    .param .u64 x_ptr,
+    .param .u64 y_ptr,
+    .param .u64 out_ptr,
+    .param .u32 n
+) {
+    <span class="comment">// 一个 warp (32 线程) 协作</span>
+    mov.u32 %r1, %ctaid.x;       <span class="comment">// block ID</span>
+    shl.b32 %r2, %r1, <span class="number">8</span>;         <span class="comment">// pid * 256</span>
+
+    <span class="comment">// 向量化加载：一次 128 字节</span>
+    ld.global.v4.f32 { %f0,%f1,%f2,%f3 },
+        [%rd1 + %r2*4];
+
+    <span class="comment">// 向量化加法</span>
+    add.f32 %f4, %f0, %f5;
+    add.f32 %f6, %f1, %f7;
+
+    <span class="comment">// 向量化存储</span>
+    st.global.v4.f32 [%rd3 + %r2*4],
+        { %f4,%f6,%f8,%f10 };
+    ret;
+}
+                    </div>
+                </div>
+                <div>
+                    <div style="background:#eff6ff; border-radius:10px; padding:0.6rem 1rem; font-weight:600; color:#1e40af; margin-bottom:0.5rem;">AMD 后端（GCN）</div>
+                    <div class="code-block" style="margin:0; font-size:0.8rem;">
+<span class="comment">// AMD GPU 上执行的 GCN 指令</span>
+.amdgpu_kernel add_kernel(
+    .arg x_ptr, 8
+    .arg y_ptr, 8
+    .arg out_ptr, 8
+    .arg n, 4
+) {
+    <span class="comment">// 一个 wave (64 线程) 协作</span>
+    s_load_dwordx4  s[0:3], s[4:5], 0x0
+    s_load_dword    s4, s[4:5], 0x10
+    s_waitcnt       lgkmcnt(0)
+
+    <span class="comment">// 计算偏移</span>
+    v_mul_i32_i24  v0, v0, <span class="number">256</span>
+
+    <span class="comment">// 向量化加载 (buffer_load)</span>
+    buffer_load_dwordx4 v[8:11], v0, s[0:3], <span class="number">0</span>
+
+    <span class="comment">// 向量加法 (VOP3)</span>
+    v_add_f32  v8,  v8,  v12
+    v_add_f32  v9,  v9,  v13
+
+    <span class="comment">// 向量化存储</span>
+    buffer_store_dwordx4 v[8:11], v0, s[8:11], <span class="number">0</span>
+    s_endpgm
+}
+                    </div>
+                </div>
+            </div>
+
+            <div class="concept-block" style="border-left-color: #8b5cf6;">
+                <div class="concept-title" style="color: #8b5cf6;">为什么代码不同，但 Python kernel 只有一份</div>
+                <ul>
+                    <li><strong>TTIR 层</strong>：你的 kernel 被翻译成硬件无关的 IR，描述"加载 256 个 float，加法，存储"</li>
+                    <li><strong>TTGIR 层</strong>：编译器根据目标硬件选择布局编码（NVIDIA 用 warp=32，AMD 用 wave=64）</li>
+                    <li><strong>LLVM 层</strong>：将 TTGIR 转换成 LLVM IR，然后 LLVM 后端分别生成 PTX（NVIDIA）和 GCN（AMD）</li>
+                    <li><strong>关键</strong>：你不需要关心这些差异，Triton 自动处理</li>
+                </ul>
+            </div>
+
+            <!-- 源码讲解：布局编码如何适配硬件 -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>源码讲解：布局编码如何适配不同硬件</strong>
+                <span style="font-size:0.85rem; color:#64748b;">——同一个 <code>tl.dot</code>（矩阵乘法），不同硬件用不同的 Tensor Core</span>
+            </p>
+
+            <div class="code-block">
+<span class="comment"># 同一个 Python kernel 中的 tl.dot</span>
+@triton.jit
+<span class="keyword">def</span> <span class="func">matmul_kernel</span>(a_ptr, b_ptr, c_ptr, M, N, K, ...):
+    <span class="comment"># ... 加载 a_block, b_block ...</span>
+    c = tl.dot(a_block, b_block)  <span class="comment"># 矩阵乘法</span>
+
+<span class="comment"># --- 编译器在 TTGIR 层的处理 ---</span>
+
+<span class="comment"># 当目标是 NVIDIA 时，编译器选择：</span>
+<span class="comment">#   - MMAEncoding (Tensor Core 布局)</span>
+<span class="comment">#   - 16x16x16 矩阵块，适配 H100/A100 的 Tensor Core</span>
+<span class="comment">#   - 数据格式：fp16 或 tf32</span>
+c = ttg.dot %a, %b, %c {
+    encoding = #ttg.nvidia_mma&lt;
+        version = [<span class="number">2</span>, <span class="number">0</span>, <span class="number">0</span>],  <span class="comment">// Hopper 架构</span>
+        warpsPerCTA = [<span class="number">4</span>, <span class="number">2</span>],  <span class="comment">// 8 个 warp</span>
+        CTALayout = {...}
+    &gt;
+} : tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f16</span>&gt; -> tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f32</span>&gt;
+
+<span class="comment"># 当目标是 AMD 时，编译器选择：</span>
+<span class="comment">#   - WMMALayout (Matrix Core 布局)</span>
+<span class="comment">#   - 32x32x8 矩阵块，适配 MI300X 的 Matrix Core</span>
+<span class="comment">#   - 数据格式：fp16 或 bf16</span>
+c = ttg.dot %a, %b, %c {
+    encoding = #ttg.amd_wmma&lt;
+        warpsPerCTA = [<span class="number">4</span>, <span class="number">1</span>],
+        CTALayout = {...}
+    &gt;
+} : tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f16</span>&gt; -> tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f32</span>&gt;
+
+<span class="comment"># 当目标是华为昇腾时：</span>
+<span class="comment">#   - AscendMmaEncoding (Cube Unit 布局)</span>
+<span class="comment">#   - 16x16x16 矩阵块，适配 Da Vinci Cube Unit</span>
+c = ttg.dot %a, %b, %c {
+    encoding = #ttg.ascend_mma&lt;
+        cubeSize = [<span class="number">16</span>, <span class="number">16</span>, <span class="number">16</span>]
+    &gt;
+} : tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f16</span>&gt; -> tensor&lt;<span class="number">128</span> x <span class="number">128</span> x <span class="type">f32</span>&gt;
+            </div>
+
+            <div class="concept-block" style="border-left-color: #16a34a;">
+                <div class="concept-title" style="color: #16a34a;">布局编码适配的核心逻辑</div>
+                <ul>
+                    <li><strong>同一个 <code>tl.dot</code></strong>：Python 层面完全一样</li>
+                    <li><strong>TTGIR 层分化</strong>：编译器根据目标硬件选择不同的 <code>Encoding</code>（NVIDIA MMA / AMD WMA / Ascend MMA）</li>
+                    <li><strong>硬件匹配</strong>：每个 Encoding 对应特定硬件的 Tensor Core / Matrix Core / Cube Unit 规格</li>
+                    <li><strong>性能调优</strong>：<code>warpsPerCTA</code>、矩阵块大小等参数需要针对硬件调整</li>
+                </ul>
+            </div>
+
+            <!-- 源码讲解：NVIDIA Backend 目录结构 -->
+            <p class="desc" style="margin-top:2rem;">
+                <strong>源码讲解：Triton 后端的代码组织</strong>
+                <span style="font-size:0.85rem; color:#64748b;">——每个硬件后端在 Triton 源码中的位置</span>
+            </p>
+
+            <div class="code-block">
+<span class="comment"># Triton 源码目录结构（与硬件适配相关）</span>
+
+triton/
+├── lib/
+│   ├── Dialect/
+│   │   ├── Triton/           <span class="comment"># TTIR 定义（硬件无关）</span>
+│   │   │   ├── IR/           <span class="comment"># 操作、类型定义</span>
+│   │   │   └── Transform/    <span class="comment"># 前端优化 pass</span>
+│   │   └── TritonGPU/        <span class="comment"># TTGIR 定义（GPU 相关）</span>
+│   │       ├── IR/           <span class="comment"># 布局编码：BlockedEncoding, MMAEncoding</span>
+│   │       └── Transform/    <span class="comment"># 后端优化 pass（coalesce, pipeline...）</span>
+│   └── Conversion/           <span class="comment"># TTGIR → LLVM IR 的 lowering</span>
+│
+├── third_party/
+│   ├── nvidia/               <span class="comment"># NVIDIA 后端</span>
+│   │   ├── lib/              <span class="comment"># PTX 生成、warp 级优化</span>
+│   │   └── python/           <span class="comment"># NVIDIA 特有的 Python API</span>
+│   │
+│   ├── amd/                  <span class="comment"># AMD 后端</span>
+│   │   ├── lib/              <span class="comment"># GCN/CDNA 代码生成</span>
+│   │   └── python/           <span class="comment"># AMD 特有的 API（如 FlashAttention）</span>
+│   │
+│   └── (triton-ascend/)      <span class="comment"># 华为昇腾后端（独立仓库）</span>
+│       ├── lib/              <span class="comment"># Ascend C 代码生成</span>
+│       └── python/           <span class="comment"># 昇腾特有 API（tt.fp_to_fp 等）</span>
+            </div>
+
+            <div class="concept-block" style="border-left-color: #ea580c;">
+                <div class="concept-title" style="color: #ea580c;">小结 &middot; 硬件适配的关键</div>
+                <ul>
+                    <li><strong>TTIR 层</strong>：硬件无关，所有后端共享同一套 IR</li>
+                    <li><strong>TTGIR 层</strong>：通过不同的 <code>Encoding</code> 适配不同硬件的 Tensor Core</li>
+                    <li><strong>Backend 层</strong>：每个硬件有自己的代码生成器（PTX / GCN / Ascend C）</li>
+                    <li><strong>新增硬件</strong>：只需添加新的 Backend 和对应的 Encoding，无需修改用户代码</li>
+                </ul>
+            </div>
+
+            <div class="chart-box">
+                <div class="chart-label">
+                    <span class="num">图 9-B</span> Triton 硬件抽象层
+                </div>
+                <div class="mermaid">
+                    flowchart TD
+                        User["用户 Kernel (Python)"] --> TTIR["TTIR (硬件无关)"]
+                        TTIR --> TTGIR["TTGIR (布局编码)"]
+                        TTGIR --> BN["NVIDIA Backend"]
+                        TTGIR --> BA["AMD Backend"]
+                        TTGIR --> BH["华为昇腾 Backend"]
+                        BN --> PTX["PTX/SASS"]
+                        BA --> GCN["GCN/CDNA"]
+                        BH --> AscendC["Ascend C"]
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 追加 10：版本对比 -->
+        <!-- ============================================================ -->
+
+        <div class="section">
+
+            <div class="section-title">
+                6. 版本对比：triton-main vs triton-ascend
+                <span class="badge-orange">版本</span>
+            </div>
+            <p class="desc">
+                目前 Triton 有两个主要版本：<strong>triton-main</strong>（官方原版，支持 NVIDIA/AMD GPU）和 <strong>triton-ascend</strong>（华为昇腾适配版，支持 Ascend NPU）。
+            </p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.5rem 0;">
+                <div class="version-card nvidia">
+                    <h3>triton-main（官方原版）</h3>
+                    <ul>
+                        <li><strong>维护者</strong>：OpenAI / Triton 社区</li>
+                        <li><strong>GitHub</strong>：triton-lang/triton</li>
+                        <li><strong>硬件</strong>：NVIDIA GPU (CC 8.0+)、AMD GPU (ROCm 6.2+)</li>
+                        <li><strong>安装</strong>：pip install triton</li>
+                        <li><strong>Python</strong>：3.10-3.14</li>
+                        <li><strong>状态</strong>：稳定版 v3.x</li>
+                    </ul>
+                </div>
+                <div class="version-card ascend">
+                    <h3>triton-ascend（昇腾适配版）</h3>
+                    <ul>
+                        <li><strong>维护者</strong>：华为昇腾社区</li>
+                        <li><strong>GitHub</strong>：triton-lang/triton-ascend</li>
+                        <li><strong>硬件</strong>：Atlas A2/A3/950 系列 NPU</li>
+                        <li><strong>安装</strong>：pip install triton-ascend</li>
+                        <li><strong>Python</strong>：3.9-3.11</li>
+                        <li><strong>依赖</strong>：CANN + TorchNPU</li>
+                        <li><strong>状态</strong>：v3.2.2（2026.07.31）</li>
+                    </ul>
+                </div>
+            </div>
+            <div style="overflow-x:auto; margin: 1.5rem 0;">
+                <table class="feature-table">
+                    <thead>
+                        <tr><th style="width:20%">维度</th><th style="width:40%">triton-main</th><th style="width:40%">triton-ascend</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td><strong>编译后端</strong></td><td>LLVM → PTX/SASS、GCN/CDNA</td><td>LLVM → Ascend C (CANN 工具链)</td></tr>
+                        <tr><td><strong>API 兼容性</strong></td><td>完整 Triton Python API</td><td>约 85% API 已支持（持续完善）</td></tr>
+                        <tr><td><strong>内存模型</strong></td><td>Global → Shared → Registers</td><td>Global → UB → Registers</td></tr>
+                        <tr><td><strong>特殊 API</strong></td><td>标准 tl.load/tl.store/tl.dot</td><td>新增 tt.fp_to_fp (FP8)、scatter_ub_to_out</td></tr>
+                        <tr><td><strong>依赖环境</strong></td><td>CUDA / ROCm</td><td>CANN + TorchNPU</td></tr>
+                        <tr><td><strong>Docker</strong></td><td>Dev Container (第三方)</td><td>官方 Dockerfile (quay.io/ascend/cann)</td></tr>
+                        <tr><td><strong>生态集成</strong></td><td>PyTorch, vLLM, HuggingFace</td><td>vLLM-Ascend, sglang-Ascend</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="concept-block" style="border-left-color: #dc2626;">
+                <div class="concept-title" style="color: #dc2626;">迁移指南要点</div>
+                <ul>
+                    <li><strong>步骤 1</strong>：安装 CANN、TorchNPU，然后 <code>pip install triton-ascend</code></li>
+                    <li><strong>步骤 2</strong>：大部分基础 kernel（使用 tl.load/tl.store/tl.dot）可无缝迁移</li>
+                    <li><strong>步骤 3</strong>：涉及特殊内存操作或布局的 kernel 可能需要调整</li>
+                    <li><strong>步骤 4</strong>：调整 BLOCK_SIZE 以适配昇腾 Cube Unit 的最优配置</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="section">
+            <div class="section-title">
+                附录 A：源码参考路径
+                <span class="badge">参考</span>
+            </div>
+            <p class="desc">
+                本文档中涉及的代码和概念，对应的 Triton 源码路径如下。读者可参考这些源码深入理解 Triton 的实现细节。
+            </p>
+            <div style="overflow-x:auto; margin: 1.2rem 0;">
+                <table class="feature-table">
+                    <thead>
+                        <tr><th>章节</th><th>内容</th><th>源码路径</th></tr>
+                    </thead>
+                    <tbody>
+                        <tr><td>1.1 编译原理</td><td>TTIR/TTGIR 定义</td><td><code>include/triton/Dialect/Triton/IR/</code><br/><code>include/triton/Dialect/TritonGPU/IR/</code></td></tr>
+                        <tr><td>1.1 编译原理</td><td>布局编码 (BlockedEncoding)</td><td><code>include/triton/Dialect/TritonGPU/IR/AttrDefs.td</code></td></tr>
+                        <tr><td>1.1 编译原理</td><td>MLIR Dialect 定义</td><td><code>include/triton/Dialect/TritonGPU/Transforms/</code></td></tr>
+                        <tr><td>1.1 编译原理</td><td>优化 Pass (coalesce, pipeline)</td><td><code>lib/Dialect/TritonGPU/Transforms/</code></td></tr>
+                        <tr><td>2.1 核心 API</td><td>tl.load / tl.store</td><td><code>python/triton/language/</code></td></tr>
+                        <tr><td>2.1 核心 API</td><td>tl.dot (矩阵乘法)</td><td><code>python/triton/language/extra/</code></td></tr>
+                        <tr><td>2.1 核心 API</td><td>autotuning 机制</td><td><code>python/triton/runtime/autotuner.py</code></td></tr>
+                        <tr><td>2.1 核心 API</td><td>tl.constexpr</td><td><code>python/triton/language/semantic.py</code></td></tr>
+                        <tr><td>5. 改写 Attention</td><td>FlashAttention kernel</td><td><code>third_party/amd/python/triton/flash_attention.py</code><br/><code>third_party/nvidia/lib/</code></td></tr>
+                        <tr><td>6. 集成</td><td>autograd.Function 封装</td><td><code>python/triton/runtime/</code></td></tr>
+                        <tr><td>5.1 生态</td><td>DeepSeek MLA kernel</td><td><code>third_party/</code> (各后端实现)</td></tr>
+                        <tr><td>9. 硬件适配</td><td>NVIDIA Backend</td><td><code>third_party/nvidia/</code></td></tr>
+                        <tr><td>9. 硬件适配</td><td>AMD Backend</td><td><code>third_party/amd/</code></td></tr>
+                        <tr><td>9. 硬件适配</td><td>昇腾 Backend</td><td><code>triton-ascend: lib/</code> (独立仓库)</td></tr>
+                        <tr><td>10. 版本对比</td><td>triton-ascend API 扩展</td><td><code>triton-ascend: python/triton/</code></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="footnote">
+            OpenAI Triton &middot; 从介绍到模型实战（完整版v2） &middot; 从模型定义到编译原理完整流程 &middot; 代码块深色高亮 &middot; Mermaid 图独立
+        </div>
+
+    </div>
+
+    <script>
+            <script>
+        mermaid.initialize({
+            theme: 'base',
+            themeVariables: {
+                background: '#ffffff',
+                primaryColor: '#f8fafc',
+                primaryBorderColor: '#3b82f6',
+                primaryTextColor: '#0b1e33',
+                lineColor: '#475569',
+                secondaryColor: '#ffffff',
+                tertiaryColor: '#f1f5f9',
+                fontSize: '16px',
+                fontFamily: '"Segoe UI", "PingFang SC", system-ui, sans-serif',
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 60,
+                rankSpacing: 50,
+            },
+            securityLevel: 'loose',
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('.mermaid svg').forEach(svg => {
+                svg.style.maxWidth = '100%';
+                svg.style.height = 'auto';
+            });
+        });
+    </script>
+    </script>
+
+</body>
+</html>

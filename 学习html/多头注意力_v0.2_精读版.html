@@ -1,0 +1,1371 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>2026 五大注意力 · 从 MHA 到 MLA 精读版（数字示例 + 源码对应）</title>
+  <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js">
+  </script>
+  <style>
+    /* ===== 全局样式 ===== */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #f4f6fa; font-family: 'Segoe UI', Roboto, system-ui, sans-serif; padding: 30px 20px; color: #0f172a; }
+    .container { max-width: 1400px; margin: 0 auto; }
+    h1 { font-size: 2.6rem; font-weight: 700; margin-bottom: 4px; color: #0b1c2f; }
+    .subhead { font-size: 1.1rem; color: #334155; margin-bottom: 30px; border-left: 6px solid #3b82f6; padding-left: 20px; background: #eef2ff; border-radius: 0 12px 12px 0; line-height: 1.8; }
+    .module { background: #ffffff; border-radius: 28px; box-shadow: 0 8px 24px rgba(0,0,0,0.04); padding: 30px 34px; margin-bottom: 50px; border: 1px solid #e9edf4; }
+    .module-title { font-size: 2rem; font-weight: 700; margin-bottom: 12px; color: #0f172a; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border-bottom: 3px solid #e9edf4; padding-bottom: 12px; }
+    .module-title small { font-size: 1rem; font-weight: 400; color: #475569; background: #e9edf4; padding: 2px 20px; border-radius: 40px; }
+    .concept-box { background: #f8fafc; padding: 20px 28px; border-radius: 16px; margin: 12px 0 24px 0; border-left: 6px solid #3b82f6; font-size: 1.05rem; line-height: 2; }
+    .concept-box strong { color: #1e293b; }
+
+    .figure-group { margin: 28px 0 16px 0; background: #fafcff; border-radius: 18px; padding: 16px 10px 10px 10px; border: 1px dashed #cbd5e1; }
+    .figure-title { font-weight: 700; font-size: 1.2rem; color: #0f172a; margin-bottom: 8px; padding-left: 8px; display: flex; align-items: center; gap: 10px; }
+    .figure-title .badge { background: #e2e8f0; color: #334155; font-size: 0.75rem; padding: 0 12px; border-radius: 40px; font-weight: 600; }
+    .mermaid-wrapper { background: #ffffff; padding: 16px 12px 10px; border-radius: 16px; overflow-x: auto; margin: 8px 0 6px 0; border: 2px solid #e2e8f0; }
+    .mermaid-wrapper .mermaid { text-align: center; font-size: 18px !important; }
+
+    .table-wrapper { overflow-x: auto; margin: 16px 0 14px; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; }
+    .compare-table { width: 100%; border-collapse: collapse; font-size: 1rem; min-width: 700px; }
+    .compare-table thead { background: #f1f5f9; font-weight: 600; }
+    .compare-table th, .compare-table td { padding: 14px 18px; border-bottom: 1px solid #e9edf4; text-align: center; vertical-align: middle; line-height: 1.6; }
+    .compare-table td:first-child { text-align: left; font-weight: 600; }
+    .compare-table td:last-child { text-align: left; }
+
+    .badge-memory { display: inline-block; background: #e0e7ff; color: #3730a3; padding: 2px 14px; border-radius: 30px; font-size: 0.85rem; font-weight: 600; }
+    .tag { display: inline-block; padding: 2px 14px; border-radius: 30px; font-size: 0.85rem; font-weight: 600; }
+    .tag-red { background: #fee2e2; color: #991b1b; }
+    .tag-green { background: #dcfce7; color: #166534; }
+    .tag-yellow { background: #fef9c3; color: #854d0e; }
+    .tag-purple { background: #f3e8ff; color: #6b21a8; }
+    .tag-blue { background: #dbeafe; color: #1e40af; }
+
+    .model-badge { display: inline-block; background: #1e293b; color: #f8fafc; font-size: 0.75rem; font-weight: 600; padding: 1px 12px; border-radius: 30px; margin: 0 2px; white-space: nowrap; }
+    .model-badge.dsv4 { background: #1e3a5f; }
+    .model-badge.m3 { background: #7c3aed; }
+    .model-badge.glm { background: #b45309; }
+    .model-badge.qw { background: #0d9488; }
+    .model-badge.kimi { background: #dc2626; }
+
+    .code-block { background: #0d1a26; color: #e2e8f0; padding: 18px 24px; border-radius: 16px; overflow-x: auto; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.9rem; line-height: 1.7; margin: 16px 0 8px; border: 1px solid #2d3a4a; }
+    .code-block .comment { color: #7a9bb5; }
+    .code-block .keyword { color: #f472b6; }
+    .code-block .func { color: #60a5fa; }
+    .code-block .string { color: #a3e635; }
+    .code-block .number { color: #fbbf24; }
+
+    .feature-box { background: #ecfdf5; padding: 16px 24px; border-radius: 16px; margin-top: 18px; border-left: 6px solid #10b981; font-size: 1.05rem; line-height: 2; }
+    .feature-box strong { color: #047857; }
+
+    .kv-cache-box { background: #f0f4fe; padding: 16px 24px; border-radius: 16px; margin-top: 16px; border-left: 6px solid #3b82f6; font-size: 1.02rem; line-height: 2; }
+    .kv-cache-box strong { color: #1e40af; }
+
+    .param-number { font-weight: 700; color: #0f172a; }
+
+    /* 过渡说明框 */
+    .transition-box { background: #fefce8; border: 2px solid #f59e0b; border-radius: 16px; padding: 18px 24px; margin: 16px 0 8px; }
+    .transition-box .title { font-weight: 700; font-size: 1.1rem; color: #b45309; margin-bottom: 6px; }
+    .transition-box .content { color: #475569; font-size: 0.98rem; line-height: 1.8; }
+    .transition-box .content strong { color: #1e293b; }
+
+    /* 数字卡 */
+    .num-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; margin: 14px 0; }
+    .num-card { background: #ffffff; border: 2px solid #e2e8f0; border-radius: 14px; padding: 14px 16px; }
+    .num-label { font-size: 0.85rem; color: #64748b; font-weight: 600; }
+    .num-value { font-size: 1.45rem; font-weight: 800; color: #0f172a; margin: 2px 0; line-height: 1.3; }
+    .num-note { font-size: 0.82rem; color: #64748b; line-height: 1.5; }
+    .save { color: #059669; }
+    .cost { color: #dc2626; }
+
+    /* 统一基线框 */
+    .baseline-box { background: #0f172a; border-radius: 16px; padding: 18px 24px; margin: 14px 0 10px; color: #e2e8f0; }
+    .baseline-box .btitle { font-weight: 700; font-size: 1.1rem; color: #fbbf24; margin-bottom: 10px; }
+    .baseline-box table { width: 100%; border-collapse: collapse; font-size: 0.98rem; }
+    .baseline-box th, .baseline-box td { padding: 8px 14px; border-bottom: 1px solid #334155; text-align: center; }
+    .baseline-box th { color: #94a3b8; }
+    .baseline-box td:first-child { font-weight: 700; color: #f8fafc; }
+    .baseline-box td:last-child { text-align: left; color: #cbd5e1; }
+
+    /* 一句话结论 */
+    .takeaway { background: #f1f5f9; border-radius: 12px; padding: 12px 18px; margin: 12px 0 4px; font-size: 0.98rem; line-height: 1.8; }
+    .takeaway strong { color: #0f172a; }
+
+    .bridge-note { background: #eff6ff; border: 1px dashed #3b82f6; border-radius: 12px; padding: 14px 20px; margin: 14px 0 6px; font-size: 0.98rem; line-height: 1.9; }
+    .bridge-note .t { font-weight: 700; color: #1e40af; }
+    .bridge-note strong { color: #1e40af; }
+
+    @media (max-width: 640px) {
+      .module { padding: 18px 14px; }
+      h1 { font-size: 2rem; }
+      .module-title { font-size: 1.5rem; }
+      .compare-table { font-size: 0.9rem; min-width: 500px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>🔍 2026 五大注意力 · 从 MHA 到 MLA 精读版</h1>
+  <div class="subhead">
+    <strong>架构三层拆解 → 总览对比/演进 → 每个机制 3 张图（宏观 → 结构展开 → 推理/数字）</strong> ·
+    统一数字基线 L=4096 · H=32 · d=128 · G=4 · d_latent=256 ·
+    <strong>省 KV 缓存 / 省算力全部数字化</strong> ·
+    <strong>源码逐行标注对应图部件</strong>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 A：大模型架构 · 三层拆解（来自 v0.1，保留）              -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #8b5cf6;">
+    <div class="module-title" style="border-bottom-color: #8b5cf6;">
+      🧱 大模型架构 · 三层拆解
+      <small>以 d_model=8192、词表=128k 为例</small>
+    </div>
+    <div class="concept-box" style="border-left-color: #8b5cf6;">
+      大语言模型（LLM）的本质是 <strong>N 层 Transformer Block 的堆叠</strong>。下面 <strong>3 张图由粗到细</strong> 展示完整流程。<br><br>
+      <strong>图 B 特别说明</strong>：<strong>“多头注意力”</strong> 作为一个整体概念被保留（蓝色框），内部展开 <strong>Q/K/V 投影 → 注意力计算 → O 投影</strong>。<strong>FFN (SwiGLU)</strong> 展开为 <strong>上投影 (up) / 门控投影 (gate) / 下投影 (down)</strong> 三个矩阵。
+    </div>
+
+    <!-- ========== 图 A：整体流程 ========== -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 A</span> 整体流程：输入 → N 个 Block → 输出</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            UserInput["用户输入"] --> Tokenizer["Token 化<br>词表 128k"]
+            Tokenizer --> Embed["Token 嵌入<br>128k × 8192 = 1.05B"]
+            Embed --> BlockLoop["循环 N 个 Block<br>每层 ≈ 1.1B"]
+            BlockLoop --> Output["输出层（LM Head）<br>通常与嵌入共享权重"]
+            Output --> Result["生成下一个 Token"]
+            Note1["每个 Block 内部见 图 B"] -.-> BlockLoop
+            style Note1 fill:#f1f5f9,stroke:#94a3b8
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px;">📋 图 A 各部件具体参数</div>
+        <div class="table-wrapper">
+          <table class="compare-table">
+            <thead><tr><th style="text-align:left;">部件</th><th>参数量</th><th>占比（70B 计）</th></tr></thead>
+            <tbody>
+              <tr><td>Token 嵌入</td><td>128k × 8192 ≈ 1.05B</td><td>~1.5%</td></tr>
+              <tr><td>Block（每层）</td><td>≈ 1.1B</td><td>~1.6% / 层</td></tr>
+              <tr><td>输出层（共享）</td><td>0（共享嵌入权重）</td><td>0%</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 图 B：单个 Block 展开（FFN 拆分为 up/gate/down） ========== -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 B</span> 单个 Block 展开：多头注意力 + FFN (SwiGLU 展开)</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            Input["输入 (8192维)"] --> LN1["LayerNorm"]
+            LN1 --> MultiHead
+            subgraph MultiHead["多头注意力 (64头, 每头128维) — 合计 268M (0.27B)"]
+                Q["Q 投影<br>67M"] --> AttnCalc["注意力计算<br>（Q·K^T/√d）"]
+                K["K 投影<br>67M"] --> AttnCalc
+                V["V 投影<br>67M"] --> AttnCalc
+                AttnCalc --> O["O 投影<br>67M"]
+            end
+            MultiHead --> Add1["残差连接 +"]
+            Add1 --> LN2["LayerNorm"]
+            LN2 --> FFN
+            subgraph FFN["FFN (SwiGLU) — 合计 805M (0.8B)"]
+                Up["上投影 (up)<br>8192×32768 = 268M"] --> SwiGLU["SwiGLU 激活"]
+                Gate["门控投影 (gate)<br>8192×32768 = 268M"] --> SwiGLU
+                SwiGLU --> Down["下投影 (down)<br>32768×8192 = 268M"]
+            end
+            FFN --> Add2["残差连接 +"]
+            Add2 --> Out["输出 (8192维)"]
+            style MultiHead fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+            style FFN fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px;">📋 图 B 各部件具体参数（展开）</div>
+        <div class="table-wrapper">
+          <table class="compare-table">
+            <thead>
+              <tr><th style="text-align:left;">部件</th><th>参数量</th><th>计算式</th></tr>
+            </thead>
+            <tbody>
+              <tr style="background:#dbeafe; font-weight:700;">
+                <td>多头注意力（整体）</td><td>268M（0.27B）</td><td>4 × d_model²</td>
+              </tr>
+              <tr><td style="padding-left:24px;">├─ Q 投影</td><td>67M</td><td>d_model²</td></tr>
+              <tr><td style="padding-left:24px;">├─ K 投影</td><td>67M</td><td>d_model²</td></tr>
+              <tr><td style="padding-left:24px;">├─ V 投影</td><td>67M</td><td>d_model²</td></tr>
+              <tr><td style="padding-left:24px;">└─ O 投影</td><td>67M</td><td>d_model²</td></tr>
+
+              <tr style="background:#fef3c7; font-weight:700;">
+                <td>FFN (SwiGLU) 整体</td><td>805M（0.8B）</td><td>3 × d_model × d_ff</td>
+              </tr>
+              <tr><td style="padding-left:24px;">├─ 上投影 (up)</td><td>268M</td><td>d_model × d_ff = 8192×32768</td></tr>
+              <tr><td style="padding-left:24px;">├─ 门控投影 (gate)</td><td>268M</td><td>d_model × d_ff = 8192×32768</td></tr>
+              <tr><td style="padding-left:24px;">└─ 下投影 (down)</td><td>268M</td><td>d_ff × d_model = 32768×8192</td></tr>
+
+              <tr style="font-weight:700; background:#f1f5f9;">
+                <td>单层 Block 总计</td><td>≈ 1.1B</td><td>0.27B + 0.8B</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:0.9rem;color:#475569;margin-top:4px;">
+          💡 <strong>SwiGLU 公式</strong>：SwiGLU(x) = Swish(gate) ⊙ up(x)<br>
+          💡 三个矩阵：up 和 gate 都是 d_model × d_ff，down 是 d_ff × d_model，合计 3 × d_model × d_ff
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 图 B→C 过渡 ========== -->
+    <div class="figure-group" style="border-color: #f59e0b; background: #fffbeb;">
+      <div class="figure-title"><span class="badge" style="background:#f59e0b;color:#fff;">图 B→C 过渡</span> 从密集 FFN 到 MoE —— 为什么需要 MoE？</div>
+
+      <div class="transition-box">
+        <div class="title">💡 核心洞察：并非所有 token 都需要所有专家</div>
+        <div class="content">
+          <strong>MoE 的核心思想是“条件计算”</strong>——每个 token 只激活少数最相关的专家，大幅减少计算量。<br><br>
+          <strong>密集 FFN 的瓶颈</strong>：每层 0.8B 参数，64 层 = 51B，<strong>每个 token 必须完整计算全部参数</strong>。<br>
+          <strong>MoE 的解法</strong>：把 0.8B 的单一路径复制 256 份变成 138B 总参数，但 <strong>Router 只选 8 个最相关的专家（3.1%）</strong>干活。
+        </div>
+      </div>
+
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            subgraph Dense["密集 FFN (图B)"]
+                DenseIn["输入 (8192维)"] --> DenseUp["up 268M"]
+                DenseIn --> DenseGate["gate 268M"]
+                DenseUp --> DenseAct["SwiGLU"]
+                DenseGate --> DenseAct
+                DenseAct --> DenseDown["down 268M"]
+                DenseDown --> DenseOut["输出"]
+            end
+            DenseOut -.-> Problem["❌ 问题：每 token 必走全部 0.8B 参数"]
+            Problem --> Solution["💡 解法：MoE — 用 Router 动态选择"]
+            subgraph MoE["MoE (图C)"]
+                MoEIn["输入 (8192维)"] --> Router["Router<br>8192×256 = 2.1M"]
+                Router --> TopK["选择 Top-K 专家 (K=8)"]
+                TopK --> E1["专家1<br>0.8B"]
+                TopK --> E2["专家2<br>0.8B"]
+                TopK --> EK["专家K<br>0.8B"]
+                E1 --> Aggregate["加权求和"]
+                E2 --> Aggregate
+                EK --> Aggregate
+                Aggregate --> MoEOut["输出"]
+            end
+            Solution --> MoE
+            style Dense fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+            style MoE fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+            style Problem fill:#fee2e2,stroke:#ef4444
+            style Solution fill:#d1fae5,stroke:#10b981
+        </div>
+      </div>
+
+      <div style="margin-top:16px;">
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px;">📊 密集 FFN vs MoE 核心指标对比</div>
+        <div class="table-wrapper">
+          <table class="compare-table">
+            <thead>
+              <tr><th style="text-align:left;">指标</th><th>密集 FFN (图B)</th><th>MoE (图C, E=256, K=8)</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>每层总参数</td><td><strong>0.8B</strong></td><td><strong>138B</strong></td><td>MoE 总参数大 170 倍</td></tr>
+              <tr><td>每层激活参数</td><td><strong>0.8B</strong></td><td><strong>4.3B</strong></td><td>MoE 激活参数仅多 5.4 倍</td></tr>
+              <tr><td>激活/总参比例</td><td><strong>100%</strong></td><td><strong>3.1%</strong></td><td>⭐ 关键：绝大部分参数闲置</td></tr>
+              <tr><td>每 token 计算量</td><td>0.8B FLOPs</td><td>4.3B FLOPs</td><td>MoE 计算量增加有限</td></tr>
+              <tr><td>参数量/计算量比</td><td>1:1</td><td><strong>32:1</strong></td><td>⭐ MoE 用参数换计算</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:0.9rem;color:#475569;margin-top:6px;background:#f1f5f9;padding:10px 16px;border-radius:12px;">
+          <strong>🎯 一句话总结</strong>：<strong>MoE 不是让模型更小，而是让模型在同等计算量下变得更大更强——用闲置参数换能力，用 Router 保效率。</strong>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========== 图 C：MoE 专家内部 ========== -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 C</span> MoE 专家内部：Router + 专家 FFN（展开）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            InputFFN["输入 (8192维)"] --> Router["Router<br>8192×256 = 2.1M"]
+            Router --> TopK["选择 Top-K (K=8)"]
+            TopK --> Expert1
+            subgraph Expert1["专家 1 — 独立 FFN (0.8B)"]
+                E1_Up["up 投影<br>8192×32768 = 268M"] --> E1_Act["SwiGLU"]
+                E1_Gate["gate 投影<br>8192×32768 = 268M"] --> E1_Act
+                E1_Act --> E1_Down["down 投影<br>32768×8192 = 268M"]
+            end
+            TopK --> Expert2
+            subgraph Expert2["专家 2 — 独立 FFN (0.8B)"]
+                E2_Up["up 投影 268M"] --> E2_Act["SwiGLU"]
+                E2_Gate["gate 投影 268M"] --> E2_Act
+                E2_Act --> E2_Down["down 投影 268M"]
+            end
+            TopK --> ExpertK["专家 K (K=8)<br>每个 0.8B"]
+            Expert1 --> Aggregate["加权求和<br>（按 Router 分数）"]
+            Expert2 --> Aggregate
+            ExpertK --> Aggregate
+            Aggregate --> OutFFN["输出 (8192维)"]
+            NoteRouter["Router 输出 E 个分数<br>选择 Top-K 个专家"] -.-> Router
+            NoteExpert["每个专家结构相同<br>但参数完全独立"] -.-> Expert1
+            style Router fill:#e0e7ff,stroke:#6366f1,stroke-width:2px
+            style Expert1 fill:#fef3c7,stroke:#f59e0b
+            style Expert2 fill:#fef3c7,stroke:#f59e0b
+            style ExpertK fill:#fef3c7,stroke:#f59e0b
+            style NoteRouter fill:#f1f5f9,stroke:#94a3b8
+            style NoteExpert fill:#f1f5f9,stroke:#94a3b8
+            style Aggregate fill:#dbeafe,stroke:#3b82f6
+        </div>
+      </div>
+      <div style="margin-top:16px;">
+        <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px;">📋 图 C 各部件具体参数</div>
+        <div class="table-wrapper">
+          <table class="compare-table">
+            <thead><tr><th style="text-align:left;">部件</th><th>参数量</th><th>计算式</th></tr></thead>
+            <tbody>
+              <tr><td>Router</td><td>8192 × 256 ≈ 2.1M</td><td>d_model × E</td></tr>
+              <tr><td>单专家 FFN (SwiGLU)</td><td><strong>3 × 8192 × 32768 ≈ 0.8B</strong></td><td>3 × d_model × d_ff</td></tr>
+              <tr><td>所有专家（E=256）</td><td>256 × 0.8B ≈ <strong>138B</strong></td><td>E × 单专家</td></tr>
+              <tr><td>推理激活（Top-K=8）</td><td>8 × 0.8B ≈ <strong>4.3B / 层</strong></td><td>K × 单专家</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div style="font-size:0.9rem;color:#475569;margin-top:4px;">
+          💡 <strong>关键洞察</strong>：MoE 用 <strong>138B 总参数</strong> 换 <strong>每 token 仅 4.3B 计算量</strong>，参数量/计算量比达到 <strong>32:1</strong>。
+        </div>
+      </div>
+    </div>
+
+    <!-- 各模型 Block 数量汇总表 -->
+    <div style="margin:12px 0 8px;">
+      <div style="font-weight:700;font-size:1.15rem;margin-bottom:10px;">📋 各模型 Block 层数与隐藏维度</div>
+      <div class="table-wrapper">
+        <table class="compare-table">
+          <thead>
+            <tr><th style="text-align:left;">模型</th><th>Block 层数 (N)</th><th>隐藏维度</th><th>注意力机制</th><th>FFN / MoE</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="model-badge dsv4">DeepSeek-V4</span></td><td>~64</td><td>~8192</td><td>CSA+HCA+SWA</td><td>MoE (256专家, 激活8)</td></tr>
+            <tr><td><span class="model-badge m3">MiniMax-M3</span></td><td>~56</td><td>~6144</td><td>MSA（稀疏注意力）</td><td>MoE (激活23B)</td></tr>
+            <tr><td><span class="model-badge glm">GLM-5.2</span></td><td>~60</td><td>~7168</td><td>DSA + IndexShare</td><td>MoE (激活40B)</td></tr>
+            <tr><td><span class="model-badge qw">Qwen3.8</span></td><td>64</td><td>5120</td><td>Gated DeltaNet + Gated Attn</td><td>MoE (95B激活) / Dense</td></tr>
+            <tr><td><span class="model-badge kimi">Kimi K3</span></td><td>~96</td><td>~10240</td><td>KDA + Gated MLA</td><td>MoE (896专家, 激活16)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="feature-box">
+      <strong>🔍 三层视角总结</strong>：<br>
+      • <strong>图 A</strong>（最粗）：输入 → Token 化 → 嵌入 → N 个 Block → 输出。<br>
+      • <strong>图 B</strong>（中等）：每个 Block = LayerNorm → <strong>多头注意力（蓝色框，内部含 Q/K/V/O）</strong> → 残差 → LayerNorm → <strong>FFN（黄色框，内部含 up/gate/down）</strong> → 残差。<br>
+      • <strong>图 B→C 过渡</strong>：密集 FFN 每 token 必走全部 0.8B 参数 → MoE 用 Router 选 Top-K 专家，用 138B 总参数换每 token 仅 4.3B 计算量。<br>
+      • <strong>图 C</strong>（最细）：MoE 专家 = 独立的 SwiGLU FFN（up/gate/down），Router 动态选择 Top-K。<br>
+      • <strong>注意力机制变体（MHA/MQA/GQA/MLA/KDA）仅替换图 B 蓝色框内的实现</strong>，Block 骨架不变。
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 B：图 B 蓝色框 → 五种注意力机制 过渡（来自 v0.1，保留）  -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #3b82f6;">
+    <div class="module-title" style="border-bottom-color: #3b82f6;">
+      🔵 图 B 蓝色框 → 五种注意力机制
+      <small>Q/K/V 始终在图 B 的蓝色框内部</small>
+    </div>
+    <div class="concept-box" style="border-left-color: #3b82f6;">
+      <strong>图 B 的蓝色框（多头注意力）包含了完整的 Q/K/V/O 投影</strong>。五种注意力机制的区别在于：
+      <br><br>
+      ① <strong>Q/K/V 投影的形状</strong>（头数、分组方式）<br>
+      ② <strong>注意力计算方式</strong>（标准 softmax / 线性 / 稀疏）<br>
+      ③ <strong>KV 缓存的存储策略</strong>（全量 / 分组 / 压缩 / 状态机）
+      <br><br>
+      下面每个机制的源码中，<strong>都标注了对应图 B 的哪个部件</strong>。
+    </div>
+
+    <!-- 对应关系表 -->
+    <div style="margin-top:12px;">
+      <div style="font-weight:700;font-size:1.05rem;margin-bottom:8px;">📋 五种注意力如何替换图 B 的蓝色框</div>
+      <div class="table-wrapper">
+        <table class="compare-table">
+          <thead>
+            <tr><th style="text-align:left;">机制</th><th>图 B 中替换位置</th><th>核心差异</th><th>2026 代表模型</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>MHA</strong></td><td>图 B 蓝色框（标准实现）</td><td>每个 Q 头独立 K/V（H 组），缓存 L·H·d</td><td>早期模型</td></tr>
+            <tr><td><strong>MQA</strong></td><td>图 B 蓝色框（K/V 改为 1 头）</td><td>所有 Q 共享单 K/V（1 组），缓存 L·1·d</td><td>已淘汰</td></tr>
+            <tr><td><strong>GQA</strong></td><td>图 B 蓝色框（K/V 改为 G 头）</td><td>分组共享 K/V（G 组），缓存 L·G·d</td><td>Qwen3.8 / GLM-5.2 / MiniMax-M3</td></tr>
+            <tr><td><strong>KDA</strong></td><td>图 B 蓝色框（完全替换为线性）</td><td>无 Q/K/V 投影，循环状态，O(1) 显存</td><td>Kimi K3</td></tr>
+            <tr><td><strong>MLA</strong></td><td>图 B 蓝色框（K/V 前加压缩层）</td><td>缓存 Latent，解压后计算，L·d_latent</td><td>DeepSeek-V4</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 C：2026 四大旗舰模型速览（来自 v0.1，保留）              -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #3b82f6;">
+    <div class="module-title" style="border-bottom: none; padding-bottom: 0;">
+      🚀 2026 四大旗舰模型速览
+      <small>真实架构归属</small>
+    </div>
+    <div class="concept-box" style="border-left-color: #8b5cf6;">
+      <strong>DeepSeek-V4</strong>（1.6T MoE）、<strong>MiniMax-M3</strong>（428B MoE）、<strong>GLM-5.2</strong>（744B MoE）、<strong>Qwen3.8</strong>（2.4T MoE）分别代表了当前大模型的技术前沿。它们所采用的注意力机制各不相同，但都围绕一个核心矛盾：<strong>如何在有限显存内支持超长上下文，同时保持推理速度</strong>。
+    </div>
+    <div class="table-wrapper">
+      <table class="compare-table">
+        <thead>
+          <tr><th style="text-align:left;">模型</th><th>发布时间</th><th>总参数 / 激活</th><th>架构</th><th style="text-align:left;">注意力机制</th><th style="text-align:left;">上下文长度</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><span class="model-badge dsv4">DeepSeek-V4</span></td><td>2026.04</td><td>1.6T / 49B (MoE)</td><td>MoE</td><td style="text-align:left;"><strong>CSA+HCA+SWA</strong></td><td>1M</td></tr>
+          <tr><td><span class="model-badge m3">MiniMax-M3</span></td><td>2026.06</td><td>428B / 23B (MoE)</td><td>MoE + MSA</td><td style="text-align:left;"><strong>MSA</strong></td><td>1M</td></tr>
+          <tr><td><span class="model-badge glm">GLM-5.2</span></td><td>2026.06</td><td>744B / 40B (MoE)</td><td>MoE</td><td style="text-align:left;"><strong>DSA + IndexShare</strong></td><td>1M</td></tr>
+          <tr><td><span class="model-badge qw">Qwen3.8</span></td><td>2026.08</td><td>2.4T / 95B (MoE)</td><td>MoE</td><td style="text-align:left;"><strong>Gated DeltaNet + Gated Attn</strong></td><td>1M / 256K</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div style="font-size:0.95rem;color:#334155;margin-top:6px;">
+      💡 <strong>KDA（Kimi Delta Attention）</strong> 由 <strong>月之暗面（Kimi）</strong> 提出，应用于 Kimi K3（2.8T MoE），它属于 <strong>线性注意力</strong> 范畴，与 GQA/MLA 有着本质区别。
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 D：图1 · 总览对比 + 演进路线（融合 v0.1 图1 与精读版导引）-->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #6366f1;">
+    <div class="module-title" style="border-bottom-color: #6366f1;">
+      📊 图1 · 总览对比 + 演进路线
+      <small>五种机制“缓存里存什么” + 为什么省 + 统一数字基线</small>
+    </div>
+
+    <div class="concept-box" style="border-left-color: #6366f1;">
+      大模型解码时，<strong>每生成 1 个 token 都会发生两件与 L（上下文长度）成正比的事</strong>：<br>
+      ① <strong>显存 O(L)</strong>：KV 缓存要把前面 L 个 token 的 K/V 都存下来；<br>
+      ② <strong>算力 O(L)</strong>：新的 Q 要和前面全部 L 个 K 逐个点积（长程扫描）。
+      <br><br>
+      下面 <strong>图 1-1</strong> 用一个公共的「图 B 投影」节点展开五种机制：<strong>Q 始终 32 头，变的只是“K/V 怎么生成、怎么存”</strong>，并按<strong>演进顺序 MHA → MQA → GQA → MLA → KDA</strong>（标准基线在前，改进在后）排列；<strong>图 1-2</strong> 再把压缩线（存得下）与分支线（算得动）串成完整演进路线。
+    </div>
+
+    <!-- 图1-1 总览对比（优化版：Q/K/V 显式 + 顺序 MHA→…→KDA + 图外说明） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 1-1</span> 总览对比：Q/K/V 投影后，“K/V 怎么存”（标准 MHA → 逐步改进）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Bbox["图 B 蓝色框：Q/K/V 投影<br>（Q 始终 32 头，五种机制都不变）"]
+            Bbox --> mha
+            Bbox --> mqa
+            Bbox --> gqa
+            Bbox --> mla
+            Bbox --> kda
+
+            subgraph mha["🟦 ① MHA · 标准基线 · 缓存 16KB/token"]
+                mh1["K/V 投影 → 32头 × 2<br>（一对一，不压缩）"]
+                mh2["缓存 H=32 组 K/V<br>8192 元素 = 16KB"]
+                mh3["Q 与全部缓存点积 → 输出"]
+                mh1 --> mh2 --> mh3
+            end
+
+            subgraph mqa["🟨 ② MQA · 改进1 · 缓存 0.5KB/token"]
+                mq1["K/V 投影 → 各 1 头<br>（全员共享）"]
+                mq2["缓存 1 组<br>256 元素 = 0.5KB"]
+                mq3["广播给 32 头 → 输出"]
+                mq1 --> mq2 --> mq3
+            end
+
+            subgraph gqa["🟩 ③ GQA · 改进2 · 缓存 2KB/token"]
+                g1["K/V 投影 → 各 G=4 头<br>（分组共享）"]
+                g2["缓存 G=4 组<br>1024 元素 = 2KB"]
+                g3["推理 repeat_interleave<br>对齐 32 头 → 输出"]
+                g1 --> g2 --> g3
+            end
+
+            subgraph mla["🩷 ④ MLA · 改进3 · 缓存 1KB/token"]
+                l1["K/V 压成 Latent<br>256 维（尺寸压缩）"]
+                l2["缓存 latent<br>512 元素 = 1KB"]
+                l3["潜在空间注意力 → 输出<br>（解压吸收进 Q/O）"]
+                l1 --> l2 --> l3
+            end
+
+            subgraph kda["🟪 ⑤ KDA · 分支路线 · 状态恒定 ~8MB"]
+                k1["K 投影(写地址)·V 投影(写内容)<br>（不存列表，直接进状态）"]
+                k2["状态 S ← δ·S + v·k^T<br>固定大小 O(1)"]
+                k3["Q(读指针) 读状态 → 输出"]
+                k1 --> k2 --> k3
+            end
+
+            style mha fill:#dbeafe,stroke:#3b82f6
+            style mqa fill:#fef3c7,stroke:#f59e0b
+            style gqa fill:#d1fae5,stroke:#10b981
+            style mla fill:#fce7f3,stroke:#ec4899
+            style kda fill:#e0e7ff,stroke:#6366f1
+        </div>
+      </div>
+      <div class="bridge-note">
+        <span class="t">🔍 这张图怎么读？</span><br>
+        ① <strong>顶部公共节点</strong>：五种机制的 <strong>Q/K/V 全来自图 B 的蓝色框</strong>（Q 始终 32 头），变化只发生在 <strong>“K/V 怎么生成、怎么存”</strong> 这一步。<br>
+        ② <strong>阅读顺序 ＝ 演进顺序</strong>：先看①标准 MHA，再看改进线 ②→③→④（MQA 全共享 → GQA 分组 → MLA 压尺寸），⑤ KDA 是另一条分支（干脆不存列表）。<br>
+        ③ <strong>图里只能一笔带过的新概念，正文详解</strong>：<br>
+        &nbsp;&nbsp;• <strong>分组 K/V（GQA）</strong>：K/V 只给 G=4 组，每组对应 8 个 Q 头；推理时 repeat_interleave 对齐 → 见 <strong>图 GQA-2 / 图 GQA-3</strong>。<br>
+        &nbsp;&nbsp;• <strong>Latent 压缩（MLA）</strong>：先压成 256 维 latent 再缓存，推理时解压吸收进 Q/O、不展开 → 见 <strong>图 MLA-2 / 图 MLA-3</strong>。<br>
+        &nbsp;&nbsp;• <strong>循环状态 S（KDA）</strong>：不存 K/V 列表，用外积 v·k^T 累加进固定状态并遗忘，Q＝读指针 → 见 <strong>图 KDA-1 / 图 KDA-2</strong>。<br>
+        &nbsp;&nbsp;• 缓存口径：<strong>16KB → 0.5KB → 2KB → 1KB</strong>（KDA 恒定 ~8MB），数字出处见下方“统一数字基线”。
+      </div>
+    </div>
+
+    <!-- 图1-2 演进路线 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 1-2</span> 演进路线：压缩线（存得下）→ 分支线（算得动）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart LR
+            MHA["MHA<br>每头独立 K/V<br>16KB/token"] --> MQA["MQA<br>全共享 1 份<br>0.5KB/token"]
+            MQA --> GQA["GQA<br>分组共享 G=4 份<br>2KB/token"]
+            GQA --> MLA["MLA<br>latent 压缩<br>1KB/token"]
+            GQA -. "换条路：连 KV 列表都不想存" .-> KDA["KDA<br>固定状态机<br>~8MB 恒定 与 L 无关"]
+            style MHA fill:#dbeafe,stroke:#3b82f6
+            style MQA fill:#fef3c7,stroke:#f59e0b
+            style GQA fill:#d1fae5,stroke:#10b981
+            style MLA fill:#fce7f3,stroke:#ec4899
+            style KDA fill:#e0e7ff,stroke:#6366f1
+        </div>
+      </div>
+      <div class="takeaway">
+        <strong>一句话</strong>：MHA → MQA → GQA → MLA 是<strong>“把要存的东西越弄越小”</strong>（压缩线，解决“显存放不下”）；KDA 是<strong>“换一种算法，连存都不存”</strong>（线性注意力，解决“长程算不完”）。两条路解决的是同一个瓶颈的两个侧面。
+      </div>
+    </div>
+
+    <!-- 统一数字基线 -->
+    <div class="baseline-box">
+      <div class="btitle">📐 统一数字基线（后文所有数字都从这一组参数算出来，方便横向对比）</div>
+      <table>
+        <thead><tr><th>参数</th><th>取值</th><th>含义</th></tr></thead>
+        <tbody>
+          <tr><td>L</td><td>4096</td><td>上下文长度（一次推理的 token 总数）</td></tr>
+          <tr><td>H</td><td>32</td><td>Q 头数</td></tr>
+          <tr><td>d</td><td>128</td><td>每头维度</td></tr>
+          <tr><td>d_model</td><td>4096</td><td>= H × d，隐藏维度</td></tr>
+          <tr><td>G</td><td>4</td><td>GQA 组数（每组 8 个 Q 头）</td></tr>
+          <tr><td>d_latent</td><td>256</td><td>MLA 潜在维度</td></tr>
+          <tr><td>精度</td><td>FP16</td><td>缓存按 2 字节 / 元素计</td></tr>
+        </tbody>
+      </table>
+      <div style="margin-top:10px;font-size:0.9rem;color:#94a3b8;">
+        💡 记忆口诀：每 token KV 元素数 = MHA 8192（16KB）→ MQA 256（0.5KB）→ GQA 1024（2KB）→ MLA 512（1KB）；KDA 为恒定状态。
+      </div>
+    </div>
+
+    <!-- 核心参数对比表（来自 v0.1 图1） -->
+    <div style="margin:12px 0 8px;">
+      <div style="font-weight:700;font-size:1.15rem;margin-bottom:10px;">📋 核心参数对比 · 2026 代表模型</div>
+      <div class="table-wrapper">
+        <table class="compare-table">
+          <thead><tr><th style="text-align:left;">机制</th><th>KV 缓存大小</th><th>推理速度</th><th>模型质量</th><th style="text-align:left;">2026 代表模型</th><th style="text-align:left;">核心思想</th></tr></thead>
+          <tbody>
+            <tr><td>MHA</td><td><span class="badge-memory">L·H·d</span></td><td><span class="tag tag-red">🐢 较慢</span></td><td>⭐⭐⭐⭐⭐</td><td style="font-weight:400;">（早期模型）</td><td>每 Q 独立 K/V</td></tr>
+            <tr><td>MQA</td><td><span class="badge-memory">L·1·d</span></td><td><span class="tag tag-green">🚀 极快</span></td><td>⭐⭐⭐</td><td style="font-weight:400;">（已淘汰）</td><td>所有 Q 共享单 K/V</td></tr>
+            <tr><td>GQA</td><td><span class="badge-memory">L·G·d</span></td><td><span class="tag tag-yellow">⚡ 较快</span></td><td>⭐⭐⭐⭐</td><td><span class="model-badge qw">Qwen3.8</span> <span class="model-badge glm">GLM-5.2</span> <span class="model-badge m3">MiniMax-M3</span></td><td>分组共享（G组）</td></tr>
+            <tr><td>KDA</td><td><span class="badge-memory">固定状态</span><br><span style="font-size:0.8rem;">(非KV缓存)</span></td><td><span class="tag tag-blue">⚡ O(L)</span></td><td>⭐⭐⭐⭐</td><td><span class="model-badge kimi">Kimi K3</span></td><td>线性注意力+循环状态</td></tr>
+            <tr><td>MLA</td><td><span class="badge-memory">L·d_latent</span><br><span style="font-size:0.8rem;">(d_latent << H·d)</span></td><td><span class="tag tag-purple">💾 省显存</span></td><td>⭐⭐⭐⭐</td><td><span class="model-badge dsv4">DeepSeek-V4</span></td><td>低秩压缩 K/V</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="font-size:0.9rem;color:#475569;margin-top:4px;">* L:序列长度, H:头数, d:头维度, G:组数, d_latent:潜在维度</div>
+    </div>
+
+    <!-- 总览洞察（融合版） -->
+    <div class="feature-box">
+      <strong>🔍 总览洞察</strong>：<br>
+      • <strong>GQA</strong> 已成为 2026 年工业界的“最大公约数”，提供了 <strong>接近 MHA 的质量，同时缓存缩减至 1/G</strong>。<br>
+      • <strong>MLA</strong> 通过低秩压缩将缓存压缩至 <strong>5%～10%</strong>，使 1M 上下文成为可能。<br>
+      • <strong>KDA</strong> 则另辟蹊径，完全抛弃 KV 缓存，用固定大小的状态机，理论上可处理无限长文本。<br>
+      • <strong>一句话主线</strong>：前四种机制在回答<span style="background:#dbeafe;padding:0 8px;border-radius:10px;">“KV 缓存怎么存更省”</span>（MQA/GQA 省个数、MLA 省尺寸），KDA 在回答<span style="background:#e0e7ff;padding:0 8px;border-radius:10px;">“如果不存 KV 会怎样”</span>（换算法）。
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 1：MHA —— 多头注意力（基线）                            -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #3b82f6;">
+    <div class="module-title" style="border-bottom-color: #3b82f6;">
+      🧩 MHA · 多头注意力 <small>Multi-Head Attention —— 基线，先被优化的对象</small>
+    </div>
+    <div class="concept-box">
+      <strong>MHA 是 Transformer 的“原教旨”设计</strong>：每个 Q 头都独立配对一个 K 头和一个 V 头（<strong>一对一，绝不共享</strong>）。它是后面所有优化的<strong>基线</strong>——先看清它的浪费在哪，才知道后面每一步在省什么。
+      <br><br>
+      <strong>浪费在哪</strong>：每 token 都要把 32 组 K/V 完整存入缓存，缓存大小 = L × 2·H·d，随 L 线性膨胀。
+    </div>
+
+    <!-- 图 MHA-1 宏观 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MHA-1 宏观</span> 整体流程：投影 → 缓存 → 注意力（一眼看懂 MHA 在干嘛）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x<br>d_model = 4096"] --> Proj["Q/K/V 三个投影<br>每个都输出 32 个头（4096 维）"]
+            Proj --> Cache["KV 缓存<br>每 token 追加 2·H·d = 8192 元素 = 16KB"]
+            Proj --> Q["Q（新 token 的 32 个头）"]
+            Cache --> Attn["注意力计算<br>Q 与缓存里全部 L 个 K 点积 → softmax → ×V"]
+            Q --> Attn
+            Attn --> Out["输出（加权和）"]
+            Note["每个 Q 头都要扫过全部历史<br>→ 算力 O(L)、缓存 O(L)"] -.-> Attn
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MHA-2 结构展开 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MHA-2 结构展开</span> Q/K/V 一一对应，互不共享</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Wq["W_q：4096 → 4096"]
+            X --> Wk["W_k：4096 → 4096"]
+            X --> Wv["W_v：4096 → 4096"]
+            Wq --> Qs["32 个 Q 头<br>头0..头31"]
+            Wk --> Ks["32 个 K 头<br>头0..头31"]
+            Wv --> Vs["32 个 V 头<br>头0..头31"]
+            Qs --> P["逐头点积：头i 只与 头i 的 K 算"]
+            Ks --> P
+            P --> A["softmax → 加权求和：头i × 头i 的 V"]
+            Vs --> A
+            A --> O["拼接 32 头结果<br>→ W_o 投影 → 输出"]
+            Note["一一对应：<br>Q0↔K0/V0、Q1↔K1/V1 ...<br>没有任何一个头被共享"] -.-> P
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MHA-3 推理 + 数字 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MHA-3 推理 / 数字</span> KV 缓存随 L 线性膨胀，长上下文直接爆炸</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            T1["第 1 个 token<br>存 16KB"] --> T2["第 2 个 token<br>追加 16KB → 共 32KB"]
+            T2 --> T3["第 3 个 token<br>追加 → 共 48KB"]
+            T3 --> TL["第 4096 个 token<br>共 4096 × 16KB = 64MB / 层"]
+            TL --> B1["L = 100k 时<br>单层就 1.6GB"]
+            B1 --> B2["64 层合计 ≈ 100GB<br>显存放不下 ❌"]
+            style B2 fill:#fee2e2,stroke:#ef4444
+        </div>
+      </div>
+      <div class="num-grid">
+        <div class="num-card">
+          <div class="num-label">每 token KV 存储</div>
+          <div class="num-value">16 KB</div>
+          <div class="num-note">2·H·d = 2×32×128 = 8192 元素</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=4096 总缓存</div>
+          <div class="num-value">64 MB <span class="cost">（基线）</span></div>
+          <div class="num-note">8192 元素 × 4096 × 2B</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">每步解码算力</div>
+          <div class="num-value">≈ 33.6M MACs <span class="cost">O(L)</span></div>
+          <div class="num-note">2·H·L·d = 2×32×4096×128</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">K/V 投影算力/步</div>
+          <div class="num-value">33.6M MACs</div>
+          <div class="num-note">2 × d_model × (H·d) = 2×4096×4096</div>
+        </div>
+      </div>
+      <div class="takeaway"><strong>MHA 的病根</strong>：缓存和扫描都随 L 增长，100k 上下文就 100GB。后面四种机制都是从这里下手。</div>
+    </div>
+
+    <div class="code-block"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;"><span class="keyword">class</span> <span class="func">MHA</span>(nn.Module):   <span class="comment"># 对应 图MHA-1 的蓝色区域</span>
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model=4096, n_heads=32):
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads          <span class="comment"># 128</span>
+        self.W_q = nn.Linear(d_model, d_model)      <span class="comment"># 图MHA-2 的 Q 投影</span>
+        self.W_k = nn.Linear(d_model, d_model)      <span class="comment"># 图MHA-2 的 K 投影（同样 32 头，浪费点 1）</span>
+        self.W_v = nn.Linear(d_model, d_model)      <span class="comment"># 图MHA-2 的 V 投影（同样 32 头，浪费点 2）</span>
+        self.W_o = nn.Linear(d_model, d_model)      <span class="comment"># 图MHA-1 的 O 投影</span>
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, x, past_kv=None):
+        B, T, _ = x.shape
+        <span class="comment"># 投影：每个 token 生成自己的一套 H=32 组 Q/K/V</span>
+        Q = self.W_q(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)  <span class="comment"># (B,32,T,128)</span>
+        K = self.W_k(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)  <span class="comment"># (B,32,T,128)</span>
+        V = self.W_v(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)  <span class="comment"># (B,32,T,128)</span>
+        <span class="comment"># 图MHA-3 推理：把新 token 的 K/V 追加进缓存（缓存长度 = L，随 L 线性增长）</span>
+        <span class="keyword">if</span> past_kv:
+            K = torch.cat([past_kv[0], K], dim=2)   <span class="comment"># (B,32,L,128)</span>
+            V = torch.cat([past_kv[1], V], dim=2)
+        <span class="comment"># 图MHA-2 注意力：Q·K^T/√d → softmax → ·V（Q 扫过全部 L 个历史位置）</span>
+        scores = Q @ K.transpose(-2,-1) / math.sqrt(self.head_dim)  <span class="comment"># (B,32,T,L)</span>
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ V                                            <span class="comment"># (B,32,T,128)</span>
+        <span class="keyword">return</span> self.W_o(out.transpose(1,2).reshape(B,T,-1)), (K, V)  <span class="comment"># O 投影 + 回传缓存</span>
+</pre></div>
+
+    <div class="feature-box">
+      <strong>⭐ MHA 总结</strong>：表达力最强（每头一个视角），但 <strong>缓存 = L×8192 元素、每步算力 O(L)</strong>，<strong>两头都随 L 涨</strong>，2026 年已不是主流——它是被优化的基线。
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 2：MQA —— 多查询注意力（个数 → 1）                     -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #f59e0b;">
+    <div class="module-title" style="border-bottom-color: #f59e0b;">
+      🧩 MQA · 多查询注意力 <small>Multi-Query Attention —— 从“每头一份”到“全员共享一份”</small>
+    </div>
+
+    <div class="transition-box">
+      <div class="title">🔁 从 MHA 到这里，做了什么变形？</div>
+      <div class="content">
+        MHA 的问题是 <strong>K/V 存了 32 份</strong>。MQA 的回答很激进：<strong>既然 K/V 是“历史信息”，为什么不让所有 Q 头共用同一份？</strong> 于是 K/V 投影从输出 32 个头改为只输出 <strong>1 个头</strong>。缓存每 token 从 8192 元素骤降到 256 元素。
+        <br><br>
+        代价：所有头只能看同一个 K/V 视角，<strong>表达力下降</strong>（质量损失）——这就是它 2026 年被淘汰的原因，但它把“省个数”的极限演示出来了。
+      </div>
+    </div>
+
+    <!-- 图 MQA-1 宏观 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MQA-1 宏观</span> 整体流程：1 份 K/V 广播给 32 个 Q 头</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Proj["Q 投影 → 32 个头<br>K/V 投影 → 各只 1 个头"]
+            Proj --> Cache["KV 缓存<br>每 token 存 2×128 = 256 元素 = 0.5KB<br>是 MHA 的 1/32"]
+            Proj --> Q["Q（32 个头）"]
+            Cache --> Br["广播：1 份 K/V 同时喂给 32 个 Q 头"]
+            Q --> Br
+            Br --> Attn["注意力计算"]
+            Attn --> Out["输出"]
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MQA-2 结构展开 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MQA-2 结构展开</span> 32 个 Q 头 → 同一份 K/V（广播）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Wq["W_q：4096 → 4096"]
+            X --> Wk["W_k：4096 → 128（只 1 个头）"]
+            X --> Wv["W_v：4096 → 128（只 1 个头）"]
+            Wq --> Qs["32 个 Q 头"]
+            Wk --> K1["K：1 个头"]
+            Wv --> V1["V：1 个头"]
+            Qs --> Br["广播：同一份 K/V 分给 32 个头"]
+            K1 --> Br
+            V1 --> Br
+            Br --> A["所有 Q 头共用同一份 K/V 算注意力"]
+            A --> O["输出"]
+            Note["代价：所有头只能看同一个视角<br>→ 表达能力下降、质量损失"] -.-> Br
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MQA-3 推理数字 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MQA-3 推理 / 数字</span> 缓存缩小 32 倍</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            T1["每 token 只存 1 组 K/V<br>0.5KB"] --> TL["L=4096 总缓存<br>4096 × 0.5KB = 2MB"]
+            TL --> SAVE["相比 MHA 的 64MB<br>节省 97%"]
+            SAVE --> Q1["但 K/V 投影算力也 ÷32<br>K/V 投影从 33.6M → 1.05M MACs"]
+            style SAVE fill:#d1fae5,stroke:#10b981
+        </div>
+      </div>
+      <div class="num-grid">
+        <div class="num-card">
+          <div class="num-label">每 token KV 存储</div>
+          <div class="num-value">0.5 KB</div>
+          <div class="num-note">2×1×128 = 256 元素，是 MHA 的 1/32</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=4096 总缓存</div>
+          <div class="num-value">2 MB <span class="save">（省 97%）</span></div>
+          <div class="num-note">256 × 4096 × 2B，比 MHA 省 62MB</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">每步解码算力</div>
+          <div class="num-value">≈ 33.6M <span class="cost">O(L) 不变</span></div>
+          <div class="num-note">Q 仍是 32 头扫全 L，注意力 FLOPs 没省</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">K/V 投影算力/步</div>
+          <div class="num-value">1.05M <span class="save">（省 32×）</span></div>
+          <div class="num-note">2 × 4096 × 128</div>
+        </div>
+      </div>
+      <div class="takeaway"><strong>注意</strong>：MQA 省的是 <strong>缓存内存 + K/V 投影算力</strong>；注意力点积本身仍是 O(L)（因为 Q 还是 32 个头扫全量历史）。代价是质量损失。</div>
+    </div>
+
+    <div class="code-block"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;"><span class="keyword">class</span> <span class="func">MQA</span>(nn.Module):   <span class="comment"># 对应 图MQA-1：K/V 改为 1 个头</span>
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model=4096, n_heads=32):
+        self.n_heads = n_heads
+        self.head_dim = d_model // n_heads          <span class="comment"># 128</span>
+        self.W_q = nn.Linear(d_model, d_model)      <span class="comment"># 图MQA-2 的 Q 投影（仍 32 头）</span>
+        self.W_k = nn.Linear(d_model, self.head_dim) <span class="comment"># ⚡ 图MQA-2 的 K 投影改为只 1 个头</span>
+        self.W_v = nn.Linear(d_model, self.head_dim) <span class="comment"># ⚡ 图MQA-2 的 V 投影改为只 1 个头</span>
+        self.W_o = nn.Linear(d_model, d_model)      <span class="comment"># O 投影</span>
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, x, past_kv=None):
+        B, T, _ = x.shape
+        Q = self.W_q(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)   <span class="comment"># (B,32,T,128)</span>
+        K = self.W_k(x).unsqueeze(1)                                          <span class="comment"># (B,1,T,128) 只 1 个头</span>
+        V = self.W_v(x).unsqueeze(1)
+        <span class="keyword">if</span> past_kv:
+            K = torch.cat([past_kv[0], K], dim=2)   <span class="comment"># (B,1,L,128) 缓存极瘦</span>
+            V = torch.cat([past_kv[1], V], dim=2)
+        <span class="comment"># 图MQA-2 广播：把 1 个头复制成 32 个头（等价 repeat_interleave）</span>
+        K = K.repeat(1, self.n_heads, 1, 1)         <span class="comment"># (B,32,L,128)</span>
+        V = V.repeat(1, self.n_heads, 1, 1)
+        scores = Q @ K.transpose(-2,-1) / math.sqrt(self.head_dim)
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ V
+        <span class="keyword">return</span> self.W_o(out.transpose(1,2).reshape(B,T,-1)), (K[:, :1], V[:, :1])  <span class="comment"># 缓存只存 1 份</span>
+</pre></div>
+
+    <div class="feature-box"><strong>⭐ MQA 总结</strong>：缓存 ÷32、投影 ÷32，但 <strong>质量损失明显</strong>，2026 年已被 GQA 全面取代——它告诉我们“省个数”不能省过头。</div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 3：GQA —— 分组查询注意力（个数 → G，重点）              -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #10b981;">
+    <div class="module-title" style="border-bottom-color: #10b981;">
+      🧩 GQA · 分组查询注意力 <small>Grouped-Query Attention —— 省个数的“黄金折中”</small>
+    </div>
+
+    <div class="transition-box">
+      <div class="title">🔁 从 MQA 到这里，做了什么变形？</div>
+      <div class="content">
+        MQA 把 32 个头<strong>全部并成 1 份</strong>，太激进、质量掉太多。GQA 的答案是<strong>“分组”</strong>：把 32 个 Q 头分成 <strong>G=4 组</strong>，每组 8 个头<strong>共享一份</strong> K/V。这样：
+        <br><br>
+        • K/V 从 32 份减到 <strong>G=4 份</strong>（缓存 ÷8，接近 MQA 的收益）<br>
+        • 但每组仍有独立的 K/V 视角（质量损失远小于 MQA）<br>
+        <strong>结论：GQA = 用 G 调档的“个数压缩器”，是 2026 年工业界的最大公约数。</strong>
+      </div>
+    </div>
+
+    <!-- 图 GQA-1 宏观（新增） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 GQA-1 宏观</span> 整体流程：投影只算 G 份 → 缓存只存 G 份 → 推理时对齐 H 份</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x (d_model=4096)"] --> Proj["Q 投影 → 32 个头<br>K/V 投影 → 只算 G=4 个头"]
+            Proj --> Cache["KV 缓存<br>每 token 存 2·G·d = 1024 元素 = 2KB<br>是 MHA 的 1/8"]
+            Cache --> Align["推理：把 G=4 组复制成 32 组<br>与 32 个 Q 头对齐（repeat_interleave）<br>→ 见 图GQA-3"]
+            Align --> Attn["注意力计算"]
+            Attn --> Out["输出"]
+            Note["关键：存储永远只保留 G 组<br>复制只发生在计算瞬间（视图操作）"] -.-> Cache
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 GQA-2 结构展开（对应原图4-1） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 GQA-2 结构展开</span> 分组共享：H=32 个 Q 头分成 G=4 组，每组共享一份 K/V</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Wq["W_q → 32 个头"]
+            X --> Wk["W_k → G=4 组 K/V"]
+            X --> Wv["W_v → G=4 组 K/V"]
+            Wk --> G0["组0：头0-7<br>共享 K0/V0"]
+            Wk --> G1["组1：头8-15<br>共享 K1/V1"]
+            Wk --> G2["组2：头16-23<br>共享 K2/V2"]
+            Wk --> G3["组3：头24-31<br>共享 K3/V3"]
+            Wq --> G0
+            Wq --> G1
+            Wq --> G2
+            Wq --> G3
+            G0 --> A["组内每个 Q 头<br>都用自己组的 K/V 算注意力"]
+            G1 --> A
+            G2 --> A
+            G3 --> A
+            A --> O["输出"]
+            Note["这一层只回答“投影/存储阶段”：<br>K/V 每 token 只算 4 份、只存 4 份"] -.-> Wk
+        </div>
+      </div>
+    </div>
+
+    <!-- 桥接说明：解决 repeat_interleave 困惑 -->
+    <div class="bridge-note">
+      <span class="t">🤔 为什么图 GQA-2 明明只有 4 组 K/V，图 GQA-3 突然要 repeat_interleave 成 32 份？</span><br>
+      因为这是两个阶段的问题：<br>
+      <strong>图 GQA-2（投影/存储阶段）</strong>：为了省内存，K/V 只算 4 份、只存 4 份。<br>
+      <strong>图 GQA-3（推理/计算阶段）</strong>：注意力公式 <code>scores = Q·K^T</code> 要求 <strong>Q 的头数 = K 的头数</strong>才能逐头点积——Q 有 32 个头，所以需要 32 份 K。于是把 4 份 K/V 各复制 <strong>H/G = 32/4 = 8</strong> 份，凑成 32 份，编号恰好和 32 个 Q 头一一对应（头 0-7 ↔ 组0，头 8-15 ↔ 组1，…）。<br>
+      <code>repeat_interleave</code> 就是“沿头维复制”这个操作；它是<strong>张量视图/广播</strong>，<strong>不会真的把缓存复制一份占额外显存</strong>——缓存里始终只有 G=4 组。
+    </div>
+
+    <!-- 图 GQA-3 推理展开（对应原图4-2，但讲清关系） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 GQA-3 推理展开</span> G 组 K/V → repeat_interleave 复制成 H 份 → 与 Q 对齐计算</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            Cache["KV 缓存<br>只存 G=4 组<br>2KB/token"] --> RI["repeat_interleave<br>沿头维复制<br>每组复制 H/G = 8 份"]
+            RI --> F0["组0 复制 8 份 → 头0-7"]
+            RI --> F1["组1 复制 8 份 → 头8-15"]
+            RI --> F2["组2 复制 8 份 → 头16-23"]
+            RI --> F3["组3 复制 8 份 → 头24-31"]
+            F0 --> S["32 个 Q 头 ↔ 32 份 K/V<br>逐头点积 → softmax → ×V"]
+            F1 --> S
+            F2 --> S
+            F3 --> S
+            S --> O["输出"]
+            Note["为什么必须复制：<br>点积要求 Q 与 K 头数一致（32 vs 32）<br>复制是视图操作，缓存仍是 G 组"] -.-> RI
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 GQA-4 数字 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 GQA-4 数字</span> 省在哪、不省在哪，一目了然</div>
+      <div class="num-grid">
+        <div class="num-card">
+          <div class="num-label">每 token KV 存储</div>
+          <div class="num-value">2 KB</div>
+          <div class="num-note">2·G·d = 2×4×128 = 1024 元素</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=4096 总缓存</div>
+          <div class="num-value">8 MB <span class="save">（省 87.5%）</span></div>
+          <div class="num-note">1024 × 4096 × 2B，比 MHA 省 56MB</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">K/V 投影算力/步</div>
+          <div class="num-value">4.2M <span class="save">（省 8×）</span></div>
+          <div class="num-note">2 × 4096 × 512 = 2×4096×(G·d)</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">注意力点积算力</div>
+          <div class="num-value">≈ 33.6M <span class="cost">O(L) 不变</span></div>
+          <div class="num-note">2·H·L·d —— Q 仍是 32 头，没省</div>
+        </div>
+      </div>
+      <div class="takeaway">
+        <strong>诚实的结论</strong>：GQA 的注意力 FLOPs 和 MHA <strong>一样</strong>（Q 还是 32 头扫全 L）。它真正省的是三样：<br>
+        ① <strong>缓存内存 ÷8</strong>（8MB vs 64MB）——缓存更容易整个装进 GPU 高速缓存，实测推理速度大幅提升；<br>
+        ② <strong>K/V 投影算力 ÷8</strong>（4.2M vs 33.6M）；<br>
+        ③ <strong>缓存读写带宽 ÷8</strong>（每步只需搬 4 份 K/V 而不是 32 份）。
+      </div>
+    </div>
+
+    <div class="code-block"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;"><span class="keyword">class</span> <span class="func">GQA</span>(nn.Module):   <span class="comment"># 对应 图GQA-1：K/V 改为 G 个头</span>
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model=4096, n_heads=32, n_groups=4):
+        self.n_heads, self.n_groups = n_heads, n_groups
+        self.head_dim = d_model // n_heads               <span class="comment"># 128</span>
+        self.W_q = nn.Linear(d_model, d_model)           <span class="comment"># 图GQA-2：Q 仍出 32 个头</span>
+        self.W_k = nn.Linear(d_model, n_groups * self.head_dim)  <span class="comment"># ⚡ 图GQA-2：K 只出 G=4 个头</span>
+        self.W_v = nn.Linear(d_model, n_groups * self.head_dim)  <span class="comment"># ⚡ 图GQA-2：V 只出 G=4 个头</span>
+        self.W_o = nn.Linear(d_model, d_model)           <span class="comment"># O 投影</span>
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, x, past_kv=None):
+        B, T, _ = x.shape
+        Q = self.W_q(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)    <span class="comment"># (B,32,T,128)</span>
+        K = self.W_k(x).view(B,T,self.n_groups,self.head_dim).transpose(1,2)  <span class="comment"># (B,4,T,128)</span>
+        V = self.W_v(x).view(B,T,self.n_groups,self.head_dim).transpose(1,2)  <span class="comment"># (B,4,T,128)</span>
+        <span class="comment"># 图GQA-1 缓存：只追加 G=4 组，永远比 MHA 小 8 倍</span>
+        <span class="keyword">if</span> past_kv:
+            K = torch.cat([past_kv[0], K], dim=2)        <span class="comment"># (B,4,L,128)</span>
+            V = torch.cat([past_kv[1], V], dim=2)
+        <span class="comment"># 图GQA-3 repeat_interleave：沿头维把 4 组复制成 32 组，与 Q 头对齐</span>
+        K = K.repeat_interleave(self.n_heads // self.n_groups, dim=1)  <span class="comment"># (B,32,L,128)</span>
+        V = V.repeat_interleave(self.n_heads // self.n_groups, dim=1)  <span class="comment"># 视图操作，缓存仍是 4 组</span>
+        <span class="comment"># 之后的注意力与 MHA 完全一致</span>
+        scores = Q @ K.transpose(-2,-1) / math.sqrt(self.head_dim)
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ V
+        <span class="comment"># 回传缓存时只保留 G 组（复制前的原始 4 组）</span>
+        <span class="keyword">return</span> self.W_o(out.transpose(1,2).reshape(B,T,-1)), (K[:, :self.n_groups], V[:, :self.n_groups])
+</pre></div>
+
+    <div class="feature-box">
+      <strong>⭐ GQA 总结</strong>：<strong>2026 年最主流</strong>（Qwen3.8 / GLM-5.2 / MiniMax-M3 均采用）。缓存 ÷G、投影 ÷G，注意力 FLOPs 不变但带宽与缓存命中大幅受益；<strong>组数 G 是核心调档旋钮</strong>。
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 4：MLA —— 多头潜在注意力（尺寸压缩，重点）              -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #ec4899;">
+    <div class="module-title" style="border-bottom-color: #ec4899;">
+      🧩 MLA · 多头潜在注意力 <small>Multi-head Latent Attention —— 不减个数，压尺寸</small>
+    </div>
+
+    <div class="transition-box">
+      <div class="title">🔁 从 GQA 到这里，做了什么变形？（衔接点）</div>
+      <div class="content">
+        GQA 优化的维度是<strong>“K/V 的个数”</strong>（32 份 → 4 份）。MLA 换了一个完全正交的维度：<strong>“K/V 的尺寸”</strong>。
+        <br><br>
+        GQA 里每一份 K/V 都是完整的 128 维；MLA 认为这些 128 维向量<strong>冗余太多</strong>，于是先用一个压缩矩阵 <code>W_kv</code> 把它们压成低维 <strong>latent（潜在向量）</strong>，缓存只存 latent，要用时再解压回来。因为 <strong>d_latent=256 &lt;&lt; H·d=4096</strong>，缓存进一步缩小。
+        <br><br>
+        <strong>关键区别</strong>：MLA 不减少头数（每头仍有自己的表达），而是让<strong>所有头的 K/V 共享同一个低秩 latent 表示</strong>——既能像 GQA 一样省缓存，又能保住接近 MHA 的质量。
+      </div>
+    </div>
+
+    <!-- 图 MLA-1 宏观（新增） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MLA-1 宏观</span> 整体流程：压缩 → 缓存 latent → 注意力（解压被吸收）</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x (4096)"] --> C["压缩 W_kv<br>4096 → 512<br>（K、V 各 256 维 latent）"]
+            C --> Cache["缓存 latent<br>每 token 存 2×256 = 512 元素 = 1KB<br>是 MHA 的 1/16"]
+            Cache --> A["注意力在 latent 空间完成<br>解压矩阵被吸收进 Q/O<br>→ 见 图MLA-3"]
+            A --> Out["输出"]
+            Note["MLA 不减 K/V 的'个数'<br>而是减小每个 K/V 的'尺寸'"] -.-> Cache
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MLA-2 压缩与缓存 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MLA-2 压缩与缓存</span> W_kv 压缩 → 存 latent → 解压成 K/V</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Wkv["W_kv 压缩层<br>4096 → 512<br>一次投影同时压 K、V"]
+            Wkv --> CK["c_K：256 维<br>（K 的 latent）"]
+            Wkv --> CV["c_V：256 维<br>（V 的 latent）"]
+            CK --> Ca["缓存 c_K<br>L × 256"]
+            CV --> Cb["缓存 c_V<br>L × 256"]
+            Ca --> UpK["解压 W_k_up<br>256 → 32×128 展开成 K"]
+            Cb --> UpV["解压 W_v_up<br>256 → 32×128 展开成 V"]
+            UpK --> A["与 Q 计算注意力"]
+            UpV --> A
+            Note["对比 MHA：<br>MHA 缓存存 32×128 完整 K/V<br>MLA 只存压缩后的 256 维 latent"] -.-> Ca
+        </div>
+      </div>
+      <div class="num-grid">
+        <div class="num-card">
+          <div class="num-label">每 token KV 存储</div>
+          <div class="num-value">1 KB</div>
+          <div class="num-note">2·d_latent = 2×256 = 512 元素</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=4096 总缓存</div>
+          <div class="num-value">4 MB <span class="save">（省 93.75%）</span></div>
+          <div class="num-note">512 × 4096 × 2B，比 MHA 省 60MB</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">K/V 投影算力/步</div>
+          <div class="num-value">2.1M <span class="save">（省 16×）</span></div>
+          <div class="num-note">d_model × 2·d_latent = 4096×512（一次压缩）</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">质量</div>
+          <div class="num-value">≈ MHA <span class="save">（几乎无损）</span></div>
+          <div class="num-note">低秩压缩保留了关键信息</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 MLA-3 吸收变形（核心） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 MLA-3 关键变形</span> 解压矩阵被吸收进 Q/O —— 这才是 MLA 省算力的精髓</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            subgraph 朴素["朴素理解（训练时）：先解压再算"]
+                CK1["缓存 c_K (256)"] --> EX["W_k_up 展开成 K<br>256 → 4096"]
+                EX --> S1["score = q^T · K<br>（q 每头 128 维）"]
+            end
+            subgraph 吸收["等价变形（推理时）：不展开，直接在 latent 上算"]
+                Q1["q（每头 128 维）"] --> ABS["q' = W_k_up^T · q<br>128 → 256 维"]
+                CK2["缓存 c_K (256)"] --> S2["score = q'^T · c_K<br>直接作用在 latent 上"]
+                ABS --> S2
+            end
+            Note["数学依据（矩阵结合律）：<br>q^T · (W_k_up · c) = (W_k_up^T · q)^T · c<br>→ 省掉'把 L 个 latent 展开成 K/V'的<br>  矩阵乘法和带宽"] -.-> 吸收
+        </div>
+      </div>
+      <div class="takeaway">
+        <strong>同理，V 的解压被吸收进 O 投影</strong>：<code>out = W_o · (Σ a_t · W_v_up · c_V_t) = (W_o · W_v_up) · Σ a_t·c_V_t</code>。于是推理时<strong>完全不需要展开 K/V</strong>，全程只在 256 维 latent 上做注意力——省掉了每步「展开 32×128 的 K/V」的计算与显存搬运。
+      </div>
+    </div>
+
+    <div class="code-block"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;"><span class="keyword">class</span> <span class="func">MLA</span>(nn.Module):   <span class="comment"># 对应 图MLA-1：K/V 改为 latent 压缩</span>
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model=4096, n_heads=32, head_dim=128, d_latent=256):
+        self.n_heads, self.head_dim, self.d_latent = n_heads, head_dim, d_latent
+        self.W_q   = nn.Linear(d_model, n_heads * head_dim)       <span class="comment"># 图MLA：Q 投影（同 MHA）</span>
+        self.W_kv  = nn.Linear(d_model, 2 * d_latent)             <span class="comment"># ⚡ 图MLA-2 压缩层：x → (c_K, c_V)</span>
+        <span class="comment"># 解压权重（训练用；推理被吸收进 Q/O，见 forward_fused）</span>
+        self.W_k_up = nn.Linear(d_latent, n_heads * head_dim)     <span class="comment"># 图MLA-2：c_K → 32×128 的 K</span>
+        self.W_v_up = nn.Linear(d_latent, n_heads * head_dim)     <span class="comment"># 图MLA-2：c_V → 32×128 的 V</span>
+        self.W_o   = nn.Linear(n_heads * head_dim, d_model)       <span class="comment"># O 投影</span>
+
+    <span class="keyword">def</span> <span class="func">forward_naive</span>(self, x, past_latent=None):   <span class="comment"># 训练/理解版：解压再算</span>
+        B, T, _ = x.shape
+        Q = self.W_q(x).view(B,T,self.n_heads,self.head_dim).transpose(1,2)  <span class="comment"># (B,32,T,128)</span>
+        c = self.W_kv(x)                                               <span class="comment"># (B,T,512)</span>
+        c_K, c_V = c[..., :self.d_latent], c[..., self.d_latent:]      <span class="comment"># 各 (B,T,256)</span>
+        <span class="keyword">if</span> past_latent:                                        <span class="comment"># 图MLA-1 缓存：只存 latent</span>
+            c_K = torch.cat([past_latent[0], c_K], dim=1)              <span class="comment"># (B,L,256)</span>
+            c_V = torch.cat([past_latent[1], c_V], dim=1)
+        K = self.W_k_up(c_K).view(B,-1,self.n_heads,self.head_dim).transpose(1,2)  <span class="comment"># (B,32,L,128)</span>
+        V = self.W_v_up(c_V).view(B,-1,self.n_heads,self.head_dim).transpose(1,2)
+        scores = Q @ K.transpose(-2,-1) / math.sqrt(self.head_dim)     <span class="comment"># 与 MHA 相同</span>
+        attn = F.softmax(scores, dim=-1)
+        out = (attn @ V).transpose(1,2).reshape(B,T,-1)
+        <span class="keyword">return</span> self.W_o(out), (c_K, c_V)
+
+    <span class="keyword">def</span> <span class="func">forward_fused</span>(self, x, past_latent=None):    <span class="comment"># 推理版：解压被吸收（图MLA-3）</span>
+        B, T, _ = x.shape
+        Q = self.W_q(x).view(B,T,self.n_heads,self.head_dim)           <span class="comment"># (B,T,32,128)</span>
+        c = self.W_kv(x)
+        c_K, c_V = c[..., :self.d_latent], c[..., self.d_latent:]
+        <span class="keyword">if</span> past_latent:
+            c_K = torch.cat([past_latent[0], c_K], dim=1)              <span class="comment"># (B,L,256)</span>
+            c_V = torch.cat([past_latent[1], c_V], dim=1)
+        <span class="comment"># 吸收：q' = W_k_up^T · q（按头分块，W_k_up 每头占 (128,256)）</span>
+        Wk_up_T = self.W_k_up.weight.view(self.n_heads, self.head_dim, self.d_latent)
+        q_abs = torch.einsum('bthd,hdL->bthL', Q, Wk_up_T)             <span class="comment"># (B,T,32,256)</span>
+        scores = torch.einsum('bthL,blL->bthl', q_abs, c_K) / math.sqrt(self.head_dim)
+        attn = torch.softmax(scores, dim=-1)
+        o_lat = torch.einsum('bthl,blL->bthL', attn, c_V)              <span class="comment"># 仍在 latent 空间 (B,T,32,256)</span>
+        <span class="comment"># V 的解压也吸收进 O：out = W_o · (W_v_up^T · o_lat)</span>
+        Wv_up_T = self.W_v_up.weight.view(self.n_heads, self.head_dim, self.d_latent)
+        o = torch.einsum('bthL,hdl->bthd', o_lat, Wv_up_T)             <span class="comment"># (B,T,32,128)</span>
+        <span class="keyword">return</span> self.W_o(o.reshape(B,T,-1)), (c_K, c_V)             <span class="comment"># 缓存仍是 latent</span>
+</pre></div>
+
+    <div class="feature-box">
+      <strong>⭐ MLA 总结</strong>：DeepSeek 提出，<strong>DeepSeek-V4 继承并发扬</strong>。缓存 4MB（MHA 的 1/16）、投影 ÷16，且解压被吸收进 Q/O 后推理不再展开 K/V——是 1M+ 长上下文的关键支撑。<strong>一句话：GQA 省“个数”，MLA 省“尺寸”，两者可以叠加。</strong>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 5：KDA —— 循环状态机（不存 KV 列表，重点）              -->
+  <!-- ================================================================ -->
+  <div class="module" style="border-left: 6px solid #6366f1;">
+    <div class="module-title" style="border-bottom-color: #6366f1;">
+      🧩 KDA · Kimi Delta Attention <small>线性注意力 —— 干脆不存 KV 列表</small>
+    </div>
+
+    <div class="transition-box">
+      <div class="title">🔁 从 GQA/MLA 到这里，为什么是“换一条路”？</div>
+      <div class="content">
+        GQA 和 MLA 再怎么压，本质还是<strong>“按 token 存一份 K/V 列表”</strong>——列表长度 = L，内存 O(L)。KDA 的思路完全不同：
+        <br><br>
+        <strong>把 softmax 注意力换成“线性注意力”</strong>：用外积 <code>v·k^T</code> 把历史信息<strong>累加进一个固定大小的状态矩阵 S</strong>，新的历史不断写进去、旧的历史按遗忘门淡出。这样<strong>无论 L 多大，内存恒定 O(1)</strong>，每步算力也恒定 O(1)，不再随上下文增长。
+        <br><br>
+        <strong>这就回答了图 5-1 的最大疑问：QKV 在哪里？</strong> K/V 不再单独存成列表——每个新 token 的 <code>k、v</code> 算出来后<strong>立即写进状态 S</strong>（外积累加），Q 则作为<strong>读指针</strong>从 S 中取回压缩后的历史。Q、K、V 都在，只是“存储形态”从列表变成了状态机。
+      </div>
+    </div>
+
+    <!-- 图 KDA-1 宏观（新增，标注 QKV 位置） -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 KDA-1 宏观</span> 循环状态机：读 → 写 → 更新 → 输出</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x（当前 token）"] --> Q["q = W_q·x<br>（查询：从状态读取历史）"]
+            X --> KV["k = W_k·x、v = W_v·x<br>（键/值：写入状态的内容）"]
+            X --> G["δ = σ(W_δ·x)<br>（遗忘门：旧状态淡出多少）"]
+            KV --> Upd["状态更新<br>S ← δ·S + v·k^T"]
+            G --> Upd
+            Q --> Read["读取<br>out = W_read(q · S)"]
+            Upd --> State["状态 S（固定大小）<br>← 上一时刻的 S"]
+            State --> Read
+            Read --> Out["输出"]
+            Note["对比 MHA/GQA/MLA：<br>它们存的是 KV 列表，长度=L，内存 O(L)<br>KDA 存的是固定大小状态 S，永远不随 L 变"] -.-> State
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 KDA-2 QKV 展开 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 KDA-2 QKV 展开</span> Q=读指针、K=写地址、V=写内容、δ=遗忘门</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            X["输入 x"] --> Wq["W_q：4096 → 4096"]
+            Wq --> Q["q：查询（读指针）<br>不写缓存，只读状态"]
+            X --> Wk["W_k：4096 → 4096"]
+            Wk --> K["k：键（写地址）<br>决定写进状态的哪个位置"]
+            X --> Wv["W_v：4096 → 4096"]
+            Wv --> V["v：值（写内容）<br>要写进状态的内容"]
+            X --> Wd["W_δ：4096 → 4096"]
+            Wd --> D["δ：遗忘门（0~1）<br>旧状态保留多少"]
+            K --> Upd["S ← δ·S + v·k^T<br>（外积累加 = softmax 的线性近似）"]
+            V --> Upd
+            D --> Upd
+            Q --> Read["out = W_read(q · S)<br>从状态读回压缩历史"]
+            Upd --> State["状态 S（恒定大小）"]
+            State --> Read
+            Read --> Out["输出"]
+            Note["Q/K/V 都在，只是形态变了：<br>不再按 token 存成列表，而是累加进 S"] -.-> Upd
+        </div>
+      </div>
+    </div>
+
+    <!-- 图 KDA-3 数字 -->
+    <div class="figure-group">
+      <div class="figure-title"><span class="badge">图 KDA-3 数字</span> 内存恒定 O(1)、算力恒定 O(1)</div>
+      <div class="mermaid-wrapper">
+        <div class="mermaid">
+          flowchart TD
+            S0["状态 S 固定大小<br>2048×2048 ≈ 8MB"] --> S1["第 1 个 token：8MB"]
+            S1 --> S2["第 4096 个 token：还是 8MB"]
+            S2 --> S3["第 100 万个 token：还是 8MB"]
+            S3 --> OK["无论 L 多大都不变 ✔"]
+            C0["每步算力固定 O(1)<br>一次状态更新 + 一次读取"] --> C1["不随 L 增长 ✔"]
+            style OK fill:#d1fae5,stroke:#10b981
+        </div>
+      </div>
+      <div class="num-grid">
+        <div class="num-card">
+          <div class="num-label">显存占用</div>
+          <div class="num-value">~8 MB <span class="save">恒定</span></div>
+          <div class="num-note">固定状态，与 L 完全无关</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=4096 对比</div>
+          <div class="num-value">省 ~87.5%</div>
+          <div class="num-note">MHA 64MB vs KDA 8MB</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">L=100k 对比</div>
+          <div class="num-value save">省 ~99.5%</div>
+          <div class="num-note">MHA 1.6GB/层 vs KDA 仍是 8MB</div>
+        </div>
+        <div class="num-card">
+          <div class="num-label">每步解码算力</div>
+          <div class="num-value save">O(1)</div>
+          <div class="num-note">MHA/GQA/MLA 是 O(L)，长程扫描</div>
+        </div>
+      </div>
+      <div class="takeaway">
+        <strong>代价</strong>：线性注意力是对 softmax 的<strong>近似</strong>（外积无法精确表达“指数归一化”），且有遗忘门，超长程信息可能被冲淡；目前质量一般不如 GQA/MLA。KDA 的价值在于<strong>把“存不下、算不完”这两个 O(L) 全部变成 O(1)</strong>，理论可处理无限长文本。
+      </div>
+    </div>
+
+    <div class="code-block"><pre style="margin:0;white-space:pre-wrap;word-break:break-word;"><span class="keyword">class</span> <span class="func">KDA</span>(nn.Module):   <span class="comment"># 对应 图KDA-1：完全替换图B蓝色框（线性注意力）</span>
+    <span class="keyword">def</span> <span class="func">__init__</span>(self, d_model=4096, s_dim=2048):
+        self.s_dim = s_dim
+        self.W_q   = nn.Linear(d_model, s_dim)     <span class="comment"># 图KDA-2：q —— 读指针</span>
+        self.W_k   = nn.Linear(d_model, s_dim)     <span class="comment"># 图KDA-2：k —— 写地址</span>
+        self.W_v   = nn.Linear(d_model, s_dim)     <span class="comment"># 图KDA-2：v —— 写内容</span>
+        self.W_beta = nn.Linear(d_model, s_dim)    <span class="comment"># 图KDA-2：δ —— 遗忘门（0~1）</span>
+        self.W_read = nn.Linear(s_dim, d_model)    <span class="comment"># 图KDA-2：读状态 → 输出</span>
+
+    <span class="keyword">def</span> <span class="func">forward</span>(self, x, state=None):
+        B = x.shape[0]
+        <span class="comment"># —— QKV 在哪里：Q=读、K=写地址、V=写内容，都在状态机内部 ——</span>
+        q = self.W_q(x).squeeze(1)                         <span class="comment"># (B, s) 读取用</span>
+        k = self.W_k(x).squeeze(1)                         <span class="comment"># (B, s) 写地址</span>
+        v = self.W_v(x).squeeze(1)                         <span class="comment"># (B, s) 写内容</span>
+        decay = torch.sigmoid(self.W_beta(x)).squeeze(1)   <span class="comment"># (B, s) 遗忘率 0~1</span>
+        <span class="keyword">if</span> state <span class="keyword">is</span> None:
+            state = torch.zeros(B, self.s_dim, self.s_dim, device=x.device)
+        <span class="comment"># 图KDA-1 状态更新：S ← δ·S + v·k^T（外积累加，历史信息写进固定状态）</span>
+        state = decay.unsqueeze(1) * state + torch.einsum('bs,bt->bst', v, k)  <span class="comment"># (B,s,s)</span>
+        <span class="comment"># 图KDA-1 读取：out = W_read(q·S)，从状态读回压缩后的全部历史</span>
+        out = self.W_read(torch.einsum('bs,bst->bt', q, state)).unsqueeze(1)   <span class="comment"># (B,1,d_model)</span>
+        <span class="keyword">return</span> out, state   <span class="comment"># 状态大小恒定，与 L 无关 → O(1) 显存、O(1) 算力</span>
+</pre></div>
+
+    <div class="feature-box">
+      <strong>⭐ KDA 总结</strong>：<span style="background:#e0e7ff;padding:0 10px;border-radius:12px;">彻底抛弃 KV 列表</span>，改用固定大小状态机。显存与每步算力都 <strong>O(1)</strong>，与上下文长度无关；代价是线性近似带来的质量折损。<strong>解决“长程算不完”，Kimi K3 的代表作。</strong>
+    </div>
+  </div>
+
+  <!-- ================================================================ -->
+  <!--  ★ 模块 6：五机制终极对比 + 总结                                 -->
+  <!-- ================================================================ -->
+  <div class="module">
+    <div class="module-title">🏁 五机制终极对比 <small>统一基线：L=4096 · H=32 · d=128 · G=4 · d_latent=256</small></div>
+    <div class="table-wrapper">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th style="text-align:left;">机制</th>
+            <th>每 token KV</th>
+            <th>@4096 总缓存</th>
+            <th>相对 MHA</th>
+            <th>每步注意力</th>
+            <th>省内存靠</th>
+            <th>省算力靠</th>
+            <th>质量</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>MHA</td><td>16KB</td><td>64MB</td><td>100%（基线）</td>
+            <td>O(L) ≈33.6M</td><td>—</td><td>—</td><td>⭐⭐⭐⭐⭐</td>
+          </tr>
+          <tr>
+            <td>MQA</td><td>0.5KB</td><td>2MB</td><td class="save">-97%</td>
+            <td>O(L) ≈33.6M</td><td>个数→1</td><td>K/V投影 ÷32</td><td>⭐⭐⭐</td>
+          </tr>
+          <tr style="background:#ecfdf5;">
+            <td>GQA</td><td>2KB</td><td>8MB</td><td class="save">-87.5%</td>
+            <td>O(L) ≈33.6M</td><td>个数→G=4</td><td>K/V投影 ÷8 + 带宽 ÷8</td><td>⭐⭐⭐⭐</td>
+          </tr>
+          <tr style="background:#fdf2f8;">
+            <td>MLA</td><td>1KB</td><td>4MB</td><td class="save">-93.75%</td>
+            <td>O(L) 但省展开</td><td>尺寸→d_latent</td><td>K/V投影 ÷16 + 解压吸收</td><td>⭐⭐⭐⭐⭐</td>
+          </tr>
+          <tr style="background:#eef2ff;">
+            <td>KDA</td><td>恒定 8MB</td><td>8MB（恒定）</td><td class="save">与 L 无关</td>
+            <td>O(1)</td><td>不存 KV 列表</td><td>线性注意力 ÷L</td><td>⭐⭐⭐⭐</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="feature-box">
+      <strong>🔍 五句话收尾</strong>：<br>
+      • <strong>MHA</strong>：基线，缓存与算力都 O(L)，两头爆炸。<br>
+      • <strong>MQA</strong>：所有头共享 1 份 K/V，省过头，质量掉。<br>
+      • <strong>GQA</strong>：分组共享（G 组），2026 年主流，缓存 ÷G、投影 ÷G。<br>
+      • <strong>MLA</strong>：不减个数、压尺寸，缓存 ÷16 且解压被吸收，质量几乎无损。<br>
+      • <strong>KDA</strong>：不存列表、改状态机，内存与算力双双 O(1)，适合超长文本。
+      <br><br>
+      <strong>一个记忆框架</strong>：前四个都在回答<strong>“KV 缓存怎么存更省”</strong>（个数/尺寸），KDA 在回答<strong>“如果不存 KV 会怎样”</strong>（换算法）。
+    </div>
+  </div>
+
+  <!-- 结尾 -->
+  <div style="text-align:center;color:#64748b;font-size:0.95rem;border-top:2px solid #e2e8f0;padding-top:30px;margin-top:10px;">
+    📊 本精读版 = 架构三层拆解（图 A/B/B→C/C）→ 图 B 蓝框桥接 → 四大旗舰速览 → 总览对比+演进路线 → 每个机制 3 张图（宏观/结构/推理数字）+ 源码逐行对应图部件 ·
+    数字口径全程一致（16KB→0.5KB→2KB→1KB；64MB→2MB→8MB→4MB；KDA 恒定 8MB）
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      'background': '#ffffff',
+      'primaryColor': '#eef2f6',
+      'primaryBorderColor': '#4b5563',
+      'primaryTextColor': '#0f172a',
+      'lineColor': '#334155',
+      'secondaryColor': '#f1f5f9',
+      'tertiaryColor': '#ffffff',
+      'fontSize': '18px',
+      'fontFamily': 'Segoe UI, sans-serif'
+    },
+    flowchart: {
+      useMaxWidth: true,
+      htmlLabels: true,
+      curve: 'basis',
+      padding: 20
+    },
+    securityLevel: 'loose'
+  });
+</script>
+</body>
+</html>

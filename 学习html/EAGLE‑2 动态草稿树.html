@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EAGLE-2 动态草稿树 · 完整技术解析</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f2f5f9;
+            font-family: -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            padding: 24px;
+            color: #1e293b;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+            padding: 28px 32px;
+            margin-bottom: 24px;
+            border: 1px solid #e9edf2;
+            transition: box-shadow 0.2s;
+        }
+        .card:hover {
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+        }
+        h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.3px;
+            color: #0b1e33;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h1 small {
+            font-size: 16px;
+            font-weight: 400;
+            color: #5e6f88;
+            margin-left: 8px;
+        }
+        h2 {
+            font-size: 20px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            color: #1a2a44;
+            border-left: 5px solid #4a8fe7;
+            padding-left: 14px;
+            line-height: 1.3;
+        }
+        h3 {
+            font-size: 16px;
+            font-weight: 600;
+            margin: 20px 0 10px 0;
+            color: #1e3a5f;
+        }
+        p, li {
+            font-size: 15px;
+            line-height: 1.7;
+            color: #1f2a44;
+        }
+        .grid-2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 24px;
+        }
+        .grid-3 {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        .highlight-box {
+            background: #f5f9ff;
+            border-radius: 12px;
+            padding: 18px 22px;
+            border: 1px solid #d9e6f5;
+            margin: 14px 0;
+        }
+        .highlight-box strong {
+            color: #1f5ba0;
+        }
+        .tag {
+            display: inline-block;
+            background: #ecf1f7;
+            border-radius: 20px;
+            padding: 2px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #2f4a6e;
+            margin-right: 6px;
+        }
+        .tag.green { background: #e2f0e6; color: #1d6b44; }
+        .tag.orange { background: #faf0e2; color: #8e5d1e; }
+        .tag.purple { background: #ede7fc; color: #5a3d8c; }
+        .tag.pink { background: #fce7f0; color: #9e4a6b; }
+        ul, ol {
+            padding-left: 22px;
+            margin: 8px 0 12px 0;
+        }
+        li {
+            margin-bottom: 4px;
+        }
+        .code-block {
+            background: #f4f7fc;
+            border-radius: 12px;
+            padding: 18px 22px;
+            overflow-x: auto;
+            margin: 14px 0 6px 0;
+            border: 1px solid #e0e6ed;
+        }
+        .code-block pre {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+            color: #1e293b;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .code-block .comment { color: #5f7a9a; }
+        .code-block .keyword { color: #a63e6b; }
+        .code-block .func { color: #256bb0; }
+        .code-block .string { color: #1f8a6b; }
+        .code-block .number { color: #b16c3a; }
+        .mermaid-wrapper {
+            background: #f8fafe;
+            border-radius: 14px;
+            padding: 18px 10px 6px 10px;
+            border: 1px solid #e2e9f2;
+            margin: 16px 0 4px 0;
+        }
+        .mermaid {
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 14px 0 10px 0;
+            font-size: 14px;
+        }
+        th {
+            background: #edf2f8;
+            font-weight: 600;
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 2px solid #d6dee8;
+            color: #1e3a5f;
+        }
+        td {
+            padding: 10px 12px;
+            border-bottom: 1px solid #e6ecf3;
+        }
+        .footnote {
+            font-size: 13px;
+            color: #5e6f88;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 14px;
+            margin-top: 14px;
+        }
+        .ascii-art {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            background: #f8fafe;
+            border-radius: 10px;
+            padding: 16px 18px;
+            border: 1px solid #e2e9f2;
+            overflow-x: auto;
+            white-space: pre;
+            color: #1a2a44;
+        }
+        .step-box {
+            background: #fafcff;
+            border-radius: 10px;
+            padding: 14px 18px;
+            border: 1px solid #e6edf6;
+            margin: 8px 0;
+        }
+        .step-box .step-label {
+            font-weight: 600;
+            color: #1f5ba0;
+            font-size: 14px;
+        }
+        .example-table td, .example-table th {
+            padding: 6px 12px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .example-table .accepted {
+            background: #e2f0e6;
+            color: #1d6b44;
+        }
+        .example-table .rejected {
+            background: #fde8e8;
+            color: #a64a4a;
+        }
+        @media (max-width: 760px) {
+            .grid-2, .grid-3 { grid-template-columns: 1fr; }
+            body { padding: 12px; }
+            .card { padding: 18px 16px; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- ===== 标题 ===== -->
+    <div class="card" style="background: #ffffff;">
+        <h1>
+            🌳 EAGLE‑2 动态草稿树
+            <small>并行解码 · 置信度驱动 · 动态剪枝</small>
+        </h1>
+        <p style="margin-top: 10px; font-size: 16px; color: #1e3a5f;">
+            一种在 <a href="https://arxiv.org/abs/2404.13249" target="_blank" style="color:#2a7de1; text-decoration:none;">EAGLE-2</a> 中提出的自适应草稿生成机制，通过 <strong>上下文感知的树结构</strong>，在保证生成质量的同时最大化投机解码的加速比。
+        </p>
+    </div>
+
+    <!-- ===== 第一部分：核心概念 ===== -->
+    <div class="card">
+        <h2>🧠 核心概念 · 一句话说清</h2>
+        <div class="highlight-box" style="font-size:16px;">
+            <strong>动态草稿树</strong> = 每步根据 <strong>置信度</strong> 动态决定 “<strong>扩展哪个分支、扩展多深</strong>”，把算力优先花在最有希望的候选 token 上，然后 <strong>剪枝</strong> 后提交给目标模型并行验证。
+        </div>
+        <div class="grid-2" style="margin-top:12px;">
+            <div>
+                <h3>🎯 要解决的问题</h3>
+                <p>静态草稿树（EAGLE‑1）固定每层分支数，但<strong>不同上下文的接受率差异巨大</strong>——简单位置可以多猜几个，困难位置猜多了全是废的。静态结构无法适应，浪费算力。</p>
+            </div>
+            <div>
+                <h3>💡 核心思想</h3>
+                <ul>
+                    <li><strong>上下文感知</strong>：用草稿模型的 <strong>置信度分数</strong>（softmax 概率）近似目标模型会给出的接受率。</li>
+                    <li><strong>动态扩展</strong>：每层只保留 Top‑K 个高置信度 token 继续扩展，低置信度的直接放弃。</li>
+                    <li><strong>硬约束</strong>：总节点数不超过 <code>speculative_num_draft_tokens</code>（默认 8），保证验证开销可控。</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 新增：简化网络结构 + 推理示例 ===== -->
+    <div class="card">
+        <h2>🔧 简化网络结构 + 推理过程示例</h2>
+        <p style="margin-bottom: 6px;">以下用 <strong>极简版 EAGLE‑2 网络</strong> 和 <strong>数值示例</strong> 展示动态草稿树的完整推理过程。</p>
+
+        <!-- 子章节：网络结构 -->
+        <h3>📐 极简网络结构</h3>
+        <div class="ascii-art">
++----------------------------------------------------------------------+
+|                        EAGLE‑2 草稿模型（简化）                        |
++----------------------------------------------------------------------+
+|                                                                      |
+|  输入: hidden_states (目标模型上一层的输出)                           |
+|        + 当前 token_ids                                              |
+|              ↓                                                        |
+|   [ 轻量级 Transformer 层 × 1 ]                                      |
+|              ↓                                                        |
+|  输出: logits (词汇表大小的概率分布)                                  |
+|        + confidence (每个 token 的置信度分数)                        |
+|                                                                      |
+|  关键组件:                                                           |
+|   ┌─────────────────────────────────────────────────────────────┐    |
+|   │  • 特征投影层: hidden_size → 中间维度 (如 1024)            │    |
+|   │  • 自注意力层: 多头注意力 (4头)                            │    |
+|   │  • 输出层: 中间维度 → vocab_size                           │    |
+|   │  • 置信度头: 中间维度 → 1 (sigmoid 输出 0~1 置信度)       │    |
+|   └─────────────────────────────────────────────────────────────┘    |
+|                                                                      |
++----------------------------------------------------------------------+
+        </div>
+        <p style="font-size:14px; color:#3a5670; margin:4px 0 12px 0;">
+            ⚡ 实际 EAGLE‑2 草稿模型通常为 2‑4 层 Transformer，远小于目标模型（如 7B/13B），因此生成开销极低。
+        </p>
+
+        <!-- 子章节：推理示例 -->
+        <h3>📝 推理过程示例（生成 “The cat” 后续）</h3>
+        <div style="background:#f8fafe; border-radius:10px; padding:16px 18px; border:1px solid #e2e9f2; margin:8px 0 12px 0;">
+            <p style="font-weight:600; color:#1f5ba0; margin-bottom:6px;">📌 场景设置</p>
+            <ul>
+                <li><strong>当前上下文</strong>：“The cat” (已生成 2 个 token)</li>
+                <li><strong>目标</strong>：生成后续 3‑4 个 token（如 “ sat on the mat”）</li>
+                <li><strong>参数</strong>：<code>max_nodes=8</code>，<code>top_k=3</code>，<code>max_depth=4</code></li>
+            </ul>
+        </div>
+
+        <!-- 步骤 1 -->
+        <div class="step-box">
+            <div class="step-label">🔹 步骤 1：根节点扩展（生成第 1 层）</div>
+            <p style="margin:6px 0 4px 0;">草稿模型基于 “The cat” 的 hidden_states，并行预测前 3 个候选 token：</p>
+            <table class="example-table" style="width:100%;">
+                <tr><th>候选 token</th><th>置信度</th><th>路径概率</th></tr>
+                <tr><td><code> sat</code></td><td>0.85</td><td>0.85</td></tr>
+                <tr><td><code> slept</code></td><td>0.60</td><td>0.60</td></tr>
+                <tr><td><code> jumped</code></td><td>0.40</td><td>0.40</td></tr>
+            </table>
+            <p style="font-size:14px; color:#3a5670; margin:4px 0 0 0;">
+                ✅ 选择 Top‑3（<code>top_k=3</code>）全部保留，进入下一层。
+            </p>
+        </div>
+
+        <!-- 步骤 2 -->
+        <div class="step-box">
+            <div class="step-label">🔹 步骤 2：扩展第 2 层（动态分支）</div>
+            <p style="margin:6px 0 4px 0;">对每个候选 token，继续预测下一个 token：</p>
+            <table class="example-table" style="width:100%;">
+                <tr><th>父节点</th><th>候选子节点</th><th>置信度</th><th>路径概率 (累积)</th></tr>
+                <tr><td><code> sat</code></td><td><code> on</code></td><td>0.90</td><td>0.85 × 0.90 = 0.765</td></tr>
+                <tr><td><code> sat</code></td><td><code> at</code></td><td>0.50</td><td>0.85 × 0.50 = 0.425</td></tr>
+                <tr><td><code> slept</code></td><td><code> peacefully</code></td><td>0.70</td><td>0.60 × 0.70 = 0.420</td></tr>
+                <tr><td><code> slept</code></td><td><code> on</code></td><td>0.45</td><td>0.60 × 0.45 = 0.270</td></tr>
+                <tr><td><code> jumped</code></td><td><code> over</code></td><td>0.55</td><td>0.40 × 0.55 = 0.220</td></tr>
+                <tr><td><code> jumped</code></td><td><code> up</code></td><td>0.35</td><td>0.40 × 0.35 = 0.140</td></tr>
+            </table>
+            <p style="font-size:14px; color:#3a5670; margin:4px 0 0 0;">
+                ✅ 保留路径概率最高的 <code>max_nodes=8</code> 个节点（此处共有 6 个，全部保留，继续扩展）。
+            </p>
+        </div>
+
+        <!-- 步骤 3 -->
+        <div class="step-box">
+            <div class="step-label">🔹 步骤 3：扩展第 3 层 &amp; 剪枝</div>
+            <p style="margin:6px 0 4px 0;">继续扩展，直到节点数达到 <code>max_nodes=8</code>，然后剪枝：</p>
+            <table class="example-table" style="width:100%;">
+                <tr><th>路径（累积概率排序）</th><th>累积概率</th><th>状态</th></tr>
+                <tr><td><code> sat → on → the</code></td><td>0.765 × 0.80 = 0.612</td><td class="accepted">✅ 保留 (Top-1)</td></tr>
+                <tr><td><code> sat → on → a</code></td><td>0.765 × 0.30 = 0.230</td><td class="accepted">✅ 保留</td></tr>
+                <tr><td><code> slept → peacefully → on</code></td><td>0.420 × 0.75 = 0.315</td><td class="accepted">✅ 保留</td></tr>
+                <tr><td><code> sat → at → the</code></td><td>0.425 × 0.65 = 0.276</td><td class="accepted">✅ 保留</td></tr>
+                <tr><td><code> slept → on → the</code></td><td>0.270 × 0.70 = 0.189</td><td class="accepted">✅ 保留</td></tr>
+                <tr><td><code> jumped → over → the</code></td><td>0.220 × 0.60 = 0.132</td><td class="accepted">✅ 保留</td></tr>
+                <tr><td><code> jumped → up → the</code></td><td>0.140 × 0.40 = 0.056</td><td class="rejected">❌ 剪枝 (概率最低)</td></tr>
+                <tr><td><code> sat → on → mat</code></td><td>0.765 × 0.10 = 0.077</td><td class="rejected">❌ 剪枝 (概率低)</td></tr>
+            </table>
+            <p style="font-size:14px; color:#3a5670; margin:4px 0 0 0;">
+                ✅ 最终保留 <strong>6 条路径</strong>（≤8），提交给目标模型验证。
+            </p>
+        </div>
+
+        <!-- 步骤 4 -->
+        <div class="step-box">
+            <div class="step-label">🔹 步骤 4：目标模型验证</div>
+            <p style="margin:6px 0 4px 0;">将 6 条路径拼接成 batch，并行送入目标模型（如 LLaMA‑2 7B）：</p>
+            <table class="example-table" style="width:100%;">
+                <tr><th>路径</th><th>验证结果</th><th>推进的 token</th></tr>
+                <tr><td><code> sat → on → the</code></td><td class="accepted">✅ 全部接受</td><td><code> sat, on, the</code></td></tr>
+                <tr><td><code> slept → peacefully → on</code></td><td>❌ 第1个 <code>slept</code> 即被拒</td><td>无</td></tr>
+                <tr><td><code> sat → at → the</code></td><td>✅ <code>sat</code> 接受，❌ <code>at</code> 被拒</td><td><code> sat</code></td></tr>
+                <tr><td><code> slept → on → the</code></td><td>❌ 第1个 <code>slept</code> 被拒</td><td>无</td></tr>
+                <tr><td><code> jumped → over → the</code></td><td>❌ 第1个 <code>jumped</code> 被拒</td><td>无</td></tr>
+                <tr><td><code> sat → on → a</code></td><td>✅ <code>sat</code> 接受，❌ <code>on</code> 被拒</td><td><code> sat</code></td></tr>
+            </table>
+            <p style="font-size:14px; color:#3a5670; margin:4px 0 0 0;">
+                ✅ 本轮实际推进：<strong>3 个 token</strong>（<code> sat</code> + <code> on</code> + <code> the</code>），仅用了 1 次大模型前向。
+            </p>
+        </div>
+
+        <!-- 步骤 5 -->
+        <div class="step-box" style="background:#eef4fa; border-color:#b7d0f0;">
+            <div class="step-label" style="color:#1f5ba0;">🎯 步骤 5：总结</div>
+            <ul>
+                <li><strong>总候选节点</strong>：从 1 个根节点动态扩展到 6 个叶子节点（≤8）。</li>
+                <li><strong>大模型前向次数</strong>：仅 <strong>1 次</strong>（验证整棵树）。</li>
+                <li><strong>实际推进</strong>：<strong>3 个 token</strong>（接受率 50%）。</li>
+                <li><strong>对比自回归</strong>：如果让大模型自己生成 3 个 token，需要 3 次前向 → <strong>EAGLE‑2 加速约 3 倍</strong>。</li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- ===== 三个基础问题 ===== -->
+    <div class="card">
+        <h2>❓ 三个你最关心的问题</h2>
+
+        <div style="margin-bottom: 24px;">
+            <h3>1️⃣ 每次推理到底蹦多少个 token（总节点数）？</h3>
+            <p><strong>不是固定数量，而是树的总节点数固定，形状动态。</strong> 总节点数由 <code>speculative_num_draft_tokens</code> 控制，默认值为 <span class="tag">8</span>（部分模型默认 4）。</p>
+            <div class="highlight-box" style="margin:6px 0 0 0;">
+                <strong>公式关系：</strong> <code>speculative_num_draft_tokens = speculative_num_steps × topk + 1</code> （近似，实际受剪枝影响）<br>
+                例：<code>topk=4</code>，<code>num_steps=3</code> → 未剪枝前 1 + 4 + 16 + 64 = 85 个候选，<strong>但强制剪枝到 ≤8 个节点</strong> 再提交验证。
+            </div>
+            <p style="margin-top:10px;">✅ <strong>结论</strong>：EAGLE‑2 每次提交给目标模型验证的 <strong>草稿节点总数固定</strong>（如 8 个），但树的<strong>深度和每层宽度根据上下文实时变化</strong>。</p>
+        </div>
+
+        <div style="margin-bottom: 24px;">
+            <h3>2️⃣ 输入和输出是什么？</h3>
+            <table>
+                <tr><th style="width:120px;">角色</th><th>输入</th><th>输出</th></tr>
+                <tr><td><strong>整体</strong></td><td>当前已生成的 token 序列（prompt + 已生成部分）</td><td>被目标模型接受的 token（可能 1~8 个），追加到序列中</td></tr>
+                <tr><td><strong>草稿模型</strong></td><td><code>hidden_states</code>（目标模型上一轮输出的隐藏状态）</td><td>每个候选 token 的 <strong>置信度分数</strong> + <strong>logits</strong></td></tr>
+                <tr><td><strong>目标模型</strong></td><td>草稿树中的所有 token 序列（拼接成 batch）</td><td>每个位置的 <strong>接受/拒绝</strong> 决策，并顺带输出新 logits</td></tr>
+            </table>
+        </div>
+
+        <div>
+            <h3>3️⃣ 动态草稿树 vs 静态草稿树</h3>
+            <table>
+                <tr><th style="width:25%;">对比维度</th><th>静态草稿树 (EAGLE‑1)</th><th>动态草稿树 (EAGLE‑2)</th></tr>
+                <tr><td>树结构</td><td>固定深度、固定每层分支数</td><td><strong>动态</strong>，根据置信度每层自适应</td></tr>
+                <tr><td>分支选择</td><td>全量扩展，无筛选</td><td>每层只保留 <strong>Top‑K</strong> 高置信度候选</td></tr>
+                <tr><td>剪枝策略</td><td>无（或简单按位置截断）</td><td><strong>综合概率剪枝</strong>，保留路径概率最高的 N 条</td></tr>
+                <tr><td>适应能力</td><td>弱，困难样本浪费算力</td><td><strong>强</strong>，简单样本深搜，困难样本宽搜</td></tr>
+                <tr><td>加速比</td><td>~2‑3x</td><td>~3‑5x（比 EAGLE‑1 提升 20‑40%）</td></tr>
+            </table>
+        </div>
+    </div>
+
+    <!-- ===== 完整决策流程图（Mermaid） ===== -->
+    <div class="card">
+        <h2>📊 完整决策流程图</h2>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                A["开始本轮草稿生成<br>输入: hidden_states"] --> B["并行预测所有候选 token<br>（一次前向输出 K 个候选及其置信度）"]
+
+                B --> C{"对当前层每个节点<br>计算上下文置信度分数"}
+
+                C --> D["选择 Top‑K 个高置信度 token<br>作为下一层的候选分支"]
+                D --> E["将选中的分支加入树结构<br>（记录路径概率）"]
+
+                E --> F{"是否达到最大深度<br>或总节点数 ≥ max_nodes？"}
+
+                F -->|否| B
+                F -->|是| G["剪枝：按路径累积概率排序<br>只保留 Top‑N 条完整路径"]
+
+                G --> H["将剪枝后的树（≤max_nodes 个节点）<br>拼接成 batch 提交给目标模型"]
+
+                H --> I["目标模型并行验证所有节点<br>输出每个位置的接受/拒绝"]
+
+                I --> J["接受有效 token，推进生成序列"]
+                J --> K["更新 hidden_states 用于下一轮"]
+
+                K --> L["结束本轮验证"]
+
+                style A fill:#e3f0ff,stroke:#4a8fe7
+                style D fill:#fef3c7,stroke:#d4a24e
+                style G fill:#fde2e2,stroke:#c9635a
+                style H fill:#d1fae5,stroke:#3f9a75
+                style J fill:#d1fae5,stroke:#3f9a75
+                style L fill:#eef2f6,stroke:#9aa9bb
+            </div>
+        </div>
+        <div style="font-size:14px; color:#3a5670; margin-top:8px;">
+            ⚙️ 关键步骤：<span class="tag">置信度驱动</span> <span class="tag green">动态分支扩展</span> <span class="tag orange">剪枝降开销</span> <span class="tag purple">并行验证</span>
+        </div>
+    </div>
+
+    <!-- ===== 源码参考 ===== -->
+    <div class="card">
+        <h2>💻 源码参考（来自 EAGLE 官方实现）</h2>
+        <p style="margin-bottom: 6px;">以下为 EAGLE‑2 动态草稿树构建的核心 Python 逻辑（基于 <a href="https://github.com/SafeAILab/EAGLE" target="_blank" style="color:#2a7de1;">SafeAILab/EAGLE</a> 简化示意）。</p>
+
+        <div class="code-block">
+            <pre>
+<span class="comment"># ============================================================</span>
+<span class="comment"># EAGLE‑2 动态草稿树构建（核心逻辑）</span>
+<span class="comment"># ============================================================</span>
+
+<span class="keyword">def</span> <span class="func">eagle2_generate_tree</span>(
+    draft_model,
+    hidden_states,          <span class="comment"># 目标模型上一轮输出的隐藏状态</span>
+    token_ids,              <span class="comment"># 当前已生成的 token 序列</span>
+    max_nodes = <span class="number">8</span>,       <span class="comment"># 总节点数上限（提交给目标模型验证的草稿数量）</span>
+    top_k = <span class="number">4</span>,            <span class="comment"># 每层保留的候选分支数</span>
+    max_depth = <span class="number">4</span>          <span class="comment"># 最大树深度</span>
+):
+    <span class="comment"># 1. 初始化：根节点（当前已生成的位置）</span>
+    tree = [{
+        <span class="string">'tokens'</span>: token_ids,
+        <span class="string">'hidden'</span>: hidden_states,
+        <span class="string">'prob'</span>: <span class="number">1.0</span>,           <span class="comment"># 路径累积概率</span>
+        <span class="string">'depth'</span>: <span class="number">0</span>
+    }]
+
+    <span class="comment"># 2. 循环扩展，直到达到最大节点数或最大深度</span>
+    <span class="keyword">while</span> len(tree) < max_nodes <span class="keyword">and</span> tree[-<span class="number">1</span>][<span class="string">'depth'</span>] < max_depth:
+        current_nodes = [node <span class="keyword">for</span> node <span class="keyword">in</span> tree <span class="keyword">if</span> node[<span class="string">'depth'</span>] == tree[-<span class="number">1</span>][<span class="string">'depth'</span>]]
+        <span class="keyword">if</span> <span class="keyword">not</span> current_nodes:
+            <span class="keyword">break</span>
+
+        <span class="comment"># 3. 并行前向：一次 forward 得到所有候选 token 的 logits 和置信度</span>
+        logits, confidence = draft_model.forward(current_nodes)
+
+        <span class="comment"># 4. 对每个节点，选择 Top‑K 个最高置信度的 token 作为下一层分支</span>
+        next_nodes = []
+        <span class="keyword">for</span> idx, node <span class="keyword">in</span> enumerate(current_nodes):
+            top_indices = confidence[idx].topk(top_k).indices.tolist()
+            <span class="keyword">for</span> token_idx <span class="keyword">in</span> top_indices:
+                <span class="comment"># 计算路径累积概率（用于后续剪枝）</span>
+                path_prob = node[<span class="string">'prob'</span>] * confidence[idx][token_idx].item()
+                next_nodes.append({
+                    <span class="string">'tokens'</span>: node[<span class="string">'tokens'</span>] + [token_idx],
+                    <span class="string">'hidden'</span>: logits[idx][token_idx],  <span class="comment"># 简化：实际为 hidden 更新</span>
+                    <span class="string">'prob'</span>: path_prob,
+                    <span class="string">'depth'</span>: node[<span class="string">'depth'</span>] + <span class="number">1</span>
+                })
+
+        <span class="comment"># 5. 剪枝：如果总节点数超过 max_nodes，只保留累积概率最高的 max_nodes 条路径</span>
+        tree += next_nodes
+        <span class="keyword">if</span> len(tree) > max_nodes:
+            tree.sort(key=<span class="keyword">lambda</span> x: x[<span class="string">'prob'</span>], reverse=<span class="keyword">True</span>)
+            tree = tree[:max_nodes]
+
+    <span class="comment"># 6. 返回树结构（每个节点是一条候选路径）</span>
+    <span class="keyword">return</span> tree
+
+
+<span class="comment"># ============================================================</span>
+<span class="comment"># 目标模型验证阶段（简略）</span>
+<span class="comment"># ============================================================</span>
+<span class="keyword">def</span> <span class="func">verify_with_target</span>(target_model, tree):
+    <span class="comment"># 将所有候选路径拼接成 batch，并行送入目标模型</span>
+    batch = [node[<span class="string">'tokens'</span>] <span class="keyword">for</span> node <span class="keyword">in</span> tree]
+    outputs = target_model.forward(batch)
+    <span class="comment"># 逐位置判断接受/拒绝（树验证 + 接受率计算）</span>
+    accepted_tokens = []
+    <span class="keyword">for</span> i, tokens <span class="keyword">in</span> enumerate(batch):
+        <span class="keyword">if</span> outputs[i].accepted:   <span class="comment"># 该路径被接受</span>
+            accepted_tokens.append(tokens[-<span class="number">1</span>])  <span class="comment"># 取最后一个 token</span>
+    <span class="keyword">return</span> accepted_tokens
+            </pre>
+        </div>
+        <div class="footnote">
+            ⚠️ 上述代码为原理性示意，实际实现包含 KV Cache 管理、树结构验证、多路径回溯等复杂逻辑。完整源码请参考 <a href="https://github.com/SafeAILab/EAGLE/blob/main/eagle/modeling_eagle.py" target="_blank" style="color:#2a7de1;">EAGLE 官方仓库</a>。
+        </div>
+    </div>
+
+    <!-- ===== 参数表 ===== -->
+    <div class="card">
+        <h2>⚙️ 关键参数与默认值</h2>
+        <table>
+            <tr><th style="width:25%;">参数</th><th style="width:20%;">默认值</th><th>作用</th></tr>
+            <tr><td><code>speculative_num_draft_tokens</code></td><td><span class="tag">8</span></td><td>目标模型一次验证的 <strong>总节点数</strong>（草稿数量上限），影响延迟和接受率</td></tr>
+            <tr><td><code>top_k</code></td><td><span class="tag">4</span></td><td>每层扩展时保留的 <strong>候选分支数</strong>，越大树越宽</td></tr>
+            <tr><td><code>max_depth</code></td><td><span class="tag">4</span></td><td>树的最大深度，限制最长依赖路径</td></tr>
+            <tr><td><code>confidence_threshold</code></td><td><span class="tag">0.3</span></td><td>置信度截断阈值，低于此值的 token 直接丢弃（可选）</td></tr>
+        </table>
+        <p style="margin-top: 10px; font-size: 14px; color: #3a5670;">
+            💡 <strong>调参直觉</strong>：<code>top_k</code> 大 → 树更宽，覆盖更多候选，但总节点数固定（max_nodes=8），所以会<strong>压缩深度</strong>；<code>max_depth</code> 大 → 树更深，能生成更长的草稿，但浅层剪枝更激进。
+        </p>
+    </div>
+
+    <!-- ===== 动态 vs 静态对比 ===== -->
+    <div class="card">
+        <h2>📈 动态树 vs 静态树 · 工作流对比</h2>
+        <div class="grid-2">
+            <div style="background:#f6f9fe; border-radius:12px; padding:16px; border:1px solid #dce5f0;">
+                <h3 style="margin-top:0; border-left-color:#94a3b8;">📦 静态树 (EAGLE‑1)</h3>
+                <ul>
+                    <li>固定每层 <code>top_k</code>，所有分支均匀扩展</li>
+                    <li>不考虑上下文难度，简单/困难样本一视同仁</li>
+                    <li>复杂样本 → 大量低质量草稿，验证浪费</li>
+                    <li>简单样本 → 受限于固定深度，无法充分挖掘潜力</li>
+                </ul>
+                <div style="font-size:13px; background:#eef2f6; border-radius:8px; padding:8px 12px; margin-top:8px;">
+                    ⏱️ 加速比：~2‑3x
+                </div>
+            </div>
+            <div style="background:#f0f7ff; border-radius:12px; padding:16px; border:1px solid #b7d0f0;">
+                <h3 style="margin-top:0; border-left-color:#4a8fe7;">🚀 动态树 (EAGLE‑2)</h3>
+                <ul>
+                    <li>每层根据 <strong>置信度</strong> 动态选择 Top‑K</li>
+                    <li>简单位置 → 增加深度，多猜几步</li>
+                    <li>困难位置 → 增加宽度，多试几种可能</li>
+                    <li>总节点数固定（<code>max_nodes=8</code>），算力利用最大化</li>
+                </ul>
+                <div style="font-size:13px; background:#dbeafe; border-radius:8px; padding:8px 12px; margin-top:8px;">
+                    ⚡ 加速比：~3‑5x（比静态提升 20‑40%）
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 页脚 ===== -->
+    <div style="text-align:center; font-size:13px; color:#6b7f98; padding:12px 0 4px 0; border-top:1px solid #e2e8f0; margin-top:8px;">
+        EAGLE‑2 动态草稿树 · 完整技术解析 · 基于 <a href="https://arxiv.org/abs/2404.13249" target="_blank" style="color:#2a7de1;">arXiv:2404.13249</a> 与官方源码
+    </div>
+
+</div>
+
+<script>
+    mermaid.initialize({
+        theme: 'base',
+        themeVariables: {
+            background: '#ffffff',
+            primaryColor: '#4a8fe7',
+            primaryTextColor: '#1a2a44',
+            primaryBorderColor: '#2a6fb5',
+            lineColor: '#6a8bb0',
+            secondaryColor: '#f0f6ff',
+            fontSize: '14px',
+            fontFamily: 'Segoe UI, -apple-system, sans-serif'
+        },
+        flowchart: {
+            useMaxWidth: true,
+            htmlLabels: true,
+            curve: 'basis',
+            padding: 12
+        }
+    });
+</script>
+
+</body>
+</html>

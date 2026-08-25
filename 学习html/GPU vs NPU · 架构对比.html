@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU vs NPU · 架构对比</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f0f4f8;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 1600px;
+            width: 100%;
+        }
+        .page-title {
+            background: #ffffff;
+            border-radius: 2rem;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 0.8rem;
+        }
+        .page-title h1 {
+            font-weight: 700;
+            font-size: 2rem;
+            color: #1a3442;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        .page-title h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #4a6a7e;
+            background: #e8edf2;
+            padding: 0.15rem 1.2rem;
+            border-radius: 40px;
+        }
+        .page-title .badge-group {
+            display: flex;
+            gap: 0.6rem;
+            flex-wrap: wrap;
+        }
+        .badge-gpu {
+            background: #3a7b9a;
+            color: #fff;
+            padding: 0.3rem 1.2rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .badge-npu {
+            background: #8a6a2a;
+            color: #fff;
+            padding: 0.3rem 1.2rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .compare-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+        .compare-card {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 1.8rem 1.8rem 1.5rem 1.8rem;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+        }
+        .compare-card .card-header {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            margin-bottom: 0.8rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 2px solid #e8edf2;
+        }
+        .compare-card .card-header h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            color: #1a3442;
+        }
+        .compare-card .card-header .tag {
+            font-size: 0.65rem;
+            font-weight: 600;
+            padding: 0.1rem 0.8rem;
+            border-radius: 30px;
+        }
+        .tag-gpu {
+            background: #dce8f0;
+            color: #2a5f7a;
+        }
+        .tag-npu {
+            background: #f0e8d0;
+            color: #8a6a2a;
+        }
+        .compare-card .mermaid-container {
+            background: #fafdff;
+            border-radius: 1.2rem;
+            padding: 0.2rem;
+            border: 1px solid #e8edf2;
+        }
+        .compare-card .mermaid {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0.3rem 0.1rem;
+            min-height: 200px;
+        }
+        .compare-card .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .compare-card .footer {
+            margin-top: 0.5rem;
+            text-align: right;
+            font-size: 0.72rem;
+            color: #6a8a9c;
+        }
+
+        /* 对比表格 */
+        .compare-table-wrapper {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 2rem 2rem 1.8rem 2rem;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            margin-bottom: 1.5rem;
+        }
+        .compare-table-wrapper h2 {
+            font-weight: 600;
+            font-size: 1.3rem;
+            color: #1a3442;
+            margin-bottom: 1rem;
+            padding-bottom: 0.6rem;
+            border-bottom: 2px solid #e8edf2;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .compare-table-wrapper h2 small {
+            font-size: 0.8rem;
+            font-weight: 400;
+            color: #4a6a7e;
+        }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.88rem;
+        }
+        .compare-table th {
+            background: #f5f8fa;
+            color: #1a3442;
+            font-weight: 600;
+            padding: 0.7rem 1rem;
+            text-align: left;
+            border-bottom: 2px solid #dce6ed;
+        }
+        .compare-table th:first-child {
+            width: 18%;
+            border-radius: 8px 0 0 0;
+        }
+        .compare-table th:nth-child(2) {
+            width: 36%;
+            border-radius: 0;
+        }
+        .compare-table th:nth-child(3) {
+            width: 36%;
+            border-radius: 0;
+        }
+        .compare-table th:last-child {
+            width: 10%;
+            border-radius: 0 8px 0 0;
+        }
+        .compare-table td {
+            padding: 0.6rem 1rem;
+            border-bottom: 1px solid #e8edf2;
+            color: #2d4a5a;
+            line-height: 1.5;
+            vertical-align: middle;
+        }
+        .compare-table tr:hover td {
+            background: #f7f9fb;
+        }
+        .compare-table .dimension {
+            font-weight: 600;
+            color: #1a3442;
+            white-space: nowrap;
+        }
+        .compare-table .gpu-col {
+            border-left: 3px solid #3a7b9a;
+            padding-left: 1.2rem;
+        }
+        .compare-table .npu-col {
+            border-left: 3px solid #8a6a2a;
+            padding-left: 1.2rem;
+        }
+        .compare-table .winner {
+            text-align: center;
+            font-size: 1.2rem;
+        }
+        .compare-table code {
+            background: #e8edf2;
+            padding: 0.05rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.78rem;
+            color: #1a3442;
+        }
+        .compare-table .highlight-gpu {
+            background: #e3edf5;
+            padding: 0.05rem 0.4rem;
+            border-radius: 4px;
+            color: #1a4a6a;
+            font-weight: 500;
+        }
+        .compare-table .highlight-npu {
+            background: #f0e8d0;
+            padding: 0.05rem 0.4rem;
+            border-radius: 4px;
+            color: #6a4a2a;
+            font-weight: 500;
+        }
+        .compare-table .emoji-big {
+            font-size: 1.1rem;
+        }
+        .legend-note {
+            margin-top: 0.8rem;
+            padding: 0.5rem 1.2rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 0.8rem 2rem;
+            background: #f5f8fa;
+            border-radius: 60px;
+            color: #1d3b4c;
+            font-size: 0.78rem;
+            border: 1px solid #e8edf2;
+        }
+        .legend-note span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .color-dot {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            margin-right: 4px;
+        }
+
+        .summary-box {
+            background: linear-gradient(135deg, #f0f6fa, #f5f2ea);
+            border-radius: 1.2rem;
+            padding: 1.2rem 1.8rem;
+            margin-top: 1.2rem;
+            border: 1px solid #dce6ed;
+        }
+        .summary-box h3 {
+            font-weight: 600;
+            font-size: 1rem;
+            color: #1a3442;
+            margin-bottom: 0.4rem;
+        }
+        .summary-box p {
+            color: #3a5a6a;
+            font-size: 0.88rem;
+            line-height: 1.7;
+        }
+        .summary-box code {
+            background: #dce6ed;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+        }
+        .summary-box .row {
+            display: flex;
+            gap: 2rem;
+            flex-wrap: wrap;
+            margin-top: 0.3rem;
+        }
+        .summary-box .col {
+            flex: 1;
+            min-width: 200px;
+        }
+        .summary-box .col strong {
+            color: #1a3442;
+        }
+        .summary-box .col .gpu-label {
+            color: #2a5f7a;
+        }
+        .summary-box .col .npu-label {
+            color: #8a6a2a;
+        }
+
+        @media (max-width: 1024px) {
+            .compare-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        @media (max-width: 768px) {
+            .page-title h1 {
+                font-size: 1.4rem;
+            }
+            .page-title h1 small {
+                font-size: 0.7rem;
+                padding: 0.1rem 0.8rem;
+            }
+            .compare-table {
+                font-size: 0.78rem;
+            }
+            .compare-table th,
+            .compare-table td {
+                padding: 0.4rem 0.6rem;
+            }
+            .compare-table .dimension {
+                font-size: 0.72rem;
+            }
+            .compare-table-wrapper {
+                padding: 1rem 0.8rem;
+            }
+            .compare-card {
+                padding: 1rem 0.8rem;
+            }
+            .summary-box .row {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            .legend-note {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.2rem;
+                padding: 0.4rem 0.8rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <!-- ====== 页头 ====== -->
+        <div class="page-title">
+            <h1>
+                ⚔️ GPU vs NPU
+                <small>架构差异对比</small>
+            </h1>
+            <div class="badge-group">
+                <span class="badge-gpu">NVIDIA H100 GPU</span>
+                <span class="badge-npu">华为昇腾 NPU</span>
+            </div>
+        </div>
+
+        <!-- ====== 并排架构图 ====== -->
+        <div class="compare-grid">
+
+            <!-- GPU 列 -->
+            <div class="compare-card">
+                <div class="card-header">
+                    <h2>🎮 GPU 架构</h2>
+                    <span class="tag tag-gpu">NVIDIA H100</span>
+                </div>
+                <div class="mermaid-container">
+                    <div class="mermaid">
+                        graph TB
+                            subgraph Host["💻 主机"]
+                                CPU["CPU"]
+                                DRAM["DRAM"]
+                            end
+
+                            subgraph GPU["🎮 GPU 芯片"]
+                                PCIe["PCIe"]
+                                GPC["GPC 调度"]
+                                subgraph SM["SM (×144)"]
+                                    CUDA["CUDA ×128"]
+                                    TC["Tensor Core ×4"]
+                                    SFU["SFU ×8"]
+                                end
+                                L1["L1 128KB"]
+                                L2["L2 96MB"]
+                                MC["内存控制器"]
+                                HBM["HBM3 80GB"]
+                            end
+
+                            CPU --> PCIe --> GPC --> SM
+                            SM --> L1 --> L2 --> MC --> HBM
+                    </div>
+                </div>
+                <div class="footer">CUDA 核心标量 · Tensor Core 矩阵 · L2 96MB</div>
+            </div>
+
+            <!-- NPU 列 -->
+            <div class="compare-card">
+                <div class="card-header">
+                    <h2>🧠 NPU 架构</h2>
+                    <span class="tag tag-npu">华为昇腾</span>
+                </div>
+                <div class="mermaid-container">
+                    <div class="mermaid">
+                        graph TB
+                            subgraph Host["💻 主机"]
+                                CPU["CPU"]
+                                DRAM["DRAM"]
+                            end
+
+                            subgraph NPU["🧠 NPU 芯片"]
+                                PCIe["PCIe"]
+                                DVPP["DVPP 预处理"]
+                                HCCL["HCCL 通信"]
+                                subgraph AICore["AI Core (×32)"]
+                                    Cube["Cube ×1"]
+                                    Vector["Vector ×1"]
+                                    Scalar["Scalar ×1"]
+                                end
+                                MTE["MTE 转置"]
+                                L2["L2 缓存"]
+                                MC["内存控制器"]
+                                HBM["HBM3 80GB"]
+                            end
+
+                            CPU --> PCIe --> DVPP --> AICore
+                            AICore --> MTE --> L2 --> MC --> HBM
+                    </div>
+                </div>
+                <div class="footer">Cube 矩阵 · Vector 向量 · Scalar 标量 · MTE 硬件转置</div>
+            </div>
+
+        </div>
+
+        <!-- ====== 对比表格 ====== -->
+        <div class="compare-table-wrapper">
+            <h2>
+                📊 详细对比
+                <small>GPU vs NPU · 核心差异一览</small>
+            </h2>
+
+            <table class="compare-table">
+                <thead>
+                    <tr>
+                        <th>维度</th>
+                        <th>🎮 NVIDIA H100 GPU</th>
+                        <th>🧠 华为昇腾 NPU</th>
+                        <th>⚡</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <!-- 设计理念 -->
+                    <tr>
+                        <td class="dimension">设计理念</td>
+                        <td class="gpu-col">通用并行计算 (GPGPU)<br><small>图形 + 计算 + AI</small></td>
+                        <td class="npu-col">特定域架构 (DSA)<br><small>专注 AI 训练/推理</small></td>
+                        <td class="winner">🎯</td>
+                    </tr>
+
+                    <!-- 核心架构 -->
+                    <tr>
+                        <td class="dimension">计算核心</td>
+                        <td class="gpu-col">
+                            <span class="highlight-gpu">CUDA 核心</span> (标量) ×18,432<br>
+                            <span class="highlight-gpu">Tensor Core</span> (矩阵) ×576
+                        </td>
+                        <td class="npu-col">
+                            <span class="highlight-npu">Cube</span> (矩阵) ×32<br>
+                            <span class="highlight-npu">Vector</span> (向量) ×32<br>
+                            <span class="highlight-npu">Scalar</span> (标量) ×32
+                        </td>
+                        <td class="winner">⚖️</td>
+                    </tr>
+
+                    <!-- 矩阵单元对比 -->
+                    <tr>
+                        <td class="dimension">矩阵单元</td>
+                        <td class="gpu-col">
+                            <code>Tensor Core</code><br>
+                            每 SM 4 个 · 全芯片 576 个<br>
+                            16×16×16 矩阵乘加
+                        </td>
+                        <td class="npu-col">
+                            <code>Cube</code><br>
+                            每 AI Core 1 个 · 全芯片 32 个<br>
+                            16×16×16 矩阵乘加
+                        </td>
+                        <td class="winner">⚖️</td>
+                    </tr>
+
+                    <!-- 标量/向量单元 -->
+                    <tr>
+                        <td class="dimension">标量/向量</td>
+                        <td class="gpu-col">
+                            <code>CUDA 核心</code> 做标量 (FP32/FP64)<br>
+                            无专用向量单元，用 CUDA 模拟
+                        </td>
+                        <td class="npu-col">
+                            <code>Scalar</code> 做标量 (控制流)<br>
+                            <code>Vector</code> 做向量 (激活/归一化)<br>
+                            <span class="highlight-npu">专用向量单元</span>
+                        </td>
+                        <td class="winner">🥇 NPU</td>
+                    </tr>
+
+                    <!-- 数据格式转换 -->
+                    <tr>
+                        <td class="dimension">数据格式转换</td>
+                        <td class="gpu-col">
+                            软件实现 (CUDA 代码)<br>
+                            需手动优化内存排布
+                        </td>
+                        <td class="npu-col">
+                            <span class="highlight-npu">MTE 硬件加速</span><br>
+                            Img2Col / 转置 硬件完成<br>
+                            提升卷积效率
+                        </td>
+                        <td class="winner">🥇 NPU</td>
+                    </tr>
+
+                    <!-- 精度支持 -->
+                    <tr>
+                        <td class="dimension">精度支持</td>
+                        <td class="gpu-col">
+                            CUDA: <code>FP32</code> <code>FP64</code><br>
+                            Tensor Core: <code>FP16</code> <code>BF16</code> <code>FP8</code> <code>INT8</code>
+                        </td>
+                        <td class="npu-col">
+                            Cube: <code>FP16</code> <code>INT8</code><br>
+                            Vector: <code>FP16</code> <code>FP32</code><br>
+                            Scalar: 控制流
+                        </td>
+                        <td class="winner">⚖️</td>
+                    </tr>
+
+                    <!-- 峰值算力 -->
+                    <tr>
+                        <td class="dimension">峰值算力</td>
+                        <td class="gpu-col">
+                            FP32: <strong>67 TFLOPS</strong><br>
+                            FP16: <strong>1.2 PFLOPS</strong><br>
+                            FP8: <strong>2.4 PFLOPS</strong><br>
+                            INT8: <strong>2.4 POPS</strong>
+                        </td>
+                        <td class="npu-col">
+                            FP16: <strong>256 TFLOPS</strong><br>
+                            INT8: <strong>640 TOPS</strong><br>
+                            (单芯片 32 AI Core)
+                        </td>
+                        <td class="winner">🥇 GPU</td>
+                    </tr>
+
+                    <!-- 显存 -->
+                    <tr>
+                        <td class="dimension">显存</td>
+                        <td class="gpu-col">
+                            HBM3 · 80 GB<br>
+                            带宽 <strong>1.5 TB/s</strong>
+                        </td>
+                        <td class="npu-col">
+                            HBM2e/HBM3 · 64-80 GB<br>
+                            带宽 <strong>400-1200 GB/s</strong>
+                        </td>
+                        <td class="winner">🥇 GPU</td>
+                    </tr>
+
+                    <!-- 缓存层次 -->
+                    <tr>
+                        <td class="dimension">缓存层次</td>
+                        <td class="gpu-col">
+                            寄存器 256KB/SM<br>
+                            L1 128KB/SM · L2 96MB 全局
+                        </td>
+                        <td class="npu-col">
+                            寄存器 私有<br>
+                            L0/L1 ~64KB · UB 248KB · L2 共享
+                        </td>
+                        <td class="winner">⚖️</td>
+                    </tr>
+
+                    <!-- 软件生态 -->
+                    <tr>
+                        <td class="dimension">软件生态</td>
+                        <td class="gpu-col">
+                            <strong>CUDA</strong> · 成熟生态<br>
+                            PyTorch/TensorFlow 原生支持
+                        </td>
+                        <td class="npu-col">
+                            <strong>CANN</strong> · 快速追赶<br>
+                            PyTorch/MindSpore 支持
+                        </td>
+                        <td class="winner">🥇 GPU</td>
+                    </tr>
+
+                    <!-- 多卡互联 -->
+                    <tr>
+                        <td class="dimension">多卡互联</td>
+                        <td class="gpu-col">
+                            <strong>NVLink 4.0</strong><br>
+                            双向 900 GB/s · 最大 18 卡
+                        </td>
+                        <td class="npu-col">
+                            <strong>HCCL</strong><br>
+                            对标 NCCL · 支持集群扩展
+                        </td>
+                        <td class="winner">🥇 GPU</td>
+                    </tr>
+
+                    <!-- 典型场景 -->
+                    <tr>
+                        <td class="dimension">典型场景</td>
+                        <td class="gpu-col">
+                            图形渲染 · 科学计算<br>
+                            AI 训练/推理 · 通用加速
+                        </td>
+                        <td class="npu-col">
+                            <span class="highlight-npu">AI 训练/推理</span><br>
+                            数据中心 · 边缘推理
+                        </td>
+                        <td class="winner">🎯</td>
+                    </tr>
+
+                    <!-- 功耗 -->
+                    <tr>
+                        <td class="dimension">功耗</td>
+                        <td class="gpu-col">
+                            H100: <strong>~700W</strong><br>
+                            风冷/液冷
+                        </td>
+                        <td class="npu-col">
+                            昇腾910: <strong>~350W</strong><br>
+                            昇腾310: <strong>8W</strong> (边缘)
+                        </td>
+                        <td class="winner">🥇 NPU</td>
+                    </tr>
+
+                    <!-- 总结 -->
+                    <tr style="background:#f5f8fa; font-weight:500;">
+                        <td class="dimension">🌟 总结</td>
+                        <td class="gpu-col" style="border-left:3px solid #3a7b9a;">
+                            <strong>通用性强</strong> · 生态成熟<br>
+                            算力峰值更高 · 适合多种负载
+                        </td>
+                        <td class="npu-col" style="border-left:3px solid #8a6a2a;">
+                            <strong>AI 专用优化</strong> · 能效比高<br>
+                            MTE 硬件转置 · Vector 专用单元
+                        </td>
+                        <td class="winner">⚖️</td>
+                    </tr>
+
+                </tbody>
+            </table>
+
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#3a7b9a;"></span> GPU 优势</span>
+                <span><span class="color-dot" style="background:#8a6a2a;"></span> NPU 优势</span>
+                <span><span class="color-dot" style="background:#b0b8c0;"></span> 持平</span>
+                <span style="font-weight:400;">🥇 优胜 · ⚖️ 持平 · 🎯 定位不同</span>
+            </div>
+        </div>
+
+        <!-- ====== 总结 ====== -->
+        <div class="summary-box">
+            <h3>🧠 核心差异总结</h3>
+            <div class="row">
+                <div class="col">
+                    <strong class="gpu-label">🎮 GPU 思路</strong>
+                    <p>
+                        用 <strong>大量通用核心</strong> (CUDA) 处理各种任务，<br>
+                        用 <strong>Tensor Core</strong> 加速矩阵运算。<br>
+                        通用性强，生态成熟，适合多种负载混合部署。
+                    </p>
+                </div>
+                <div class="col">
+                    <strong class="npu-label">🧠 NPU 思路</strong>
+                    <p>
+                        用 <strong>专用架构</strong> (Cube/Vector/Scalar) 针对 AI 优化，<br>
+                        <strong>MTE</strong> 硬件加速数据格式转换，<br>
+                        <strong>Vector</strong> 专用单元处理激活/归一化。<br>
+                        能效比高，专用性强，适合纯 AI 工作负载。
+                    </p>
+                </div>
+                <div class="col">
+                    <strong>⚡ 关键差异</strong>
+                    <p>
+                        GPU = <code>CUDA (标量) + Tensor Core (矩阵)</code><br>
+                        NPU = <code>Cube (矩阵) + Vector (向量) + Scalar (标量)</code><br>
+                        <span style="font-size:0.82rem; color:#5a7a8a;">
+                            NPU 多了 <strong>专用 Vector</strong> 单元，<br>
+                            少了 <strong>通用性</strong>，多了 <strong>AI 专用优化</strong>
+                        </span>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'base',
+                themeVariables: {
+                    background: '#ffffff',
+                    primaryColor: '#e8edf2',
+                    primaryTextColor: '#1a3442',
+                    primaryBorderColor: '#3a7b9a',
+                    lineColor: '#4a8aa8',
+                    secondaryColor: '#dce6ed',
+                    tertiaryColor: '#f0f4f8',
+                    clusterBkg: '#f7f9fb',
+                    clusterBorder: '#c0d0dc',
+                    nodeBorder: '#4a8aa8',
+                    nodeTextColor: '#1a3442',
+                    fontFamily: '"Segoe UI", system-ui, sans-serif',
+                    fontSize: '13px',
+                    edgeLabelBackground: '#ffffff',
+                    mainBkg: '#ffffff'
+                },
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis',
+                    padding: 14,
+                    nodeSpacing: 40,
+                    rankSpacing: 40,
+                },
+                securityLevel: 'loose',
+            });
+        });
+    </script>
+</body>
+</html>

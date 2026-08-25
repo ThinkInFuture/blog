@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>华为昇腾 NPU 架构 · 大图版</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f0f4f8;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 1400px;
+            width: 100%;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 2rem 2rem 1.8rem 2rem;
+            width: 100%;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            margin-bottom: 1.5rem;
+        }
+        .card-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+            padding: 0 0.3rem;
+        }
+        .card-header h1 {
+            font-weight: 600;
+            font-size: 1.8rem;
+            color: #1a3442;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .card-header h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #4a6a7e;
+            background: #e8edf2;
+            padding: 0.15rem 1.2rem;
+            border-radius: 40px;
+            letter-spacing: 0.3px;
+        }
+        .badge {
+            background: #1a3442;
+            color: #f0f6fa;
+            padding: 0.3rem 1.2rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .badge-primary {
+            background: #3a7b9a;
+        }
+        .badge-npu {
+            background: #8a6a2a;
+        }
+        .badge-mem {
+            background: #3a7a6a;
+        }
+        .badge-perf {
+            background: #8a4a3a;
+        }
+        .mermaid-container {
+            background: #ffffff;
+            border-radius: 1.5rem;
+            padding: 0.2rem;
+            border: 1px solid #e8edf2;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0.5rem 0.2rem;
+            min-height: 320px;
+        }
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .legend-note {
+            margin-top: 1rem;
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem 2.5rem;
+            background: #f5f8fa;
+            border-radius: 60px;
+            color: #1d3b4c;
+            font-size: 0.85rem;
+            border: 1px solid #e8edf2;
+        }
+        .legend-note span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .color-dot {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            margin-right: 4px;
+        }
+        .footer {
+            margin-top: 0.6rem;
+            text-align: right;
+            font-size: 0.78rem;
+            color: #6a8a9c;
+            padding-right: 0.5rem;
+            letter-spacing: 0.2px;
+        }
+        .helper-card {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 1.8rem 2rem 1.5rem 2rem;
+            width: 100%;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            margin-bottom: 1.5rem;
+        }
+        .helper-card .card-header h1 {
+            font-size: 1.4rem;
+        }
+        .helper-card .card-header h1 small {
+            font-size: 0.85rem;
+            padding: 0.1rem 1rem;
+        }
+        .helper-card .mermaid {
+            min-height: 240px;
+            padding: 0.5rem 0.2rem;
+        }
+        .helper-card .legend-note {
+            font-size: 0.8rem;
+            padding: 0.5rem 1.2rem;
+            gap: 0.8rem 2rem;
+        }
+        .glossary {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 2rem 2rem 1.8rem 2rem;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+        }
+        .glossary-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e8edf2;
+        }
+        .glossary-header h2 {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #1a3442;
+        }
+        .glossary-header .count {
+            background: #e8edf2;
+            color: #4a6a7e;
+            padding: 0.1rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .glossary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .glossary-item {
+            background: #f7f9fb;
+            border-radius: 1rem;
+            padding: 0.9rem 1.2rem;
+            border-left: 4px solid #3a7b9a;
+            transition: all 0.15s ease;
+        }
+        .glossary-item:hover {
+            background: #f0f4f8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 20, 40, 0.06);
+        }
+        .glossary-item .term {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1a3442;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.2rem;
+            flex-wrap: wrap;
+        }
+        .glossary-item .term .tag {
+            font-size: 0.6rem;
+            font-weight: 500;
+            background: #dce6ed;
+            color: #2c5f7a;
+            padding: 0.05rem 0.6rem;
+            border-radius: 30px;
+            white-space: nowrap;
+        }
+        .glossary-item .term .tag-npu {
+            background: #f0e8d0;
+            color: #8a6a2a;
+        }
+        .glossary-item .term .tag-cube {
+            background: #fde8e8;
+            color: #b33a3a;
+        }
+        .glossary-item .term .tag-mem {
+            background: #e5edf0;
+            color: #3a6a7a;
+        }
+        .glossary-item .term .tag-host {
+            background: #dce6ed;
+            color: #3a5a6a;
+        }
+        .glossary-item .term .tag-ai {
+            background: #fef3e0;
+            color: #b3771a;
+        }
+        .glossary-item .term .tag-perf {
+            background: #fce8e0;
+            color: #8a4a3a;
+        }
+        .glossary-item .desc {
+            font-size: 0.85rem;
+            color: #2d4a5a;
+            line-height: 1.5;
+        }
+        .glossary-item .desc code {
+            background: #e8edf2;
+            padding: 0.05rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #1a3442;
+            font-weight: 500;
+        }
+        .glossary-item .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.2rem 0.8rem;
+            margin-top: 0.4rem;
+            padding-top: 0.4rem;
+            border-top: 1px solid #e8edf2;
+            font-size: 0.78rem;
+        }
+        .glossary-item .spec-grid .label {
+            color: #5a7a8a;
+        }
+        .glossary-item .spec-grid .value {
+            color: #1a3442;
+            font-weight: 500;
+            text-align: right;
+        }
+        .ai-summary {
+            background: linear-gradient(135deg, #fef9f0, #fcf4e8);
+            border-radius: 1rem;
+            padding: 1rem 1.5rem;
+            margin-top: 1.5rem;
+            border: 1px solid #f0e4d0;
+        }
+        .ai-summary h3 {
+            color: #8a6a3a;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.4rem;
+        }
+        .ai-summary p {
+            color: #5a4a3a;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+        .ai-summary code {
+            background: #f0e4d0;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #6a4a2a;
+            font-weight: 500;
+        }
+        .unit-explainer {
+            background: #e8f0f5;
+            border-radius: 1rem;
+            padding: 0.8rem 1.2rem;
+            margin-top: 0.6rem;
+            border-left: 4px solid #3a7b9a;
+        }
+        .unit-explainer h4 {
+            color: #1a4a5a;
+            font-weight: 600;
+            font-size: 0.85rem;
+            margin-bottom: 0.2rem;
+        }
+        .unit-explainer p {
+            color: #2a5a6a;
+            font-size: 0.82rem;
+            line-height: 1.6;
+        }
+        .unit-explainer code {
+            background: #dce6ed;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #1a3442;
+            font-weight: 600;
+        }
+        @media (max-width: 640px) {
+            .card, .helper-card, .glossary {
+                padding: 1.2rem 0.8rem;
+            }
+            .card-header h1 {
+                font-size: 1.3rem;
+            }
+            .card-header h1 small {
+                font-size: 0.7rem;
+                padding: 0.1rem 0.8rem;
+            }
+            .legend-note {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.2rem;
+                padding: 0.5rem 1rem;
+            }
+            .glossary-grid {
+                grid-template-columns: 1fr;
+            }
+            .glossary-item .spec-grid {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+            .glossary-item .spec-grid .value {
+                text-align: left;
+            }
+            .helper-card .card-header h1 {
+                font-size: 1.1rem;
+            }
+            .helper-card .card-header h1 small {
+                font-size: 0.65rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <!-- ============================================================ -->
+        <!-- 主图：昇腾 NPU 完整架构 -->
+        <!-- ============================================================ -->
+        <div class="card">
+            <div class="card-header">
+                <h1>
+                    🧠 华为昇腾 NPU 完整架构
+                    <small>达芬奇架构 · 昇腾910/950</small>
+                </h1>
+                <span class="badge">主图</span>
+            </div>
+
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph Host["💻 主机 / 系统"]
+                            CPU["中央处理器 CPU<br>任务调度 · 资源管理"]
+                            HostMem["系统内存 DDR<br>数据准备 · 结果回收"]
+                        end
+
+                        subgraph NPU["🧠 昇腾 NPU 芯片"]
+                            PCIe["PCIe 接口<br>CPU-NPU 高速互联"]
+                            DVPP["数字视觉预处理<br>图像缩放/拼接/编解码"]
+                            HCCL["HCCL 通信<br>多卡互联 · 集群扩展"]
+
+                            subgraph AI_Core_Cluster["AI Core 集群 · 达芬奇架构核心"]
+                                direction TB
+                                AICore1["AI Core #1<br>─────────────<br>🟦 Cube ×1 (矩阵)<br>🟩 Vector ×1 (向量)<br>🟨 Scalar ×1 (标量)<br>📦 L0/L1/UB 缓存"]
+                                AICore2["AI Core #2<br>─────────────<br>🟦 Cube ×1 (矩阵)<br>🟩 Vector ×1 (向量)<br>🟨 Scalar ×1 (标量)<br>📦 L0/L1/UB 缓存"]
+                                AICore3["AI Core #3<br>─────────────<br>🟦 Cube ×1 (矩阵)<br>🟩 Vector ×1 (向量)<br>🟨 Scalar ×1 (标量)<br>📦 L0/L1/UB 缓存"]
+                                AICore4["AI Core #4<br>─────────────<br>🟦 Cube ×1 (矩阵)<br>🟩 Vector ×1 (向量)<br>🟨 Scalar ×1 (标量)<br>📦 L0/L1/UB 缓存"]
+                                MTE["⚡ 存储转换单元 MTE<br>硬件级 Img2Col<br>数据格式转换加速"]
+                            end
+
+                            subgraph Cache_Mem["片上缓存 / 缓冲区"]
+                                L2["L2 缓存<br>片上共享"]
+                                Buffer["输入/输出缓冲区<br>数据转置/格式转换"]
+                                Register["寄存器堆<br>各计算单元私有"]
+                            end
+
+                            subgraph VRAM["显存子系统"]
+                                HBM["HBM2e/HBM3 显存<br>带宽 1.2 TB/s<br>容量 64-80 GB"]
+                                MemoryCtrl["内存控制器<br>多通道 HBM 接口"]
+                            end
+                        end
+
+                        CPU -->|"任务下发"| PCIe
+                        HostMem -->|"数据加载"| PCIe
+                        PCIe -->|"命令 / 数据"| DVPP
+                        DVPP -->|"预处理数据"| AI_Core_Cluster
+                        PCIe -->|"直接调度"| HCCL
+                        HCCL -.->|"多卡通信"| AI_Core_Cluster
+
+                        AICore1 -->|"读写"| L2
+                        AICore2 -->|"读写"| L2
+                        AICore3 -->|"读写"| L2
+                        AICore4 -->|"读写"| L2
+
+                        AICore1 -.->|"寄存器"| Register
+                        AICore2 -.->|"寄存器"| Register
+                        AICore3 -.->|"寄存器"| Register
+                        AICore4 -.->|"寄存器"| Register
+
+                        L2 -->|"缓存一致性"| MemoryCtrl
+                        Buffer -->|"数据转置/搬运"| AI_Core_Cluster
+                        MemoryCtrl -->|"访存"| HBM
+
+                        AICore1 -.->|"专用加速"| MTE
+                        AICore2 -.->|"专用加速"| MTE
+                        AICore3 -.->|"专用加速"| MTE
+                        AICore4 -.->|"专用加速"| MTE
+                </div>
+            </div>
+
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#2c5f7a;"></span> 主机 & 系统</span>
+                <span><span class="color-dot" style="background:#8a6a2a;"></span> NPU 核心单元</span>
+                <span><span class="color-dot" style="background:#c0392b;"></span> Cube 矩阵单元</span>
+                <span><span class="color-dot" style="background:#5a8fa8;"></span> 缓存 / 缓冲区</span>
+                <span><span class="color-dot" style="background:#6a8f9e;"></span> 显存子系统</span>
+                <span><span class="color-dot" style="background:#b3771a;"></span> MTE 存储转换</span>
+                <span style="font-weight:400;">➡️ 数据流 · 控制流</span>
+            </div>
+            <div class="footer">🚀 达芬奇架构 · MTE 位于 AI Core 集群内 · Cube/Vector/Scalar 铁三角</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 1: AI Core 内部结构 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🔬 辅助图 1 · AI Core 内部结构
+                    <small>达芬奇架构 · 铁三角 + MTE</small>
+                </h1>
+                <span class="badge badge-primary">放大</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph AICore["🔲 AI Core (达芬奇架构)"]
+                            Cube["🟦 Cube 计算单元<br>矩阵乘加 · 16×16×16<br>INT8/FP16 加速"]
+                            Vector["🟩 Vector 计算单元<br>向量运算 · 激活函数<br>归一化 · FP16/FP32"]
+                            Scalar["🟨 Scalar 计算单元<br>标量运算 · 控制流<br>流程控制 · 地址计算"]
+                            L0A["L0A Buffer<br>矩阵 A 输入"]
+                            L0B["L0B Buffer<br>矩阵 B 输入"]
+                            L0C["L0C Buffer<br>矩阵结果输出"]
+                            UB["Unified Buffer<br>统一缓冲区<br>向量/标量数据"]
+                            MTE_local["⚡ 存储转换单元 MTE<br>硬件数据格式转换<br>Img2Col 加速"]
+                        end
+
+                        L0A --> Cube
+                        L0B --> Cube
+                        Cube --> L0C
+                        L0C --> Vector
+                        Vector --> UB
+                        UB --> MTE_local
+                        MTE_local -->|"转置后数据"| L0A
+                        Scalar -->|"控制"| Cube
+                        Scalar -->|"控制"| Vector
+                </div>
+            </div>
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#c0392b;"></span> Cube 矩阵</span>
+                <span><span class="color-dot" style="background:#2a7a3a;"></span> Vector 向量</span>
+                <span><span class="color-dot" style="background:#b3771a;"></span> Scalar 标量</span>
+                <span><span class="color-dot" style="background:#f0a030;"></span> MTE 转置</span>
+                <span><span class="color-dot" style="background:#5a8fa8;"></span> 缓存/缓冲区</span>
+            </div>
+            <div class="footer">Cube + Vector + Scalar 铁三角 · MTE 硬件加速数据格式转换</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 2: 存储层次 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🗄️ 辅助图 2 · 存储层次
+                    <small>延迟 · 容量 · 带宽</small>
+                </h1>
+                <span class="badge badge-mem">金字塔</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph LR
+                        Reg["寄存器<br>各单元私有<br>1 周期"]
+                        L0["L0/L1 Buffer<br>L0A/L0B/L0C<br>~64KB · 极低延迟"]
+                        UB["Unified Buffer<br>~248KB<br>低延迟"]
+                        L2["L2 缓存<br>片上共享<br>~50 周期"]
+                        HBM["HBM2e/HBM3<br>64-80GB<br>1.2 TB/s · ~500 周期"]
+
+                        Reg --> L0
+                        L0 --> UB
+                        UB --> L2
+                        L2 --> HBM
+                </div>
+            </div>
+            <div class="legend-note">
+                <span style="color:#2a7a3a;">⬆️ 越快</span>
+                <span style="color:#c0392b;">⬇️ 越大</span>
+                <span style="font-weight:400;">越往上越快 · 越往下越大</span>
+            </div>
+            <div class="footer">昇腾 NPU 专用存储层次 · Unified Buffer 是核心</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 3: AI 推理数据流 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🧠 辅助图 3 · AI 推理数据流
+                    <small>大模型推理路径</small>
+                </h1>
+                <span class="badge badge-npu">AI 视图</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph LR
+                        Host["系统内存<br>模型权重/输入"]
+                        PCIe["PCIe<br>高速互联"]
+                        HBM["HBM3 显存<br>模型权重"]
+                        L2["L2 缓存<br>片上共享"]
+                        MTE["MTE<br>数据格式转换"]
+                        AICore["AI Core<br>Cube/Vector"]
+                        Out["推理结果"]
+
+                        Host -->|"加载模型"| PCIe
+                        PCIe -->|"DMA 传输"| HBM
+                        HBM -->|"权重读取"| L2
+                        L2 -->|"数据转置"| MTE
+                        MTE -->|"优化格式"| AICore
+                        AICore -->|"矩阵/向量计算"| Out
+
+                        style MTE fill:#f0e8c0,stroke:#b3771a,stroke-width:2px
+                        style AICore fill:#f0e8d0,stroke:#8a6a2a,stroke-width:2px
+                        style Out fill:#e8f4e8,stroke:#2a7a3a,stroke-width:2px
+                </div>
+            </div>
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#2c5f7a;"></span> 主机/传输</span>
+                <span><span class="color-dot" style="background:#6a8f9e;"></span> 显存/缓存</span>
+                <span><span class="color-dot" style="background:#b3771a;"></span> MTE 转置</span>
+                <span><span class="color-dot" style="background:#8a6a2a;"></span> AI Core</span>
+            </div>
+            <div class="footer">关键路径：HBM → L2 → MTE (格式转换) → AI Core (Cube 矩阵乘加)</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 4: 计算单元对比 + 性能数据 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    ⚡ 辅助图 4 · 计算单元对比
+                    <small>Cube · Vector · Scalar</small>
+                </h1>
+                <span class="badge badge-perf">性能</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph Cube["🟦 Cube (矩阵)"]
+                            C1["16×16×16 矩阵乘加"]
+                            C2["1 指令 = 4096 次乘加"]
+                            C3["INT8/FP16 加速"]
+                            C4["AI 计算核心"]
+                        end
+
+                        subgraph Vector["🟩 Vector (向量)"]
+                            V1["向量运算"]
+                            V2["激活函数 · 归一化"]
+                            V3["FP16/FP32"]
+                            V4["灵活计算"]
+                        end
+
+                        subgraph Scalar["🟨 Scalar (标量)"]
+                            S1["标量运算"]
+                            S2["控制流 · 地址计算"]
+                            S3["流程控制"]
+                            S4["调度协调"]
+                        end
+
+                        C1 --> C4
+                        V1 --> V4
+                        S1 --> S4
+
+                        style Cube fill:#fde8e8,stroke:#c0392b
+                        style Vector fill:#e8f4e8,stroke:#2a7a3a
+                        style Scalar fill:#fef3e0,stroke:#b3771a
+                </div>
+            </div>
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#c0392b;"></span> Cube (矩阵)</span>
+                <span><span class="color-dot" style="background:#2a7a3a;"></span> Vector (向量)</span>
+                <span><span class="color-dot" style="background:#b3771a;"></span> Scalar (标量)</span>
+                <span style="font-weight:400;">铁三角协同</span>
+            </div>
+            <div class="unit-explainer">
+                <h4>📐 性能数据 (昇腾910)</h4>
+                <p>
+                    <code>Cube</code> FP16: 256 TFLOPS · INT8: 640 TOPS<br>
+                    <code>Vector</code> FP16/FP32 灵活计算 · 激活函数/归一化<br>
+                    <code>HBM2e</code> 带宽 1.2 TB/s · 容量 64 GB
+                </p>
+            </div>
+            <div class="footer">Cube 负责密集矩阵 · Vector 负责灵活向量 · Scalar 负责控制流</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 概念说明 -->
+        <!-- ============================================================ -->
+        <div class="glossary">
+            <div class="glossary-header">
+                <h2>📖 昇腾 NPU 核心概念速查</h2>
+                <span class="count">15 项</span>
+            </div>
+            <div class="glossary-grid">
+
+                <div class="glossary-item" style="border-left-color: #8a6a2a;">
+                    <div class="term">达芬奇架构 <span class="tag tag-npu">核心架构</span></div>
+                    <div class="desc">
+                        华为自研 NPU 架构，采用 <strong>Cube + Vector + Scalar</strong> 铁三角设计。
+                        针对 AI 领域定制，覆盖端、边、云全场景。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">设计理念</span><span class="value">DSA 特定域架构</span>
+                        <span class="label">核心单元</span><span class="value">Cube/Vector/Scalar</span>
+                        <span class="label">特色</span><span class="value">MTE 硬件转置</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #8a6a2a;">
+                    <div class="term">AI Core <span class="tag tag-npu">计算核心</span></div>
+                    <div class="desc">
+                        昇腾 NPU 的计算核心，包含矩阵(Cube)、向量(Vector)、标量(Scalar)三种计算单元，
+                        配合多级缓存完成 AI 计算。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">每芯片数量</span><span class="value">32 (910)</span>
+                        <span class="label">计算模式</span><span class="value">SIMD/SIMT 混合</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">Cube 矩阵计算单元 <span class="tag tag-cube">矩阵</span></div>
+                    <div class="desc">
+                        执行 <strong>16×16×16 矩阵乘加</strong>，一条指令完成 4096 次乘加。
+                        是 AI 训练/推理的算力核心。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">每 AI Core</span><span class="value">1 个</span>
+                        <span class="label">精度支持</span><span class="value">INT8/FP16</span>
+                        <span class="label">910 FP16</span><span class="value">256 TFLOPS</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #2a7a3a;">
+                    <div class="term">Vector 向量计算单元 <span class="tag tag-cube">向量</span></div>
+                    <div class="desc">
+                        执行向量运算，包括 <strong>激活函数、归一化、池化</strong> 等，
+                        支持 FP16/FP32 精度。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">每 AI Core</span><span class="value">1 个</span>
+                        <span class="label">精度支持</span><span class="value">FP16/FP32</span>
+                        <span class="label">典型用途</span><span class="value">激活/归一化</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #b3771a;">
+                    <div class="term">Scalar 标量计算单元 <span class="tag tag-cube">标量</span></div>
+                    <div class="desc">
+                        负责 <strong>控制流、地址计算、标量运算</strong>，协调 Cube 和 Vector 的执行。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">每 AI Core</span><span class="value">1 个</span>
+                        <span class="label">功能</span><span class="value">控制/调度</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #b3771a;">
+                    <div class="term">存储转换单元 MTE <span class="tag tag-mem">特色</span></div>
+                    <div class="desc">
+                        <strong>达芬奇架构特色</strong>，位于 NPU 芯片内部 AI Core 集群。
+                        硬件级数据格式转换（如 Img2Col），大幅提升卷积效率。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">功能</span><span class="value">数据格式转换</span>
+                        <span class="label">对比 GPU</span><span class="value">硬件加速 vs 软件实现</span>
+                        <span class="label">位置</span><span class="value">AI Core 集群内</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #2c5f7a;">
+                    <div class="term">CANN 异构计算架构 <span class="tag tag-host">软件栈</span></div>
+                    <div class="desc">
+                        华为 NPU 软件栈，向上兼容 PyTorch/MindSpore，向下使能昇腾硬件。
+                        包含算子库、编译器等。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">编程语言</span><span class="value">Ascend C</span>
+                        <span class="label">框架支持</span><span class="value">PyTorch/MindSpore</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #6a8f9e;">
+                    <div class="term">HBM 显存 <span class="tag tag-mem">显存</span></div>
+                    <div class="desc">
+                        昇腾 NPU 专用高带宽内存，HBM2e/HBM3，为大模型提供高吞吐数据访问。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">910B 带宽</span><span class="value">400 GB/s</span>
+                        <span class="label">910B3 带宽</span><span class="value">1.2 TB/s</span>
+                        <span class="label">容量</span><span class="value">64-80 GB</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #5a8fa8;">
+                    <div class="term">Unified Buffer <span class="tag tag-mem">片内缓存</span></div>
+                    <div class="desc">
+                        AI Core 内统一缓冲区，向量/标量计算的数据中转站，
+                        容量约 <strong>248 KB</strong>。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">位置</span><span class="value">AI Core 内部</span>
+                        <span class="label">容量</span><span class="value">~248 KB</span>
+                        <span class="label">用途</span><span class="value">向量/标量数据</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #2c5f7a;">
+                    <div class="term">HCCL 通信库 <span class="tag tag-host">多卡互联</span></div>
+                    <div class="desc">
+                        华为集合通信库，支持多卡训练时的 <strong>AllReduce、Broadcast</strong> 等
+                        集合通信操作。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">功能</span><span class="value">多卡通信</span>
+                        <span class="label">对标</span><span class="value">NVIDIA NCCL</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #3a7b9a;">
+                    <div class="term">数字视觉预处理 DVPP <span class="tag tag-npu">预处理</span></div>
+                    <div class="desc">
+                        硬件级图像/视频预处理，包括 <strong>缩放、拼接、编解码</strong>，
+                        减轻 AI Core 负担。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">功能</span><span class="value">图像预处理</span>
+                        <span class="label">优势</span><span class="value">硬件加速</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">混合精度训练 <span class="tag tag-ai">AI 训练</span></div>
+                    <div class="desc">
+                        Cube 支持 FP16/BF16 混合精度，在保持精度的同时大幅提升训练吞吐量。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">精度支持</span><span class="value">FP16/BF16/INT8</span>
+                        <span class="label">910 FP16</span><span class="value">256 TFLOPS</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #8a6a2a;">
+                    <div class="term">昇腾910 <span class="tag tag-npu">旗舰芯片</span></div>
+                    <div class="desc">
+                        华为云端训练芯片，32 个 AI Core，支持千亿参数大模型训练。
+                        910B3 引入 HBM3e 内存。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">AI Core</span><span class="value">32 个</span>
+                        <span class="label">FP16 算力</span><span class="value">256-320 TFLOPS</span>
+                        <span class="label">工艺</span><span class="value">7nm (N+1/N+2)</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #8a6a2a;">
+                    <div class="term">昇腾310 <span class="tag tag-npu">推理芯片</span></div>
+                    <div class="desc">
+                        华为边缘推理 SoC，低功耗设计，面向端侧 AI 推理场景。
+                        功耗仅 <strong>8W</strong>。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">FP16 算力</span><span class="value">8 TFLOPS</span>
+                        <span class="label">INT8 算力</span><span class="value">16 TOPS</span>
+                        <span class="label">功耗</span><span class="value">8W</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #8a4a3a;">
+                    <div class="term">算力单位 <span class="tag tag-perf">性能</span></div>
+                    <div class="desc">
+                        <code>TFLOPS</code> = 每秒 10¹² 次浮点运算 (万亿次)<br>
+                        <code>TOPS</code> = 每秒 10¹² 次整数运算 (万亿次)
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">910 FP16</span><span class="value">256 TFLOPS</span>
+                        <span class="label">310 INT8</span><span class="value">16 TOPS</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="ai-summary">
+                <h3>🧠 主图 + 4 辅助图 · 各自分工</h3>
+                <p>
+                    <strong>主图</strong>：完整的昇腾 NPU 架构，MTE 位于 NPU 芯片内部 AI Core 集群。<br>
+                    <strong>辅助图 1</strong>：AI Core 内部结构 — <code>Cube/Vector/Scalar</code> 铁三角 + <code>MTE</code>。<br>
+                    <strong>辅助图 2</strong>：存储层次金字塔 — 从寄存器到 HBM 的延迟与容量。<br>
+                    <strong>辅助图 3</strong>：AI 推理数据流 — <code>HBM → L2 → MTE → AI Core</code> 完整路径。<br>
+                    <strong>辅助图 4</strong>：计算单元对比 — <code>Cube 4096次/指令</code>、<code>FP16 256 TFLOPS</code>。
+                </p>
+                <p style="margin-top: 0.3rem; font-size: 0.85rem; color: #6a5a4a;">
+                    💡 核心差异：GPU 用 CUDA 核心做标量，Tensor Core 做矩阵；<br>
+                    昇腾 NPU 用 <strong>Cube</strong> 做矩阵（专用最强），<strong>Vector</strong> 做向量（灵活），<strong>Scalar</strong> 做标量（控制）
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'base',
+                themeVariables: {
+                    background: '#ffffff',
+                    primaryColor: '#e8edf2',
+                    primaryTextColor: '#1a3442',
+                    primaryBorderColor: '#3a7b9a',
+                    lineColor: '#4a8aa8',
+                    secondaryColor: '#dce6ed',
+                    tertiaryColor: '#f0f4f8',
+                    clusterBkg: '#f7f9fb',
+                    clusterBorder: '#c0d0dc',
+                    nodeBorder: '#4a8aa8',
+                    nodeTextColor: '#1a3442',
+                    fontFamily: '"Segoe UI", system-ui, sans-serif',
+                    fontSize: '14px',
+                    edgeLabelBackground: '#ffffff',
+                    mainBkg: '#ffffff'
+                },
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis',
+                    padding: 18,
+                    nodeSpacing: 50,
+                    rankSpacing: 50,
+                },
+                securityLevel: 'loose',
+            });
+        });
+    </script>
+</body>
+</html>

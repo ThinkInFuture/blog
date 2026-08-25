@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模型加速全景图 · 修正架构层</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: #e8edf5;
+            padding: 40px 24px 60px;
+            display: flex;
+            justify-content: center;
+            color: #1a2634;
+        }
+
+        .container {
+            max-width: 1300px;
+            width: 100%;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 36px;
+        }
+
+        .header h1 {
+            font-size: 40px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            color: #0f1a2e;
+            display: inline-block;
+            background: linear-gradient(135deg, #1a2634, #3a4a5e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header .sub {
+            font-size: 16px;
+            color: #5a6b82;
+            margin-top: 6px;
+            letter-spacing: 0.4px;
+            -webkit-text-fill-color: #5a6b82;
+        }
+
+        .arch-map {
+            background: #ffffff;
+            border-radius: 28px;
+            padding: 32px 30px 28px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.06);
+            border: 1px solid #dce3ee;
+        }
+
+        .layer {
+            margin-bottom: 28px;
+            position: relative;
+        }
+
+        .layer:last-child {
+            margin-bottom: 0;
+        }
+
+        .layer-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #2d4059;
+            margin-bottom: 14px;
+            letter-spacing: 0.3px;
+            padding-left: 4px;
+        }
+
+        .layer-title .badge {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 2px 14px;
+            border-radius: 30px;
+            color: #fff;
+            background: #7a8a9e;
+            letter-spacing: 0.3px;
+        }
+
+        .layer-grid {
+            display: grid;
+            gap: 14px;
+        }
+
+        /* 各层网格列数定义 */
+        .layer-scene .layer-grid { grid-template-columns: repeat(3, 1fr); }
+        /* 架构层调整为 2 列，让 MoE 和 MHA 系列各占一列，更清晰 */
+        .layer-arch .layer-grid { grid-template-columns: repeat(2, 1fr); }
+        .layer-algo .layer-grid { grid-template-columns: repeat(6, 1fr); }
+        .layer-eng .layer-grid { grid-template-columns: repeat(5, 1fr); }
+        .layer-hardware .layer-grid { grid-template-columns: repeat(4, 1fr); }
+
+        .module {
+            background: #f8fafe;
+            border-radius: 14px;
+            padding: 16px 14px 14px;
+            border: 1px solid #e4ebf4;
+            transition: background 0.15s, border-color 0.15s;
+            position: relative;
+        }
+
+        .module:hover {
+            background: #f2f7ff;
+            border-color: #bccde2;
+        }
+
+        .module .mod-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            font-size: 15px;
+            color: #1a2a44;
+            margin-bottom: 8px;
+        }
+
+        .module .mod-header .icon {
+            font-size: 18px;
+        }
+
+        .module .mod-body {
+            font-size: 12.5px;
+            color: #4a5a6e;
+            line-height: 1.5;
+            padding-left: 2px;
+        }
+
+        .sub-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px 8px;
+            margin-top: 10px;
+            padding-top: 8px;
+            border-top: 1px dashed #dce4ef;
+        }
+
+        .sub-tag {
+            background: #ffffff;
+            border: 1px solid #d4deec;
+            border-radius: 30px;
+            padding: 2px 12px 2px 10px;
+            font-size: 11px;
+            color: #1f334f;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.1s;
+        }
+
+        .sub-tag .dot {
+            display: inline-block;
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+
+        .sub-tag .label {
+            font-weight: 500;
+        }
+        .sub-tag .desc {
+            color: #5f738c;
+            font-size: 10px;
+        }
+
+        .layer-arrow {
+            text-align: center;
+            font-size: 22px;
+            color: #b0c4db;
+            letter-spacing: 6px;
+            margin: -10px 0 2px;
+            user-select: none;
+            font-weight: 300;
+        }
+
+        /* ----- 颜色体系 (按层) ----- */
+        .layer-scene .module { border-left: 4px solid #4a7bc4; }
+        .layer-scene .module .mod-header { color: #1f3d70; }
+        .layer-scene .sub-tag .dot { background: #4a7bc4; }
+
+        .layer-arch .module { border-left: 4px solid #8b5cf6; }
+        .layer-arch .module .mod-header { color: #5b21b6; }
+        .layer-arch .sub-tag .dot { background: #8b5cf6; }
+
+        .layer-algo .module { border-left: 4px solid #5b7fff; }
+        .layer-algo .module .mod-header { color: #2a4f9e; }
+        .layer-algo .sub-tag .dot { background: #5b7fff; }
+
+        .layer-eng .module { border-left: 4px solid #2ecc71; }
+        .layer-eng .module .mod-header { color: #1a6e3a; }
+        .layer-eng .sub-tag .dot { background: #2ecc71; }
+
+        .layer-hardware .module { border-left: 4px solid #f39c12; }
+        .layer-hardware .module .mod-header { color: #8a5d0e; }
+        .layer-hardware .sub-tag .dot { background: #f39c12; }
+
+        /* ===== 响应式 ===== */
+        @media (max-width: 1200px) {
+            .layer-algo .layer-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 1024px) {
+            .layer-scene .layer-grid { grid-template-columns: repeat(3, 1fr); }
+            .layer-arch .layer-grid { grid-template-columns: 1fr 1fr; }
+            .layer-eng .layer-grid { grid-template-columns: repeat(3, 1fr); }
+            .layer-hardware .layer-grid { grid-template-columns: repeat(2, 1fr); }
+            .layer-algo .layer-grid { grid-template-columns: repeat(3, 1fr); }
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 20px 12px 40px; }
+            .arch-map { padding: 20px 14px 24px; }
+            .layer-scene .layer-grid { grid-template-columns: 1fr; }
+            .layer-arch .layer-grid { grid-template-columns: 1fr; }
+            .layer-algo .layer-grid { grid-template-columns: 1fr 1fr; }
+            .layer-eng .layer-grid { grid-template-columns: 1fr 1fr; }
+            .layer-hardware .layer-grid { grid-template-columns: 1fr 1fr; }
+            .header h1 { font-size: 30px; }
+            .layer-title { font-size: 15px; }
+        }
+
+        @media (max-width: 480px) {
+            .layer-algo .layer-grid { grid-template-columns: 1fr; }
+            .layer-eng .layer-grid { grid-template-columns: 1fr; }
+            .layer-hardware .layer-grid { grid-template-columns: 1fr; }
+            .module { padding: 12px 12px 14px; }
+        }
+
+        .footer-note {
+            text-align: center;
+            margin-top: 28px;
+            font-size: 14px;
+            color: #6f7f92;
+            letter-spacing: 0.3px;
+        }
+        .footer-note strong { color: #3a4a5e; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+
+        <div class="header">
+            <h1>🧠 模型加速全景图</h1>
+            <div class="sub">全栈分层架构 · 场景 → 架构 → 算法 → 工程 → 硬件</div>
+        </div>
+
+        <div class="arch-map">
+
+            <!-- ========== 第1层：应用场景层 ========== -->
+            <div class="layer layer-scene">
+                <div class="layer-title">
+                    <span>📱 应用场景层</span>
+                    <span class="badge">部署形态</span>
+                </div>
+                <div class="layer-grid">
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">☁️</span> 云端数据中心</div>
+                        <div class="mod-body">高吞吐训练 &amp; 推理，弹性伸缩，大规模集群部署</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">A100/H100</span><span class="desc">集群</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">多卡并行</span><span class="desc">分布式</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🌐</span> 边缘网关</div>
+                        <div class="mod-body">低延迟实时推理，带宽受限，需要模型轻量化</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">Jetson</span><span class="desc">NVIDIA</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">Atlas</span><span class="desc">华为</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">📱</span> 移动端 / IoT</div>
+                        <div class="mod-body">超低功耗，极小内存占用，端侧AI推理</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">TFLite</span><span class="desc">Android</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">Core ML</span><span class="desc">iOS</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">MCU</span><span class="desc">TinyML</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layer-arrow">⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇</div>
+
+            <!-- ========== 第2层：模型架构层（修正：MHA系列合并） ========== -->
+            <div class="layer layer-arch">
+                <div class="layer-title">
+                    <span>🧩 模型架构层</span>
+                    <span class="badge">基础组件 · 计算模式</span>
+                </div>
+                <div class="layer-grid">
+                    <!-- 模块1：MoE -->
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">⚖️</span> MoE (混合专家)</div>
+                        <div class="mod-body">稀疏门控路由，动态激活部分专家，大幅降低训练/推理计算量（显存换计算）。</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">稀疏路由</span><span class="desc">Top-K门控</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">负载均衡</span><span class="desc">专家容量</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">并行策略</span><span class="desc">Expert Parallel</span></span>
+                        </div>
+                    </div>
+                    <!-- 模块2：多头注意力与所有加速变体（MHA / MQA / GQA / KDA / 稀疏注意） -->
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🔁</span> 多头注意力 (MHA) 与加速变体</div>
+                        <div class="mod-body">Transformer 核心组件。通过头结构优化（MQA/GQA）或复杂度降低（KDA/线性/稀疏注意）来加速解码与长序列推理。</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">MHA</span><span class="desc">标准多头</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">MQA</span><span class="desc">多查询注意力</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">GQA</span><span class="desc">分组查询注意力</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">KDA</span><span class="desc">核/线性注意力</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">稀疏注意</span><span class="desc">BigBird</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layer-arrow">⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇</div>
+
+            <!-- ========== 第3层：算法优化层 ========== -->
+            <div class="layer layer-algo">
+                <div class="layer-title">
+                    <span>📐 算法优化层</span>
+                    <span class="badge">模型压缩 · 解码加速</span>
+                </div>
+                <div class="layer-grid">
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🔢</span> 量化压缩</div>
+                        <div class="mod-body">FP32 → INT8 / FP8 / INT4，降低显存与带宽</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">PTQ</span><span class="desc">训练后</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">QAT</span><span class="desc">感知训练</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">混合精度</span><span class="desc">FP16/INT8</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">✂️</span> 模型剪枝</div>
+                        <div class="mod-body">移除冗余通道/神经元，减少参数量与FLOPs</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">非结构化</span><span class="desc">稀疏</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">结构化</span><span class="desc">通道/滤波器</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">半结构化</span><span class="desc">2:4</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🧪</span> 知识蒸馏</div>
+                        <div class="mod-body">大模型（教师）指导小模型（学生）学习</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">响应蒸馏</span><span class="desc">Logit</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">特征蒸馏</span><span class="desc">中间层</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">关系蒸馏</span><span class="desc">样本间</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🔍</span> 架构搜索 (NAS)</div>
+                        <div class="mod-body">自动搜索最优网络结构，平衡精度与效率</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">强化学习</span><span class="desc">控制器</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">进化算法</span><span class="desc">遗传</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">可微分</span><span class="desc">DARTS</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🌀</span> 稀疏化</div>
+                        <div class="mod-body">利用权重/激活稀疏性，减少无效计算</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">静态稀疏</span><span class="desc">固定掩码</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">动态稀疏</span><span class="desc">运行时</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">稀疏训练</span><span class="desc">L1/L2</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🎲</span> 投机解码 &amp; 采样加速</div>
+                        <div class="mod-body">草稿模型快速生成候选Token，大模型并行验证，无损加速生成。</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">投机解码</span><span class="desc">Speculative</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">拒绝采样</span><span class="desc">Rejection</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">Medusa</span><span class="desc">多头预测</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">KV Cache优化</span><span class="desc">内存复用</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layer-arrow">⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇</div>
+
+            <!-- ========== 第4层：工程优化层 ========== -->
+            <div class="layer layer-eng">
+                <div class="layer-title">
+                    <span>⚙️ 工程优化层</span>
+                    <span class="badge">推理引擎 · 运行时调度</span>
+                </div>
+                <div class="layer-grid">
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🚀</span> 推理引擎</div>
+                        <div class="mod-body">高性能运行时框架，算子实现与硬件调度</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">TensorRT</span><span class="desc">NVIDIA</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">ONNX Runtime</span><span class="desc">跨平台</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">OpenVINO</span><span class="desc">Intel</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">TFLite</span><span class="desc">移动端</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">📊</span> 计算图优化</div>
+                        <div class="mod-body">常量折叠、死代码消除、算子融合等变换</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">常量折叠</span><span class="desc">编译期</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">死代码消除</span><span class="desc">移除无用</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">内存规划</span><span class="desc">复用</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🧮</span> 内存管理</div>
+                        <div class="mod-body">内存池、In-place操作、复用降低显存峰值</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">内存池</span><span class="desc">预分配</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">内存重用</span><span class="desc">In-place</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">重计算</span><span class="desc">换时间</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">⚡</span> 并行计算</div>
+                        <div class="mod-body">多核/GPU并行，数据/模型/流水线并行</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">数据并行</span><span class="desc">Batch</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">模型并行</span><span class="desc">层拆分</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">流水线并行</span><span class="desc">Stage</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🔗</span> 算子融合</div>
+                        <div class="mod-body">连续算子合并为单一内核，减少启动开销</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">水平融合</span><span class="desc">同层</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">垂直融合</span><span class="desc">跨层</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">分组融合</span><span class="desc">模式聚合</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="layer-arrow">⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ︎ ⬇</div>
+
+            <!-- ========== 第5层：硬件加速层 ========== -->
+            <div class="layer layer-hardware">
+                <div class="layer-title">
+                    <span>🔌 硬件加速层</span>
+                    <span class="badge">芯片 · 算力底座</span>
+                </div>
+                <div class="layer-grid">
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🖥️</span> GPU</div>
+                        <div class="mod-body">大规模并行计算，适用于训练和通用推理</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">NVIDIA</span><span class="desc">A100/H100</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">AMD</span><span class="desc">MI300</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">🧠</span> NPU / TPU</div>
+                        <div class="mod-body">专用矩阵加速单元，极致能效比</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">TPU</span><span class="desc">Google</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">昇腾</span><span class="desc">华为</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">寒武纪</span><span class="desc">MLU</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">💡</span> FPGA / ASIC</div>
+                        <div class="mod-body">可重构 / 定制化，低延迟特定场景</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">FPGA</span><span class="desc">Xilinx/Intel</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">DSA</span><span class="desc">定制芯片</span></span>
+                        </div>
+                    </div>
+                    <div class="module">
+                        <div class="mod-header"><span class="icon">💾</span> 存算一体</div>
+                        <div class="mod-body">在存储器内部直接计算，消除数据搬运瓶颈</div>
+                        <div class="sub-tags">
+                            <span class="sub-tag"><span class="dot"></span><span class="label">RRAM</span><span class="desc">阻变存储</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">PCM</span><span class="desc">相变存储</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">近存计算</span><span class="desc">HBM</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="footer-note">
+            <strong>模型加速全景图</strong> · 已修正：KDA 与 MHA/MQA/GQA 合并为“多头注意力与加速变体”，体现一脉相承的优化关系
+        </div>
+
+    </div>
+
+</body>
+</html>

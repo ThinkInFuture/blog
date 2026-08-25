@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GPU 架构 · 大图版（性能对应关系）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js">
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            background: #f0f4f8;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+            padding: 1.5rem;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            max-width: 1400px;
+            width: 100%;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 2rem 2rem 1.8rem 2rem;
+            width: 100%;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            margin-bottom: 1.5rem;
+        }
+        .card-header {
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            margin-bottom: 1rem;
+            padding: 0 0.3rem;
+        }
+        .card-header h1 {
+            font-weight: 600;
+            font-size: 1.8rem;
+            color: #1a3442;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+        }
+        .card-header h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #4a6a7e;
+            background: #e8edf2;
+            padding: 0.15rem 1.2rem;
+            border-radius: 40px;
+            letter-spacing: 0.3px;
+        }
+        .badge {
+            background: #1a3442;
+            color: #f0f6fa;
+            padding: 0.3rem 1.2rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            letter-spacing: 0.3px;
+        }
+        .badge-primary {
+            background: #3a7b9a;
+        }
+        .badge-tensor {
+            background: #b33a3a;
+        }
+        .badge-mem {
+            background: #3a7a6a;
+        }
+        .badge-perf {
+            background: #8a4a3a;
+        }
+        .mermaid-container {
+            background: #ffffff;
+            border-radius: 1.5rem;
+            padding: 0.2rem;
+            border: 1px solid #e8edf2;
+        }
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            width: 100%;
+            overflow-x: auto;
+            padding: 0.5rem 0.2rem;
+            min-height: 320px;
+        }
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        .legend-note {
+            margin-top: 1rem;
+            padding: 0.6rem 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem 2.5rem;
+            background: #f5f8fa;
+            border-radius: 60px;
+            color: #1d3b4c;
+            font-size: 0.85rem;
+            border: 1px solid #e8edf2;
+        }
+        .legend-note span {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+        .color-dot {
+            display: inline-block;
+            width: 14px;
+            height: 14px;
+            border-radius: 4px;
+            margin-right: 4px;
+        }
+        .footer {
+            margin-top: 0.6rem;
+            text-align: right;
+            font-size: 0.78rem;
+            color: #6a8a9c;
+            padding-right: 0.5rem;
+            letter-spacing: 0.2px;
+        }
+        .helper-card {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 1.8rem 2rem 1.5rem 2rem;
+            width: 100%;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+            margin-bottom: 1.5rem;
+        }
+        .helper-card .card-header h1 {
+            font-size: 1.4rem;
+        }
+        .helper-card .card-header h1 small {
+            font-size: 0.85rem;
+            padding: 0.1rem 1rem;
+        }
+        .helper-card .mermaid {
+            min-height: 240px;
+            padding: 0.5rem 0.2rem;
+        }
+        .helper-card .legend-note {
+            font-size: 0.8rem;
+            padding: 0.5rem 1.2rem;
+            gap: 0.8rem 2rem;
+        }
+        .unit-explainer {
+            background: #e8f0f5;
+            border-radius: 1rem;
+            padding: 0.8rem 1.2rem;
+            margin-top: 0.6rem;
+            border-left: 4px solid #3a7b9a;
+        }
+        .unit-explainer h4 {
+            color: #1a4a5a;
+            font-weight: 600;
+            font-size: 0.9rem;
+            margin-bottom: 0.3rem;
+        }
+        .unit-explainer p {
+            color: #2a5a6a;
+            font-size: 0.85rem;
+            line-height: 1.7;
+        }
+        .unit-explainer code {
+            background: #dce6ed;
+            padding: 0.1rem 0.5rem;
+            border-radius: 4px;
+            font-size: 0.82rem;
+            color: #1a3442;
+            font-weight: 600;
+        }
+        .unit-explainer .highlight-box {
+            background: #fef9f0;
+            border-radius: 0.6rem;
+            padding: 0.5rem 1rem;
+            margin-top: 0.4rem;
+            border: 1px solid #f0e4d0;
+        }
+        .unit-explainer .highlight-box code {
+            background: #f0e4d0;
+        }
+        .glossary {
+            background: #ffffff;
+            border-radius: 2rem;
+            box-shadow: 0 8px 30px rgba(0, 20, 40, 0.12);
+            padding: 2rem 2rem 1.8rem 2rem;
+            border: 1px solid rgba(200, 215, 225, 0.3);
+        }
+        .glossary-header {
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.8rem;
+            border-bottom: 2px solid #e8edf2;
+        }
+        .glossary-header h2 {
+            font-weight: 600;
+            font-size: 1.5rem;
+            color: #1a3442;
+        }
+        .glossary-header .count {
+            background: #e8edf2;
+            color: #4a6a7e;
+            padding: 0.1rem 0.9rem;
+            border-radius: 40px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .glossary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1rem;
+        }
+        .glossary-item {
+            background: #f7f9fb;
+            border-radius: 1rem;
+            padding: 0.9rem 1.2rem;
+            border-left: 4px solid #3a7b9a;
+            transition: all 0.15s ease;
+        }
+        .glossary-item:hover {
+            background: #f0f4f8;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 20, 40, 0.06);
+        }
+        .glossary-item .term {
+            font-weight: 600;
+            font-size: 0.95rem;
+            color: #1a3442;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.2rem;
+            flex-wrap: wrap;
+        }
+        .glossary-item .term .tag {
+            font-size: 0.6rem;
+            font-weight: 500;
+            background: #dce6ed;
+            color: #2c5f7a;
+            padding: 0.05rem 0.6rem;
+            border-radius: 30px;
+            white-space: nowrap;
+        }
+        .glossary-item .term .tag-tensor {
+            background: #fde8e8;
+            color: #b33a3a;
+        }
+        .glossary-item .term .tag-core {
+            background: #e3edf5;
+            color: #2a5f7a;
+        }
+        .glossary-item .term .tag-mem {
+            background: #e5edf0;
+            color: #3a6a7a;
+        }
+        .glossary-item .term .tag-host {
+            background: #dce6ed;
+            color: #3a5a6a;
+        }
+        .glossary-item .term .tag-ai {
+            background: #fef3e0;
+            color: #b3771a;
+        }
+        .glossary-item .term .tag-perf {
+            background: #fce8e0;
+            color: #8a4a3a;
+        }
+        .glossary-item .desc {
+            font-size: 0.85rem;
+            color: #2d4a5a;
+            line-height: 1.5;
+        }
+        .glossary-item .desc code {
+            background: #e8edf2;
+            padding: 0.05rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            color: #1a3442;
+            font-weight: 500;
+        }
+        .glossary-item .spec-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.2rem 0.8rem;
+            margin-top: 0.4rem;
+            padding-top: 0.4rem;
+            border-top: 1px solid #e8edf2;
+            font-size: 0.78rem;
+        }
+        .glossary-item .spec-grid .label {
+            color: #5a7a8a;
+        }
+        .glossary-item .spec-grid .value {
+            color: #1a3442;
+            font-weight: 500;
+            text-align: right;
+        }
+        .ai-summary {
+            background: linear-gradient(135deg, #fef9f0, #fcf4e8);
+            border-radius: 1rem;
+            padding: 1rem 1.5rem;
+            margin-top: 1.5rem;
+            border: 1px solid #f0e4d0;
+        }
+        .ai-summary h3 {
+            color: #8a6a3a;
+            font-weight: 600;
+            font-size: 0.95rem;
+            margin-bottom: 0.4rem;
+        }
+        .ai-summary p {
+            color: #5a4a3a;
+            font-size: 0.88rem;
+            line-height: 1.6;
+        }
+        .ai-summary code {
+            background: #f0e4d0;
+            padding: 0.1rem 0.4rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            color: #6a4a2a;
+            font-weight: 500;
+        }
+        @media (max-width: 640px) {
+            .card, .helper-card, .glossary {
+                padding: 1.2rem 0.8rem;
+            }
+            .card-header h1 {
+                font-size: 1.3rem;
+            }
+            .card-header h1 small {
+                font-size: 0.7rem;
+                padding: 0.1rem 0.8rem;
+            }
+            .legend-note {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 0.2rem;
+                padding: 0.5rem 1rem;
+            }
+            .glossary-grid {
+                grid-template-columns: 1fr;
+            }
+            .glossary-item .spec-grid {
+                grid-template-columns: 1fr;
+                gap: 0.1rem;
+            }
+            .glossary-item .spec-grid .value {
+                text-align: left;
+            }
+            .helper-card .card-header h1 {
+                font-size: 1.1rem;
+            }
+            .helper-card .card-header h1 small {
+                font-size: 0.65rem;
+            }
+            .unit-explainer {
+                padding: 0.6rem 0.8rem;
+            }
+            .unit-explainer .highlight-box {
+                padding: 0.4rem 0.6rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+
+        <!-- ============================================================ -->
+        <!-- 主图：GPU 完整架构 -->
+        <!-- ============================================================ -->
+        <div class="card">
+            <div class="card-header">
+                <h1>
+                    ⚙️ GPU 完整架构
+                    <small>NVIDIA H100 · 含 Tensor Core</small>
+                </h1>
+                <span class="badge">主图</span>
+            </div>
+
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph Host["💻 主机 / 系统"]
+                            CPU["中央处理器 CPU<br>PCIe 5.0 x16"]
+                            DRAM["系统内存 DRAM<br>DDR5-6400"]
+                        end
+
+                        subgraph GPU["🎮 GPU 芯片"]
+                            PCIe["PCIe 5.0 接口<br>带宽 64 GB/s"]
+                            GPC["图形处理集群 GPC<br>9 个 GPC"]
+                            
+                            subgraph SM_Cluster["流式多处理器集群 (SM) · 共 144 个"]
+                                SM1["SM #1<br>─────────────<br>🟦 CUDA 核心 ×128<br>🔴 Tensor Core ×4<br>🟩 SFU ×8<br>🟨 纹理单元 ×8"]
+                                SM2["SM #2<br>─────────────<br>🟦 CUDA 核心 ×128<br>🔴 Tensor Core ×4<br>🟩 SFU ×8<br>🟨 纹理单元 ×8"]
+                                SM3["SM #3<br>─────────────<br>🟦 CUDA 核心 ×128<br>🔴 Tensor Core ×4<br>🟩 SFU ×8<br>🟨 纹理单元 ×8"]
+                                SM4["SM #4<br>─────────────<br>🟦 CUDA 核心 ×128<br>🔴 Tensor Core ×4<br>🟩 SFU ×8<br>🟨 纹理单元 ×8"]
+                            end
+
+                            subgraph Cache_Mem["片上缓存 / 内存"]
+                                L1["L1 缓存 / 共享内存<br>128 KB (每 SM)"]
+                                L2["L2 统一缓存<br>96 MB (全局)"]
+                                Register["寄存器堆<br>256 KB (每 SM)"]
+                            end
+
+                            subgraph VRAM["显存子系统"]
+                                GDDR["HBM3 显存<br>带宽 1.5 TB/s<br>容量 80 GB"]
+                                MemoryCtrl["内存控制器<br>5120-bit 位宽"]
+                            end
+                        end
+
+                        CPU -->|"PCIe 传输"| PCIe
+                        DRAM -->|"系统内存"| CPU
+                        PCIe -->|"命令 / 数据"| GPC
+                        GPC -->|"调度分发"| SM1
+                        GPC -->|"调度分发"| SM2
+                        GPC -->|"调度分发"| SM3
+                        GPC -->|"调度分发"| SM4
+
+                        SM1 -->|"读写"| L1
+                        SM2 -->|"读写"| L1
+                        SM3 -->|"读写"| L1
+                        SM4 -->|"读写"| L1
+
+                        L1 -->|"缓存一致性"| L2
+                        L2 -->|"全局共享"| MemoryCtrl
+                        MemoryCtrl -->|"访存"| GDDR
+
+                        SM1 -.->|"寄存器"| Register
+                        SM2 -.->|"寄存器"| Register
+                        SM3 -.->|"寄存器"| Register
+                        SM4 -.->|"寄存器"| Register
+                </div>
+            </div>
+
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#2c5f7a;"></span> 主机 & 系统</span>
+                <span><span class="color-dot" style="background:#3a7b9a;"></span> GPU 核心单元</span>
+                <span><span class="color-dot" style="background:#5a8fa8;"></span> 缓存 / 内存</span>
+                <span><span class="color-dot" style="background:#6a8f9e;"></span> 显存子系统</span>
+                <span><span class="color-dot" style="background:#c0392b;"></span> Tensor Core (SM 内部)</span>
+                <span style="font-weight:400;">➡️ 数据流 · 控制流</span>
+            </div>
+            <div class="footer">🚀 Tensor Core 集成在 SM 内部 · 全芯片 144 × 4 = 576 个</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 1: SM 内部结构 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🔬 辅助图 1 · SM 内部结构
+                    <small>流式多处理器</small>
+                </h1>
+                <span class="badge badge-primary">放大</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph SM["🔲 流式多处理器 SM (×144)"]
+                            CUDA["🟦 CUDA 核心<br>×128 · 标量运算"]
+                            TC["🔴 Tensor Core<br>×4 · 矩阵乘加"]
+                            SFU["🟩 SFU<br>×8 · sin/cos/log"]
+                            Tex["🟨 纹理单元<br>×8 · 采样/过滤"]
+                            L1_local["L1 / 共享内存<br>128 KB"]
+                            Reg_local["寄存器堆<br>256 KB"]
+                        end
+                        CUDA --> L1_local
+                        TC --> L1_local
+                        SFU --> L1_local
+                        Tex --> L1_local
+                        CUDA -.-> Reg_local
+                        TC -.-> Reg_local
+                        SFU -.-> Reg_local
+                        Tex -.-> Reg_local
+                </div>
+            </div>
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#3a7b9a;"></span> 计算单元</span>
+                <span><span class="color-dot" style="background:#c0392b;"></span> Tensor Core</span>
+                <span><span class="color-dot" style="background:#5a8fa8;"></span> 存储</span>
+            </div>
+            <div class="footer">每个 SM 含 4 类计算单元 · Tensor Core 在其中</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 2: 存储层次 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🗄️ 辅助图 2 · 存储层次
+                    <small>延迟 · 容量 · 带宽</small>
+                </h1>
+                <span class="badge badge-mem">金字塔</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph LR
+                        R["寄存器<br>256KB/SM<br>1 周期"]
+                        L1C["L1/共享内存<br>128KB/SM<br>2 周期"]
+                        L2C["L2 缓存<br>96MB 全局<br>~50 周期"]
+                        H["HBM3 显存<br>80GB · 1.5TB/s<br>~500 周期"]
+                        R --> L1C
+                        L1C --> L2C
+                        L2C --> H
+                </div>
+            </div>
+            <div class="legend-note">
+                <span style="color:#2a7a3a;">⬆️ 越快</span>
+                <span style="color:#c0392b;">⬇️ 越大</span>
+                <span style="font-weight:400;">越往上越快 · 越往下越大</span>
+            </div>
+            <div class="footer">LLM 推理瓶颈通常在 HBM3 带宽</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 3: AI 推理数据流 -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    🧠 辅助图 3 · AI 推理数据流
+                    <small>LLM 推理路径</small>
+                </h1>
+                <span class="badge badge-tensor">AI 视图</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph LR
+                        Host["系统内存<br>模型权重"]
+                        PCIe["PCIe 5.0<br>64 GB/s"]
+                        HBM["HBM3 显存<br>80 GB"]
+                        L2["L2 缓存<br>96 MB"]
+                        SM["SM<br>Tensor Core"]
+                        Out["推理结果"]
+
+                        Host -->|"加载"| PCIe
+                        PCIe -->|"DMA"| HBM
+                        HBM -->|"权重读取"| L2
+                        L2 -->|"缓存命中"| SM
+                        SM -->|"矩阵运算"| Out
+
+                        style SM fill:#fde8e8,stroke:#c0392b,stroke-width:2px
+                        style Out fill:#e8f4e8,stroke:#2a7a3a,stroke-width:2px
+                </div>
+            </div>
+            <div class="legend-note">
+                <span><span class="color-dot" style="background:#2c5f7a;"></span> 主机/传输</span>
+                <span><span class="color-dot" style="background:#6a8f9e;"></span> 显存/缓存</span>
+                <span><span class="color-dot" style="background:#c0392b;"></span> Tensor Core</span>
+            </div>
+            <div class="footer">关键路径：权重从 HBM3 → L2 → SM (Tensor Core)</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 辅助图 4: 性能对应关系（重点修正） -->
+        <!-- ============================================================ -->
+        <div class="helper-card">
+            <div class="card-header">
+                <h1>
+                    ⚡ 辅助图 4 · 性能对应关系
+                    <small>哪个核心跑什么精度？全芯片 vs 单核心</small>
+                </h1>
+                <span class="badge badge-perf">性能</span>
+            </div>
+            <div class="mermaid-container">
+                <div class="mermaid">
+                    graph TB
+                        subgraph CUDA["🟦 CUDA 核心 (标量运算)"]
+                            C1["FP32: 67 TFLOPS"]
+                            C2["FP64: 34 TFLOPS"]
+                            C3["全芯片 18,432 个"]
+                            C4["单核心 ~3.6 GFLOPS"]
+                        end
+
+                        subgraph TC["🔴 Tensor Core (矩阵乘加)"]
+                            T1["FP16: 1.2 PFLOPS"]
+                            T2["BF16: 1.2 PFLOPS"]
+                            T3["FP8: 2.4 PFLOPS"]
+                            T4["INT8: 2.4 POPS"]
+                            T5["全芯片 576 个"]
+                            T6["单核心 ~2 TFLOPS"]
+                        end
+
+                        C1 --> C3
+                        T1 --> T5
+
+                        style CUDA fill:#e3edf5,stroke:#2a5f7a
+                        style TC fill:#fde8e8,stroke:#c0392b
+                </div>
+            </div>
+
+            <!-- 详细的解释框 -->
+            <div class="unit-explainer">
+                <h4>📐 性能数据解读</h4>
+                <p>
+                    <strong>全芯片峰值 vs 单核心性能</strong>
+                </p>
+                <div class="highlight-box">
+                    <p>
+                        <strong>CUDA 核心（标量）</strong><br>
+                        • <code>FP32</code> 67 TFLOPS（全芯片 18,432 核心合计）→ 单核心 ≈ <strong>3.6 GFLOPS</strong><br>
+                        • <code>FP64</code> 34 TFLOPS（全芯片合计）→ 单核心 ≈ <strong>1.8 GFLOPS</strong>
+                    </p>
+                    <p style="margin-top:0.3rem;">
+                        <strong>Tensor Core（矩阵）</strong><br>
+                        • <code>FP16 / BF16</code> 1.2 PFLOPS（全芯片 576 核心合计）→ 单核心 ≈ <strong>2 TFLOPS</strong><br>
+                        • <code>FP8</code> 2.4 PFLOPS（全芯片合计）→ 单核心 ≈ <strong>4.2 TFLOPS</strong><br>
+                        • <code>INT8</code> 2.4 POPS（全芯片合计）→ 单核心 ≈ <strong>4.2 TOPS</strong>
+                    </p>
+                </div>
+                <p style="margin-top:0.4rem;">
+                    💡 <strong>单位换算</strong>：<code>1 PFLOPS = 1000 TFLOPS</code> · <code>1 TFLOPS = 1000 GFLOPS</code><br>
+                    🔑 <strong>关键理解</strong>：图表中所有性能数字都是 <strong>「全芯片峰值」</strong>，即所有核心同时工作时的总吞吐量。
+                </p>
+            </div>
+            <div class="footer">Tensor Core 矩阵运算比 CUDA 标量运算快约 18 倍 (FP16 vs FP32)</div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 概念说明 -->
+        <!-- ============================================================ -->
+        <div class="glossary">
+            <div class="glossary-header">
+                <h2>📖 GPU 核心概念速查</h2>
+                <span class="count">14 项</span>
+            </div>
+            <div class="glossary-grid">
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">Tensor Core <span class="tag tag-tensor">AI 核心</span></div>
+                    <div class="desc">
+                        集成在 SM 内部的矩阵乘加单元。每 SM 4 个，全芯片 576 个。
+                        支持 FP16/BF16/FP8/INT8 混合精度。
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">每 SM</span><span class="value">4</span>
+                        <span class="label">全芯片</span><span class="value">576</span>
+                        <span class="label">FP16 全芯片</span><span class="value">1.2 PFLOPS</span>
+                        <span class="label">单核心 FP16</span><span class="value">~2 TFLOPS</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item">
+                    <div class="term">CUDA 核心 <span class="tag tag-core">并行计算</span></div>
+                    <div class="desc">SM 内的标量浮点运算单元，执行 FP32/FP64 运算。</div>
+                    <div class="spec-grid">
+                        <span class="label">每 SM</span><span class="value">128</span>
+                        <span class="label">全芯片</span><span class="value">18,432</span>
+                        <span class="label">FP32 全芯片</span><span class="value">67 TFLOPS</span>
+                        <span class="label">单核心 FP32</span><span class="value">~3.6 GFLOPS</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #8a4a3a;">
+                    <div class="term">算力单位 <span class="tag tag-perf">性能</span></div>
+                    <div class="desc">
+                        <code>TFLOPS</code> = 每秒 10¹² 次浮点运算（万亿次）<br>
+                        <code>PFLOPS</code> = 每秒 10¹⁵ 次浮点运算（千万亿次）<br>
+                        <code>POPS</code> = 每秒 10¹⁵ 次整数运算（千万亿次）<br>
+                        <strong>1 PFLOPS = 1000 TFLOPS</strong>
+                    </div>
+                    <div class="spec-grid">
+                        <span class="label">H100 FP16</span><span class="value">1.2 PFLOPS</span>
+                        <span class="label">单 Tensor Core</span><span class="value">~2 TFLOPS</span>
+                        <span class="label">单 CUDA 核心</span><span class="value">~3.6 GFLOPS</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item">
+                    <div class="term">流式多处理器 SM <span class="tag tag-core">计算单元</span></div>
+                    <div class="desc">GPU 基本执行单元，包含 CUDA 核心、Tensor Core、SFU、纹理单元、L1 缓存和寄存器堆。</div>
+                    <div class="spec-grid">
+                        <span class="label">H100 总数</span><span class="value">144</span>
+                        <span class="label">每 SM 线程</span><span class="value">2048</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #5a8fa8;">
+                    <div class="term">L1 缓存 / 共享内存 <span class="tag tag-mem">片内</span></div>
+                    <div class="desc">每 SM 私有，可配置为缓存或共享内存，延迟 ~2 周期。</div>
+                    <div class="spec-grid">
+                        <span class="label">容量</span><span class="value">128 KB</span>
+                        <span class="label">延迟</span><span class="value">~2 周期</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #5a8fa8;">
+                    <div class="term">L2 统一缓存 <span class="tag tag-mem">全局</span></div>
+                    <div class="desc">全芯片共享，大幅减少显存访问，延迟 ~50 周期。</div>
+                    <div class="spec-grid">
+                        <span class="label">容量</span><span class="value">96 MB</span>
+                        <span class="label">延迟</span><span class="value">~50 周期</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #5a8fa8;">
+                    <div class="term">寄存器堆 <span class="tag tag-mem">最快</span></div>
+                    <div class="desc">每 SM 私有，每个线程独立寄存器，延迟 1 周期。</div>
+                    <div class="spec-grid">
+                        <span class="label">容量</span><span class="value">256 KB</span>
+                        <span class="label">延迟</span><span class="value">1 周期</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">混合精度训练 <span class="tag tag-ai">AI 训练</span></div>
+                    <div class="desc">Tensor Core 核心应用，低精度计算梯度，FP32 更新权重。</div>
+                    <div class="spec-grid">
+                        <span class="label">加速比</span><span class="value">3-5×</span>
+                        <span class="label">显存节省</span><span class="value">~50%</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">FP8 推理 <span class="tag tag-ai">AI 推理</span></div>
+                    <div class="desc">H100 支持 FP8 格式，推理吞吐提升 2 倍。</div>
+                    <div class="spec-grid">
+                        <span class="label">加速比</span><span class="value">2×</span>
+                        <span class="label">精度损失</span><span class="value">&lt;1%</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item">
+                    <div class="term">GPC 调度 <span class="tag tag-core">调度</span></div>
+                    <div class="desc">NVIDIA 顶层组织单元，负责任务分发到 SM。</div>
+                    <div class="spec-grid">
+                        <span class="label">H100 GPC</span><span class="value">9 个</span>
+                        <span class="label">每 GPC SM</span><span class="value">16 个</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item">
+                    <div class="term">PCIe 5.0 <span class="tag tag-host">互联</span></div>
+                    <div class="desc">CPU-GPU 高速通道，x16 双向带宽。</div>
+                    <div class="spec-grid">
+                        <span class="label">带宽</span><span class="value">64 GB/s</span>
+                        <span class="label">延迟</span><span class="value">~2 μs</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #6a8f9e;">
+                    <div class="term">HBM3 显存 <span class="tag tag-mem">显存</span></div>
+                    <div class="desc">H100 专用高带宽内存，AI 训练推理标配。</div>
+                    <div class="spec-grid">
+                        <span class="label">带宽</span><span class="value">1.5 TB/s</span>
+                        <span class="label">容量</span><span class="value">80 GB</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">Transformer 引擎 <span class="tag tag-ai">AI 专属</span></div>
+                    <div class="desc">H100 专用硬件，动态选择最优精度加速 Transformer。</div>
+                    <div class="spec-grid">
+                        <span class="label">训练加速</span><span class="value">4-6×</span>
+                        <span class="label">推理加速</span><span class="value">3-4×</span>
+                    </div>
+                </div>
+
+                <div class="glossary-item" style="border-left-color: #c0392b;">
+                    <div class="term">LLM 推理瓶颈 <span class="tag tag-ai">性能</span></div>
+                    <div class="desc">大语言模型推理主要受 <strong>显存带宽</strong> 限制，而非计算能力。</div>
+                    <div class="spec-grid">
+                        <span class="label">H100 (70B)</span><span class="value">~12,000 token/s</span>
+                        <span class="label">RTX 4090 (7B)</span><span class="value">~800 token/s</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="ai-summary">
+                <h3>🧠 主图 + 4 辅助图 · 各自分工</h3>
+                <p>
+                    <strong>主图</strong>：完整的 GPU 架构，从 CPU 到显存的完整数据流。<br>
+                    <strong>辅助图 1</strong>：SM 内部结构，看清 <code>Tensor Core</code> 的位置。<br>
+                    <strong>辅助图 2</strong>：存储层次金字塔，理解延迟与容量的权衡。<br>
+                    <strong>辅助图 3</strong>：AI 推理数据流，关注 <code>HBM3 → L2 → SM</code> 路径。<br>
+                    <strong>辅助图 4</strong>：⭐ 性能对应关系 — <code>CUDA核心</code> 跑 FP32/FP64，<code>Tensor Core</code> 跑 FP16/FP8/INT8；<br>
+                    图中数字是 <strong>全芯片峰值</strong>，单核心性能已换算标注。
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({
+                startOnLoad: true,
+                theme: 'base',
+                themeVariables: {
+                    background: '#ffffff',
+                    primaryColor: '#e8edf2',
+                    primaryTextColor: '#1a3442',
+                    primaryBorderColor: '#3a7b9a',
+                    lineColor: '#4a8aa8',
+                    secondaryColor: '#dce6ed',
+                    tertiaryColor: '#f0f4f8',
+                    clusterBkg: '#f7f9fb',
+                    clusterBorder: '#c0d0dc',
+                    nodeBorder: '#4a8aa8',
+                    nodeTextColor: '#1a3442',
+                    fontFamily: '"Segoe UI", system-ui, sans-serif',
+                    fontSize: '14px',
+                    edgeLabelBackground: '#ffffff',
+                    mainBkg: '#ffffff'
+                },
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis',
+                    padding: 18,
+                    nodeSpacing: 50,
+                    rankSpacing: 50,
+                },
+                securityLevel: 'loose',
+            });
+        });
+    </script>
+</body>
+</html>

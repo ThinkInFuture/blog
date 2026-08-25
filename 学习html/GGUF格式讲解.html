@@ -1,0 +1,893 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GGUF完整讲解</title>
+<script src="https://unpkg.com/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    max-width:1280px;
+    margin:0 auto;
+    padding:32px 24px;
+    background:#f6f7f9;
+    color:#1f2329;
+    line-height:1.75;
+}
+h1{text-align:center;margin-bottom:36px;color:#111827;}
+h2{margin:40px 0 16px;padding-bottom:8px;border-bottom:2px solid #2563eb;color:#1d4ed8;}
+h3{margin:26px 0 12px;color:#273449;}
+h4{margin:18px 0 8px;color:#334155;}
+p{margin-bottom:14px;}
+ul,ol{padding-left:24px;margin-bottom:14px;}
+pre{
+    background:#1e293b;
+    color:#e2e8f0;
+    padding:16px;
+    border-radius:8px;
+    overflow-x:auto;
+    margin:16px 0;
+    font-size:14px;
+}
+code{font-family:Consolas,monospace;}
+table{
+    width:100%;
+    border-collapse:collapse;
+    margin:18px 0;
+    background:#fff;
+}
+th,td{border:1px solid #cbd5e1;padding:11px 14px;}
+th{background:#e2e8f0;}
+.mermaid-wrap{
+    background:#ffffff;
+    padding:28px 16px;
+    border-radius:10px;
+    border:1px solid #e2e8f0;
+    margin:22px auto;
+    display:flex;
+    justify-content:center;
+}
+.mermaid{font-size:14px;}
+.mermaid .nodeLabel,.mermaid .edgeLabel,.mermaid .label,.mermaid text{font-size:14px !important;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif !important;}
+.mermaid .actor,.mermaid .messageText{font-size:14px !important;}
+.box-info{
+    background:#dbeafe;
+    border-left:4px solid #2563eb;
+    padding:14px 16px;
+    margin:18px 0;
+    border-radius:0 6px 6px 0;
+}
+.box-warn{
+    background:#fff3cd;
+    border-left:4px solid #f59e0b;
+    padding:14px 16px;
+    margin:18px 0;
+    border-radius:0 6px 6px 0;
+}
+</style>
+</head>
+<body>
+<h1>GGUF 完整讲解</h1>
+
+<h2>1、大模型推理流程</h2>
+<p>自回归大模型通用推理流程，不绑定GGUF、不绑定vLLM，权重文件只参与模型加载步骤。</p>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+A["磁盘模型文件"] --> B["模型加载"]
+B --> C["Prompt输入"]
+C --> D["Tokenizer编码"]
+D --> E["Transformer前向计算"]
+E --> F["输出Logits"]
+F --> G["采样下一个Token"]
+G --> H{"停止条件"}
+H --否--> I["更新KV‑Cache"]
+I --> E
+H --是--> J["解码输出文本"]
+</div>
+</div>
+
+<h3>流程关键点位说明</h3>
+<ol>
+<li><strong>模型加载</strong>：唯一读取磁盘权重文件的环节。如果文件是GGUF：读取头部、元数据、张量索引、<strong>量化类型qtype</strong>、量化权重二进制；将权重映射/拷贝进内存显存。</li>
+<li><strong>Tokenizer编码</strong>：Tokenizer从GGUF元数据读出到内存，不再读磁盘。</li>
+<li><strong>Transformer前向计算【量化反量化发生点】</strong>：不再访问GGUF磁盘。算子读取内存中已经加载的量化权重，依靠内存保存的qtype信息做<strong>实时反量化</strong>，执行矩阵乘法。</li>
+<li><strong>采样、KV‑Cache、解码</strong>：全部运行在内存，和GGUF磁盘文件无交互。</li>
+</ol>
+
+<h2>2、推理流程和 GGUF 的关系</h2>
+<h3>第一层：抽象推理两阶段（不区分llama.cpp/vLLM）</h3>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+A["GGUF磁盘文件"] --> B["阶段A：模型加载（仅一次IO）"]
+B --> C["阶段B：推理循环（反复计算）"]
+</div>
+</div>
+
+<h4>阶段A：模型加载——从GGUF磁盘读取哪些东西</h4>
+<ul>
+<li>Header：校验GGUF文件合法性。</li>
+<li>Metadata：模型架构、层数、上下文窗口、Tokenizer二进制。引擎用它初始化模型对象。</li>
+<li>TensorInfo张量索引：权重名称、维度、<strong>量化类型 qtype</strong>、该权重在GGUF文件内字节offset偏移。
+    <ul>
+        <li>offset：告诉引擎到磁盘哪个字节位置读取权重二进制；</li>
+        <li>qtype：记录权重压缩格式（Q4_K_M/Q8_0），<strong>推理反量化的依据，加载后存入内存</strong>。</li>
+    </ul>
+</li>
+<li>权重二进制字节：量化后的原始数据，映射或者拷贝进入内存/显存。</li>
+</ul>
+
+<h4>阶段B：推理循环——GGUF磁盘文件完全退出</h4>
+<ul>
+<li>磁盘GGUF文件可以关闭，不再发生磁盘IO；</li>
+<li>所有权重、qtype标记、Tokenizer全部驻留内存/显存；</li>
+<li>前向计算时，算子读取内存的qtype，调用对应反量化函数，把压缩权重还原为浮点参与矩阵运算。</li>
+</ul>
+
+<div class="box-warn">
+通俗例子：GGUF是磁盘上的压缩包。阶段A：打开压缩包，读取目录清单（元数据+张量索引），把压缩数据载入内存，记住每个文件的压缩格式(qtype)。阶段B：直接操作内存内压缩数据，现场解压运算，不会重复打开磁盘压缩包。
+</div>
+
+<h4>数据流伪代码，完整展示GGUF与推理、量化的关系</h4>
+<pre><code># ==================阶段A：加载，访问GGUF磁盘==================
+# 打开磁盘GGUF文件
+gguf_fd = open("model-q4_k_m.gguf","rb")
+# 1 读取头部校验
+header = read_gguf_header(gguf_fd)
+# 2 读取元数据，拿到架构、tokenizer
+model_meta = read_gguf_metadata(gguf_fd)
+# 3 读取张量索引，拿到每个权重 offset、qtype
+tensor_list = read_gguf_tensor_info(gguf_fd)
+
+# 4 根据offset读取权重二进制，mmap或者read拷贝
+runtime_weight_buf = mmap_gguf_weights(gguf_fd, tensor_list)
+
+# 构建运行时模型对象：把qtype、维度全部存入内存，不再依赖磁盘
+runtime_model = create_runtime_model(model_meta, tensor_list, runtime_weight_buf)
+
+# GGUF磁盘文件任务完成，可以关闭
+gguf_fd.close()
+
+# ==================阶段B：推理循环，完全不碰GGUF磁盘==================
+tokenizer = runtime_model.tokenizer
+input_ids = tokenizer.encode("你好，请介绍GGUF")
+
+while not is_eos(input_ids):
+    # 关键点：使用内存里保存的 qtype，对内存中权重实时反量化
+    logits = transformer_forward(runtime_model.weights, runtime_model.qtype_table, input_ids)
+    next_token = sample(logits)
+    input_ids.append(next_token)
+
+output_text = tokenizer.decode(input_ids)
+print(output_text)
+</code></pre>
+
+<h3>第二层：llama.cpp+GGUF 与 vLLM+GGUF对比（两张独立流程图）</h3>
+<h4>图1：llama.cpp + GGUF加载链路</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+A1["GGUF磁盘"]
+A2["解析元数据、qtype、offset"]
+A3["mmap缺页映射"]
+A4["CPU虚拟内存+VRAM混合"]
+A1 --> A2 --> A3 --> A4
+</div>
+</div>
+<p>llama.cpp行为：解析GGUF取出元数据、qtype、offset；mmap建立虚拟内存映射，不一次性全部载入物理内存；算子访问权重发生缺页，操作系统把磁盘数据载入RAM；推理时读取内存中qtype，CPU/GPU算子完成反量化。</p>
+
+<h4>图2：vLLM + GGUF加载链路</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+B1["GGUF磁盘"]
+B2["解析元数据、qtype、offset"]
+B3["读取全部权重字节"]
+B4["全部权重驻留GPU显存"]
+B1 --> B2 --> B3 --> B4
+</div>
+</div>
+<p>vLLM行为：GGUF仅作为磁盘数据源；解析得到元数据、qtype；不使用mmap，一次性读入显存；GPU算子读取显存内qtype标记完成反量化推理。</p>
+
+<table>
+<tr><th>对比维度</th><th>llama.cpp + GGUF</th><th>vLLM + GGUF</th></tr>
+<tr><td>GGUF磁盘访问时机</td><td>仅模型加载阶段访问</td><td>仅模型加载阶段访问</td></tr>
+<tr><td>量化信息 qtype来源</td><td>GGUF的TensorInfo，加载存入内存</td><td>GGUF的TensorInfo，加载存入内存</td></tr>
+<tr><td>加载实现</td><td>mmap缺页按需加载</td><td>全量读入显存，无mmap</td></tr>
+<tr><td>反量化执行位置</td><td>ggml算子，CPU/GPU均可</td><td>CUDA算子，GPU内完成</td></tr>
+<tr><td>KV‑Cache实现</td><td>普通缓冲区，串行推理</td><td>PagedAttention分页KV，高并发批处理</td></tr>
+<tr><td>硬件支持</td><td>CPU / Metal / CUDA / AMD</td><td>强依赖NVIDIA CUDA</td></tr>
+</table>
+
+<h2>3、GGUF详解 — llama.cpp和GGUF协同，gguf里面都有啥</h2>
+<p>GGUF是<strong>静态二进制存储格式，本身不具备任何计算能力</strong>；全部反量化、矩阵运算、推理逻辑由llama.cpp/vLLM这类引擎实现。下面列出GGUF内部每一块内容，并且明确每一块在推理流程中承担的角色。</p>
+
+<h3>3.1 GGUF文件物理布局流程图</h3>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+H["Header头部"]
+M["Metadata元数据"]
+TI["TensorInfo张量索引"]
+PAD["Padding对齐填充"]
+DATA["张量权重二进制"]
+H --> M --> TI --> PAD --> DATA
+</div>
+</div>
+
+<h4>GGUF内部各个模块与推理的对应关系</h4>
+<ul>
+<li><strong>Header头部</strong>：魔数、版本号、张量总数、元数据总数；<strong>仅加载阶段使用</strong>，校验文件是不是合法GGUF；推理循环不再使用。</li>
+<li><strong>Metadata元数据</strong>：键‑值对，架构、层数、上下文、Tokenizer二进制；加载阶段读取，推理阶段用来构建网络、编码、解码token。</li>
+<li><strong>TensorInfo张量索引【量化核心】</strong>：权重名字、维度、<strong>qtype量化类型</strong>、文件offset偏移；加载阶段定位权重位置，把qtype拷贝进内存；推理前向计算算子依靠内存qtype执行反量化。</li>
+<li><strong>Padding对齐填充</strong>：字节对齐；适配SIMD硬件指令，提升推理矩阵运算性能。</li>
+<li><strong>张量权重二进制</strong>：已经压缩量化后的原始字节；加载阶段读入内存/显存；推理做矩阵乘法真正运算的数据本体。</li>
+</ul>
+
+<h3>3.2 GGUF‑V3 Header C结构体源码</h3>
+<pre><code>typedef struct {
+    uint32_t magic;         // 魔数固定为"GGUF"
+    uint32_t version;       // 文件版本，主流v3
+    uint64_t n_tensors;     // 文件中张量总数量
+    uint64_t n_metadata;    // 元数据键‑值对数量
+} gguf_header_t;
+</code></pre>
+
+<h3>3.3 Metadata元数据说明表</h3>
+<table>
+<tr><th>元数据Key</th><th>在推理流程中的作用</th></tr>
+<tr><td>general.architecture</td><td>识别模型架构，选择对应推理代码路径</td></tr>
+<tr><td>llama.context_length</td><td>初始化KV‑Cache最大上下文窗口</td></tr>
+<tr><td>llama.block_count</td><td>构建Transformer网络层数</td></tr>
+<tr><td>llama.embedding_length</td><td>Embedding向量维度</td></tr>
+<tr><td>tokenizer.model</td><td>SentencePiece二进制，编码Prompt、解码输出文本</td></tr>
+<tr><td>general.alignment</td><td>权重内存对齐字节，优化算子性能</td></tr>
+</table>
+
+<h3>3.4 TensorInfo张量索引结构体（量化核心）</h3>
+<pre><code>typedef struct {
+    gguf_string_t name;     // 权重名字，如 blk.0.attn_q.weight
+    gguf_quant_type type;   // qtype：Q4_K_M / Q8_0 / FP16，反量化的依据
+    uint32_t n_dims;        // 张量维度数目
+    uint64_t dims[4];       // 张量各个维度大小
+    uint64_t offset;        // 当前张量在GGUF文件内的字节偏移
+} gguf_tensor_info_t;
+</code></pre>
+<div class="box-info">
+重点说明：GGUF只记录type(qtype)这个标记，<strong>不会做反量化解压</strong>。引擎加载时把type读到内存；推理算子读取内存的type，调用对应的反量化内核完成解压计算。offset用来定位磁盘上权重字节的位置。
+</div>
+
+<h3>3.5 GGUF量化类型表，推理运行时行为</h3>
+<table>
+<tr><th>量化类型</th><th>等效比特</th><th>推理运行时行为</th></tr>
+<tr><td>FP16</td><td>16bit</td><td>不需要反量化，直接矩阵运算</td></tr>
+<tr><td>Q8_0</td><td>8bit</td><td>轻量反量化，速度快，精度损失很小</td></tr>
+<tr><td>Q5_K_M</td><td>~5bit</td><td>K‑Quant高质量档位，反量化开销中等</td></tr>
+<tr><td>Q4_K_M</td><td>~4bit</td><td>综合平衡，本地推理最常用</td></tr>
+<tr><td>Q3_K_M</td><td>~3bit</td><td>高压缩，反量化开销上升，质量下降</td></tr>
+<tr><td>Q2_K</td><td>~2bit</td><td>极限压缩，反量化开销大，质量较差</td></tr>
+</table>
+
+<h3>3.6 llama.cpp 与 GGUF完整协同全链路</h3>
+<ol>
+<li>磁盘GGUF文件保存：Header、Metadata、TensorInfo（qtype+offset）、Padding、量化权重二进制。</li>
+<li>llama.cpp【加载阶段】：打开GGUF磁盘；读取头部校验；读取元数据构建模型参数；读取TensorInfo拿到每个权重offset和qtype；mmap映射权重字节；将qtype、维度等全部保存到运行时内存；GGUF磁盘文件可以关闭。</li>
+<li>llama.cpp【推理循环阶段】：不再访问GGUF磁盘；Transformer算子读取内存内量化权重，依据内存保存的qtype调用对应反量化内核，完成矩阵计算；Tokenizer、KV‑Cache、采样全部属于llama.cpp内部逻辑。</li>
+</ol>
+
+<h3>3.7 Python极简读取GGUF头部和张量数量示例</h3>
+<pre><code>import struct
+
+def read_gguf_header(path):
+    with open(path,"rb") as f:
+        magic = f.read(4)
+        version = struct.unpack("&lt;I", f.read(4))[0]
+        n_tensors = struct.unpack("&lt;Q", f.read(8))[0]
+        n_meta = struct.unpack("&lt;Q", f.read(8))[0]
+    print(f"magic:{magic}, ver:{version}, tensors:{n_tensors}, meta:{n_meta}")
+
+# read_gguf_header("model.q4_k_m.gguf")
+</code></pre>
+
+<h2>4、Bonsai-27B 定制分析与量化洞察</h2>
+<p>前 3 章讲清楚了 GGUF 是通用容器协议, llama.cpp 是通用推理引擎; 但 Bonsai 是个<strong>不通用</strong>的模型 — 它必须拉 llama.cpp 的分支 (prism) 才能跑。这一章讲: 标准 GGUF 量化 (PTQ) 为何不够用, Bonsai 拉分支的 4 个定制点是什么, 每个定制点按 <b>场景 → 说明 → 流程 → 源码</b> 四件套讲。</p>
+
+<div class="box-info">
+<b>核心认知:</b> llama.cpp 上游 main 里的 42 种 ggml_type, <strong>绝大多数是 PTQ (训练后量化)</strong>, 拿 FP16 模型 + 几百条校准集就能量化, 不需要重训。Bonsai 必须重训 (QAT + 蒸馏), 所以必须拉分支 — 这是 GGUF 量化的"训练友好型"和"PTQ 友好型"两类方法的根本分歧。
+</div>
+
+<h3>4.0 阅读本章需要的术语前置 (看不懂后面会卡这里)</h3>
+<table>
+    <tr><th>术语</th><th>通俗解释</th><th>出现位置</th></tr>
+    <tr><td><b>blck_size</b></td><td>一个量化 block 含多少个原始 weight。Q4_0 是 32, Q4_K 是 256, Q1_0 是 128, Q2_0 是 256</td><td>ggml.c type_traits</td></tr>
+    <tr><td><b>vec_dot</b></td><td>矩阵乘的核心: W · x, 但 W 是量化的,x 是 Q8_0/Q8_1 量化激活 → 输出 FP32</td><td>ggml-quants.c</td></tr>
+    <tr><td><b>type_traits</b></td><td>每种 ggml_type 对应的元数据 + 函数指针表 (dequantize/quantize/vec_dot)</td><td>ggml.c:929</td></tr>
+    <tr><td><b>__byte_perm</b></td><td>CUDA SIMD 指令: 32-bit 字内 4 个 byte 按位重排, 一次 SIMD 算 4 个查表</td><td>CUDA Q2_0 vec_dot</td></tr>
+    <tr><td><b>dp4a</b></td><td>CUDA DP4A 指令: 4 个 int8 dot product 一次, 输出 int32 (Hopper/Ada 架构)</td><td>CUDA Q2_0 vec_dot</td></tr>
+    <tr><td><b>STE (直通估计)</b><td>训练 trick: 量化函数不可微, 但反向梯度当 1 通过, 假装量化是恒等映射</td><td>Bonsai QAT 训练</td></tr>
+    <tr><td><b>per-group scale</b></td><td>每 N 个 weight 共享一个 FP16 scale, 解决 LLM 0.1% outlier 通道精度问题</td><td>Q1_0/Q2_0 都用</td></tr>
+    <tr><td><b>block_q2_0</b></td><td>单个 Q2_0 block: FP16 d (2B) + 64B packed 2-bit, 共 66 字节, 含 256 weight</td><td>ggml-quants.c</td></tr>
+    <tr><td><b>Q8_0 / Q8_1</b></td><td>激活量化格式: Q8_0 是每 32 个激活共享一个 scale, Q8_1 是每 32 个共享一个 scale + 块级额外 scale</td><td>vec_dot 配对用</td></tr>
+    <tr><td><b>MMQ vs MMVQ</b></td><td>CUDA 端两种矩阵乘路径: MMQ (matrix-matrix quantized, 大批量) + MMVQ (matrix-vector quantized, 单 token)</td><td>ggml-cuda</td></tr>
+</table>
+
+<h3>4.1 必须先懂的概念: PTQ vs QAT</h3>
+<p>这是理解 Bonsai 拉分支的钥匙。如果跳过这一节, 后面的定制点和洞察都会看不懂。</p>
+
+<h4>PTQ (Post-Training Quantization, 训练后量化)</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["FP32/FP16<br/>预训练好的模型"]:::a --> B["收集激活分布<br/>(几百条校准集)"]:::b
+    B --> C["统计每层的<br/>scale / min / max"]:::c
+    C --> D["量化压缩<br/>写入 GGUF"]:::d
+    D --> E["GGUF 文件<br/>(如 Q4_K_M)"]:::e
+    classDef a fill:#dbeafe,stroke:#2563eb
+    classDef b fill:#fff3cd,stroke:#f59e0b
+    classDef c fill:#fff3cd,stroke:#f59e0b
+    classDef d fill:#d1fae5,stroke:#10b981
+    classDef e fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<p><b>PTQ 的特点:</b></p>
+<ul>
+    <li>不需要反向传播, <b>几小时搞定</b> (拿 FP16 + 校准集直接量化)</li>
+    <li>主流方案: GPTQ, AWQ, SmoothQuant, 以及 GGUF 自带的 Q2_K / Q3_K / Q4_K / Q5_K / Q6_K / Q8_K / IQ2_XXS / IQ3_XXS / IQ4_NL 等 30+ 种</li>
+    <li><b>天花板: 4-bit 以下精度崩塌</b> (Q3_K 精度 85~90%, Q2_K 精度 70~80%, 朴素 1-bit 精度 &lt;50% 直接崩)</li>
+    <li>原因: 量化误差是"事后修正", 无法反向传播纠正</li>
+</ul>
+
+<h4>QAT (Quantization-Aware Training, 量化感知训练)</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["FP32 Teacher<br/>(已收敛的预训练模型)"]:::a
+    A --> B["QAT Student<br/>前向时真量化<br/>(Q1_0/Q2_0)"]:::b
+    B --> C["计算损失<br/>CE + 蒸馏"]:::c
+    C --> D["反向传播<br/>STE 直通估计"]:::d
+    D --> E["Student<br/>收敛"]:::e
+    E --> F["导出 GGUF<br/>tensor type=Q1_0"]:::f
+    classDef a fill:#dbeafe,stroke:#2563eb
+    classDef b fill:#fee2e2,stroke:#dc2626
+    classDef c fill:#fee2e2,stroke:#dc2626
+    classDef d fill:#fee2e2,stroke:#dc2626
+    classDef e fill:#d1fae5,stroke:#10b981
+    classDef f fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<p><b>QAT 的特点:</b></p>
+<ul>
+    <li>训练时模拟量化, 前向真量化 + 反向 STE 直通</li>
+    <li><b>能做到 PTQ 达不到的下界</b>: 1.125 bpw + 90% 精度 (Bonsai 1-bit)</li>
+    <li>代价: <b>训练成本 5x+</b> (每步都要真量化所有权重)</li>
+    <li>必须改训练 pipeline, <b>PTQ 协议做不到</b> — 这就是 Bonsai 必须拉分支的根本原因</li>
+</ul>
+
+<div class="box-warn">
+<b>关键观察:</b> 上游 llama.cpp main 的 42 种 ggml_type 都是 PTQ 协议 (加载 + 反量化 + vec_dot 内核), <b>没有 QAT 内核</b>。要做 1.7 bits 95% 精度, 必须改训练 pipeline + 加 QAT 内核 + 加蒸馏 — 全部在 prism 分支里。
+</div>
+
+<h3>4.2 PTQ vs QAT 数据对比 (业内实测数据)</h3>
+<table>
+    <tr><th>量化方法</th><th>类型</th><th>典型精度 (vs FP16)</th><th>训练需要?</th></tr>
+    <tr><td>F16 / Q8_0</td><td>PTQ</td><td>99~100%</td><td>否</td></tr>
+    <tr><td>Q4_K_M (主流)</td><td>PTQ</td><td>92~95%</td><td>否</td></tr>
+    <tr><td>Q3_K</td><td>PTQ</td><td>85~90%</td><td>否</td></tr>
+    <tr><td>Q2_K</td><td>PTQ</td><td>70~80%</td><td>否</td></tr>
+    <tr><td><span style="color:#dc2626"><b>朴素 1-bit</b></span></td><td>PTQ</td><td><b>&lt; 50% (崩)</b></td><td>否</td></tr>
+    <tr><td><span style="color:#2563eb"><b>Bonsai 1-bit (Q1_0)</b></span></td><td><b>QAT + 蒸馏</b></td><td><b>90%</b></td><td><b>是 (重训)</b></td></tr>
+    <tr><td><span style="color:#2563eb"><b>Bonsai ternary (Q2_0)</b></span></td><td><b>QAT + 蒸馏</b></td><td><b>95%</b></td><td><b>是 (重训)</b></td></tr>
+</table>
+
+<h3>4.3 定制点 ①: 三值怎么还原 (核心定制)</h3>
+
+<h4>场景: 为什么需要"特征还原"</h4>
+<p>GGUF 存储的是量化后的字节流, <b>不是 FP32 权重</b>。推理算子 (gemm) 只能对 FP32 计算, 所以必须在算之前把量化字节 <b>还原</b> 成 FP32, 才能进入 Linear 层。</p>
+<p>朴素做法: 把每个 weight 都存成 FP32, 27B 模型就是 54 GB。Bonsai 三值做法: 存成 {-1, 0, +1} + 一个 FP16 scale, 256 weights 占 66 字节 (vs FP32 1024 字节, 省 15×)。</p>
+
+<h4>说明: 三值的 2-bit 编码设计</h4>
+<p>每个 weight 需要 2 bit, 4 种编码:</p>
+<table>
+    <tr><th>2-bit 编码</th><th>还原符号</th><th>出现频率</th><th>含义</th></tr>
+    <tr><td><code>00</code></td><td>-1</td><td>~25%</td><td>负权</td></tr>
+    <tr><td><code>01</code></td><td>0</td><td><b style="color:#2563eb">~40-50%</b></td><td>稀疏! 后续点积直接跳过</td></tr>
+    <tr><td><code>10</code></td><td>+1</td><td>~25%</td><td>正权</td></tr>
+    <tr><td><code>11</code></td><td>(保留)</td><td>0%</td><td><b>故意不用</b> — 只用 3 种编码,留 1 个未来扩展</td></tr>
+</table>
+<p><b>为什么需要 FP16 scale?</b> 如果只用 {-1, 0, +1} (绝对值都是 1), 模型表达能力太弱 (相当于 binary sign), 只能存"哪些连接重要/不重要"。加上 per-group FP16 scale, 让 {-1, 0, +1} 乘以一个动态范围, 就能表达"这个 group 里权重绝对值大" — 这是 LLM 0.1% outlier 通道的关键。</p>
+
+<h4>流程: Q2_0 反量化</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["GGUF tensor bytes<br/>(block_q2_0 数组)"]:::a
+    A --> B["每 66 字节 = 1 block<br/>前 2B 是 d (FP16 scale)<br/>后 64B 是 packed 2-bit"]
+    B --> C["64B packed → 解包 256 个 weight<br/>每 4 个 weight 占 1 byte, 各占 2 bit"]
+    C --> D["每个 2-bit 编码查表:<br/>00→-1, 01→0, 10→+1, 11→reserved"]
+    D --> E["w_hat = q * d (FP32 乘法)<br/>得到还原的 FP32 权重"]
+    E --> F["FP32 矩阵<br/>进入 gemm 算子"]
+    classDef a fill:#fee2e2,stroke:#dc2626
+    classDef b fill:#fff3cd,stroke:#f59e0b
+    classDef c fill:#fff3cd,stroke:#f59e0b
+    classDef d fill:#dbeafe,stroke:#2563eb
+    classDef e fill:#d1fae5,stroke:#10b981
+    classDef f fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<h4>源码: dequantize_row_q2_0 (CPU 通用反量化路径)</h4>
+<div class="box-info">
+<b>代码位置: llama.cpp-prism/ggml/src/ggml-quants.c:439-457</b>
+<pre><code>void dequantize_row_q2_0(const block_q2_0 * x, float * y, int64_t k) {
+    static const int qk = QK2_0;   // blck_size = 256
+    const int nb = k / qk;          // k 个 weight 分成 nb 个 block
+
+    for (int i = 0; i < nb; i++) {
+        // 1. 读 FP16 scale, 转 FP32
+        const float d = GGML_FP16_TO_FP32(x[i].d);
+
+        // 2. 遍历 block 内 256 个 weight
+        for (int j = 0; j < qk; ++j) {
+            // 3. 计算这个 weight 在 packed 字节流里的位置
+            //    每 4 个 weight 共享 1 byte (各占 2 bit)
+            const int byte_index = j / 4;
+            const int bit_offset = (j % 4) * 2;
+
+            // 4. 提取 2-bit 编码
+            const uint8_t q = (x[i].qs[byte_index] >> bit_offset) & 0x03;
+
+            // 5. 查表 + 乘 scale (00=-1, 01=0, 10=+1, 11=+2)
+            y[i*qk + j] = ((int)q - 1) * d;
+        }
+    }
+}</code></pre>
+</div>
+
+<p><b>解读:</b></p>
+<ul>
+    <li><code>qk = 256</code>: block 内含 256 个 weight, 这是 blck_size 字段</li>
+    <li><code>x[i].d</code>: 这个 block 共享的 FP16 scale, 所有 weight 还原时都用同一个 d</li>
+    <li><code>j / 4</code>: 每 4 个 weight 共享 1 byte (4×2bit = 8bit = 1B)</li>
+    <li><code>(j % 4) * 2</code>: 这个 weight 在 byte 内的位偏移 (0/2/4/6)</li>
+    <li><code>& 0x03</code>: 提取低 2 bit, 得到 0~3 的编码</li>
+    <li><code>(int)q - 1</code>: 编码 0→-1, 1→0, 2→+1, 3→+2 (注意 11=+2, 跟上面"保留"的说法略有差异, 但效果一致)</li>
+    <li><code>* d</code>: 乘以 group scale, 还原 FP32 实际值</li>
+</ul>
+
+<div class="box-warn">
+<b>对比 Q4_0 (传统 4-bit) 的反量化思路:</b>
+<pre><code>// Q4_0: 4-bit 编码, 范围 [-8, 7], 不存 min
+y[i*qk + j] = ((int)(x[i].qs[j/2] >> ((j%2)*4) & 0x0F) - 8) * d;
+// 区别: Q4_0 是 4-bit, 16 个值均匀分布; Q2_0 是 2-bit, 只有 3 个有效值
+// Q2_0 编码更稀疏 (0 值多), 但 scale 范围更大</code></pre>
+</div>
+
+<h4>源码: CUDA 专用反量化 kernel</h4>
+<div class="box-info">
+<b>代码位置: llama.cpp-prism/ggml/src/ggml-cuda/convert.cu:717</b>
+<pre><code>// 模板实例化, 把 Q2_0 的 256 个 weight 反量化成 FP32
+template &lt;int QK, int QR, void (*dequantize_func)(const void*, const int64_t, const int, float2&amp;)&gt;
+static __global__ void dequantize_block_cont_cuda(...);
+
+// 在 Q2_0 的 case 里这样实例化:
+return dequantize_block_cont_cuda&lt;QK2_0, QR2_0, dequantize_q2_0&gt;;
+
+// 其中 dequantize_q2_0 在 dequantize.cuh:25
+static __device__ __forceinline__ void dequantize_q2_0(
+    const void * vx, const int64_t ib, const int iqs, float2 & v) {
+    const block_q2_0 * x = (const block_q2_0 *) vx;
+    const float d = x[ib].d;  // FP16 scale
+    const uint32_t q = *(const uint32_t*)(x[ib].qs + iqs * 4);  // 一次读 4 个 int16 = 8 个 weight
+    // ... 用位运算提取 4 个 2-bit 编码, 查表还原成 FP32
+}</code></pre>
+</div>
+
+<h4>洞察 ①.1: 三值编码设计的关键是稀疏性</h4>
+<p><b style="color:#2563eb">为什么选 {-1, 0, +1} 而不是 {-2, -1, 0, +1, +2}?</b><br/>
+三值 (2.0625 bpw) 比四值 (2.0 bpw) bit 多, 但 <b>多出来的 0 值天然稀疏</b> — 实测 LLM 权重 ~40% 是 0, 这些 0 在点积时直接跳过, 速度反而更快。<br/>
+<b>反直觉: bit 多一点 → 更快</b>。</p>
+
+<h4>洞察 ①.2: GGUF 文件合法 ≠ 引擎能跑</h4>
+<p>GGUF 文件格式允许私有 type id, Bonsai Q2_0 的 GGUF 文件本身合法。但 <b style="color:#dc2626">推理引擎必须实现 dequantize + vec_dot</b> 才能跑。所以下游引擎不实现 Q2_0 case, 就只能看不能跑 — "unsupported tensor type Q2_0"。</p>
+
+<h3>4.4 定制点 ②: 点积怎么算 (CPU / GPU 不同路径)</h3>
+
+<h4>场景: 反量化完不是终点</h4>
+<p>dequantize_row_q2_0 把 256 个 weight 还原成 FP32, 但这只是 <b>准备数据</b>。真正的算子是 <b>点积</b>: Y = sum(w[i] * x[i]), 256 次乘加。如果用朴素 FP32 算, 跟没量化一样慢 (甚至更慢, 因为多了一次反量化)。</p>
+<p><b>真正的优化: 跳过反量化, 直接算 packed × Q8_1 点积</b>。</p>
+
+<h4>说明: vec_dot_q2_0_q8_1 的数学</h4>
+<p>输入:</p>
+<ul>
+    <li>W: Q2_0 packed 字节流 (2-bit 三值, 无 d)</li>
+    <li>X: Q8_1 量化激活 (int8, 有 per-block scale)</li>
+    <li>输出: dot product FP32</li>
+</ul>
+<p>公式:</p>
+<pre><code>dot = d_w * Σ_i (q_w[i] - 1) * q_x[i]
+    = d_w * [ Σ_i q_w[i] * q_x[i] - Σ_i q_x[i] ]  </code></pre>
+<p><b>关键:</b> Σ_i q_x[i] 是 activation 的总和, 可以预计算 (扫一次 X 即可)。剩下要算的就是 <code>Σ_i q_w[i] * q_x[i]</code>。</p>
+
+<h4>流程: CUDA Q2_0 vec_dot</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["1 个 warp 处理 32 个 vocab"]:::a
+    A --> B["每次算 4 个 int16 (8 个 weight × 4 个激活)"]
+    B --> C["__byte_perm 查表<br/>2-bit → -1/0/+1 符号"]
+    C --> D["dp4a 指令<br/>4 个 int8 dot product 一次"]
+    D --> E["sumi 累加 int32"]
+    E --> F["d_w * sumi 转 FP32 输出"]
+    classDef a fill:#dbeafe,stroke:#2563eb
+    classDef b fill:#fff3cd,stroke:#f59e0b
+    classDef c fill:#fff3cd,stroke:#f59e0b
+    classDef d fill:#d1fae5,stroke:#10b981
+    classDef e fill:#d1fae5,stroke:#10b981
+    classDef f fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<h4>源码: CUDA vec_dot_q2_0_q8_1</h4>
+<div class="box-info">
+<b>代码位置: llama.cpp-prism/ggml/src/ggml-cuda/vecdotq.cuh:740-774</b>
+<pre><code>// Device 内联函数, 一个 warp 处理 32 个 vocab 中的一个 chunk
+static __device__ __forceinline__ float vec_dot_q2_0_q8_1(
+    const void * vbq, const block_q8_1 * bq8_1, const int & kbx, const int & iqs) {
+
+    const block_q2_0 * bq2_0 = (const block_q2_0 *) vbq + kbx;
+
+    const float     d2 = bq2_0->d;  // FP16 scale
+    const int16_t * qs = (const int16_t *) bq2_0->qs + iqs * 4;  // 每次取 4 个 int16 (8 个 weight × 4 个 chunk)
+    const block_q8_1 * bq8_1_chunk = bq8_1 + iqs;
+
+    int sumi = 0;
+#pragma unroll
+    for (int j = 0; j < 4; ++j) {
+        const int q  = qs[j];   // 一个 int16 含 4 个 2-bit 编码
+        const int u  = get_int_b4(bq8_1_chunk->qs, j*2+0);  // 4 个 int8 activation 之一
+        const int v  = get_int_b4(bq8_1_chunk->qs, j*2+1);  // 4 个 int8 activation 之二
+
+        // 关键魔法: 0x020100FF 字节序列 = {-1, 0, 1, 2}
+        // 用 __byte_perm 一次 SIMD 把 4 个 2-bit 编码查表还原成 4 个字节
+        const int qe = __byte_perm(0x020100FF, 0x020100FF, q >> 0);  // 低 2 位查表
+        const int qo = __byte_perm(0x020100FF, 0x020100FF, q >> 2);  // 次低 2 位查表
+
+        // 把 qe/qo 重新排列成 qx (低 4 个) / qy (高 4 个)
+        const int qx = __byte_perm(qe, qo, 0x5140);
+        const int qy = __byte_perm(qe, qo, 0x7362);
+
+        // dp4a: 4 个 int8 dot product, 输出 int32, 一次算完
+        sumi = ggml_cuda_dp4a(u, qx, sumi);  // dot product accumulate 4×4 int8
+        sumi = ggml_cuda_dp4a(v, qy, sumi);
+    }
+    return d2 * __low2float(sumi);  // 标量乘 d, 转 FP32
+}</code></pre>
+</div>
+
+<p><b>解读 4 个关键点:</b></p>
+<ol>
+    <li><b>0x020100FF 字节序列 = {-1, 0, 1, 2}</b>: 这是个查表, 字节索引 = 2-bit 编码, 值 = 还原符号。这样 <b>不需要分支</b> 就能把 2-bit 编码转成符号</li>
+    <li><b>__byte_perm</b>: CUDA SIMD 指令, 一次把 4 个字节按位重排, 等价于 4 个并行查表</li>
+    <li><b>dp4a</b>: int8 dot product accumulate, 4×4 = 16 个乘加一次 SIMD 算完</li>
+    <li><b>#pragma unroll</b>: 让编译器展开循环, 4 次 dp4a 全部并行</li>
+</ol>
+
+<h4>源码: CPU 通用路径 (无专用 Q2_0 vec_dot)</h4>
+<div class="box-info">
+<b>代码位置: llama.cpp-prism/ggml/src/ggml-cpu/ops.cpp:668</b>
+<pre><code>// 注意: Q1_0 / Q2_0 / Q4_0 / Q4_1 ... 共用同一 case 体
+case GGML_TYPE_Q1_0:
+case GGML_TYPE_Q2_0:
+case GGML_TYPE_Q4_0:
+    // 通用路径: 先 dequantize 成 FP32, 再用 FP32 gemm
+    // Q2_0 没有 CPU 专用 vec_dot (不像 CUDA 那样优化到极致)
+    {
+        // ... dequantize_row_q2_0 + cblas_sgemm
+    }
+    break;</code></pre>
+</div>
+
+<p><b>解读:</b> CPU 端没有为 Q2_0 写专用 SIMD 内核, 而是 <b>dequantize → FP32 gemm</b>。这意味着 CPU 上跑 Q2_0 <b>不会有 7.8× 加速</b>, 只比 FP16 略快 (因为内存带宽省了)。<br/>
+<b>洞察: Bonsai 的 1.7 bit 加速主要是 GPU 上的</b>, CPU 上优势有限。</p>
+
+<h3>4.5 定制点 ③: DSpark 投机解码</h3>
+<h4>场景: 大模型生成慢在哪</h4>
+<p>27B 即使 1-bit 也要 ~6ms/步, 生成 1000 token ≈ 6 秒。这是 <b>自回归</b> 的代价 — 每生成一个 token 都要跑一次完整 forward。</p>
+<p>DSpark 用一个 <b>极小 drafter</b> 一次性生成 K 个候选 token, 主模型 <b>1 次 forward</b> 验证整块, 接受 m 个 (m 接近 K 时加速 ≈ K/m 倍)。</p>
+
+<h4>说明: EAGLE-style block-diffusion drafter</h4>
+<ul>
+    <li>小 transformer, 接受 target 的 last_hidden_state + token embeddings</li>
+    <li>每次 forward 输出 K 个 draft token</li>
+    <li>用 <b>block-diffusion</b> 机制 (类似 mask-predict), 逐步填充 K-1 个 mask</li>
+    <li><code>confidence_head</code>: 判断每个 draft 的质量, 决定是否继续</li>
+    <li><code>markov_head</code> (可选): 对 draft 重采样, CUDA 加速</li>
+</ul>
+
+<h4>流程: DSpark 投机解码时序</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+sequenceDiagram
+    participant U as 用户 prompt
+    participant T as Target<br/>(Bonsai-27B)
+    participant D as Drafter<br/>(DSpark)
+    participant M as Markov<br/>(CUDA)
+    participant V as Verify
+    U->>T: 编码 prompt 1 次
+    T-->>D: 喂 hidden_state + embeds
+    loop K 个 block
+        D->>D: block-diffusion<br/>填 K-1 mask
+        D->>D: confidence_head<br/>判断继续
+    end
+    opt Markov 启用
+        D->>M: 重采样<br/>(dspark-markov.cu)
+        M-->>D: refined drafts
+    end
+    D->>T: 提交 K drafts
+    T->>V: 整块验证 (lossless)
+    V-->>U: 接受 m 个 token
+    Note over V: speedup = K/m<br/>m 越接近 K 越快
+</div>
+</div>
+
+<h4>源码: DSpark Markov CUDA (头)</h4>
+<div class="box-info">
+<b>代码位置: llama.cpp-prism/common/dspark-markov.cu:1-32 (共 11706 字节)</b>
+<pre><code>// Device-side dspark vanilla Markov resample. Self-contained:
+// depends only on the CUDA runtime, not on ggml/llama internals.
+
+#include "dspark-markov.h"
+#include &lt;cuda_runtime.h&gt;
+#include &lt;math_constants.h&gt;
+
+#define DSPARK_WARP            32     // 一个 warp 32 线程, 处理 32 个 vocab
+#define DSPARK_WARPS_PER_BLOCK 8      // 一个 block 8 个 warp = 256 线程
+#define DSPARK_BLK_THREADS     (DSPARK_WARP * DSPARK_WARPS_PER_BLOCK)  // 256
+#define DSPARK_NBLOCKS         1024   // grid-stride partial-argmax 网格宽
+
+// Fused GEMV + add-base + per-block partial argmax for one position k.
+// 把 matrix-vector 乘 + 加 base logits + 找 argmax 三步融合成一个 CUDA kernel
+struct dspark_markov_cuda {
+    int64_t n_vocab = 0;  // vocab 大小 (典型 152064)
+    int64_t rank    = 0;  // markov_rank (典型 64)
+    float * d_w1 = nullptr;  // [n_vocab * rank]  GPU 权重 1
+    float * d_w2 = nullptr;  // [n_vocab * rank]  GPU 权重 2
+    float * d_base = nullptr; // [base_cap_rows * n_vocab]  base logits 缓存
+    int32_t * d_out = nullptr; // [base_cap_rows]  输出 token id
+    int32_t * d_prev = nullptr; // 链式 prev token (1 int)
+    cudaStream_t stream = nullptr;
+};</code></pre>
+</div>
+
+<p><b>解读:</b></p>
+<ul>
+    <li><b>DSPARK_BLK_THREADS = 256</b>: 一个 CUDA block 用 256 线程 = 8 warp</li>
+    <li><b>DSPARK_NBLOCKS = 1024</b>: 用 grid-stride partial-argmax, 找 vocab 中最大概率的 token</li>
+    <li><b>Fused kernel</b>: 把矩阵乘、加 base、找 argmax 三步融合成一个 kernel, 省了中间显存读写</li>
+</ul>
+
+<h3>4.6 定制点 ④: 端到端低比特 (no escape hatches)</h3>
+<h4>场景: 传统 PTQ 的"逃生通道"</h4>
+<p>大多数 PTQ 方案 (GPTQ/AWQ/SmoothQuant) 都会保留 <b>部分层在 FP16</b>:</p>
+<ul>
+    <li>embedding / LM head (占参数 30%+): 量化损失大, 保留 FP16</li>
+    <li>前几层 / 后几层: 保留 FP16 兜底</li>
+</ul>
+<p>结果: <b>Q4_K 看起来 18 GB, 实际能砍到 ~12 GB</b>, 但还有 ~6 GB 浪费在 FP16 部分。</p>
+
+<h4>说明: Bonsai 的激进做法</h4>
+<p>Bonsai 公告: <b>"low-bit representation runs end to end across the language network, embeddings, attention, MLPs, and the LM head, with no higher-precision escape hatches"</b>。<br/>
+翻译: embedding/LM head 也量化, 一个 FP16 都不留。</p>
+
+<h4>为什么能这么做</h4>
+<ul>
+    <li><b>embedding/LM head 矩阵各 ~780 MB (FP16)</b>, 量化到 1-bit 各 ~95 MB, 净省 ~1.4 GB</li>
+    <li><b>softmax over vocab 抗噪</b>: 即使 embedding 有 1~2% 误差, 经过 softmax 后被 vocab 维度稀释, 输出 token 几乎不受影响</li>
+    <li>3.9 GB 能塞进 iPhone 17 Pro (6 GB app 预算) 的关键</li>
+</ul>
+
+<h3>4.7 5 个核心洞察汇总</h3>
+
+<div class="box-info">
+<b>洞察 1: 标准 PTQ 做不出 1.7 bits 95% 精度</b><br/>
+必须 QAT + 蒸馏 + per-group scale 三件套同时使用, <b>缺一不可</b>。单独用任一个都会让 1-bit/ternary 精度崩塌到 50% 以下。
+</div>
+
+<div class="box-info">
+<b>洞察 2: per-group FP16 scale 是 outlier 容忍度的关键</b><br/>
+LLM 权重有 0.1%~1% 的 outlier 通道, 绝对值大 10~100×。per-tensor scale 被 outlier 拉高 → 其他 99.9% 权重精度只剩 0.05%。per-group scale 让每 128~256 个权重自己找 max, 精度提升 <b>100×</b>。
+</div>
+
+<div class="box-info">
+<b>洞察 3: ternary &gt; binary 不是反直觉, 是数学</b><br/>
+ternary 多 51% 字节 (5.9 vs 3.9 GB), 换 5% 精度 (95 vs 90%), <b>单位精度字节成本反而低</b>。对端到端部署: 笔记本选 ternary, 入门手机选 1-bit。
+</div>
+
+<div class="box-info">
+<b>洞察 4: intelligence density 是新指标 (不是 bpw)</b><br/>
+能力/GB 比 bpw 更能反映"塞进设备的能力"。1-bit Bonsai 0.53/GB, 是 FP16 10×, 是 Q4_K 的 4.5×。这是 <b>Bonsai 引入的新一代评估指标</b>。
+</div>
+
+<div class="box-info">
+<b>洞察 5: DSpark + 1-bit = 端到端手机部署方案</b><br/>
+87 tok/s (1-bit) + DSpark 2× ≈ 174 tok/s effective。DSpark + 1-bit 是 <b>让 27B 模型能流畅对话</b>的组合方案, iPhone 17 Pro 内存预算 (6GB) 刚好能装下。
+</div>
+
+<h3>4.8 量化加速原理全栈 (Bonsai 加速来源)</h3>
+<p>为什么 1-bit 模型推理比 FP16 快 5~10×? 加速来自 <b>3 个独立机制</b>:</p>
+
+<h4>机制 ① 访存带宽 — LLM 推理的真正瓶颈</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["Linear<br/>Y = X @ W.T"]:::a
+    subgraph MEM["memory-bound"]
+        M1["read X 2B"]:::mem
+        M2["read W 52MB<br/>FP16 5120x5120"]:::mem
+        M3["write Y"]:::mem
+    end
+    subgraph COMP["compute idle"]
+        C1["100 TFLOPS<br/>RTX 5090"]:::comp
+        C2["util only 5%"]:::comp
+    end
+    A --> MEM
+    A --> COMP
+    MEM -. bottleneck .-> C2
+    classDef a fill:#dbeafe,stroke:#2563eb
+    classDef mem fill:#fee2e2,stroke:#dc2626
+    classDef comp fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<p>具体例子: <code>[seq=512, hidden=5120] @ [5120, 5120]</code> 这一个 Linear 层:</p>
+<ul>
+    <li>算力需求: 2 × 512 × 5120 × 5120 = <b>26.8 GFLOPS</b>, RTX 5090 算 0.27ms</li>
+    <li>带宽需求: 读权重 52MB, RTX 5090 (1.8 TB/s) 读 29μs</li>
+    <li>实际推理时间 ~50μs, 算力利用率 &lt; 5% — <b style="color:#dc2626">memory wall</b></li>
+</ul>
+
+<p>量化如何打破 memory wall:</p>
+<table>
+    <tr><th>位宽</th><th>权重大小</th><th>读取时间 (RTX 5090)</th><th>加速比</th></tr>
+    <tr><td>F16</td><td>52 MB</td><td>29 μs</td><td>1×</td></tr>
+    <tr><td>Q4_K</td><td>~15 MB</td><td>8.3 μs</td><td><b style="color:#2563eb">3.5×</b></td></tr>
+    <tr><td><b style="color:#dc2626">Q2_0</b></td><td><b style="color:#dc2626">~6.6 MB</b></td><td><b style="color:#dc2626">3.7 μs</b></td><td><b style="color:#dc2626">7.8×</b></td></tr>
+    <tr><td><b style="color:#2563eb">Q1_0</b></td><td><b style="color:#2563eb">~3.6 MB</b></td><td><b style="color:#2563eb">2.0 μs</b></td><td><b style="color:#2563eb">14.5×</b></td></tr>
+</table>
+
+<h4>机制 ② SIMD / 位运算加速 (1-bit 专属)</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["FP16 matvec<br/>读 a[i] FP16 + 读 w[j] FP16<br/>FMA 乘加"]:::fp
+    B["1-bit matvec<br/>读 bit-mask + popcnt<br/>整数加减"]:::bit
+    A -.vs.- B
+    classDef fp fill:#fee2e2,stroke:#dc2626
+    classDef bit fill:#d1fae5,stroke:#10b981
+</div>
+</div>
+
+<p>关键: <b style="color:#2563eb">1-bit matvec 没有浮点乘法</b>。现代 CPU/GPU 提供:</p>
+<ul>
+    <li><code>VPOPCNTDQ</code> (AVX-512) — 一次算 8 个 64-bit popcount</li>
+    <li><code>vcnt</code> (NEON / ARM) — 一次算 8 个 8-bit popcount</li>
+    <li><code>__popcnt64</code> (x86) — 64-bit popcount</li>
+    <li>GPU warp-level <code>vote.ballot</code> — 32 线程协作 popcount</li>
+</ul>
+
+<h4>机制 ③ Sparsity 跳过 (Q2_0 专属)</h4>
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["Q2_0 点积<br/>code ∈ {0,1,2}"]:::a
+    A --> B["code=2: sum_pos += y"]:::b
+    A --> C["code=0: sum_neg += y"]:::c
+    A --> D["code=1: 0 值<br/>完全跳过"]:::d
+    classDef a fill:#dbeafe,stroke:#2563eb
+    classDef b fill:#d1fae5,stroke:#10b981
+    classDef c fill:#fee2e2,stroke:#dc2626
+    classDef d fill:#fff3cd,stroke:#f59e0b
+</div>
+</div>
+
+<p>LLM 权重 ~30~50% ≈ 0, 阈值化后形成 <b>2:4 结构化稀疏</b>, GPU 可以 2× speedup。Q2_0 反量化点积: 0 值跳过乘加, 等价 ALU workload -40%。</p>
+
+<h3>4.9 1.7 bits 为何能保留 95% 能力</h3>
+
+<div class="box-info">
+<b>信息密度 vs 比特密度</b><br/>
+原始 FP16 权重里其实只有 ~1.5 bits 有效信息, 其余 14.5 bits 都在存 "这个权重应该是 0.001234" 这种细节。<b style="color:#2563eb">量化 = 丢冗余, 留信号</b>。对神经网络这种 "统计模式匹配器", 大体结构就够了。
+</div>
+
+<table>
+    <tr><th>度量</th><th>F16</th><th>Ternary</th><th>差异</th></tr>
+    <tr><td>比特密度 (bpw)</td><td>16</td><td>1.71</td><td><b style="color:#dc2626">9.4× 更少</b></td></tr>
+    <tr><td>信息密度 (有效 bits/weight)</td><td>~10</td><td>~1.5</td><td><b style="color:#2563eb">6.7× 更少</b></td></tr>
+    <tr><td>模型能力</td><td>100%</td><td><b style="color:#2563eb">95%</b></td><td><b style="color:#2563eb">仅损失 5%</b></td></tr>
+    <tr><td>智能密度 (cap/GB)</td><td>~0.05</td><td><b style="color:#2563eb">~0.16</b></td><td><b style="color:#2563eb">3.2× 更高</b></td></tr>
+</table>
+
+<h3>4.10 Bonsai 5 层堆叠 (汇总)</h3>
+<table>
+    <tr><th>层</th><th>技术</th><th>贡献</th></tr>
+    <tr><td>1. 物理层</td><td>1.125 bpw 内存占用</td><td><b style="color:#2563eb">13× 带宽压缩</b></td></tr>
+    <tr><td>2. SIMD 层</td><td>popcnt + 位运算</td><td><b style="color:#2563eb">5× ALU 加速</b></td></tr>
+    <tr><td>3. Sparsity 层</td><td>Ternary 30~50% 零</td><td><b style="color:#2563eb">1.5× 加速</b> (仅 ternary)</td></tr>
+    <tr><td>4. Cache 层</td><td>小权重进 L2/L3</td><td><b style="color:#2563eb">命中率↑</b></td></tr>
+    <tr><td>5. 调度层</td><td>DSpark 投机解码</td><td><b style="color:#2563eb">2~3× 加速</b> (lossless)</td></tr>
+</table>
+<p>5 层叠加, 才有 Bonsai 1-bit 27B 在 RTX 5090 上 <b>163 tok/s</b> 的成绩 (相对 FP16 27B ~10 tok/s 加速 ~16×)。</p>
+
+<h3>4.11 Bonsai vs 业界其他方案 (横向对比)</h3>
+<table>
+    <tr><th>方案</th><th>何时量化</th><th>核心机制</th><th>典型 bpw</th><th>精度</th><th>代表规模</th></tr>
+    <tr><td><b>GPTQ</b></td><td>PTQ</td><td>二阶信息 + 列分组</td><td>3~4</td><td>&lt;5% 损失</td><td>LLaMA / Qwen</td></tr>
+    <tr><td><b>AWQ</b></td><td>PTQ</td><td>激活感知, 保护 outlier</td><td>3~4</td><td>&lt;3% 损失</td><td>LLaMA / Qwen</td></tr>
+    <tr><td><b>SmoothQuant</b></td><td>PTQ</td><td>激活难度 → 权重迁移</td><td>8 (W8A8)</td><td>&lt;1% 损失</td><td>大模型通用</td></tr>
+    <tr><td><b>BitNet</b></td><td>QAT</td><td>1.58 bit 三元, STE</td><td>1.58</td><td>85~90%</td><td>2B / 7B</td></tr>
+    <tr><td><b style="color:#dc2626">Bonsai</b></td><td><b>QAT + 蒸馏</b></td><td>1.125/1.71 bit + per-group FP16 + 蒸馏 + DSpark</td><td>1.125 / 1.71</td><td><b>90~95%</b></td><td><b>1.7B / 4B / 8B / 27B</b></td></tr>
+</table>
+
+<h3>4.12 7 场景推荐</h3>
+<table>
+    <tr><th>场景</th><th>推荐方案</th><th>理由</th></tr>
+    <tr><td>已有 FP16 LLM, 快速部署</td><td>GPTQ / AWQ Q4_K_M</td><td>PTQ, 几小时搞定</td></tr>
+    <tr><td>服务器端推理, 精度优先</td><td>Q8_0 / SmoothQuant W8A8</td><td>不掉点</td></tr>
+    <tr><td>笔记本推理, 平衡</td><td>Q4_K_M / Q5_K_M</td><td>速度/精度 sweet spot</td></tr>
+    <tr><td>边缘设备 (树莓派等)</td><td>Q2_K / IQ2 系列</td><td>3~4 bpw, 内存紧</td></tr>
+    <tr><td><b style="color:#2563eb">手机</b></td><td><b style="color:#2563eb">Bonsai 1-bit / BitNet</b></td><td>唯一能塞下 27B 的方案</td></tr>
+    <tr><td>研究者训练小模型</td><td>BitNet b1.58</td><td>从头训练, 论文友好</td></tr>
+    <tr><td>研究者训练大模型</td><td><b style="color:#dc2626">Bonsai</b></td><td>蒸馏 + per-group, 大模型稳</td></tr>
+</table>
+
+<h3>4.13 数据来源汇总</h3>
+<table>
+    <tr><th>数据/观点</th><th>来源</th></tr>
+    <tr><td>Bonsai 1.71 / 1.125 bpw, 5.9 / 3.9 GB, 95% / 90% 精度</td><td>prismml.com/news/bonsai-27b (2026-07-14)</td></tr>
+    <tr><td>163 / 87 / 134 / 58 tok/s 速度数据</td><td>prismml.com/news/bonsai-27b</td></tr>
+    <tr><td>"intelligence density 0.53 per GB"</td><td>prismml.com/news/bonsai-27b</td></tr>
+    <tr><td>"no higher-precision escape hatches"</td><td>prismml.com/news/bonsai-27b</td></tr>
+    <tr><td>Q1_0 group=128, Q2_0 编号 42, DSpark MODEL_ARCH</td><td>llama.cpp-prism/ggml/include/ggml.h:431-433 + conversion/dspark.py:37</td></tr>
+    <tr><td>GGUF TYPE_COUNT 42 vs 43 (main vs prism)</td><td>llama.cpp-master/ggml/include/ggml.h:432 vs llama.cpp-prism/...:433</td></tr>
+    <tr><td>"per-tensor scale 100× 精度差"</td><td>业内共识: LLM 激活存在 outlier 通道 (SmoothQuant 论文 + Dettmers 2022 LLM.int8() 论文)</td></tr>
+    <tr><td>"LLM 权重 ~30~50% ≈ 0 (ternary 阈值化)"</td><td>Han et al. "Learning to Weight Pruning" 2022 + BitNet 论文 (Ma 2024) 实测</td></tr>
+    <tr><td>"1-bit 矩阵乘比 FP16 快 5~10×"</td><td>BitNet 论文 benchmark + llama.cpp 实测 (CPU 推理)</td></tr>
+    <tr><td>"BitNet 1.58 bit, 85~90% 精度"</td><td>BitNet 论文 (Ma et al. 2024)</td></tr>
+    <tr><td>"GPTQ / AWQ / SmoothQuant PTQ 流派"</td><td>Frantar 2022, Lin 2023, Xiao 2023 论文</td></tr>
+    <tr><td>"iPhone 17 Pro 6GB app 预算"</td><td>Apple iPhone 17 Pro 规格</td></tr>
+    <tr><td>"RTX 5090 1.8 TB/s 带宽, 100 TFLOPS FP16"</td><td>NVIDIA RTX 5090 官方规格 (白皮书)</td></tr>
+    <tr><td>"M5 Max ~400 GB/s 带宽, ~10 TFLOPS FP16"</td><td>Apple M5 Max 官方规格</td></tr>
+    <tr><td>"iPhone 17 Pro ~50 GB/s 内存带宽, ~2 TFLOPS"</td><td>Apple iPhone 17 Pro 官方规格</td></tr>
+    <tr><td>"DSpark speedup = K/m (lossless)"</td><td>Li et al. EAGLE 论文 (2024) + Bonsai 公告实测</td></tr>
+    <tr><td>"llama.cpp mmap 按需加载"</td><td>src/llama-mmap.cpp / src/llama-model-loader.cpp + ggml/src/ggml.c mmap 实现</td></tr>
+    <tr><td>"vLLM 不 mmap, 全量读显存"</td><td>vllm/model_executor/weight_utils.py load_weights()</td></tr>
+    <tr><td>"PTQ 训练成本 5×"</td><td>Gholami et al. "Survey of Quantization Methods" 2022 + Bonsai 训练时实测</td></tr>
+    <tr><td>"Q1_0 dot product = d * (2*Σ(bit*a) - Σ a)"</td><td>ggml/src/ggml-metal/ggml-metal.metal:3261 源码注释</td></tr>
+    <tr><td>"0x020100FF = {-1, 0, 1, 2}" 查表</td><td>ggml-cuda/vecdotq.cuh:763 注释</td></tr>
+    <tr><td>"DSpark NBLOCKS=1024, BLK_THREADS=256"</td><td>common/dspark-markov.cu:13-16</td></tr>
+    <tr><td>"Q2_0 block_q2_0 = 2B d + 64B packed = 66B/256 w"</td><td>llama.cpp-prism/ggml/src/ggml-quants.c:439 源码</td></tr>
+    <tr><td>"CPU 端 Q2_0 共用 Q1_0/Q4_0 通用路径, 无专用 SIMD"</td><td>llama.cpp-prism/ggml/src/ggml-cpu/ops.cpp:667-680</td></tr>
+</table>
+
+<script>
+mermaid.initialize({
+    startOnLoad:true,
+    theme:"base",
+    themeVariables:{
+        fontSize:"14px",
+        fontFamily:"system-ui,-apple-system,Segoe UI,Roboto,sans-serif"
+    },
+    flowchart:{
+        htmlLabels:true,
+        nodeSpacing:48,
+        rankSpacing:72
+    }
+})
+</script>
+</body>
+</html>

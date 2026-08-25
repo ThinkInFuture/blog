@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>华杉的技术博客</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.6}
+.navbar{padding:16px 0;border-bottom:1px solid #eee}
+.nav-inner{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
+.nav-logo{font-size:16px;font-weight:700}
+.nav-links{display:flex;gap:24px}
+.nav-links a{text-decoration:none;color:#888;font-size:14px}
+.nav-links a:hover{color:#111}
+.wrap{max-width:1000px;margin:0 auto;padding:0 24px}
+.hero{padding:40px 0 32px;border-bottom:1px solid #eee}
+.hero-tag{font-size:12px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
+.hero h1{font-size:32px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px}
+.hero p{font-size:15px;color:#666;max-width:480px}
+
+.carousel{padding:40px 24px;border-bottom:1px solid #eee;position:relative;overflow:hidden;max-width:1000px;margin:0 auto}
+.carousel-track{display:flex;transition:transform 0.5s ease}
+.carousel-card{min-width:100%;background:#f7f8fa;border-radius:8px;padding:60px 40px;flex-shrink:0}
+.cc-tag{font-size:11px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.cc-title{font-size:20px;font-weight:600;margin-bottom:8px}
+.cc-desc{font-size:14px;color:#888;line-height:1.8;margin-bottom:16px;max-width:600px}
+.cc-link{font-size:14px;color:#3b82f6;text-decoration:none}
+.cc-link:hover{text-decoration:underline}
+.carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;border:1px solid #ddd;background:#fff;cursor:pointer;font-size:20px;color:#666;display:flex;align-items:center;justify-content:center;z-index:10}
+.carousel-arrow:hover{border-color:#999;color:#111}
+.carousel-arrow.prev{left:16px}
+.carousel-arrow.next{right:16px}
+.carousel-dots{display:flex;justify-content:center;gap:8px;margin-top:20px}
+.carousel-dot{width:8px;height:8px;border-radius:50%;background:#ddd;cursor:pointer;border:none}
+.carousel-dot.active{background:#3b82f6}
+
+.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #eee}
+.metric{padding:28px 0;text-align:center;border-right:1px solid #eee}
+.metric:last-child{border-right:none}
+.mv{font-size:28px;font-weight:700}
+.ml{font-size:12px;color:#999;margin-top:2px}
+.sec{padding:56px 0;border-bottom:1px solid #eee}
+.sec:last-child{border-bottom:none}
+.sec-title{font-size:22px;font-weight:700;margin-bottom:6px}
+.sec-desc{font-size:14px;color:#888;margin-bottom:32px}
+.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
+.col-tag{font-size:11px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
+.col-title{font-size:15px;font-weight:600;margin-bottom:6px}
+.col-text{font-size:13px;color:#888;line-height:1.7}
+.col-link{font-size:13px;color:#3b82f6;text-decoration:none;margin-top:10px;display:inline-block}
+.col-link:hover{text-decoration:underline}
+.list{list-style:none}
+.li{padding:14px 0;border-top:1px solid #eee}
+.li:last-child{border-bottom:1px solid #eee}
+.li a{text-decoration:none;color:inherit;display:block}
+.li-meta{font-size:11px;color:#999;margin-bottom:3px}
+.li-title{font-size:15px;font-weight:600}
+.li-desc{font-size:13px;color:#888;margin-top:3px}
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:48px}
+.quote{background:#f9f9f9;border-left:3px solid #3b82f6;padding:20px 24px;margin:32px 0;font-size:14px;color:#444;line-height:1.8}
+footer{padding:40px 0;border-top:1px solid #eee}
+.ft-inner{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
+.ft-copy{color:#ccc;font-size:13px}
+.ft-links{display:flex;gap:20px}
+.ft-links a{color:#999;text-decoration:none;font-size:13px}
+.ft-links a:hover{color:#333}
+@media(max-width:768px){
+.metrics,.cols3{grid-template-columns:1fr}
+.metric{border-right:none;border-bottom:1px solid #eee}
+.metric:last-child{border-bottom:none}
+.cols2{grid-template-columns:1fr}
+.hero h1{font-size:24px}
+.ft-inner{flex-direction:column;gap:16px;text-align:center}
+}
+</style>
+</head>
+<body>
+<nav class="navbar"><div class="nav-inner">
+<div class="nav-logo">华杉的技术博客</div>
+<div class="nav-links">
+<a href="#learning">学习笔记</a>
+<a href="#topics">技术领域</a>
+<a href="#experiments">实验项目</a>
+</div>
+</div></nav>
+
+<div class="wrap">
+<div class="hero">
+<p>从理论学习到实践验证，探索大模型推理加速技术的前沿领域</p>
+</div>
+</div>
+
+<div class="carousel" id="carousel">
+<button class="carousel-arrow prev" onclick="moveCarousel(-1)">&lsaquo;</button>
+<button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
+<div class="carousel-track" id="carouselTrack">
+<div class="carousel-card">
+<div class="cc-tag">基础理论</div>
+<div class="cc-title">Transformer推理全景：策略对比与内部原理</div>
+<div class="cc-desc">深入理解串行推理与并行验证的区别，Token到Logits矩阵的完整推导过程</div>
+<a class="cc-link" href="学习html/串行推理并行验证.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-tag">对比分析</div>
+<div class="cc-title">GPU vs NPU 架构对比</div>
+<div class="cc-desc">GPU与NPU在AI推理场景下的性能、能效、适用场景全面对比</div>
+<a class="cc-link" href="学习html/GPU vs NPU · 架构对比.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-tag">加速技术</div>
+<div class="cc-title">投机解码：推理加速技术</div>
+<div class="cc-desc">投机解码的原理、实现方式及在大模型推理中的加速效果</div>
+<a class="cc-link" href="学习html/投机解码-推理加速_v0.2.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-tag">实战工具</div>
+<div class="cc-title">OpenAI Triton 从介绍到模型实战</div>
+<div class="cc-desc">Triton编程模型、核心概念及完整的模型实战案例</div>
+<a class="cc-link" href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-tag">硬件基础</div>
+<div class="cc-title">GPU架构详解</div>
+<div class="cc-desc">GPU硬件架构、计算单元、内存层次结构及对AI推理的影响</div>
+<a class="cc-link" href="学习html/GPU架构.html">阅读 &rarr;</a>
+</div>
+</div>
+<div class="carousel-dots" id="carouselDots"></div>
+</div>
+
+<div class="wrap">
+<div class="metrics">
+<div class="metric"><div class="mv">11</div><div class="ml">学习笔记</div></div>
+<div class="metric"><div class="mv">5</div><div class="ml">技术领域</div></div>
+<div class="metric"><div class="mv">3</div><div class="ml">加速技术</div></div>
+<div class="metric"><div class="mv">2</div><div class="ml">实验类型</div></div>
+</div>
+
+<div class="sec" id="topics">
+<div class="sec-title">技术领域</div>
+<div class="sec-desc">覆盖AI推理优化的核心技术方向</div>
+<div class="cols3">
+<div>
+<div class="col-tag">Hardware</div>
+<div class="col-title">GPU与NPU架构</div>
+<div class="col-text">深入分析GPU/NPU的计算单元、内存层次结构，理解硬件对推理性能的影响</div>
+<a class="col-link" href="学习html/GPU架构.html">GPU架构 &rarr;</a>
+<a class="col-link" href="学习html/NPU架构.html" style="margin-left:12px">NPU架构 &rarr;</a>
+</div>
+<div>
+<div class="col-tag">Acceleration</div>
+<div class="col-title">推理加速技术</div>
+<div class="col-text">投机解码、动态草稿树等前沿加速方案，显著提升推理吞吐量</div>
+<a class="col-link" href="学习html/投机解码-推理加速_v0.2.html">投机解码 &rarr;</a>
+<a class="col-link" href="学习html/EAGLE&#8209;2 动态草稿树.html" style="margin-left:12px">EAGLE-2 &rarr;</a>
+</div>
+<div>
+<div class="col-tag">Optimization</div>
+<div class="col-title">算子与编程</div>
+<div class="col-text">融合算子优化、Triton编程实战，从底层提升推理效率</div>
+<a class="col-link" href="学习html/融合算子.html">融合算子 &rarr;</a>
+<a class="col-link" href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html" style="margin-left:12px">Triton &rarr;</a>
+</div>
+</div>
+</div>
+
+<div class="sec" id="learning">
+<div class="sec-title">学习笔记</div>
+<div class="sec-desc">系统化的AI推理优化技术学习记录</div>
+<ul class="list">
+<li class="li"><a href="学习html/串行推理并行验证.html">
+<div class="li-meta">基础理论</div>
+<div class="li-title">Transformer推理全景：策略对比与内部原理</div>
+<div class="li-desc">串行推理与并行验证的区别，Token到Logits矩阵的完整推导</div>
+</a></li>
+<li class="li"><a href="学习html/多头注意力_v0.2_精读版.html">
+<div class="li-meta">核心机制</div>
+<div class="li-title">多头注意力机制精读</div>
+<div class="li-desc">多头注意力的数学原理、计算流程及在Transformer中的关键作用</div>
+</a></li>
+<li class="li"><a href="学习html/GPU架构.html">
+<div class="li-meta">硬件基础</div>
+<div class="li-title">GPU架构详解</div>
+<div class="li-desc">GPU硬件架构、计算单元、内存层次结构及对AI推理的影响</div>
+</a></li>
+<li class="li"><a href="学习html/NPU架构.html">
+<div class="li-meta">硬件基础</div>
+<div class="li-title">NPU架构详解</div>
+<div class="li-desc">神经网络处理单元的设计理念、架构特点及在AI推理中的优势</div>
+</a></li>
+<li class="li"><a href="学习html/GPU vs NPU · 架构对比.html">
+<div class="li-meta">对比分析</div>
+<div class="li-title">GPU vs NPU 架构对比</div>
+<div class="li-desc">GPU与NPU在AI推理场景下的性能、能效、适用场景全面对比</div>
+</a></li>
+<li class="li"><a href="学习html/gguf.html">
+<div class="li-meta">模型格式</div>
+<div class="li-title">GGUF格式详解</div>
+<div class="li-desc">GGUF模型格式的结构、优势及在本地推理中的应用</div>
+</a></li>
+<li class="li"><a href="学习html/投机解码-推理加速_v0.2.html">
+<div class="li-meta">加速技术</div>
+<div class="li-title">投机解码：推理加速技术</div>
+<div class="li-desc">投机解码的原理、实现方式及在大模型推理中的加速效果</div>
+</a></li>
+<li class="li"><a href="学习html/EAGLE&#8209;2 动态草稿树.html">
+<div class="li-meta">加速技术</div>
+<div class="li-title">EAGLE-2 动态草稿树</div>
+<div class="li-desc">EAGLE-2算法的动态草稿树生成机制及推理加速原理</div>
+</a></li>
+<li class="li"><a href="学习html/融合算子.html">
+<div class="li-meta">优化技术</div>
+<div class="li-title">融合算子技术</div>
+<div class="li-desc">算子融合的原理、实现方法及对推理性能的提升效果</div>
+</a></li>
+<li class="li"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html">
+<div class="li-meta">实战工具</div>
+<div class="li-title">OpenAI Triton 从介绍到模型实战</div>
+<div class="li-desc">Triton编程模型、核心概念及完整的模型实战案例</div>
+</a></li>
+<li class="li"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版v2）.html">
+<div class="li-meta">实战工具</div>
+<div class="li-title">OpenAI Triton 从介绍到模型实战（v2）</div>
+<div class="li-desc">Triton进阶内容，更多实战案例和性能优化技巧</div>
+</a></li>
+</ul>
+</div>
+
+<div class="sec" id="experiments">
+<div class="sec-title">实验项目</div>
+<div class="sec-desc">复现前沿论文效果，在此基础上探索更优的推理优化方案</div>
+<div class="cols2">
+<div>
+<div class="sec-title" style="font-size:16px;margin-bottom:16px">复现</div>
+<ul class="list">
+<li class="li"><a href="#">
+<div class="li-title">待添加：论文效果复现</div>
+<div class="li-desc">复现论文或开源项目中的推理效果，验证理论分析的正确性</div>
+</a></li>
+</ul>
+</div>
+<div>
+<div class="sec-title" style="font-size:16px;margin-bottom:16px">优化</div>
+<ul class="list">
+<li class="li"><a href="#">
+<div class="li-title">待添加：推理性能优化</div>
+<div class="li-desc">在现有基础上进行优化，追求更快的推理速度和更低的延迟</div>
+</a></li>
+</ul>
+</div>
+</div>
+</div>
+
+<div class="quote">
+推理优化的核心在于：用更少的计算资源，更快地获得更好的结果。从硬件架构理解计算本质，从算法设计突破性能瓶颈，从工程实践落地优化方案。
+</div>
+
+</div>
+
+<footer><div class="ft-inner">
+<div class="ft-copy">2026 华杉的技术博客</div>
+<div class="ft-links">
+<a href="#learning">学习笔记</a>
+<a href="#topics">技术领域</a>
+<a href="#experiments">实验项目</a>
+</div>
+</div></footer>
+
+<script>
+var carouselIndex=0;
+var track=document.getElementById('carouselTrack');
+var cards=track.children;
+var maxIndex=cards.length-1;
+var dots=document.getElementById('carouselDots');
+var autoTimer;
+function buildDots(){for(var i=0;i<=maxIndex;i++){var d=document.createElement('button');d.className='carousel-dot'+(i===0?' active':'');d.setAttribute('data-i',i);d.onclick=function(){goToCarousel(+this.getAttribute('data-i'))};dots.appendChild(d)}}
+function updateDots(){var ds=dots.children;for(var i=0;i<ds.length;i++)ds[i].className='carousel-dot'+(i===carouselIndex?' active':'')}
+function goToCarousel(i){carouselIndex=i;track.style.transform='translateX(-'+(carouselIndex*100)+'%)';updateDots()}
+function moveCarousel(dir){var next=carouselIndex+dir;if(next<0)next=maxIndex;if(next>maxIndex)next=0;goToCarousel(next)}
+function startAuto(){autoTimer=setInterval(function(){moveCarousel(1)},4000)}
+function stopAuto(){clearInterval(autoTimer)}
+buildDots();startAuto();
+document.getElementById('carousel').addEventListener('mouseenter',stopAuto);
+document.getElementById('carousel').addEventListener('mouseleave',startAuto);
+</script>
+</body>
+</html>

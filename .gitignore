@@ -1,0 +1,14 @@
+tests/
+docs/
+*.pyc
+*.py
+__pycache__/
+.DS_Store
+Thumbs.db
+*.zip
+models/
+功能代码/
+开源项目/
+学习pdf/
+layout.png
+send_email.py
