@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vLLM-Ascend 源码解读 - 华杉的技术博客</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:800px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.5px}
+h2{font-size:19px;font-weight:700;margin:36px 0 12px;padding-top:20px;border-top:1px solid #eee}
+p{font-size:15px;color:#444;margin-bottom:12px}
+ul{margin:0 0 12px 22px}
+li{font-size:14px;color:#444;margin-bottom:6px}
+pre{background:#f7f8fa;border-radius:8px;padding:18px 20px;font-size:13px;line-height:1.7;overflow-x:auto;margin:16px 0;font-family:Consolas,Menlo,monospace;color:#333}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+.note{background:#eef4ff;border-left:3px solid #3b82f6;padding:14px 18px;font-size:14px;color:#444;margin:16px 0;border-radius:0 6px 6px 0}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:13px}
+th,td{border:1px solid #eee;padding:8px 12px;text-align:left;vertical-align:top}
+th{background:#f9f9f9;font-weight:600}
+td code{white-space:nowrap}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">vLLM 源码</span>2026-09-09 发布</div>
+<h1>vLLM-Ascend 源码解读</h1>
+
+<p><a href="https://github.com/vllm-project/vllm-ascend" target="_blank" rel="nofollow">vLLM-Ascend</a> 是 vLLM 社区官方维护的昇腾 NPU 硬件插件，遵循 <a href="https://github.com/vllm-project/vllm/issues/11162" target="_blank" rel="nofollow">RFC: Hardware pluggable</a> 的硬件可插拔设计，让 Transformer、MoE、Embedding、多模态等主流模型无需修改即可运行在昇腾 NPU 上。本文基于 <code>v0.23.0</code> 源码梳理其整体架构与核心模块。</p>
+
+<h2>一、项目定位</h2>
+<p>vLLM 本体通过 Platform 抽象层屏蔽硬件差异，vllm-ascend 作为独立插件在运行时注册 <code>ascend</code> 平台，接管设备管理、算子执行、通信与图引擎等能力。这种插件化设计的好处是：</p>
+<ul>
+<li>vLLM 主仓库保持硬件无关，昇腾适配代码独立演进、独立发版；</li>
+<li>版本号与 vLLM 对齐（如 v0.23.0 对应 vLLM v0.23.x），升级节奏一致；</li>
+<li>对上游的侵入性修改收敛到 <code>patch/</code> 目录，便于跟随上游重构。</li>
+</ul>
+
+<h2>二、整体目录结构</h2>
+<pre>vllm_ascend/
+├── platform/            # 平台注册与设备能力声明
+├── worker/              # Worker 与 ModelRunner（v1 / v2 两套）
+│   └── v2/              #   新版执行路径：aclgraph、采样、投机解码
+├── model_executor/      # offloader 卸载器、kernel 预热
+├── model_loader/        # 权重加载：netloader 弹性加载、rfork
+├── ops/                 # 自定义算子 + Triton kernel 库
+│   ├── fused_moe/       #   MoE 融合算子（dispatcher、router、eplb）
+│   ├── triton/          #   Triton kernels：rms_norm、rope、fla、kda、mamba…
+│   └── …                #   mla、gdn、dsa、activation、layernorm…
+├── quantization/        # 量化方法：w8a8 / w4a8 / w4a4 / wna16 / kv_cache
+├── sample/              # 采样器与 rejection sampler
+├── spec_decode/         # 投机解码 proposer：eagle / mtp / ngram / dflash / dspark
+├── eplb/                # MoE 专家负载均衡策略（EPLB、FlashLB 等）
+├── patch/               # 对上游 vLLM 的适配补丁（platform / worker）
+├── _310p/               # Ascend 310P 专用实现分支
+├── xlite/               # 轻量化执行路径
+├── observability/       # 可观测性：metrics 导出
+└── profiler/            # torch_npu profiler 集成</pre>
+
+<h2>三、核心模块解读</h2>
+
+<h3 style="font-size:16px;margin:20px 0 8px">1. Worker 与 ModelRunner</h3>
+<p><code>worker/</code> 是推理执行的核心。v1 路径（<code>model_runner_v1.py</code>）负责稳定版调度；v2 路径（<code>worker/v2/</code>）是重构后的新版执行器，拆分出 <code>model_states</code>（模型状态机）、<code>sample/</code>（top-k/top-p、penalties、logprob）、<code>spec_decode/</code>（各投机解码 speculator 的 aclgraph 实现）等子模块。<code>aclgraph_utils.py</code> 封装了昇腾 ACL Graph 等价于 CUDA Graph 的捕获与重放逻辑。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">2. Triton 算子库（ops/triton/）</h3>
+<p>这是源码中最值得精读的部分，大量 kernel 用 Triton 编写以适配昇腾的 Triton 后端：</p>
+<ul>
+<li><b>基础算子</b>：<code>rms_norm</code>、<code>rope</code>、<code>activation</code>（swiglu_quant 等）、<code>layernorm_gated</code>；</li>
+<li><b>线性注意力族</b>：<code>fla/</code>（chunk_delta_h、chunk_o、l2norm 等，服务于 GDN/线性注意力模型）、<code>kda/</code>（Kendall Delta Attention 的 chunk 实现）、<code>mamba/</code>（causal_conv1d、lightning_attn）；</li>
+<li><b>投机解码辅助</b>：<code>spec_decode/ngram</code>、<code>reject_sample</code>、<code>penalty</code>；</li>
+<li><b>确定性保障</b>：<code>batch_invariant/</code>（matmul、softmax 等 batch 无关实现，保证数值一致性）。</li>
+</ul>
+<p>每个 kernel 目录配有 <code>docs/*.md</code> 说明设计动机与实现细节，如 <code>docs/rms_norm.md</code>、<code>docs/rope.md</code>，是学习 Triton on Ascend 的第一手材料。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">3. MoE 与 EPLB</h3>
+<p><code>ops/fused_moe/</code> 实现了完整的 MoE 执行链路：router（fused_topk / grouped_topk）、token dispatcher、shared/routed experts 与 finalize。<code>eplb/</code> 提供专家负载均衡策略族：<code>policy_default_eplb</code>、<code>policy_flashlb</code>、<code>policy_swift_balancer</code> 等，由 <code>policy_factory</code> 统一创建，可在大规模 EP 部署下动态重排专家。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">4. 量化体系（quantization/）</h3>
+<p>按 <code>methods/</code> 下权重×激活位宽组织：</p>
+<table>
+<tr><th>目录</th><th>量化方案</th><th>说明</th></tr>
+<tr><td><code>w8a8/</code></td><td>fp8_block、w8a8_dynamic/static、w8a8_mxfp8、w8a8_pdmix</td><td>主流 W8A8 方案，支持 ModelSlim、compressed-tensors 配置</td></tr>
+<tr><td><code>w4a8/</code>、<code>w4a4/</code></td><td>w4a8、mxfp4、flatquant、laos_dynamic</td><td>更低比特的权重激活联合量化</td></tr>
+<tr><td><code>wna16/</code></td><td>w4a16、w8a16</td><td>仅权重量化</td></tr>
+<tr><td><code>kv_cache/</code></td><td>kv_c8</td><td>KV Cache INT8 量化</td></tr>
+</table>
+<p><code>configs/</code> 中的 <code>modelslim_config</code>（华为 ModelSlim 工具链）、<code>fp8_config</code>、<code>compressed_tensors_config</code> 负责解析 HF 模型自带的量化配置。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">5. 投机解码（spec_decode/）</h3>
+<p>proposer 体系覆盖了当前主流方案：<code>eagle_proposer</code>（EAGLE/EAGLE-3，含 vwn 变体）、<code>dspark_proposer</code>、<code>dflash_proposer / dflash2_proposer</code>、<code>medusa_proposer</code>、<code>ngram_proposer</code>（含 NPU 版）、<code>draft_proposer</code>（标准 MTP 草稿模型）、<code>suffix_proposer</code>。配套 <code>models/</code> 下有 deepseek_v4、kimi_k3、qwen3、minimax_m3 等模型的 MTP/draft 权重适配，验证层则由 <code>sample/rejection_sampler.py</code> 与 v2 的 autoregressive speculator 承担。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">6. Patch 适配层</h3>
+<p><code>patch/platform/</code> 与 <code>patch/worker/</code> 收纳对上游 vLLM 的运行时补丁：KV Cache 管理、分布式（HCCL PG 注册）、CUDA Graph、多进程 Executor、投机配置等。<code>patch_v2/</code> 对应新版执行路径。这一层的设计原则是"能不 patch 就不 patch"，随上游版本演进而收敛。</p>
+
+<h3 style="font-size:16px;margin:20px 0 8px">7. 其他值得关注的模块</h3>
+<ul>
+<li><code>model_loader/netloader/</code>：跨节点弹性权重加载（elastic_load），支持大模型分片并行拉取；<code>rfork/</code> 提供基于 seed 同步的 fork 加速方案；</li>
+<li><code>model_executor/offloader/</code>：CPU-NPU 权重/状态卸载与预取；<code>warmup/</code> 在启动期预热 Triton kernel 避免首 token 抖动；</li>
+<li><code>_310p/</code>：310P 这类较早硬件的专用 attention/MoE/量化实现；</li>
+<li><code>xlite/</code>：面向极致启动速度的轻量执行路径。</li>
+</ul>
+
+<h2>四、建议的阅读路径</h2>
+<ul>
+<li>第一步：从 <code>platform/</code> 入手，理解插件如何被 vLLM 发现与注册；</li>
+<li>第二步：读 <code>worker/model_runner_v1.py</code>，串起一次完整推理的生命周期；</li>
+<li>第三步：挑 <code>ops/triton/docs/rms_norm.md</code> + 对应 kernel 精读，掌握 Triton on Ascend 的写法；</li>
+<li>第四步：按兴趣深入 <code>fused_moe + eplb</code>（MoE 部署）或 <code>spec_decode</code>（投机解码）；</li>
+<li>第五步：对照 <code>docs/source/</code> 官方文档与 <code>benchmarks/</code> 跑通端到端压测。</li>
+</ul>
+
+<div class="note">阅读提示：v2 执行路径（worker/v2）是未来的主力方向，新特性优先落在 v2；排查线上问题时 v1/v2 的行为差异值得留意。</div>
+
+<p style="margin-top:32px;font-size:13px;color:#999">源码版本：vllm-ascend v0.23.0（main 分支） · 仅供学习交流</p>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
