@@ -34,7 +34,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .carousel-dot{width:8px;height:8px;border-radius:50%;background:#ddd;cursor:pointer;border:none}
 .carousel-dot.active{background:#3b82f6}
 
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #eee}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #eee}
 .metric{padding:28px 0;text-align:center;border-right:1px solid #eee}
 .metric:last-child{border-right:none}
 .mv{font-size:28px;font-weight:700}
@@ -91,6 +91,8 @@ footer{padding:40px 0;border-top:1px solid #eee}
 .li{flex-direction:column;gap:2px}
 }
 </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
 </head>
 <body>
 <nav class="navbar"><div class="nav-inner">
@@ -142,28 +144,28 @@ footer{padding:40px 0;border-top:1px solid #eee}
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">21</div><div class="ml">学习笔记</div></div>
-<div class="metric"><div class="mv">6</div><div class="ml">技术专题</div></div>
-<div class="metric"><div class="mv">1</div><div class="ml">实验项目</div></div>
-<div class="metric"><div class="mv dim">待完善</div><div class="ml">自研模型</div></div>
+<div class="metric"><div class="mv">22</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">1</div><div class="ml">实验专区</div></div>
+<div class="metric"><div class="mv dim">敬请期待</div><div class="ml">模型专区</div></div>
 </div>
 
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">21 篇 · 6 个专题</div>
+<div class="sec-badge">22 篇 · 6 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">21</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">22</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">4</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">1</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">2</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">4</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
 <button class="chip" data-topic="theory">基础理论<span class="count">5</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="vllm" data-ts="20260909"><a href="code-docs/index.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">vLLM-Ascend 源码导航<span class="li-tag">vLLM 源码</span></span><span class="li-desc">vLLM-Ascend 全量源码文档站：架构总览、模块详解与源码查看器</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20260909"><a href="学习html/vLLM-Ascend 源码解读.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">vLLM-Ascend 源码解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">昇腾插件整体架构：平台注册、Worker、Triton 算子、量化与投机解码</span></span></a></li>
 <li class="li" data-topic="accel" data-ts="20260907"><a href="学习html/PD分离组网介绍.html"><span class="li-date">2026-09-07</span><span class="li-main"><span class="li-title">PD分离组网介绍<span class="li-tag">推理加速</span></span><span class="li-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</span></span></a></li>
 <li class="li" data-topic="theory" data-ts="20260831"><a href="学习html/AI 的概率魔法 - Logits · Softmax · Temperature.html"><span class="li-date">2026-08-31</span><span class="li-main"><span class="li-title">AI 的概率魔法：Logits · Softmax · Temperature<span class="li-tag">基础理论</span></span><span class="li-desc">从 logits 到采样概率的完整链路，理解温度参数对生成的影响</span></span></a></li>
