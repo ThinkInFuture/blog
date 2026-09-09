@@ -15,14 +15,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .nav-links a:hover{color:#111}
 .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
 .hero{padding:40px 0 32px;border-bottom:1px solid #eee}
-.hero-tag{font-size:12px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px}
 .hero h1{font-size:32px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px}
-.hero p{font-size:15px;color:#666;max-width:480px}
+.hero p{font-size:15px;color:#666;max-width:520px}
 
 .carousel{padding:40px 24px;border-bottom:1px solid #eee;position:relative;overflow:hidden;max-width:1000px;margin:0 auto}
 .carousel-track{display:flex;transition:transform 0.5s ease}
 .carousel-card{min-width:100%;background:#f7f8fa;border-radius:8px;padding:60px 40px;flex-shrink:0}
-.cc-tag{font-size:11px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px}
+.cc-meta{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.cc-tag{font-size:11px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:0.5px}
+.cc-date{font-size:11px;color:#aaa}
 .cc-title{font-size:20px;font-weight:600;margin-bottom:8px}
 .cc-desc{font-size:14px;color:#888;line-height:1.8;margin-bottom:16px;max-width:600px}
 .cc-link{font-size:14px;color:#3b82f6;text-decoration:none}
@@ -39,25 +40,41 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .metric{padding:28px 0;text-align:center;border-right:1px solid #eee}
 .metric:last-child{border-right:none}
 .mv{font-size:28px;font-weight:700}
+.mv.dim{color:#ccc;font-size:20px;padding-top:4px}
 .ml{font-size:12px;color:#999;margin-top:2px}
 .sec{padding:56px 0;border-bottom:1px solid #eee}
-.sec:last-child{border-bottom:none}
-.sec-title{font-size:22px;font-weight:700;margin-bottom:6px}
-.sec-desc{font-size:14px;color:#888;margin-bottom:32px}
-.cols3{display:grid;grid-template-columns:repeat(3,1fr);gap:40px}
-.col-tag{font-size:11px;color:#3b82f6;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px}
-.col-title{font-size:15px;font-weight:600;margin-bottom:6px}
-.col-text{font-size:13px;color:#888;line-height:1.7}
-.col-link{font-size:13px;color:#3b82f6;text-decoration:none;margin-top:10px;display:inline-block}
-.col-link:hover{text-decoration:underline}
+.sec:last-of-type{border-bottom:none}
+.sec-head{display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:8px}
+.sec-title{font-size:22px;font-weight:700}
+.sec-badge{font-size:11px;color:#fff;background:#3b82f6;border-radius:10px;padding:2px 10px;font-weight:600}
+.sec-badge.todo{background:#ddd;color:#888}
+.sec-desc{font-size:14px;color:#888;margin-bottom:28px}
+
+.zone-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px}
+.chip{font-size:13px;color:#666;background:#f4f5f7;border:none;border-radius:16px;padding:6px 16px;cursor:pointer}
+.chip:hover{background:#e8eaee}
+.chip.active{background:#111;color:#fff}
+.count{font-size:11px;opacity:.65;margin-left:4px}
+
 .list{list-style:none}
-.li{padding:14px 0;border-top:1px solid #eee}
+.li{padding:14px 0;border-top:1px solid #eee;display:flex;gap:18px;align-items:baseline}
 .li:last-child{border-bottom:1px solid #eee}
+.li-date{font-size:12px;color:#b0b0b0;font-variant-numeric:tabular-nums;white-space:nowrap;min-width:76px}
+.li-main{flex:1}
 .li a{text-decoration:none;color:inherit;display:block}
-.li-meta{font-size:11px;color:#999;margin-bottom:3px}
 .li-title{font-size:15px;font-weight:600}
+.li a:hover .li-title{color:#3b82f6}
+.li-tag{font-size:11px;color:#3b82f6;background:#eef4ff;border-radius:4px;padding:1px 8px;margin-left:8px;vertical-align:2px;font-weight:600}
 .li-desc{font-size:13px;color:#888;margin-top:3px}
-.cols2{display:grid;grid-template-columns:1fr 1fr;gap:48px}
+.more-btn{display:block;width:100%;text-align:center;margin-top:20px;padding:10px;border:1px solid #e5e5e5;border-radius:6px;background:#fff;color:#666;font-size:13px;cursor:pointer}
+.more-btn:hover{border-color:#999;color:#111}
+
+.cols2{display:grid;grid-template-columns:1fr 1fr;gap:32px}
+.pcard{background:#fafbfc;border:1px solid #eee;border-radius:8px;padding:24px}
+.pcard-tag{font-size:11px;color:#999;font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;display:flex;justify-content:space-between}
+.todo-tag{font-size:10px;color:#b45309;background:#fef3c7;border-radius:8px;padding:1px 8px;text-transform:none;letter-spacing:0}
+.pcard-title{font-size:15px;font-weight:600;margin-bottom:6px;color:#444}
+.pcard-text{font-size:13px;color:#999;line-height:1.7}
 .quote{background:#f9f9f9;border-left:3px solid #3b82f6;padding:20px 24px;margin:32px 0;font-size:14px;color:#444;line-height:1.8}
 footer{padding:40px 0;border-top:1px solid #eee}
 .ft-inner{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
@@ -69,12 +86,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 .ft-links a{color:#999;text-decoration:none;font-size:13px}
 .ft-links a:hover{color:#333}
 @media(max-width:768px){
-.metrics,.cols3{grid-template-columns:1fr}
+.metrics{grid-template-columns:repeat(2,1fr)}
 .metric{border-right:none;border-bottom:1px solid #eee}
-.metric:last-child{border-bottom:none}
 .cols2{grid-template-columns:1fr}
 .hero h1{font-size:24px}
 .ft-inner{flex-direction:column;gap:16px;text-align:center}
+.li{flex-direction:column;gap:2px}
 }
 </style>
 </head>
@@ -82,14 +99,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <nav class="navbar"><div class="nav-inner">
 <div class="nav-logo">华杉的技术博客</div>
 <div class="nav-links">
-<a href="#learning">学习笔记</a>
-<a href="#topics">技术领域</a>
-<a href="#experiments">实验项目</a>
+<a href="#learning">学习专区</a>
+<a href="#experiments">实验专区</a>
+<a href="#models">模型专区</a>
 </div>
 </div></nav>
 
 <div class="wrap">
 <div class="hero">
+<h1>AI推理优化学习笔记</h1>
 <p>从理论学习到实践验证，探索大模型推理加速技术的前沿领域</p>
 </div>
 </div>
@@ -99,34 +117,34 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-tag">基础理论</div>
-<div class="cc-title">Transformer推理全景：策略对比与内部原理</div>
-<div class="cc-desc">深入理解串行推理与并行验证的区别，Token到Logits矩阵的完整推导过程</div>
-<a class="cc-link" href="学习html/串行推理并行验证.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-07</span></div>
+<div class="cc-title">PD分离组网介绍</div>
+<div class="cc-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</div>
+<a class="cc-link" href="学习html/PD分离组网介绍.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
-<div class="cc-tag">对比分析</div>
-<div class="cc-title">GPU vs NPU 架构对比</div>
-<div class="cc-desc">GPU与NPU在AI推理场景下的性能、能效、适用场景全面对比</div>
-<a class="cc-link" href="学习html/GPU vs NPU · 架构对比.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-09-09</span></div>
+<div class="cc-title">vLLM-Ascend 源码解读</div>
+<div class="cc-desc">vLLM 昇腾插件的整体架构：平台注册、Worker、Triton 算子、量化与投机解码</div>
+<a class="cc-link" href="学习html/vLLM-Ascend 源码解读.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
-<div class="cc-tag">加速技术</div>
-<div class="cc-title">投机解码：推理加速技术</div>
-<div class="cc-desc">投机解码的原理、实现方式及在大模型推理中的加速效果</div>
-<a class="cc-link" href="学习html/投机解码-推理加速_v0.2.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-08-31</span></div>
+<div class="cc-title">AI 的概率魔法：Logits · Softmax · Temperature</div>
+<div class="cc-desc">从 logits 到采样概率的完整链路，理解温度参数对生成多样性的影响</div>
+<a class="cc-link" href="学习html/AI 的概率魔法 - Logits · Softmax · Temperature.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
-<div class="cc-tag">实战工具</div>
-<div class="cc-title">OpenAI Triton 从介绍到模型实战</div>
-<div class="cc-desc">Triton编程模型、核心概念及完整的模型实战案例</div>
-<a class="cc-link" href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">量化技术</span><span class="cc-date">2026-08-29</span></div>
+<div class="cc-title">自研动态混合精度量化</div>
+<div class="cc-desc">动态混合精度量化方案的设计思路与工程实践</div>
+<a class="cc-link" href="学习html/自研动态混合精度量化.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
-<div class="cc-tag">硬件基础</div>
-<div class="cc-title">GPU架构详解</div>
-<div class="cc-desc">GPU硬件架构、计算单元、内存层次结构及对AI推理的影响</div>
-<a class="cc-link" href="学习html/GPU架构.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">模型架构</span><span class="cc-date">2026-08-28</span></div>
+<div class="cc-title">Qwen3.8 MTP · 完整架构解析</div>
+<div class="cc-desc">Qwen3.8 多Token预测（MTP）模块的完整架构与实现细节</div>
+<a class="cc-link" href="学习html/Qwen3.8 MTP · 完整架构解析.html">阅读 &rarr;</a>
 </div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
@@ -134,123 +152,91 @@ footer{padding:40px 0;border-top:1px solid #eee}
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">11</div><div class="ml">学习笔记</div></div>
-<div class="metric"><div class="mv">5</div><div class="ml">技术领域</div></div>
-<div class="metric"><div class="mv">3</div><div class="ml">加速技术</div></div>
-<div class="metric"><div class="mv">2</div><div class="ml">实验类型</div></div>
-</div>
-
-<div class="sec" id="topics">
-<div class="sec-title">技术领域</div>
-<div class="sec-desc">覆盖AI推理优化的核心技术方向</div>
-<div class="cols3">
-<div>
-<div class="col-tag">Hardware</div>
-<div class="col-title">GPU与NPU架构</div>
-<div class="col-text">深入分析GPU/NPU的计算单元、内存层次结构，理解硬件对推理性能的影响</div>
-<a class="col-link" href="学习html/GPU架构.html">GPU架构 &rarr;</a>
-<a class="col-link" href="学习html/NPU架构.html" style="margin-left:12px">NPU架构 &rarr;</a>
-</div>
-<div>
-<div class="col-tag">Acceleration</div>
-<div class="col-title">推理加速技术</div>
-<div class="col-text">投机解码、动态草稿树等前沿加速方案，显著提升推理吞吐量</div>
-<a class="col-link" href="学习html/投机解码-推理加速_v0.2.html">投机解码 &rarr;</a>
-<a class="col-link" href="学习html/EAGLE&#8209;2 动态草稿树.html" style="margin-left:12px">EAGLE-2 &rarr;</a>
-</div>
-<div>
-<div class="col-tag">Optimization</div>
-<div class="col-title">算子与编程</div>
-<div class="col-text">融合算子优化、Triton编程实战，从底层提升推理效率</div>
-<a class="col-link" href="学习html/融合算子.html">融合算子 &rarr;</a>
-<a class="col-link" href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html" style="margin-left:12px">Triton &rarr;</a>
-</div>
-</div>
+<div class="metric"><div class="mv">21</div><div class="ml">学习笔记</div></div>
+<div class="metric"><div class="mv">6</div><div class="ml">技术专题</div></div>
+<div class="metric"><div class="mv">1</div><div class="ml">实验项目</div></div>
+<div class="metric"><div class="mv dim">待完善</div><div class="ml">自研模型</div></div>
 </div>
 
 <div class="sec" id="learning">
-<div class="sec-title">学习笔记</div>
-<div class="sec-desc">系统化的AI推理优化技术学习记录</div>
-<ul class="list">
-<li class="li"><a href="学习html/串行推理并行验证.html">
-<div class="li-meta">基础理论</div>
-<div class="li-title">Transformer推理全景：策略对比与内部原理</div>
-<div class="li-desc">串行推理与并行验证的区别，Token到Logits矩阵的完整推导</div>
-</a></li>
-<li class="li"><a href="学习html/多头注意力_v0.2_精读版.html">
-<div class="li-meta">核心机制</div>
-<div class="li-title">多头注意力机制精读</div>
-<div class="li-desc">多头注意力的数学原理、计算流程及在Transformer中的关键作用</div>
-</a></li>
-<li class="li"><a href="学习html/GPU架构.html">
-<div class="li-meta">硬件基础</div>
-<div class="li-title">GPU架构详解</div>
-<div class="li-desc">GPU硬件架构、计算单元、内存层次结构及对AI推理的影响</div>
-</a></li>
-<li class="li"><a href="学习html/NPU架构.html">
-<div class="li-meta">硬件基础</div>
-<div class="li-title">NPU架构详解</div>
-<div class="li-desc">神经网络处理单元的设计理念、架构特点及在AI推理中的优势</div>
-</a></li>
-<li class="li"><a href="学习html/GPU vs NPU · 架构对比.html">
-<div class="li-meta">对比分析</div>
-<div class="li-title">GPU vs NPU 架构对比</div>
-<div class="li-desc">GPU与NPU在AI推理场景下的性能、能效、适用场景全面对比</div>
-</a></li>
-<li class="li"><a href="学习html/gguf.html">
-<div class="li-meta">模型格式</div>
-<div class="li-title">GGUF格式详解</div>
-<div class="li-desc">GGUF模型格式的结构、优势及在本地推理中的应用</div>
-</a></li>
-<li class="li"><a href="学习html/投机解码-推理加速_v0.2.html">
-<div class="li-meta">加速技术</div>
-<div class="li-title">投机解码：推理加速技术</div>
-<div class="li-desc">投机解码的原理、实现方式及在大模型推理中的加速效果</div>
-</a></li>
-<li class="li"><a href="学习html/EAGLE&#8209;2 动态草稿树.html">
-<div class="li-meta">加速技术</div>
-<div class="li-title">EAGLE-2 动态草稿树</div>
-<div class="li-desc">EAGLE-2算法的动态草稿树生成机制及推理加速原理</div>
-</a></li>
-<li class="li"><a href="学习html/融合算子.html">
-<div class="li-meta">优化技术</div>
-<div class="li-title">融合算子技术</div>
-<div class="li-desc">算子融合的原理、实现方法及对推理性能的提升效果</div>
-</a></li>
-<li class="li"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html">
-<div class="li-meta">实战工具</div>
-<div class="li-title">OpenAI Triton 从介绍到模型实战</div>
-<div class="li-desc">Triton编程模型、核心概念及完整的模型实战案例</div>
-</a></li>
-<li class="li"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版v2）.html">
-<div class="li-meta">实战工具</div>
-<div class="li-title">OpenAI Triton 从介绍到模型实战（v2）</div>
-<div class="li-desc">Triton进阶内容，更多实战案例和性能优化技巧</div>
-</a></li>
+<div class="sec-head">
+<div class="sec-title">学习专区</div>
+<div class="sec-badge">21 篇 · 6 个专题</div>
+</div>
+<div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
+<div class="zone-chips" id="topicChips">
+<button class="chip active" data-topic="all">全部<span class="count">21</span></button>
+<button class="chip" data-topic="accel">推理加速<span class="count">4</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">1</span></button>
+<button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
+<button class="chip" data-topic="ops">算子与编程<span class="count">4</span></button>
+<button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
+<button class="chip" data-topic="theory">基础理论<span class="count">5</span></button>
+</div>
+<ul class="list" id="learningList">
+<li class="li" data-topic="vllm" data-ts="20260909"><a href="学习html/vLLM-Ascend 源码解读.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">vLLM-Ascend 源码解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">昇腾插件整体架构：平台注册、Worker、Triton 算子、量化与投机解码</span></span></a></li>
+<li class="li" data-topic="accel" data-ts="20260907"><a href="学习html/PD分离组网介绍.html"><span class="li-date">2026-09-07</span><span class="li-main"><span class="li-title">PD分离组网介绍<span class="li-tag">推理加速</span></span><span class="li-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20260831"><a href="学习html/AI 的概率魔法 - Logits · Softmax · Temperature.html"><span class="li-date">2026-08-31</span><span class="li-main"><span class="li-title">AI 的概率魔法：Logits · Softmax · Temperature<span class="li-tag">基础理论</span></span><span class="li-desc">从 logits 到采样概率的完整链路，理解温度参数对生成的影响</span></span></a></li>
+<li class="li" data-topic="quant" data-ts="20260829"><a href="学习html/自研动态混合精度量化.html"><span class="li-date">2026-08-29</span><span class="li-main"><span class="li-title">自研动态混合精度量化<span class="li-tag">量化与格式</span></span><span class="li-desc">动态混合精度量化方案的设计思路与工程实践</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20260829"><a href="学习html/模型加速全景图.html"><span class="li-date">2026-08-29</span><span class="li-main"><span class="li-title">模型加速全景图<span class="li-tag">基础理论</span></span><span class="li-desc">大模型推理加速技术全景梳理：算法、系统、硬件三层视角</span></span></a></li>
+<li class="li" data-topic="accel" data-ts="20260829"><a href="学习html/投机解码-推理加速_v0.3.html"><span class="li-date">2026-08-29</span><span class="li-main"><span class="li-title">投机解码：推理加速（v0.3）<span class="li-tag">推理加速</span></span><span class="li-desc">投机解码最新版本：原理、实现方式及加速效果对比</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20260829"><a href="学习html/串行推理并行验证.html"><span class="li-date">2026-08-29</span><span class="li-main"><span class="li-title">Transformer推理全景：策略对比与内部原理<span class="li-tag">基础理论</span></span><span class="li-desc">串行推理与并行验证的区别，Token到Logits矩阵的完整推导</span></span></a></li>
+<li class="li" data-topic="accel" data-ts="20260828"><a href="学习html/Qwen3.8 MTP · 完整架构解析.html"><span class="li-date">2026-08-28</span><span class="li-main"><span class="li-title">Qwen3.8 MTP · 完整架构解析<span class="li-tag">推理加速</span></span><span class="li-desc">Qwen3.8 多Token预测（MTP）模块的完整架构与实现细节</span></span></a></li>
+<li class="li" data-topic="ops" data-ts="20260826"><a href="学习html/KDA原理与Triton实现讲解.html"><span class="li-date">2026-08-26</span><span class="li-main"><span class="li-title">KDA原理与Triton实现讲解<span class="li-tag">算子与编程</span></span><span class="li-desc">KDA 算法原理及其 Triton kernel 实现</span></span></a></li>
+<li class="li" data-topic="quant" data-ts="20260825"><a href="学习html/三值化量化训练原理.html"><span class="li-date">2026-08-25</span><span class="li-main"><span class="li-title">三值化量化训练原理<span class="li-tag">量化与格式</span></span><span class="li-desc">三值权重量化的数学原理与训练方法</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20260825"><a href="学习html/大模型训练并行技术.html"><span class="li-date">2026-08-25</span><span class="li-main"><span class="li-title">大模型训练并行技术<span class="li-tag">基础理论</span></span><span class="li-desc">数据并行、张量并行、流水线并行的原理与适用场景</span></span></a></li>
+<li class="li" data-topic="ops" data-ts="20260821"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版v2）.html"><span class="li-date">2026-08-21</span><span class="li-main"><span class="li-title">OpenAI Triton 从介绍到模型实战（v2）<span class="li-tag">算子与编程</span></span><span class="li-desc">Triton 进阶内容，更多实战案例和性能优化技巧</span></span></a></li>
+<li class="li" data-topic="ops" data-ts="20260821"><a href="学习html/OpenAI Triton · 从介绍到模型实战（完整版）.html"><span class="li-date">2026-08-21</span><span class="li-main"><span class="li-title">OpenAI Triton 从介绍到模型实战<span class="li-tag">算子与编程</span></span><span class="li-desc">Triton编程模型、核心概念及完整的模型实战案例</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20260819"><a href="学习html/多头注意力_v0.2_精读版.html"><span class="li-date">2026-08-19</span><span class="li-main"><span class="li-title">多头注意力机制精读<span class="li-tag">基础理论</span></span><span class="li-desc">多头注意力的数学原理、计算流程及在Transformer中的关键作用</span></span></a></li>
+<li class="li" data-topic="accel" data-ts="20260815"><a href="学习html/EAGLE&#8209;2 动态草稿树.html"><span class="li-date">2026-08-15</span><span class="li-main"><span class="li-title">EAGLE-2 动态草稿树<span class="li-tag">推理加速</span></span><span class="li-desc">EAGLE-2算法的动态草稿树生成机制及推理加速原理</span></span></a></li>
+<li class="li" data-topic="ops" data-ts="20260813"><a href="学习html/融合算子.html"><span class="li-date">2026-08-13</span><span class="li-main"><span class="li-title">融合算子技术<span class="li-tag">算子与编程</span></span><span class="li-desc">算子融合的原理、实现方法及对推理性能的提升效果</span></span></a></li>
+<li class="li" data-topic="hw" data-ts="20260813"><a href="学习html/GPU vs NPU · 架构对比.html"><span class="li-date">2026-08-13</span><span class="li-main"><span class="li-title">GPU vs NPU 架构对比<span class="li-tag">硬件架构</span></span><span class="li-desc">GPU与NPU在AI推理场景下的性能、能效、适用场景全面对比</span></span></a></li>
+<li class="li" data-topic="hw" data-ts="20260813"><a href="学习html/NPU架构.html"><span class="li-date">2026-08-13</span><span class="li-main"><span class="li-title">NPU架构详解<span class="li-tag">硬件架构</span></span><span class="li-desc">神经网络处理单元的设计理念、架构特点及在AI推理中的优势</span></span></a></li>
+<li class="li" data-topic="hw" data-ts="20260813"><a href="学习html/GPU架构.html"><span class="li-date">2026-08-13</span><span class="li-main"><span class="li-title">GPU架构详解<span class="li-tag">硬件架构</span></span><span class="li-desc">GPU硬件架构、计算单元、内存层次结构及对AI推理的影响</span></span></a></li>
+<li class="li" data-topic="quant" data-ts="20260812"><a href="学习html/GGUF格式讲解.html"><span class="li-date">2026-08-12</span><span class="li-main"><span class="li-title">GGUF格式详解<span class="li-tag">量化与格式</span></span><span class="li-desc">GGUF模型格式的结构、优势及在本地推理中的应用</span></span></a></li>
 </ul>
+<button class="more-btn" id="moreBtn">查看全部 21 篇</button>
 </div>
 
 <div class="sec" id="experiments">
-<div class="sec-title">实验项目</div>
-<div class="sec-desc">复现前沿论文效果，在此基础上探索更优的推理优化方案</div>
-<div class="cols2">
-<div>
-<div class="sec-title" style="font-size:16px;margin-bottom:16px">复现</div>
-<ul class="list">
-<li class="li"><a href="#">
-<div class="li-title">待添加：论文效果复现</div>
-<div class="li-desc">复现论文或开源项目中的推理效果，验证理论分析的正确性</div>
-</a></li>
-</ul>
+<div class="sec-head">
+<div class="sec-title">实验专区</div>
+<div class="sec-badge">1 个实验 · 持续更新</div>
 </div>
-<div>
-<div class="sec-title" style="font-size:16px;margin-bottom:16px">优化</div>
+<div class="sec-desc">复现前沿论文效果，探索更优的推理优化方案，实验数据与结论完整公开</div>
 <ul class="list">
-<li class="li"><a href="#">
-<div class="li-title">待添加：推理性能优化</div>
-<div class="li-desc">在现有基础上进行优化，追求更快的推理速度和更低的延迟</div>
-</a></li>
+<li class="li"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
 </ul>
+<div class="cols2" style="margin-top:24px">
+<div class="pcard">
+<div class="pcard-tag"><span>论文复现</span><span class="todo-tag">待完善</span></div>
+<div class="pcard-title">复现实验（规划中）</div>
+<div class="pcard-text">复现论文或开源项目中的推理效果，验证理论分析的正确性。实验环境与复现结论将发布在此处。</div>
+</div>
+<div class="pcard">
+<div class="pcard-tag"><span>性能优化</span><span class="todo-tag">待完善</span></div>
+<div class="pcard-title">优化实验（规划中）</div>
+<div class="pcard-text">在现有基础上进行优化，追求更快的推理速度和更低的延迟。对比数据与调优过程将发布在此处。</div>
+</div>
+</div>
+</div>
+
+<div class="sec" id="models">
+<div class="sec-head">
+<div class="sec-title">模型专区</div>
+<div class="sec-badge todo">待完善</div>
+</div>
+<div class="sec-desc">自己动手训练的模型，训练记录、评测结果与下载入口都将发布在这里</div>
+<div class="cols2">
+<div class="pcard">
+<div class="pcard-tag"><span>训练记录</span><span class="todo-tag">待完善</span></div>
+<div class="pcard-title">自研模型（规划中）</div>
+<div class="pcard-text">记录自己训练模型的全过程：数据处理、训练配置、_loss 曲线与踩坑总结。</div>
+</div>
+<div class="pcard">
+<div class="pcard-tag"><span>评测发布</span><span class="todo-tag">待完善</span></div>
+<div class="pcard-title">模型发布（规划中）</div>
+<div class="pcard-text">训练完成的模型将在此发布：评测基准、性能指标与使用方式。</div>
 </div>
 </div>
 </div>
@@ -265,9 +251,9 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="ft-copy">2026 华杉的技术博客</div>
 <div class="ft-icp"><a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow">苏ICP备2026063680号-1</a></div>
 <div class="ft-links">
-<a href="#learning">学习笔记</a>
-<a href="#topics">技术领域</a>
-<a href="#experiments">实验项目</a>
+<a href="#learning">学习专区</a>
+<a href="#experiments">实验专区</a>
+<a href="#models">模型专区</a>
 </div>
 </div></footer>
 
@@ -287,6 +273,35 @@ function stopAuto(){clearInterval(autoTimer)}
 buildDots();startAuto();
 document.getElementById('carousel').addEventListener('mouseenter',stopAuto);
 document.getElementById('carousel').addEventListener('mouseleave',startAuto);
+
+var SHOW_LIMIT=8;
+var lis=document.querySelectorAll('#learningList .li');
+var moreBtn=document.getElementById('moreBtn');
+var expanded=false;
+function applyFilter(){
+var topic=document.querySelector('#topicChips .chip.active').getAttribute('data-topic');
+var shown=0;
+for(var i=0;i<lis.length;i++){
+var match=(topic==='all'||lis[i].getAttribute('data-topic')===topic);
+lis[i].style.display=match?'':'none';
+if(match){shown++;lis[i].style.display=(expanded||shown<=SHOW_LIMIT)?'':'none'}
+}
+var total=0;
+for(var j=0;j<lis.length;j++){if(topic==='all'||lis[j].getAttribute('data-topic')===topic)total++}
+moreBtn.style.display=(total>SHOW_LIMIT)?'':'none';
+moreBtn.textContent=expanded?('收起，仅显示最新 '+SHOW_LIMIT+' 篇'):('查看全部 '+total+' 篇');
+}
+document.getElementById('topicChips').addEventListener('click',function(e){
+var chip=e.target.closest('.chip');
+if(!chip)return;
+var chips=this.children;
+for(var i=0;i<chips.length;i++)chips[i].className='chip';
+chip.className='chip active';
+expanded=false;
+applyFilter();
+});
+moreBtn.onclick=function(){expanded=!expanded;applyFilter()};
+applyFilter();
 </script>
 </body>
 </html>
