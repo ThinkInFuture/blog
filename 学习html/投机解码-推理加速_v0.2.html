@@ -267,43 +267,46 @@
         <h4 style="margin-top:26px; padding:8px 12px; background:#eef6ff; border-left:4px solid #2563eb; border-radius:6px;">✅ 看完流程，再从一个样例看「流程如何落成架构」：以 DSpark 为例</h4>
         <p>上面的流程图是<strong>通用五步循环</strong>。如果想直观理解「草稿模型到底架在哪、特征从哪里来、校验长度怎么控制」，可对照下图的 DSpark 原文示例：草稿模型<strong>复用目标模型多层隐层特征</strong>，由<strong>置信度头动态决定验证长度</strong>（基于 arXiv:2607.05147 论文原图重构）：</p>
         <div class="mermaid-wrap">
-            <div class="fig-caption">图 4 · DSpark「流程 × 架构」样例：草稿模型复用目标特征 + 置信度动态调度</div>
-            <pre class="mermaid">
-                flowchart TD
-                    subgraph Target["🎯 目标模型 Qwen3-4B（36层）"]
-                        direction TB
-                        T0["Embedding"] --> TL1["特征层 l₁"] --> TL2["特征层 l₂"] --> TL3["特征层 l₃"] --> TL4["特征层 l₄"] --> TL5["特征层 l₅"] --> T_OUT["输出 Logits"]
-                    end
+            <div class="fig-caption">图 4 · DSpark「流程 × 架构」样例：并行多头主干 + 串行 Markov 头，复用目标特征 + 置信度动态调度</div>
+                <pre class="mermaid">
+                    flowchart TD
+                        subgraph Target["🎯 目标模型 Qwen3-4B（36层）"]
+                            direction TB
+                            T0["Embedding"] --> TL1["特征层 l₁"] --> TL2["特征层 l₂"] --> TL3["特征层 l₃"] --> TL4["特征层 l₄"] --> TL5["特征层 l₅"] --> T_OUT["输出 Logits"]
+                        end
 
-                    subgraph Draft["✏️ 草稿模型 DSpark<br/>（离线实验：5 层 transform，生产：3 层 MoE）"]
-                        direction TB
-                        DB["并行主干 + 序列模块"] --> D_OUT["草稿候选（block=7）"]
-                        DB --> DC["置信度头"]
-                    end
+                        subgraph Draft["✏️ 草稿模型 DSpark<br/>（离线：5层transform；生产：3层MoE + Markov头）"]
+                            direction TB
+                            PM["⚡ 并行主干：单前向 · 多头并行产出 base logit U₁…U₇"]
+                            SM["🔗 串行序列头：Markov 低秩转移偏置，逐位链接 x₀→x₁→…→x₇"]
+                            PM --> D_OUT["校正后草稿候选（block=7）"]
+                            SM -. "+B 校正链接" .-> D_OUT
+                            PM --> DC["置信度头 c₁…c₇"]
+                        end
 
-                    TL1 -- "h₁" --> FC["fc 融合"]
-                    TL2 -- "h₂" --> FC
-                    TL3 -- "h₃" --> FC
-                    TL4 -- "h₄" --> FC
-                    TL5 -- "h₅" --> FC
-                    FC --> DB
+                        TL1 -- "h₁" --> FC["fc 融合"]
+                        TL2 -- "h₂" --> FC
+                        TL3 -- "h₃" --> FC
+                        TL4 -- "h₄" --> FC
+                        TL5 -- "h₅" --> FC
+                        FC --> PM
 
-                    D_OUT --> CAND["候选 tokens"]
-                    DC -- "动态验证长度" --> LEN["截断长度"]
-                    CAND --> VERIFY["增量校验"]
-                    LEN --> VERIFY
-                    VERIFY --> ACCEPT["接受前缀 + 重采样"]
+                        D_OUT --> CAND["候选 tokens"]
+                        DC -- "动态验证长度" --> LEN["截断长度"]
+                        CAND --> VERIFY["增量校验"]
+                        LEN --> VERIFY
+                        VERIFY --> ACCEPT["接受前缀 + 重采样"]
 
-                    classDef targetFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
-                    classDef draftFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
-                    classDef projFill fill:#fef9e7,stroke:#d97706,stroke-width:1px;
-                    classDef flowFill fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,stroke-dasharray: 3 3;
+                        classDef targetFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
+                        classDef draftFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
+                        classDef projFill fill:#fef9e7,stroke:#d97706,stroke-width:1px;
+                        classDef flowFill fill:#f3f4f6,stroke:#6b7280,stroke-width:1px,stroke-dasharray: 3 3;
 
-                    class Target targetFill;
-                    class Draft draftFill;
-                    class FC projFill;
-                    class CAND,VERIFY,LEN,ACCEPT flowFill;
-            </pre>
+                        class Target targetFill;
+                        class Draft draftFill;
+                        class FC projFill;
+                        class CAND,VERIFY,LEN,ACCEPT flowFill;
+                </pre>
         </div>
         <div class="note-supplement">
             <strong>🔍 这张样例图如何对应上面的流程？</strong><br/>
@@ -394,55 +397,105 @@
         <!-- ============================================================ -->
         <h2>四、三代投机解码技术整体迭代对比</h2>
         <p><em>纯客观维度对比，无主观渲染、无营销修饰。</em> 三代技术代表了投机解码领域从“因果串行”到“全并行”再到“混合自适应”的演进路径。其中 DSpark 数据已根据 arXiv:2607.05147 生产环境实测结果更新。</p>
+        <div class="fig-caption">表1：核心架构与资源消耗</div>
         <table>
             <thead>
                 <tr>
-                    <th>技术版本</th>
-                    <th>资源消耗</th>
-                    <th>生成方式</th>
-                    <th>并发支撑能力</th>
-                    <th>实测加速比</th>
-                    <th>Token接受率</th>
-                    <th>核心技术特征</th>
-                    <th>主要缺陷</th>
+                    <th>技术方案</th>
+                    <th>生成范式</th>
+                    <th>硬件资源消耗</th>
+                    <th>并发支持能力</th>
+                    <th>架构核心特征</th>
                 </tr>
             </thead>
             <tbody>
                 <tr>
-                    <td><strong>EAGLE 系列</strong></td>
-                    <td>较高</td>
-                    <td>串行因果草稿生成</td>
-                    <td>弱，仅适配低并发</td>
-                    <td>2.0 ~ 3.0×</td>
-                    <td>最高（~70%+）</td>
-                    <td>依托主模型隐层特征，草稿因果合规、稳定性强</td>
-                    <td>无法利用GPU并行算力，高并发吞吐差，资源开销高</td>
+                    <td><strong>EAGLE</strong></td>
+                    <td>串行因果生成</td>
+                    <td>较高（依赖主模型高层特征，显存占用大）</td>
+                    <td>弱（串行逻辑限制，仅适配低并发）</td>
+                    <td>依托主模型隐层特征，草稿因果合规，稳定性强</td>
                 </tr>
                 <tr>
                     <td><strong>DFlash</strong></td>
-                    <td>较低</td>
-                    <td>无约束全并行草稿生成</td>
-                    <td>极强，适配高负载集群</td>
-                    <td>3.0 ~ 4.0×（理论上限最高）</td>
-                    <td>最低（~30% ~ 45%）</td>
+                    <td>无约束全并行生成</td>
+                    <td>较低（轻量级骨干，显存友好）</td>
+                    <td>极强（天然适配高负载集群，压满GPU算力）</td>
                     <td>批量并行生成Token，硬件利用率拉满，单轮生成量大</td>
-                    <td>无因果依赖，文本逻辑断裂多，无效校验多，有效通过率低</td>
                 </tr>
                 <tr>
                     <td><strong>DSpark</strong></td>
-                    <td>均衡</td>
-                    <td>半自回归并行 + 串行校正</td>
-                    <td>强，带硬件动态调度</td>
-                    <td><strong>每用户生成速度 +60%~85%</strong>（V4-Flash，相同吞吐下，arXiv:2607.05147 生产实测）</td>
-                    <td>较高（位置级条件接受率全程高位稳定，不随位置衰减）</td>
-                    <td>并行生成打底、串行校正纠错，动态适配GPU负载；相较Eagle3平均接受长度提升<strong>+26.7%~+30.9%</strong>，相较DFlash提升<strong>+16.3%~+18.4%</strong></td>
-                    <td>架构复杂、调度逻辑重，工程部署与调优成本高</td>
+                    <td>半回归并行 + 串行校正</td>
+                    <td>中等（骨干+校正头，架构最重但调度灵活）</td>
+                    <td>强（带硬件动态感知调度器）</td>
+                    <td>并行生成打底（提速度）+ 串行校正纠错（提质量），动态适配GPU负载</td>
                 </tr>
             </tbody>
         </table>
-        <div class="note-supplement">
-            <strong>📊 关于加速比与接受率：</strong> 加速比 = 原生解码耗时 / 投机解码耗时。接受率 = 被主模型接受的草稿 Token 数 / 草稿生成的 Token 总数。两者通常呈负相关：草稿越“激进”（并行、无约束），接受率越低，但单轮生成量更大；草稿越“保守”（串行、因果），接受率越高，但生成速度受限。DSpark 在两者之间取得了较好的工程平衡。
-        </div>
+
+        <div class="fig-caption">表2：关键性能指标（统一以 Vanilla AR 为分母）</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>技术方案</th>
+                    <th>实测端到端加速比（vs Vanilla AR）</th>
+                    <th>Token 接受率</th>
+                    <th>核心优势指标</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>EAGLE</strong></td>
+                    <td>2.0x ~ 3.0x</td>
+                    <td>最高（~70%+）</td>
+                    <td>单步猜测极准，无效校验最少，出字丝滑</td>
+                </tr>
+                <tr>
+                    <td><strong>DFlash</strong></td>
+                    <td>3.0x ~ 4.0x（理论上限最高）</td>
+                    <td>较低（~30%~45%）</td>
+                    <td>纯计算吞吐量最大，能把GPU算力吃到极致</td>
+                </tr>
+                <tr>
+                    <td><strong>DSpark</strong></td>
+                    <td>2.9x ~ 3.7x</td>
+                    <td>较高且平稳（不随位置衰减）</td>
+                    <td>位置级条件接受率全程高位稳定，打破了并行生成“越往后越不准”的物理定律</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="fig-caption">表3：优劣势与最佳场景匹配</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>技术方案</th>
+                    <th>核心缺陷（痛点）</th>
+                    <th>最适合的业务场景</th>
+                    <th>工程落地难度</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>EAGLE</strong></td>
+                    <td>串行计算，无法利用GPU并行算力，高并发下吞吐量是瓶颈</td>
+                    <td>单路低延迟（如实时语音助手、交互式编程）</td>
+                    <td>中等（逻辑清晰，但显存优化较难）</td>
+                </tr>
+                <tr>
+                    <td><strong>DFlash</strong></td>
+                    <td>无因果依赖，逻辑断裂严重，无效校验多（有效通过率低）</td>
+                    <td>高并发离线批量（如海量文档翻译、数据清洗）</td>
+                    <td>最低（代码轻量，调大Batch Size即可）</td>
+                </tr>
+                <tr>
+                    <td><strong>DSpark</strong></td>
+                    <td>架构复杂，调度逻辑重，工程部署与调优成本极高</td>
+                    <td>混合负载生产环境（既要并发又要低延迟，且有顶级工程团队）</td>
+                    <td>最高（调度器需深度定制，Debug周期长）</td>
+                </tr>
+            </tbody>
+        </table>
         <p><strong>相关论文链接：</strong></p>
         <a class="paper-link" href="https://arxiv.org/abs/2311.16867" target="_blank">📄 EAGLE: Speculative Sampling Without a Draft Model (arXiv:2311.16867)</a>
         <a class="paper-link" href="https://arxiv.org/abs/2408.13074" target="_blank">📄 DFlash: Draft‑free Speculative Decoding via Parallel Token Generation (arXiv:2408.13074)</a>
@@ -674,29 +727,65 @@
         </div>
 
         <div class="mermaid-wrap">
-            <div class="fig-caption">图 13 · DSpark ① 半自回归架构：并行主干 + 轻量串行序列头</div>
-            <pre class="mermaid">
-                flowchart TD
-                    subgraph PAR["并行主干（Parallel Backbone，复用目标隐层特征）"]
-                        direction TB
-                        PB["一次前向产出整块<br/>base logit 集合 U₁…Uγ"]
-                    end
-                    subgraph SEQ["轻量串行序列头（Sequential Block，极轻量）"]
-                        direction TB
-                        MH["Markov 头（默认）<br/>低秩转移偏置 B(x_{k-1},·)<br/>= W₁[x_{k-1}] · W₂"]
-                        RN["RNN 头（可选）<br/>循环状态累积整段前缀"]
-                        MH --> DSP["校正后草稿分布"]
-                        RN --> DSP
-                    end
-                    Input["输入上下文 C"] --> PB
-                    PB -->|"base logit U"| SEQ
-                    DSP --> OUT["块内候选 d1…dγ<br/>兼顾「并行速度 + 串行连贯」"]
+            <div class="fig-caption">图 13 · DSpark ① 半自回归架构：并行多头产出 base logit + 串行 Markov 头逐位链接（又并行又串行）</div>
+                <pre class="mermaid">
+                    flowchart TD
+                        subgraph TM["🎯 目标模型（一次前向产出锚点 token D）"]
+                            direction LR
+                            P["Prompt A B C"] --> F1["目标模型前向"] --> D["锚点 D"]
+                        end
+                        D --> PB
 
-                    classDef parFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
-                    classDef seqFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
-                    class PAR parFill;
-                    class SEQ seqFill;
-            </pre>
+                        subgraph PB["⚡ 并行主干 Parallel Backbone（单前向 · 多头并行产出 γ 个 base logit）"]
+                            direction LR
+                            IN["输入：锚点 D"] --> FWD["一次前向计算（复用目标特征 / KV 注入）"]
+                            FWD --> U1["U₁"]
+                            FWD --> U2["U₂"]
+                            FWD --> U3["U₃"]
+                            FWD --> U4["U₄"]
+                        end
+
+                        subgraph SEQ["🔗 轻量串行序列头 Sequential Block（Markov 头 · 逐位串行链接）"]
+                            direction LR
+                            X0["x₀ = D（锚点）"]
+                            X0 -->|"B(x₀,·) 低秩转移偏置<br/>W₁[x₀] · W₂"| X1["x₁"]
+                            X1 -->|"B(x₁,·)"| X2["x₂"]
+                            X2 -->|"B(x₂,·)"| X3["x₃"]
+                            X3 -->|"B(x₃,·)"| X4["x₄"]
+                        end
+
+                        U1 -->|"+B 校正"| X1
+                        U2 -->|"+B 校正"| X2
+                        U3 -->|"+B 校正"| X3
+                        U4 -->|"+B 校正"| X4
+
+                        X1 --> C1["c₁ 置信度"]
+                        X2 --> C2["c₂"]
+                        X3 --> C3["c₃"]
+                        X4 --> C4["c₄"]
+
+                        C1 --> SCH
+                        C2 --> SCH
+                        C3 --> SCH
+                        C4 --> SCH
+
+                        SCH["🧮 硬件感知前缀调度器<br/>累计存活概率 ∏cᵢ 全局贪心选取"] --> KEEP["✅ 保留高置信前缀 E F G"]
+                        SCH --> DROP["🗑 丢弃低置信 H"]
+                        KEEP --> VER["目标模型并行校验（一次前向）"]
+                        DROP --> VER
+                        VER --> OUT["接受 E,F · 拒绝 G · 纠正生成 G*"]
+
+                        classDef tFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
+                        classDef pFill fill:#fff3e0,stroke:#f59e0b,stroke-width:1px;
+                        classDef sFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
+                        classDef cFill fill:#fef9e7,stroke:#d97706,stroke-width:1px;
+                        classDef vFill fill:#ede9fe,stroke:#7c3aed,stroke-width:1px;
+                        class TM tFill;
+                        class PB pFill;
+                        class SEQ sFill;
+                        class C1,C2,C3,C4 cFill;
+                        class SCH,KEEP,DROP,VER,OUT vFill;
+                </pre>
         </div>
 
         <div class="note-supplement" style="margin-top:18px;">
@@ -750,8 +839,8 @@
         <p>DSpark 提出了 <strong>半自回归（Semi-Autoregressive）</strong> 混合架构：以高速的全并行主干打底，再叠加一个<strong>轻量串行序列头</strong>恢复块内 Token 依赖，旨在调和 EAGLE 与 DFlash 的矛盾。它的设计包含三个核心协同组件：</p>
 
         <ul>
-            <li><strong>阶段一：并行粗猜（Parallel Rough Draft）</strong>：首先复用 DFlash 的并行生成模块，快速产出 <span class="math-inline">γ</span> 个初始候选 Token（论文离线实验 block_size=7，生产环境最大 γ=5）。这批 Token 可能存在逻辑断裂，但提供了一个“高速度”的起点。</li>
-            <li><strong>阶段二：轻量序列校正（Sequential Correction）</strong>：引入一个极轻量的 <strong>序列模块（Sequential Module）</strong>，在并行主干之上建立局部 Markov 依赖。其校正公式为：
+            <li><strong>阶段一：并行多头粗猜（Parallel Rough Draft）</strong>：首先复用 DFlash 的<strong>并行多头主干</strong>，单次前向同时产出 <span class="math-inline">γ</span> 个 base logit（即并行多头、一步到位，不逐位排队），论文离线实验 block_size=7，生产环境最大 γ=5。这批 Token 可能存在逻辑断裂，但提供了一个“高速度”的起点。</li>
+            <li><strong>阶段二：轻量串行 Markov 校正（Sequential Correction）</strong>：引入一个极轻量的 <strong>序列模块（Sequential Module）</strong>，在并行多头主干之上<strong>逐位串行</strong>建立局部 Markov 依赖——第 <span class="math-inline">k</span> 位用低秩转移偏置 <span class="math-inline">B(x_{k-1},·)</span> 链接到上一位采样结果，把“并行断点”重新串成连贯序列。其校正公式为：
                 \[
                 p(t_i | t_0, t_{<i}) = \frac{\exp(l_i + b(t_0, t_{<i}, i))}{\sum_{v \in V} \exp(l_v + b(t_0, t_{<i}, i))}
                 \]
@@ -770,7 +859,7 @@
         <p><strong>优势深度剖析（含论文实测数据）：</strong></p>
         <ul>
             <li><strong>均衡最优解</strong>：通过“并行打底 + 序列校正”，DSpark 同时继承并行草稿在首位的高容量与自回归草稿在后缀的连贯性，位置级条件接受率全程保持高位稳定（论文 Figures 1–2：DSpark 起始约 0.93 且不随位置衰减，DFlash 从 0.87 衰减至 0.78）。在 Qwen3-4B/8B/14B 上的实验表明，DSpark 的平均接受长度相比 Eagle3 提升 <strong>+26.7%~+30.9%</strong>，相比 DFlash 提升 <strong>+16.3%~+18.4%</strong>。</li>
-            <li><strong>生产环境验证</strong>：已部署在 DeepSeek-V4 在线系统中。在真实用户流量下，相比生产基线 MTP-1，在相同吞吐量下，单用户生成速度提升 <strong>60%~85%</strong>（V4-Flash）和 <strong>57%~78%</strong>（V4-Pro）。在严格交互延迟约束下，基线性能严重劣化时，DSpark 通过削减校验开销维持了稳健的吞吐量。</li>
+            <li><strong>生产环境验证</strong>：已部署在 DeepSeek-V4 在线系统中。在真实用户流量下，相比生产基线 MTP-1，在相同吞吐量下，单用户生成速度提升 <strong>60%~85%</strong>（V4-Flash）和 <strong>57%~78%</strong>（V4-Pro）。<span style="color:#6b7280;">（注意：此 60%~85% 是「相对 MTP-1 基线的增量」而非「相对朴素自回归」；端到端相对 vanilla AR 的加速更高，可达数倍。）</span>在严格交互延迟约束下，基线性能严重劣化时，DSpark 通过削减校验开销维持了稳健的吞吐量。</li>
             <li><strong>动态自适应</strong>：置信度调度器使得 DSpark 能够在波动的生产流量中自适应调整策略，无论是低并发延迟敏感场景，还是高并发吞吐优先场景，均能表现稳健。</li>
         </ul>
 
@@ -835,5 +924,7 @@
         });
     </script>
 
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
 </body>
 </html>
