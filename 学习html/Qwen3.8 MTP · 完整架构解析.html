@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen3.8 MTP · 按源码逻辑拆解（主干 → 草稿 → 验证）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            color: #1e2a3a;
+        }
+        .container { max-width: 1100px; margin: 0 auto; }
+        .header {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 20px 28px;
+            margin-bottom: 24px;
+            border: 1px solid #e2e8f0;
+        }
+        .header h1 {
+            margin: 0 0 6px 0;
+            font-size: 2rem;
+            font-weight: 700;
+            color: #0b2b4a;
+        }
+        .header h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #4a6a85;
+            margin-left: 12px;
+        }
+        .header p { margin: 0; font-size: 1.05rem; color: #3a5a75; }
+        .card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 18px 24px;
+            margin-bottom: 20px;
+            border: 1px solid #e2e8f0;
+        }
+        .card h2 {
+            margin-top: 0;
+            font-weight: 600;
+            font-size: 1.4rem;
+            color: #0b2b4a;
+            border-bottom: 3px solid #dce5f2;
+            padding-bottom: 6px;
+        }
+        .card h2 i {
+            font-style: normal;
+            background: #eef4ff;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 0.8rem;
+            color: #1a5a9c;
+            margin-left: 10px;
+        }
+        .sub { color: #4a6a85; margin-top: -6px; margin-bottom: 14px; font-size: 0.95rem; }
+        .mermaid-wrapper {
+            background: #fafcff;
+            border-radius: 12px;
+            padding: 15px 10px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .note-box {
+            background: #f0f7ff;
+            border-left: 6px solid #3b82f6;
+            padding: 12px 18px;
+            border-radius: 8px;
+            margin: 14px 0 8px 0;
+            color: #1e3a5f;
+            line-height: 1.7;
+        }
+        .note-box strong { color: #1a4b8c; }
+        .highlight {
+            background: #fef9e7;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            color: #b45309;
+        }
+        pre {
+            background: #1e293b !important;
+            padding: 14px 18px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.85rem;
+            line-height: 1.6;
+            border: 1px solid #334155;
+        }
+        pre code { color: #e2e8f0; font-family: inherit; }
+        .footer {
+            text-align: center;
+            color: #6a7f9b;
+            font-size: 0.9rem;
+            padding: 14px 0 8px;
+            border-top: 1px solid #dce5f2;
+            margin-top: 16px;
+        }
+        @media (max-width: 700px) { .header h1 { font-size: 1.6rem; } .card { padding: 14px; } }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🧠 Qwen3.8 MTP · 按源码拆解 <small>先看权重组成，再跑主干、草稿、验证</small></h1>
+        <p><strong>按代码执行顺序讲：</strong> ① 权重加载 → ② 主干推理（1次）→ ③ 草稿循环（只跑1层）→ ④ 验证推理（再跑1次主干）→ ⑤ 接受/拒绝</p>
+    </div>
+
+    <!-- 1. 权重组成 -->
+    <div class="card">
+        <h2>📂 ① 权重组成 <i>模型文件里就这 3 块</i></h2>
+        <div class="sub">GGUF 里按层索引存储，加载后得到三个东西：主干（64层）、MTP Head（1层）、共享的 LM_Head。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    W["权重文件 (qwen3.8.gguf)"] --> T["trunk = weights[0:64] <br> 主干 Trunk (64层标准Decoder, 27B)"]
+                    W --> M["mtp = weights[64] <br> MTP Head (1层轻量Decoder, 0.45B)"]
+                    W --> L["lm = weights.lm_head <br> 共享 LM Head (输出层)"]
+
+                    style T fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+                    style M fill:#fef9c3,stroke:#ca8a04,stroke-width:2px
+                    style L fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+            </div>
+        </div>
+        <pre><code class="language-python"># 加载权重（这就是全部）
+trunk = weights[0:64]   # 主干 64层（标准 Decoder Block）
+mtp   = weights[64]     # MTP Head 1层（轻量 Decoder Block）
+lm    = weights.lm_head # 共享 LM Head（词表映射）
+
+# 后续所有流程都复用这三块，草稿和验证共用 trunk 和 lm。</code></pre>
+        <div class="note-box">
+            <strong>关键：</strong> 所有推理流程都基于这 <span class="highlight">3 个组件</span> 拼装。草稿和验证共用 <code>trunk</code> 和 <code>lm</code>，唯一多出来的是 <code>mtp</code> 这 1 层。
+        </div>
+        <div class="note-box" style="border-left-color:#16a34a; background:#f0fdf4;">
+            <strong>✅ 实测核对（官方 Qwen/Qwen3.8-27B config.json）：</strong>
+            <code>num_hidden_layers=64</code> ✓、
+            <code>mtp_num_hidden_layers=1</code> ✓（MTP 确为 1 层）、
+            <code>mtp_use_dedicated_embeddings=false</code> ✓（MTP 直接复用主模型共享 token 嵌入，与"取前一个 token 的 embedding 拼接"一致）、
+            <code>tie_word_embeddings=false</code>（LM Head 为独立矩阵，被草稿 / 验证两条路径共用）。
+            结论：本文"64 层主干 + 1 层 MTP Head + 共享 LM Head"的三组件拆解与真实模型权重结构一致。
+        </div>
+    </div>
+
+    <!-- 2. 主干推理（1次） -->
+    <div class="card">
+        <h2>⚙️ ② 主干推理（先跑 1 次） <i>产出隐藏状态 h，后续复用</i></h2>
+        <div class="sub">整个推理过程中，<strong>只有这一步是“重”计算</strong>（过全部 64 层）。之后所有草稿循环都<strong>再也不碰主干</strong>。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    Ctx["当前上下文 (已生成的 token)"] --> Trunk["trunk (64层标准Decoder)"]
+                    Trunk --> H["产出隐藏状态 h (缓存)"]
+                    H --> Next["后续草稿和验证都复用 h"]
+
+                    style Trunk fill:#f0fdf4,stroke:#16a34a,stroke-width:3px
+                    style H fill:#fef9c3,stroke:#ca8a04,stroke-width:2px
+            </div>
+        </div>
+        <pre><code class="language-python"># 主干推理（仅此一次）
+def trunk_forward(context):
+    h = embed(context)          # token -> embedding
+    for layer in trunk:         # 循环 64 层
+        h = layer(h)
+    return h                    # 隐藏状态 h (seq, 4096)
+
+# 在一个生成步中，只调用一次
+h = trunk_forward(context)      # ← 这就是唯一的“重”计算
+cache_h = h                     # 缓存起来，后续草稿用</code></pre>
+        <div class="note-box">
+            <strong>重点：</strong> <code>h</code> 被缓存后，<span class="highlight">草稿阶段完全不再调用 `trunk`</span>，只复用这个 <code>h</code>。
+        </div>
+    </div>
+
+    <!-- 3. 草稿推理（循环，只跑 1 层） -->
+    <div class="card">
+        <h2>⚡ ③ 草稿推理（循环 N 次） <i>只跑 MTP Head（1层）+ LM_Head，完全不碰主干</i></h2>
+        <div class="sub">这是加速的核心：草稿循环里 <strong>没有 `trunk`</strong>，只有 <code>mtp</code> 和 <code>lm</code>，代价是 1 层 vs 64 层。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    H["缓存的隐藏状态 h"] --> MTP1["mtp (1层) + 上一token的embedding"]
+                    MTP1 --> LM1["lm (共享 LM_Head)"]
+                    LM1 --> T1["草稿 token1"]
+                    T1 --> MTP2["mtp (1层) + token1的embedding"]
+                    MTP2 --> LM2["lm (共享 LM_Head)"]
+                    LM2 --> T2["草稿 token2"]
+
+                    style H fill:#fef9c3,stroke:#ca8a04
+                    style MTP1 fill:#fef9c3,stroke:#ca8a04,stroke-width:2px
+                    style MTP2 fill:#fef9c3,stroke:#ca8a04,stroke-width:2px
+                    style LM1 fill:#dbeafe,stroke:#3b82f6
+                    style LM2 fill:#dbeafe,stroke:#3b82f6
+            </div>
+        </div>
+        <pre><code class="language-python"># 草稿推理（循环 N 次，默认 2~3）
+def draft_loop(h, prev_token, num_drafts=2):
+    drafts = []
+    prev_emb = embed(prev_token)    # 上一 token 的 embedding
+    for _ in range(num_drafts):
+        # ★ 关键：这里只有 mtp（1层）和 lm，没有 trunk！
+        h_mtp = forward(mtp, concat(h, prev_emb))  # 只过 1 层
+        logits = lm(h_mtp)                         # 过共享 LM_Head
+        token = sample(logits)                     # 采样
+        drafts.append(token)
+        prev_emb = embed(token)      # 下一轮用刚猜出的 token
+        h = h_mtp                    # 下一轮用 MTP 的输出
+    return drafts
+
+# 使用缓存的 h 和最后一个真实 token
+drafts = draft_loop(h, last_real_token, num_drafts=2)
+# 得到 [草稿1, 草稿2]</code></pre>
+        <div class="note-box">
+            <strong>看清楚：</strong> 循环体里 <span class="highlight">完全没有 `trunk`</span>。每次迭代只过 <code>mtp</code>（1 层）和 <code>lm</code>。这是草稿极快的根本原因。
+        </div>
+    </div>
+
+    <!-- 4. 验证推理（再跑 1 次主干，带 KV Cache） -->
+    <div class="card">
+        <h2>✅ ④ 验证推理（再跑 1 次主干） <i>把上下文+草稿拼一起，一次性算真实分布</i></h2>
+        <div class="sub">验证时再跑一次主干，但因为 <strong>KV Cache 已缓存上下文部分</strong>，只需要算新拼接的草稿位置，浪费极小。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    Full["上下文 + 草稿 (拼成一个序列)"] --> Trunk2["trunk (64层) <br> 带 KV Cache 复用"]
+                    Trunk2 --> H2["各位置隐藏状态"]
+                    H2 --> LM2["lm (共享 LM_Head)"]
+                    LM2 --> Real["真实概率分布 (verifier)"]
+
+                    style Trunk2 fill:#f0fdf4,stroke:#16a34a,stroke-width:3px
+                    style LM2 fill:#dbeafe,stroke:#3b82f6
+            </div>
+        </div>
+        <pre><code class="language-python"># 验证推理（再跑一次主干）
+def verify(context_with_drafts):
+    # 第二次调用 trunk（带 KV Cache，只算新位置）
+    h_full = forward(trunk, context_with_drafts)  # 上下文+草稿一起过
+    logits = lm(h_full)                           # 每个位置的真实分布
+    return logits
+
+# 拼装完整序列
+full_context = context + drafts
+verify_logits = verify(full_context)
+# 得到 [位置1的真实分布, 位置2的真实分布, ...]</code></pre>
+        <div class="note-box">
+            <strong>注意：</strong> 这一步虽然又跑了一次 <code>trunk</code>（64层），但 <span class="highlight">KV Cache 让“上下文”部分完全跳过</span>，只计算新增的草稿 token 位置，所以实际新增计算量远小于 64 层。
+        </div>
+    </div>
+
+    <!-- 5. 接受/拒绝 -->
+    <div class="card">
+        <h2>🎯 ⑤ 接受 / 拒绝 <i>用真实分布修正草稿</i></h2>
+        <div class="sub">逐个比对草稿和真实分布，正确的保留，错误的丢弃并用真实值替换。</div>
+        <pre><code class="language-python">def accept_reject(drafts, verify_logits):
+    accepted = []
+    for i, draft_token in enumerate(drafts):
+        real_token = argmax(verify_logits[i])      # 真实分布的最大概率 token
+        if draft_token == real_token:
+            accepted.append(draft_token)           # 猜对了，收下
+        else:
+            accepted.append(real_token)            # 猜错了，用真实的替换
+            break                                  # 遇到第一个错误就停
+    return accepted
+
+# 最终输出
+final_tokens = accept_reject(drafts, verify_logits)</code></pre>
+        <div class="note-box">
+            <strong>保证质量：</strong> 因为验证分布是真实模型算出来的，所以 <span class="highlight">最终输出的 token 永远和原始模型完全一致</span>，错的草稿会被丢弃。
+        </div>
+    </div>
+
+    <!-- 6. 完整流程图（汇总） -->
+    <div class="card">
+        <h2>🔁 完整生成步总览 <i>按源码顺序串起来</i></h2>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    A["开始生成步"] --> B["① trunk_forward(上下文) <br> (64层, 只1次)"]
+                    B --> C["② draft_loop(缓存h) <br> (循环2~3次, 每次只过mtp+lm)"]
+                    C --> D["③ verify(上下文+草稿) <br> (再次trunk, 带KV Cache)"]
+                    D --> E["④ accept_reject(草稿, 真实分布)"]
+                    E --> F["输出接受的token, 进入下一步"]
+
+                    style B fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+                    style C fill:#fef9c3,stroke:#ca8a04,stroke-width:2px
+                    style D fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+                    style E fill:#f3e8ff,stroke:#8b5cf6,stroke-width:2px
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>计算量拆解：</strong><br>
+            • 步骤①：1 次 64 层（重）<br>
+            • 步骤②：2~3 次 1 层（极轻）<br>
+            • 步骤③：1 次 64 层（重，但 KV Cache 复用）<br>
+            = 2×64层 + 3×1层，远小于传统自回归的 3×64层。
+        </div>
+    </div>
+
+    <!-- 7. 实测验证 -->
+    <div class="card">
+        <h2>🧪 ⑦ 实测验证 <i>下载真实 Qwen3.8-27B 权重核对</i></h2>
+        <div class="sub">不靠脑补：从 ModelScope 拉真实模型（unsloth/Qwen3.8-27B-GGUF，Q4_K_M 量化，16.46GB）+ 官方 config.json，用 gguf 解析器逐张量核对本文机制。</div>
+
+        <div class="note-box">
+            <strong>验证目标：</strong> 本文「64 层主干 + 1 层 MTP Head + 共享 LM Head」的三组件拆解，以及「草稿 = 取 h 拼接前一个 token 的 embedding 再过一层 fc」的机制，必须能在真实权重里找到对应张量。
+        </div>
+
+        <div class="note-box" style="border-left-color:#1a5a9c; background:#eef4ff;">
+            <strong>验证步骤：</strong><br>
+            ① 下载真实 GGUF：<code>unsloth/Qwen3.8-27B-GGUF / Qwen3.8-27B-UD-Q4_K_M.gguf</code>（16.46GB）；<br>
+            ② 下载官方 <code>config.json</code>（Qwen/Qwen3.8-27B）核对架构超参；<br>
+            ③ 用 <code>gguf.GGUFReader</code> 解析张量名 / 形状 / 元数据，逐项比对。
+        </div>
+
+        <p style="font-weight:600; margin:14px 0 6px; color:#1a4b8c;">📊 关键物证（来自真实 GGUF）</p>
+        <table style="width:100%; border-collapse:collapse; font-size:0.9rem;">
+            <thead>
+                <tr style="background:#0b2b4a; color:#fff;">
+                    <th style="padding:8px; text-align:left;">真实权重事实</th>
+                    <th style="padding:8px; text-align:left;">对应本文说法</th>
+                    <th style="padding:8px; text-align:center;">结论</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px;"><code>block_count = 65</code><br>blk.0~63 主干 + blk.64 为 MTP</td>
+                    <td style="padding:8px;">64 层主干 + 1 层 MTP Head</td>
+                    <td style="padding:8px; text-align:center; color:#16a34a; font-weight:700;">✅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px;"><code>nextn_predict_layers = 1</code><br><code>full_attention_interval = 4</code></td>
+                    <td style="padding:8px;">MTP 只 1 层；主干为混合注意力</td>
+                    <td style="padding:8px; text-align:center; color:#16a34a; font-weight:700;">✅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px;">顶层仅一个 <code>output.weight [5120, 248320]</code>（共享 LM Head）<br>一个 <code>token_embd.weight [5120, 248320]</code></td>
+                    <td style="padding:8px;">验证 / 草稿两条路径共用同一 lm</td>
+                    <td style="padding:8px; text-align:center; color:#16a34a; font-weight:700;">✅</td>
+                </tr>
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:8px;"><code>blk.64.nextn.eh_proj.weight</code><br>shape = [10240, 5120]</td>
+                    <td style="padding:8px;">取 h(5120) 拼接前一个 token 的 embedding(5120)，再过一层 fc → 5120</td>
+                    <td style="padding:8px; text-align:center; color:#16a34a; font-weight:700;">✅</td>
+                </tr>
+                <tr>
+                    <td style="padding:8px;"><code>blk.64</code> 含完整 attn/ffn/norm（15 张量）+ 4 个 nextn 专属张量，其中 <code>shared_head_norm</code></td>
+                    <td style="padding:8px;">MTP 输出经 shared_head_norm 复用同一 LM Head</td>
+                    <td style="padding:8px; text-align:center; color:#16a34a; font-weight:700;">✅</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="note-box" style="border-left-color:#16a34a; background:#f0fdf4; margin-top:14px;">
+            <strong>✅ 核对结论：</strong> 本文对 MTP 机制的描述（同权重双路径、主干 + 1 层 MTP 头、共享 LM Head、草稿侧拼接 embedding 再过 fc）与<strong>真实模型结构完全一致</strong>。真实规格：hidden 5120 / vocab 248320 / 64+1 层 / 混合注意力（每 4 层 1 个全注意力）。文中 4096、128k 等为教学示意值，机制正确。
+        </div>
+
+        <div class="note-box" style="border-left-color:#ca8a04; background:#fef9c3;">
+            <strong>📌 备注：</strong> 模型内部架构标记为 <code>qwen35</code>（Qwen3.5 系），社区 / GGUF 仓名为 "Qwen3.8"，属命名差异，不影响机制结论。校验脚本见 <code>verify_qwen38_mtp.py</code>，验证归档见 <code>tests/result/</code>。
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>📌 整个流程就是 <strong>主干算 2 次（前后各 1 次），草稿循环只跑 MTP 那 1 层</strong>。</p>
+        <p>所有图均采用 TD 布局 · 完全按你要求的源码顺序讲解</p>
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({
+        theme: 'base',
+        themeVariables: {
+            background: '#ffffff',
+            primaryColor: '#3b82f6',
+            primaryTextColor: '#1e293b',
+            primaryBorderColor: '#3b82f6',
+            lineColor: '#64748b',
+            secondaryColor: '#f1f5f9',
+            tertiaryColor: '#f8fafc',
+            nodeBackground: '#ffffff',
+            nodeBorder: '#cbd5e1',
+            mainBkg: '#f8fafc',
+            clusterBkg: '#ffffff',
+            clusterBorder: '#e2e8f0',
+            edgeLabelBackground: '#ffffff',
+        },
+        sequence: { actorMargin: 80, messageMargin: 40, mirrorActors: false },
+        flowchart: { useMaxWidth: true, htmlLabels: true }
+    });
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
