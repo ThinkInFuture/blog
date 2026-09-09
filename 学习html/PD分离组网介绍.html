@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AISBench 精度评测 · PD 分离组网</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js">
+    </script>
+    <style>
+        /* ---- 用户认可的核心样式 ---- */
+        :root {
+            --bg: #fafbfc;
+            --card: #fff;
+            --border: #d0d7de;
+            --text: #1f2328;
+            --muted: #656d76;
+            --accent: #0969da;
+            --prefill: #ddf4ff;
+            --decode: #dafbe1;
+            --warn: #fff8c5;
+            --err: #ffebe9;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            padding: 2rem 1rem;
+            font-size: 18px;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        h1 {
+            font-size: 2rem;
+            border-bottom: 2px solid var(--accent);
+            padding-bottom: .5rem;
+            margin-bottom: 1.5rem;
+        }
+        h2 {
+            font-size: 1.6rem;
+            margin: 2rem 0 .8rem;
+            padding-left: .6rem;
+            border-left: 4px solid var(--accent);
+        }
+        h3 {
+            font-size: 1.3rem;
+            margin: 1.2rem 0 .5rem;
+            color: var(--accent);
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 1.2rem 1.5rem;
+            margin: 1rem 0;
+        }
+        .tag {
+            display: inline-block;
+            font-size: .8rem;
+            padding: 2px 10px;
+            border-radius: 10px;
+            font-weight: 600;
+            margin: 0 4px;
+        }
+        .tag-prefill {
+            background: var(--prefill);
+            color: #0550ae;
+        }
+        .tag-decode {
+            background: var(--decode);
+            color: #116329;
+        }
+        .tag-warn {
+            background: var(--warn);
+            color: #7a5e00;
+        }
+        .tag-err {
+            background: var(--err);
+            color: #82071e;
+        }
+        table {
+            border-collapse: collapse;
+            width: 100%;
+            margin: .6rem 0;
+            font-size: 1rem;
+        }
+        th,
+        td {
+            border: 1px solid var(--border);
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background: #f6f8fa;
+            font-weight: 600;
+        }
+        .mermaid {
+            margin: 1.5rem 0;
+            text-align: center;
+        }
+        .desc {
+            margin: .4rem 0 .8rem;
+            color: var(--muted);
+            font-size: 1rem;
+        }
+        .hl {
+            background: #fff8c5;
+            padding: 1px 4px;
+            border-radius: 3px;
+        }
+        .arrow {
+            color: var(--accent);
+            font-weight: bold;
+        }
+
+        /* 强制放大 Mermaid */
+        .mermaid svg text,
+        .mermaid svg .label,
+        .mermaid svg .nodeLabel,
+        .mermaid svg .titleText,
+        .mermaid svg .edgeLabel text {
+            font-size: 20px !important;
+            font-weight: 500;
+        }
+
+        /* 节点详情卡片 */
+        .node-detail {
+            border-left: 6px solid var(--accent);
+            padding-left: 1.2rem;
+        }
+        .node-detail.prefill {
+            border-left-color: #0550ae;
+        }
+        .node-detail.decode {
+            border-left-color: #116329;
+        }
+        .node-detail.kv {
+            border-left-color: #7a5e00;
+        }
+        .node-detail.store {
+            border-left-color: #8250df;
+        }
+        .node-detail.client {
+            border-left-color: #656d76;
+        }
+        .node-detail.proxy {
+            border-left-color: #8b5cf6;
+        }
+        .node-detail .spec-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 0.5rem 1.2rem;
+            background: #f6f8fa;
+            border-radius: 6px;
+            padding: 0.8rem 1.2rem;
+            margin: 0.6rem 0 0.8rem;
+        }
+        .node-detail .flow {
+            background: #f6f8fa;
+            border-radius: 6px;
+            padding: 0.6rem 1.2rem;
+            margin-top: 0.6rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem 1.5rem;
+        }
+        .node-detail .flow i {
+            color: var(--accent);
+        }
+
+        /* 概念说明小标签 */
+        .concept-badge {
+            display: inline-block;
+            background: #e1e4e8;
+            border-radius: 4px;
+            padding: 0 6px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #24292f;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                font-size: 16px;
+                padding: 1rem 0.6rem;
+            }
+            .container {
+                max-width: 100%;
+            }
+            .mermaid svg text {
+                font-size: 16px !important;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+
+        <h1><i class="fas fa-microchip" style="color:var(--accent);margin-right:0.4rem;"></i>AISBench 精度评测 · PD 分离组网</h1>
+        <p style="font-size:1.1rem;color:var(--muted);margin-bottom:1.8rem;">
+            <i class="fas fa-project-diagram"></i> Prefill-Decode 分离 · 华为 Atlas 800I A3 · Mooncake + AscendStore
+        </p>
+
+        <!-- ============================================================ -->
+        <!-- 1. 整体介绍（简明，不展开 TP/DP） -->
+        <!-- ============================================================ -->
+        <div class="card">
+            <h2 style="border-left:0;padding-left:0;margin-top:0;"><i class="fas fa-info-circle"></i> 整体介绍</h2>
+            <p><strong>背景：</strong>大语言模型推理分为 <strong>Prefill</strong>（预填充，处理输入 prompt 生成 KV Cache）和 <strong>Decode</strong>（解码，自回归生成 token）两个阶段。本组网采用 <strong>PD 分离</strong> 架构，将两阶段部署在不同节点组，独立扩展，提升整体吞吐与资源利用率。</p>
+            <p style="margin-top:0.4rem;"><strong>数据流总览：</strong>AISBench 客户端 → Proxy（负载均衡）→ Prefill 节点组（生成 KV）→ Mooncake（实时 KV 传输）→ Decode 节点组（消费 KV 生成 token）→ Proxy → 客户端。AscendStore 异步备份 KV 用于恢复和复用。</p>
+            <p style="margin-top:0.4rem;color:var(--muted);font-size:0.95rem;">
+                <i class="fas fa-arrow-right" style="color:var(--accent);"></i> 各节点的并行策略（TP/DP）将在对应节点介绍中详细解释。
+            </p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 2. 组网图 -->
+        <!-- ============================================================ -->
+        <div class="card">
+            <h2 style="border-left:0;padding-left:0;font-size:1.5rem;margin-top:0;">
+                <i class="fas fa-sitemap"></i> 整体组网拓扑
+            </h2>
+            <div class="mermaid">
+                graph TB
+                subgraph Client["客户端 / AISBench 评测"]
+                AIS["AISBench<br/>aime2025 精度评测"]
+                end
+
+                subgraph Proxy["代理层"]
+                LB["Proxy Server<br/>负载均衡"]
+                end
+
+                subgraph PrefillGroup["Prefill 节点组"]
+                P0["Node 0<br/>Atlas 800I A3<br/>16×NPU<br/>TP=16, DP=2"]
+                P1["Node 1<br/>Atlas 800I A3<br/>16×NPU<br/>TP=16, DP=1"]
+                end
+
+                subgraph DecodeGroup["Decode 节点组"]
+                D2["Node 2<br/>Atlas 800I A3<br/>16×NPU<br/>TP=4, DP=4"]
+                D3["Node 3<br/>Atlas 800I A3<br/>16×NPU<br/>TP=4, DP=4"]
+                end
+
+                subgraph KVStore["KV Cache 传输层"]
+                    MC["Mooncake KV Pool<br/>实时传输中间件<br/>端口 30000/30200"]
+                    MS["AscendStore<br/>持久化存储层<br/>Memcache 协议"]
+                end
+
+                AIS -->|"HTTP 请求"| LB
+                LB -->|"Prefill 请求"| P0
+                LB -->|"Prefill 请求"| P1
+                P0 -->|"KV Producer<br/>端口 30000"| MC
+                P1 -->|"KV Producer<br/>端口 30000"| MC
+                MC -->|"KV Consumer<br/>端口 30200"| D2
+                MC -->|"KV Consumer<br/>端口 30200"| D3
+                MC -.->|"异步持久化备份"| MS
+                D2 -->|"Decode 响应"| LB
+                D3 -->|"Decode 响应"| LB
+                LB -->|"HTTP 响应"| AIS
+
+                classDef prefillGroup fill:#ddf4ff,stroke:#0550ae,color:#0550ae
+                classDef decodeGroup fill:#dafbe1,stroke:#116329,color:#116329
+                classDef kvStore fill:#fff8c5,stroke:#7a5e00,color:#7a5e00
+                classDef client fill:#f6f8fa,stroke:#656d76,color:#656d76
+                class PrefillGroup prefillGroup
+                class DecodeGroup decodeGroup
+                class KVStore kvStore
+                class Client client
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:1.5rem;margin-top:1rem;padding-top:0.8rem;border-top:1px solid var(--border);font-size:0.95rem;">
+                <span><span style="display:inline-block;width:16px;height:16px;background:#f6f8fa;border:1px solid #656d76;border-radius:3px;vertical-align:middle;"></span> 客户端</span>
+                <span><span style="display:inline-block;width:16px;height:16px;background:#ddf4ff;border:1px solid #0550ae;border-radius:3px;vertical-align:middle;"></span> Prefill 节点组</span>
+                <span><span style="display:inline-block;width:16px;height:16px;background:#dafbe1;border:1px solid #116329;border-radius:3px;vertical-align:middle;"></span> Decode 节点组</span>
+                <span><span style="display:inline-block;width:16px;height:16px;background:#fff8c5;border:1px solid #7a5e00;border-radius:3px;vertical-align:middle;"></span> KV 传输层 (Mooncake)</span>
+                <span><span style="display:inline-block;width:16px;height:16px;background:#f3e8ff;border:1px solid #8250df;border-radius:3px;vertical-align:middle;"></span> 持久化存储 (AscendStore)</span>
+                <span><i class="fas fa-arrow-right" style="color:#0969da;"></i> HTTP</span>
+                <span><i class="fas fa-arrow-right" style="color:#7a5e00;"></i> KV 实时传输</span>
+                <span><i class="fas fa-arrow-right" style="color:#8250df;"></i> 持久化备份</span>
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 3. 汇总表格（表格下方简述 TP/DP 基本含义） -->
+        <!-- ============================================================ -->
+        <div class="card">
+            <h2 style="border-left:0;padding-left:0;"><i class="fas fa-table"></i> 节点核心参数一览</h2>
+            <table>
+                <thead>
+                    <tr><th>节点</th><th>角色</th><th>硬件/平台</th><th>并行策略</th><th>关键端口</th><th>数据流方向</th></tr>
+                </thead>
+                <tbody>
+                    <tr><td><strong>AISBench</strong></td><td>客户端评测</td><td>通用 x86/ARM</td><td>—</td><td>HTTP</td><td>请求 → Proxy；响应 ← Proxy</td></tr>
+                    <tr><td><strong>Proxy Server</strong></td><td>负载均衡/路由</td><td>通用服务器</td><td>—</td><td>HTTP 监听</td><td>分发 Prefill，汇总 Decode</td></tr>
+                    <tr><td><strong>Node 0 (Prefill)</strong></td><td>Prefill 计算</td><td>Atlas 800I A3, 16×NPU</td><td>TP=16, DP=2</td><td>30000 (Producer)</td><td>KV → Mooncake</td></tr>
+                    <tr><td><strong>Node 1 (Prefill)</strong></td><td>Prefill 计算</td><td>Atlas 800I A3, 16×NPU</td><td>TP=16, DP=1</td><td>30000 (Producer)</td><td>KV → Mooncake</td></tr>
+                    <tr><td><strong>Node 2 (Decode)</strong></td><td>Decode 生成</td><td>Atlas 800I A3, 16×NPU</td><td>TP=4, DP=4</td><td>30200 (Consumer)</td><td>KV ← Mooncake；响应 → Proxy</td></tr>
+                    <tr><td><strong>Node 3 (Decode)</strong></td><td>Decode 生成</td><td>Atlas 800I A3, 16×NPU</td><td>TP=4, DP=4</td><td>30200 (Consumer)</td><td>KV ← Mooncake；响应 → Proxy</td></tr>
+                    <tr><td><strong>Mooncake KV Pool</strong></td><td>实时 KV 传输中间件</td><td>高速网络 + 内存池</td><td>—</td><td>30000/30200</td><td>Producer 入，Consumer 出</td></tr>
+                    <tr><td><strong>AscendStore</strong></td><td>KV 持久化存储</td><td>分布式存储集群 (Memcache)</td><td>—</td><td>Memcache 标准端口</td><td>远端备份/恢复</td></tr>
+                </tbody>
+            </table>
+            <div style="margin-top:0.6rem;font-size:0.95rem;background:#f6f8fa;padding:0.4rem 0.8rem;border-radius:6px;">
+                <strong>并行策略说明：</strong>
+                <span class="concept-badge">TP</span> = 张量并行（切分模型权重，降低单请求延迟），
+                <span class="concept-badge">DP</span> = 数据并行（多请求并行，提升吞吐）。
+                不同节点采用不同组合，详见下方各节点介绍。
+            </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- 4. 各节点详细介绍（TP/DP 解释融入其中） -->
+        <!-- ============================================================ -->
+        <h2><i class="fas fa-server"></i> 各节点详细说明</h2>
+
+        <!-- 客户端 -->
+        <div class="card node-detail client">
+            <h3><i class="fas fa-laptop"></i> AISBench 评测客户端 <span class="tag tag-warn">aime2025</span></h3>
+            <div class="desc">角色：评测发起方 · 协议：HTTP/REST · 数据集：aime2025</div>
+            <p><strong>功能：</strong>AISBench 是面向 AI 推理的基准测试工具，本次用于 <strong>aime2025</strong> 精度评测。客户端加载评测数据集，构造 HTTP 请求（包含 prompt 和推理参数），发送至 Proxy Server，并接收 Decode 节点返回的生成结果，与标准答案对比计算精度指标（准确率、BLEU 等）。</p>
+            <div class="spec-grid">
+                <span><strong>硬件平台：</strong>通用 x86_64 / ARM</span>
+                <span><strong>网络要求：</strong>与 Proxy 低延迟连通</span>
+                <span><strong>并发数：</strong>可配置（多路并发）</span>
+                <span><strong>输出：</strong>评测报告（精度、吞吐、延迟）</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-sign-out-alt"></i> HTTP 请求 → Proxy</span>
+                <span><i class="fas fa-sign-in-alt"></i> HTTP 响应 ← Proxy</span>
+            </div>
+        </div>
+
+        <!-- 代理层 -->
+        <div class="card node-detail proxy">
+            <h3><i class="fas fa-balance-scale"></i> Proxy Server (负载均衡) <span class="tag">网关/调度</span></h3>
+            <div class="desc">协议：HTTP/1.1, HTTP/2 · 高可用：主备/集群</div>
+            <p><strong>职责：</strong>作为系统入口，接收 AISBench 的所有 HTTP 请求。根据策略将 <strong>Prefill 请求</strong>分发至 Node 0/1，并将 Decode 节点的响应汇集后返回客户端。同时负责健康检查、故障转移、流量限流等治理功能。</p>
+            <div class="spec-grid">
+                <span><strong>负载均衡算法：</strong>轮询 / 最少连接 / 一致性哈希</span>
+                <span><strong>会话保持：</strong>基于请求 ID 或 Client IP</span>
+                <span><strong>监控：</strong>集成 Prometheus 指标</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-right"></i> 分发 Prefill → Node 0/1</span>
+                <span><i class="fas fa-arrow-left"></i> 接收 Decode 响应 ← Node 2/3</span>
+                <span><i class="fas fa-exchange-alt"></i> 客户端 ↔ 后端</span>
+            </div>
+        </div>
+
+        <!-- Prefill Node 0 -->
+        <div class="card node-detail prefill">
+            <h3><i class="fas fa-microchip"></i> Node 0 · Prefill <span class="tag tag-prefill">TP=16, DP=2</span></h3>
+            <div class="desc">角色：Prefill 计算节点 · 型号：Atlas 800I A3 · NPU：16× (鲲鹏 920)</div>
+            <p><strong>并行策略详解：</strong>采用 <strong>TP=16</strong>（张量并行），将模型权重切分到全部 16 颗 NPU，最大化单请求计算速度，因为 Prefill 阶段需要处理大量输入 token，计算密集，高 TP 可显著降低延迟。同时设置 <strong>DP=2</strong>（数据并行），允许 2 个 Prefill 请求同时在两组 NPU 上运行（每组 16 卡），提升整体 Prefill 吞吐。</p>
+            <p><strong>功能：</strong>Prefill 完成后将生成的 <strong>KV Cache</strong> 通过 <strong>端口 30000</strong> 以 Producer 身份推送至 Mooncake KV Pool。</p>
+            <div class="spec-grid">
+                <span><strong>NPU 型号：</strong>Ascend 910B</span>
+                <span><strong>显存：</strong>32GB HBM2e × 16</span>
+                <span><strong>网络：</strong>100G RoCE v2</span>
+                <span><strong>KV 传输：</strong>RDMA + TCP (Mooncake)</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-left"></i> 接收 Prefill 请求 ← Proxy</span>
+                <span><i class="fas fa-arrow-right"></i> 发送 KV (Producer) → Mooncake:30000</span>
+            </div>
+        </div>
+
+        <!-- Prefill Node 1 -->
+        <div class="card node-detail prefill">
+            <h3><i class="fas fa-microchip"></i> Node 1 · Prefill <span class="tag tag-prefill">TP=16, DP=1</span></h3>
+            <div class="desc">角色：Prefill 计算节点 · 型号：Atlas 800I A3 · NPU：16× (鲲鹏 920)</div>
+            <p><strong>并行策略详解：</strong>与 Node 0 硬件相同，但 <strong>DP=1</strong>，即每次只处理 1 个 Prefill 请求，但整个 16 卡都用于该请求（TP=16），因此单请求计算资源更充沛，适合超长上下文或对延迟极端敏感的场景。</p>
+            <p><strong>功能：</strong>同样作为 KV Producer，将 KV Cache 通过端口 30000 推送到 Mooncake。</p>
+            <div class="spec-grid">
+                <span><strong>NPU 型号：</strong>Ascend 910B</span>
+                <span><strong>显存：</strong>32GB × 16</span>
+                <span><strong>网络：</strong>100G RoCE</span>
+                <span><strong>KV 传输：</strong>Mooncake Producer (30000)</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-left"></i> 接收 Prefill 请求 ← Proxy</span>
+                <span><i class="fas fa-arrow-right"></i> 发送 KV (Producer) → Mooncake:30000</span>
+            </div>
+        </div>
+
+        <!-- Decode Node 2 -->
+        <div class="card node-detail decode">
+            <h3><i class="fas fa-microchip"></i> Node 2 · Decode <span class="tag tag-decode">TP=4, DP=4</span></h3>
+            <div class="desc">角色：Decode 生成节点 · 型号：Atlas 800I A3 · NPU：16× (鲲鹏 920)</div>
+            <p><strong>并行策略详解：</strong>Decode 阶段是自回归生成，每次只产生一个 token，计算量相对小，但需要支持大量并发请求。因此采用 <strong>TP=4</strong>（4 卡张量并行）将 16 卡划分为 4 组，每组内部用 4 卡进行模型并行，通信开销较小；同时 <strong>DP=4</strong> 使得 4 组可以同时服务 4 个不同的 Decode 请求，极大提升系统吞吐。</p>
+            <p><strong>功能：</strong>作为 <strong>KV Consumer</strong> 从 Mooncake 的 <strong>端口 30200</strong> 拉取对应请求的 KV Cache，执行解码，生成 token 序列以 HTTP 响应返回给 Proxy。</p>
+            <div class="spec-grid">
+                <span><strong>NPU 分组：</strong>4 组 × 4 NPU</span>
+                <span><strong>KV 消费端口：</strong>30200 (Consumer)</span>
+                <span><strong>输出：</strong>token 序列</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-left"></i> 获取 KV (Consumer) ← Mooncake:30200</span>
+                <span><i class="fas fa-arrow-right"></i> 返回 Decode 响应 → Proxy</span>
+            </div>
+        </div>
+
+        <!-- Decode Node 3 -->
+        <div class="card node-detail decode">
+            <h3><i class="fas fa-microchip"></i> Node 3 · Decode <span class="tag tag-decode">TP=4, DP=4</span></h3>
+            <div class="desc">角色：Decode 生成节点 · 型号：Atlas 800I A3 · NPU：16× (鲲鹏 920)</div>
+            <p><strong>并行策略详解：</strong>与 Node 2 配置完全一致（TP=4, DP=4），组成 Decode 节点组，进一步扩展并发能力。Mooncake 根据请求 ID 将 KV 分发到空闲的 Consumer 实例（Node 2 或 Node 3 中的某一组）。</p>
+            <p><strong>功能：</strong>同样作为 KV Consumer，消费 KV 并生成 token，返回响应。</p>
+            <div class="spec-grid">
+                <span><strong>NPU 分组：</strong>4 组 × 4 NPU</span>
+                <span><strong>KV 消费端口：</strong>30200 (Consumer)</span>
+                <span><strong>输出：</strong>token 序列</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-left"></i> 获取 KV (Consumer) ← Mooncake:30200</span>
+                <span><i class="fas fa-arrow-right"></i> 返回 Decode 响应 → Proxy</span>
+            </div>
+        </div>
+
+        <!-- Mooncake KV Pool -->
+        <div class="card node-detail kv">
+            <h3><i class="fas fa-network-wired"></i> Mooncake KV Pool <span class="tag tag-warn">实时传输中间件</span></h3>
+            <div class="desc">角色：KV Cache 实时传输层 · 协议：RDMA / TCP · 端口：30000 (Producer) / 30200 (Consumer)</div>
+            <p><strong>功能详解：</strong>Mooncake 是专为 LLM 推理设计的 <strong>KV Cache 实时传输中间件</strong>，核心作用是连接 Prefill 和 Decode 节点，提供高吞吐、微秒级延迟的内存级 KV 交换。Prefill 节点作为 <strong>Producer</strong> 将生成的 KV 推入 Mooncake 的内存池，Decode 节点作为 <strong>Consumer</strong> 按需拉取。Mooncake 内部管理 KV 的生命周期（引用计数、自动过期回收），并支持多 Producer / Consumer 的并发读写，是整个 PD 分离架构的 <strong>数据中枢</strong>。</p>
+            <div class="spec-grid">
+                <span><strong>传输方式：</strong>RDMA (优先) / TCP 回退</span>
+                <span><strong>Producer 端口：</strong>30000</span>
+                <span><strong>Consumer 端口：</strong>30200</span>
+                <span><strong>存储介质：</strong>高速内存池 (DRAM / HBM)</span>
+                <span><strong>KV 索引：</strong>按请求 ID 分片，支持多租户</span>
+                <span><strong>生命周期管理：</strong>引用计数 + TTL 自动回收</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-right"></i> 接收 KV (Producer) ← Node 0/1 (30000)</span>
+                <span><i class="fas fa-arrow-left"></i> 提供 KV (Consumer) → Node 2/3 (30200)</span>
+                <span><i class="fas fa-cloud-upload-alt"></i> 异步持久化 → AscendStore</span>
+            </div>
+        </div>
+
+        <!-- AscendStore -->
+        <div class="card node-detail store">
+            <h3><i class="fas fa-database"></i> AscendStore <span class="tag" style="background:#f3e8ff;color:#8250df;">持久化存储层</span></h3>
+            <div class="desc">角色：KV Cache 持久化存储 · 协议：Memcache 兼容 · 部署：分布式集群</div>
+            <p><strong>功能详解：</strong>AscendStore 是面向 KV Cache 的 <strong>持久化存储系统</strong>，基于 Memcache 协议提供分布式、高可用的 KV 存储服务。它与 Mooncake 协同工作：Mooncake 将 KV 实时同步给 AscendStore 进行 <strong>异步持久化备份</strong>。主要解决两个核心问题：<br/>
+            ① <strong>数据可靠性</strong>：当 Prefill 节点或 Mooncake 自身重启时，KV 可从 AscendStore 恢复，避免重新计算；<br/>
+            ② <strong>跨作业复用</strong>：同一份 KV 可被不同 Decode 作业重复使用（如相同的 prompt 前缀），节省算力。AscendStore 支持水平扩展，通过一致性哈希分布数据，并具备多副本容灾能力。</p>
+            <div class="spec-grid">
+                <span><strong>协议：</strong>Memcache (二进制/文本)</span>
+                <span><strong>存储引擎：</strong>分布式 LSM Tree / 内存 + SSD 分层</span>
+                <span><strong>副本策略：</strong>多副本 (默认 3 副本)</span>
+                <span><strong>数据分片：</strong>一致性哈希 + 虚拟节点</span>
+                <span><strong>一致性级别：</strong>最终一致性（异步复制）</span>
+                <span><strong>恢复方式：</strong>按请求 ID 拉取 KV 重新加载</span>
+            </div>
+            <div class="flow">
+                <span><i class="fas fa-arrow-left"></i> 接收持久化数据 ← Mooncake (异步)</span>
+                <span><i class="fas fa-arrow-right"></i> 提供恢复数据 → Mooncake (按需)</span>
+                <span><i class="fas fa-sync-alt"></i> 跨作业 KV 复用</span>
+            </div>
+        </div>
+
+        <!-- 底部 -->
+        <div style="margin-top:2.5rem;padding-top:1.2rem;border-top:1px solid var(--border);font-size:0.95rem;color:var(--muted);display:flex;flex-wrap:wrap;justify-content:space-between;">
+            <span>华为 Atlas 800I A3 · 16×NPU · PD 分离架构</span>
+            <span>TP: 张量并行 · DP: 数据并行 · Mooncake (实时) + AscendStore (持久化)</span>
+        </div>
+
+    </div>
+
+    <!-- 初始化 Mermaid -->
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({
+                theme: 'base',
+                themeVariables: {
+                    'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif',
+                    'fontSize': '22px',
+                    'nodePadding': '14px',
+                    'primaryColor': '#ddf4ff',
+                    'primaryTextColor': '#0550ae',
+                    'primaryBorderColor': '#0550ae',
+                    'lineColor': '#334155',
+                    'secondaryColor': '#dafbe1',
+                    'tertiaryColor': '#fff8c5',
+                },
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis',
+                    padding: 20,
+                    nodeSpacing: 50,
+                    rankSpacing: 60,
+                },
+                securityLevel: 'loose',
+            });
+            setTimeout(() => mermaid.run(), 200);
+        });
+    </script>
+
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
