@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>三值量化学习逻辑 · 零基础直观理解</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+            padding: 30px 20px;
+            line-height: 1.8;
+        }
+        .container { max-width: 900px; margin: 0 auto; }
+        .header {
+            background: #0f172a;
+            color: #fff;
+            border-radius: 16px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            border: 1px solid #334155;
+        }
+        .header h1 { font-size: 28px; }
+        .header .sub { color: #94a3b8; font-size: 16px; margin-top: 8px; }
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 30px 35px;
+            margin-bottom: 30px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+        }
+        .card h2 {
+            font-size: 22px;
+            margin-bottom: 16px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .card h3 { font-size: 17px; color: #2563eb; margin: 25px 0 12px 0; }
+        .card p { color: #475569; margin-bottom: 14px; font-size: 16px; }
+        .mermaid {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 15px 0;
+            border: 1px solid #e2e8f0;
+            overflow-x: auto;
+        }
+        .mermaid svg { max-width: 100%; }
+        .analogy-box {
+            background: #f0fdf4;
+            border-left: 6px solid #22c55e;
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .analogy-box strong { color: #15803d; }
+        .danger-box {
+            background: #fef2f2;
+            border-left: 6px solid #ef4444;
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .danger-box strong { color: #b91c1c; }
+        .good-box {
+            background: #eff6ff;
+            border-left: 6px solid #3b82f6;
+            padding: 16px 20px;
+            border-radius: 0 12px 12px 0;
+            margin: 20px 0;
+        }
+        .good-box strong { color: #1d4ed8; }
+        .step-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin: 15px 0;
+        }
+        .step-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .step-num {
+            background: #1e293b;
+            color: #fff;
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: bold;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .footer { text-align: center; padding: 20px; color: #94a3b8; font-size: 13px; }
+        .tag { background: #e2e8f0; padding: 2px 10px; border-radius: 12px; font-size: 13px; }
+        .two-cards {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🧠 三值量化学习逻辑</h1>
+        <div class="sub">直通估计器（STE）如何“骗过”梯度 · 零基础直观理解</div>
+    </div>
+
+    <!-- 1. 正常的训练：溜滑梯 -->
+    <div class="card">
+        <h2>1. 正常训练：光滑的“溜滑梯”</h2>
+        <p>正常的神经网络训练，就像站在一个<strong>光滑的斜坡（损失函数）</strong>上。</p>
+        <ul style="padding-left:20px; color:#475569; margin-bottom:15px;">
+            <li><strong>前向</strong>：你往下滑（计算损失）。</li>
+            <li><strong>反向</strong>：你感受坡度（计算梯度），坡度朝哪，你就朝反方向迈步。</li>
+            <li><strong>结果</strong>：每一步都稳稳地往下走，最终到达山底（最优解）。</li>
+        </ul>
+        <div class="mermaid">
+flowchart TD
+    A["权重 w（你的位置）"] --> B["前向计算（往下滑）"]
+    B --> C["算出损失（多高）"]
+    C --> D["反向求导（感受坡度）"]
+    D --> E["梯度下降（朝反方向迈步）"]
+    E --> A
+        </div>
+        <div class="good-box">
+            <strong>✅ 关键点：</strong> 因为斜坡是连续的，坡度（梯度）永远存在，你永远知道该往哪走。
+        </div>
+    </div>
+
+    <!-- 2. 三值化的问题：楼梯断裂 -->
+    <div class="card">
+        <h2>2. 三值化的问题：变成“断裂的楼梯”</h2>
+        <p>三值化时，我们把权重强制变成 <code>-1</code>、<code>0</code>、<code>+1</code>。这就好比把<strong>光滑的斜坡</strong>，改成了<strong>只有三级的陡峭台阶</strong>。</p>
+        <div class="danger-box">
+            <strong>⛔ 致命问题：</strong> 台阶的平面是平的（导数为0），台阶的边缘是垂直的（导数无穷大）。<br>
+            当你站在台阶上时，你<strong>感觉不到坡度</strong>（梯度消失了）！你根本不知道是该往左走还是往右走。
+        </div>
+        <div class="mermaid">
+flowchart TD
+    W["全精度权重"] --> Q["前向：强制四舍五入<br/>(踩上台阶)"]
+    Q --> T["变成离散值 {-1, 0, +1}"]
+    T --> M["计算损失"]
+    M --> G["反向求导"]
+    G --> X["❌ 台阶是平的，梯度=0"]
+    X --> END["权重无法更新，训练卡死"]
+        </div>
+        <p style="color:#b91c1c; font-weight:bold;">这就是“梯度消失” —— 如果没有 STE，三值化网络根本训练不动。</p>
+    </div>
+
+    <!-- 3. STE的魔法：假装有斜坡（拆成两个图） -->
+    <div class="card">
+        <h2>3. STE 的魔法：假装有个“隐形斜坡”</h2>
+        <p>STE（直通估计器）想了个鬼点子：<strong>前向传播时，我踩台阶（做三值化）；反向传播时，我假装台阶不存在，直接穿透过去！</strong></p>
+        <div class="analogy-box">
+            <strong>🎯 比喻：</strong> 就像你闭着眼睛下楼梯。脚踩空了（前向离散化），但大脑告诉你“刚才那一步是平的”（反向直通），你的手还是能扶住墙（梯度），继续往下摸。
+        </div>
+
+        <!-- 图A：前向传播（踩台阶） -->
+        <h3>前向传播：踩台阶</h3>
+        <div class="mermaid">
+flowchart TD
+    W["全精度权重"] --> R["四舍五入（踩台阶）"]
+    R --> T["变成 {-1, 0, +1}"]
+    T --> L["计算损失"]
+        </div>
+
+        <!-- 图B：反向传播（STE直通） -->
+        <h3>反向传播：假装台阶不存在</h3>
+        <div class="mermaid">
+flowchart TD
+    L["损失"] --> G["计算梯度"]
+    G --> STE["🔮 STE 直通<br/>(忽略四舍五入，原样传回)"]
+    STE --> U["更新全精度权重<br/>(继续往前走)"]
+        </div>
+
+        <div class="good-box">
+            <strong>✅ 代码就是这一句：</strong> <code>return grad_output, None</code>。直接把梯度原样扔回给全精度权重，假装 Round 和 Clamp 从来没发生过。
+        </div>
+    </div>
+
+    <!-- 4. 为什么会震荡？为什么最终能收敛？ -->
+    <div class="card">
+        <h2>4. 震荡与收敛：为什么“瞎摸”也能到终点？</h2>
+        <p>既然 STE 是“乱传”梯度，为什么模型最后还能收敛？我们看一个简单的物理场景。</p>
+
+        <h3>场景：权重在 0.6，目标需要 0</h3>
+        <div class="step-list">
+            <div class="step-item">
+                <div class="step-num">1</div>
+                <div><strong>前向</strong>：0.6 四舍五入 = <strong>+1</strong>（踩到了 +1 的台阶）。损失巨大（因为本来想要 0）。</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">2</div>
+                <div><strong>STE 反向</strong>：梯度说“太大了，赶紧减小！”。这个巨大推力直接打在 0.6 上。</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">3</div>
+                <div><strong>更新</strong>：0.6 被猛地推到了 <strong>0.1</strong>（甚至可能负值）。</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">4</div>
+                <div><strong>下一轮前向</strong>：0.1 四舍五入 = <strong>0</strong>（终于踩到了 0 的台阶！）。</div>
+            </div>
+            <div class="step-item">
+                <div class="step-num">5</div>
+                <div><strong>最终</strong>：虽然 0.1 不是 0，但前向输出已经变成 0 了。模型只要把 0.1 稳住（或继续推向 0），就完美收敛。</div>
+            </div>
+        </div>
+        <div class="analogy-box">
+            <strong>🎯 核心机制（推箱子过沟）：</strong><br>
+            权重就是箱子。STE 的梯度就是一股巨大的推力。<br>
+            虽然推力很粗暴（导致震荡），但它能把箱子从“+1 的沟”里推出来，推过 0.5 的边界，掉进“0 的沟”里。一旦掉进正确的沟（桶），前向输出就稳定了。
+        </div>
+    </div>
+
+    <!-- 5. 最终对比（拆成两个独立图，每个都是 TD） -->
+    <div class="card">
+        <h2>5. 最终对比：全精度 vs 三值化 STE</h2>
+
+        <!-- 图1：全精度训练（独立） -->
+        <div class="mermaid">
+flowchart TD
+    A1["权重=0.6"] --> A2["输出=0.6×2=1.2"] --> A3["完美命中"]
+    A3 --> A4["梯度=0，权重不变"]
+        </div>
+
+        <!-- 图2：三值化 STE 训练（独立） -->
+        <div class="mermaid">
+flowchart TD
+    B1["权重=0.6"] --> B2["三值化=1"] --> B3["输出=2，偏大"]
+    B3 --> B4["STE梯度巨大"] --> B5["权重被推到-1.0（震荡）"]
+    B5 --> B6["三值化=-1"] --> B7["输出=-2，偏小"]
+    B7 --> B8["STE反方向推"] --> B9["权重推回0.8"]
+    B9 --> B10["三值化=1，输出≈2"]
+    B10 --> B11["反复震荡，但落进桶里"]
+        </div>
+
+        <div style="background:#1e293b; color:#e2e8f0; padding:16px 20px; border-radius:12px; margin-top:15px;">
+            <p style="color:#facc15; font-weight:bold; margin-bottom:5px;">📌 终极结论：</p>
+            <p style="color:#cbd5e1; margin-bottom:0;">全精度训练是“精准制导”，一次到位。三值化 STE 是“推箱子过沟”，虽然来回震荡，但因为有 STE 这股“蛮力”推着，权重总能越过离散边界，掉进 <strong>-1、0、+1</strong> 这三个正确的坑里。一旦掉进去，前向输出就稳了，模型也就学会了。</p>
+        </div>
+    </div>
+
+    <div class="footer">三值量化 STE 学习逻辑 · 简化理解版 · 放弃公式，拥抱直觉</div>
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            primaryColor: '#dbeafe',
+            primaryTextColor: '#1e293b',
+            primaryBorderColor: '#2563eb',
+            lineColor: '#64748b',
+            secondaryColor: '#f1f5f9',
+            tertiaryColor: '#ffffff'
+        }
+    });
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
