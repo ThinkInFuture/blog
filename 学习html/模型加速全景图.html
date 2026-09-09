@@ -246,6 +246,49 @@
             letter-spacing: 0.3px;
         }
         .footer-note strong { color: #3a4a5e; }
+
+        /* ===== 典型应用（全景图后新页） ===== */
+        .apps {
+            margin-top: 30px;
+            padding-top: 26px;
+            border-top: 2px dashed #dce4ef;
+        }
+        .apps .apps-grid { grid-template-columns: 1fr; gap: 20px; }
+        .apps .module { border-left: 4px solid #ef7d54; padding: 18px 20px 18px; }
+        .apps .module .mod-header { color: #b3491f; font-size: 17px; flex-wrap: wrap; }
+        .apps .sub-tag .dot { background: #ef7d54; }
+        .apps .mod-body { font-size: 13.5px; line-height: 1.75; }
+        .apps .mod-body p { margin: 0 0 10px; }
+        .apps .mod-body p:last-child { margin-bottom: 0; }
+        .apps .mod-body b { color: #b3491f; }
+        .app-tag {
+            font-size: 11.5px;
+            font-weight: 600;
+            color: #fff;
+            background: #ef7d54;
+            border-radius: 30px;
+            padding: 2px 12px;
+            margin-left: 8px;
+        }
+        .app-links {
+            margin-top: 12px;
+            padding-top: 10px;
+            border-top: 1px dashed #e0d6cf;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .app-link {
+            font-size: 12px;
+            color: #2a6fb0;
+            text-decoration: none;
+            background: #eef5fc;
+            border: 1px solid #d3e4f5;
+            border-radius: 8px;
+            padding: 4px 10px;
+            transition: background 0.12s;
+        }
+        .app-link:hover { background: #e0eefb; }
     </style>
 </head>
 <body>
@@ -341,9 +384,10 @@
                         <div class="mod-header"><span class="icon">🔢</span> 量化压缩</div>
                         <div class="mod-body">FP32 → INT8 / FP8 / INT4，降低显存与带宽</div>
                         <div class="sub-tags">
-                            <span class="sub-tag"><span class="dot"></span><span class="label">PTQ</span><span class="desc">训练后</span></span>
-                            <span class="sub-tag"><span class="dot"></span><span class="label">QAT</span><span class="desc">感知训练</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">PTQ</span><span class="desc">训练后·可含混合/分组量化</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">分组量化</span><span class="desc">group-wise缩放</span></span>
                             <span class="sub-tag"><span class="dot"></span><span class="label">混合精度</span><span class="desc">FP16/INT8</span></span>
+                            <span class="sub-tag"><span class="dot"></span><span class="label">QAT</span><span class="desc">感知训练</span></span>
                         </div>
                     </div>
                     <div class="module">
@@ -505,7 +549,81 @@
             <strong>模型加速全景图</strong> · 已修正：KDA 与 MHA/MQA/GQA 合并为“多头注意力与加速变体”，体现一脉相承的优化关系
         </div>
 
+        <!-- ========== 典型应用：加速技术落地（新页） ========== -->
+        <section class="apps">
+            <div class="layer-title">
+                <span>🚀 典型应用：加速技术落地</span>
+                <span class="badge">三值化 · 混合精度 · 原生 MTP</span>
+            </div>
+            <div class="layer-grid apps-grid">
+
+                <div class="module">
+                    <div class="mod-header"><span class="icon">🌳</span> Ternary Bonsai 27B <span class="app-tag">极端低比特量化 · 端侧</span></div>
+                    <div class="mod-body">
+                        <p><b>加速技术</b>：基于 Qwen3.6-27B 混合注意力骨干（约 75% 线性注意力），<b>端到端三值化（1.58-bit）</b>——权重取值 {-1, 0, +1}，每 128 权重共享一个 FP16 缩放因子（group-wise），真值约 1.71 bit/weight。FP16 约 54GB → 部署约 7.2GB（≈9.4× 压缩），精度保留 FP16 的约 94.6%。辅以 4-bit KV 缓存量化，并在线性注意力骨干上支撑 262K 上下文端侧运行；官方额外提供 DSpark 投机解码草稿层进一步提速；多模态（视觉塔 4-bit）。</p>
+                        <p><b>定位</b>：在同体量模型中以极小体积换取可用精度，适合单卡 / 端侧部署。</p>
+                    </div>
+                    <div class="sub-tags">
+                        <span class="sub-tag"><span class="dot"></span><span class="label">三值化</span><span class="desc">1.58-bit</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">分组量化</span><span class="desc">g128</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">混合架构</span><span class="desc">线性注意力</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">DSpark</span><span class="desc">投机解码</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">4-bit KV</span><span class="desc">缓存量化</span></span>
+                    </div>
+                    <div class="app-links">
+                        <a class="app-link" href="https://huggingface.co/prism-ml/Ternary-Bonsai-27B-gguf" target="_blank">🤗 HF: Ternary-Bonsai-27B-gguf</a>
+                        <a class="app-link" href="https://docs.prismml.com/models/bonsai-27b" target="_blank">📄 官方文档</a>
+                        <a class="app-link" href="https://prismml.com/news/ternary-bonsai" target="_blank">📰 发布博客</a>
+                        <a class="app-link" href="https://modelscope.cn/models/prism-ml/Ternary-Bonsai-27B-gguf" target="_blank">🐚 魔塔: Ternary-Bonsai-27B-gguf</a>
+                    </div>
+                </div>
+
+                <div class="module">
+                    <div class="mod-header"><span class="icon">🐦</span> Ornith-1.5-35B-A3B <span class="app-tag">MoE · FP8 · 原生 MTP</span></div>
+                    <div class="mod-body">
+                        <p><b>训练侧（核心特点）</b>：采用 <b>自出题（self-generated tasks）+ 自脚手架 / 自滚动优化（self-scaffolding）+ 强化学习闭环（end-to-end self-improvement）</b> 的范式，将任务生成、脚手架构建与求解滚动联合优化，相比同体量 Qwen3.6-35B 在编程与智能体基准上提升明显。</p>
+                        <p><b>加速技术</b>：35B MoE，每 token 仅激活约 3B 参数；<b>FP8（per-tensor）量化</b>降低显存与带宽；<b>原生 MTP 草稿头（约 1.9B）</b>即自投机解码（vLLM --spec-type draft-mtp）；社区 NVFP4+FP8 混合量化把 35B 压到 22.6GiB（较 BF16 约 3× 更小）且保留 MTP 块，投机解码依然可用；原生 256K 长上下文。</p>
+                    </div>
+                    <div class="sub-tags">
+                        <span class="sub-tag"><span class="dot"></span><span class="label">FP8 量化</span><span class="desc">per-tensor</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">混合精度</span><span class="desc">NVFP4+FP8</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">MoE</span><span class="desc">3B激活</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">原生 MTP</span><span class="desc">自投机</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">256K</span><span class="desc">长上下文</span></span>
+                    </div>
+                    <div class="app-links">
+                        <a class="app-link" href="https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B" target="_blank">🤗 HF: Ornith-1.5-35B-A3B</a>
+                        <a class="app-link" href="https://huggingface.co/ornith-ai/Ornith-1.5-35B-A3B-FP8" target="_blank">🤗 HF: FP8 权重</a>
+                        <a class="app-link" href="https://huggingface.co/shisa-ai/Ornith-1.5-35B-A3B-MTP-FP8" target="_blank">🤗 HF: MTP-FP8</a>
+                        <a class="app-link" href="https://deep-reinforce.com/ornith.html" target="_blank">📰 官方博客</a>
+                        <a class="app-link" href="https://modelscope.cn/models/ornith-ai/Ornith-1.5-35B-A3B" target="_blank">🐚 魔塔: Ornith-1.5-35B-A3B</a>
+                    </div>
+                </div>
+
+                <div class="module">
+                    <div class="mod-header"><span class="icon">🪨</span> Qwen3.8-27B-Ridge <span class="app-tag">架构感知量化 · 原生 MTP</span></div>
+                    <div class="mod-body">
+                        <p><b>加速技术</b>：对 Qwen3.8-27B（混合 GatedDeltaNet + 全注意力）做 <b>架构感知混合量化</b> + <b>原生 MTP</b>。敏感的门控线性注意力（GDN）状态路径保持 Q8_0 高精度，混合器 Q4_K，中段 FFN 压至 IQ2_M，MTP 草稿头 Q6_K。27B → 11.7GB @3.7bpw，约 54 tok/s（RTX PRO 6000 Blackwell），原生 MTP 提供投机提速。</p>
+                        <p><b>定位</b>：按层敏感度分配比特，在体积与精度间精细权衡，适合单卡高吞吐。</p>
+                    </div>
+                    <div class="sub-tags">
+                        <span class="sub-tag"><span class="dot"></span><span class="label">架构感知量化</span><span class="desc">混合精度</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">原生 MTP</span><span class="desc">投机提速</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">GDN 状态路径</span><span class="desc">Q8_0</span></span>
+                        <span class="sub-tag"><span class="dot"></span><span class="label">低比特 FFN</span><span class="desc">IQ2_M</span></span>
+                    </div>
+                    <div class="app-links">
+                        <a class="app-link" href="https://huggingface.co/empero-ai/Qwen3.8-27B-Ridge-GGUF" target="_blank">🤗 HF: Qwen3.8-27B-Ridge-GGUF</a>
+                        <a class="app-link" href="https://modelscope.cn/models/empero-ai/Qwen3.8-27B-Ridge-GGUF" target="_blank">🐚 魔塔: Qwen3.8-27B-Ridge-GGUF</a>
+                    </div>
+                </div>
+
+            </div>
+        </section>
+
     </div>
 
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
 </body>
 </html>
