@@ -10,13 +10,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .navbar{padding:16px 0;border-bottom:1px solid #eee}
 .nav-inner{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
 .nav-logo{font-size:16px;font-weight:700}
+.nav-sub{font-size:12px;font-weight:400;color:#999;margin-left:10px;padding-left:10px;border-left:1px solid #e5e5e5}
 .nav-links{display:flex;gap:24px}
 .nav-links a{text-decoration:none;color:#888;font-size:14px}
 .nav-links a:hover{color:#111}
 .wrap{max-width:1000px;margin:0 auto;padding:0 24px}
-.hero{padding:40px 0 32px;border-bottom:1px solid #eee}
-.hero h1{font-size:32px;font-weight:700;margin-bottom:10px;letter-spacing:-0.5px}
-.hero p{font-size:15px;color:#666;max-width:520px}
 
 .carousel{padding:40px 24px;border-bottom:1px solid #eee;position:relative;overflow:hidden;max-width:1000px;margin:0 auto}
 .carousel-track{display:flex;transition:transform 0.5s ease}
@@ -89,7 +87,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 .metrics{grid-template-columns:repeat(2,1fr)}
 .metric{border-right:none;border-bottom:1px solid #eee}
 .cols2{grid-template-columns:1fr}
-.hero h1{font-size:24px}
 .ft-inner{flex-direction:column;gap:16px;text-align:center}
 .li{flex-direction:column;gap:2px}
 }
@@ -97,20 +94,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 </head>
 <body>
 <nav class="navbar"><div class="nav-inner">
-<div class="nav-logo">华杉的技术博客</div>
+<div class="nav-logo">华杉的技术博客<span class="nav-sub">大模型学习实践</span></div>
 <div class="nav-links">
 <a href="#learning">学习专区</a>
 <a href="#experiments">实验专区</a>
 <a href="#models">模型专区</a>
 </div>
 </div></nav>
-
-<div class="wrap">
-<div class="hero">
-<h1>AI推理优化学习笔记</h1>
-<p>从理论学习到实践验证，探索大模型推理加速技术的前沿领域</p>
-</div>
-</div>
 
 <div class="carousel" id="carousel">
 <button class="carousel-arrow prev" onclick="moveCarousel(-1)">&lsaquo;</button>
