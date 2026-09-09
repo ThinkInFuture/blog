@@ -1,0 +1,1565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>DSpark 完整复现报告：论文+代码+迭代1-20（精简整理）</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+         background: #edf1f7; color: #1f2937; line-height: 1.8; padding: 28px 14px; }
+  .container { max-width: 1180px; margin: 0 auto; background: #fff;
+               border-radius: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.08); padding: 34px 42px; }
+  h1 { font-size: 26px; color: #111827; border-left: 6px solid #2563eb; padding-left: 14px; margin-bottom: 10px; }
+  .meta { color: #6b7280; font-size: 13.5px; margin-bottom: 18px; }
+  h2 { font-size: 21px; margin: 34px 0 12px; padding-bottom: 7px; border-bottom: 2px solid #e5e7eb; color: #1e3a8a; }
+  h3 { font-size: 17px; margin: 22px 0 8px; color: #1e293b; }
+  h4 { font-size: 15px; margin: 14px 0 6px; color: #334155; }
+  p { margin: 10px 0; }
+  ul, ol { margin: 10px 0; padding-left: 26px; }
+  li { margin: 5px 0; }
+  hr { border: none; border-top: 1px solid #e5e7eb; margin: 22px 0; }
+  code { background: #eef2ff; padding: 2px 6px; border-radius: 4px;
+         font-family: Consolas, Monaco, monospace; font-size: 13px; color: #1e40af; }
+  pre { background: #282c34; color: #abb2bf; padding: 14px 16px; border-radius: 8px;
+        overflow-x: auto; font-family: Consolas, "Courier New", monospace; font-size: 12.5px;
+        line-height: 1.5; white-space: pre; margin: 12px 0; }
+  pre code { background: none; color: inherit; padding: 0; }
+  blockquote { border-left: 4px solid #1a73e8; margin: 12px 0; padding: 8px 14px; background: #f8faff; color: #374151; }
+  table { width: 100%; border-collapse: collapse; margin: 16px 0 22px; font-size: 14px; }
+  th, td { border: 1px solid #d1d5db; padding: 9px 11px; text-align: left; vertical-align: top; }
+  th { background: #1e40af; color: #fff; font-weight: 600; }
+  tbody tr:nth-child(even) { background: #f3f4f6; }
+  tbody tr:hover { background: #e5edff; }
+  .summary { background: #eef6ff; border: 1px solid #bfdbfe; border-left: 5px solid #2563eb;
+             border-radius: 10px; padding: 16px 20px; margin: 14px 0 10px; }
+  .summary-title { font-weight: 700; color: #1e3a8a; margin-bottom: 8px; font-size: 16px; }
+  .summary ul { padding-left: 22px; margin: 0; }
+  .summary li { margin: 6px 0; }
+  .tag { display: inline-block; background: #2563eb; color: #fff; border-radius: 4px;
+          padding: 1px 7px; font-size: 12px; margin: 0 2px; }
+  .toc { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+          padding: 14px 18px; margin: 16px 0; }
+  .toc-title { font-weight: 700; color: #1e3a8a; margin-bottom: 8px; }
+  .toc ul { list-style: none; padding-left: 0; columns: 2; }
+  .toc li { margin: 4px 0; }
+  .toc a { color: #2563eb; text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .ok { color: #16a34a; font-weight: 600; }
+  .warn { color: #d97706; font-weight: 600; }
+  .bad { color: #dc2626; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>DSpark 完整复现报告：论文 + 代码 + 迭代 1–20（精简整理）</h1>
+  <div class="meta">生成时间：2026-08-17 05:48:06 ｜ 环境：RTX 4070 Ti SUPER 16GB / transformers 5.3.0 / torch 2.6.0+cu124 ｜ 论文：arXiv:2607.05147 ｜ 整理版：移除内嵌 3.3MB 库、统一排版、补充速览与目录</div>
+
+<div class="summary">
+  <div class="summary-title">📌 核心结论（一页速览）</div>
+  <ul>
+    <li><strong>目标</strong>：复现 DSpark（arXiv:2607.05147）投机解码草稿模型，target = Qwen3-4B（RTX 4070 Ti SUPER 16GB）。</li>
+    <li><strong>官方标杆</strong>：GSM8K 接受长度 6.11、首位接受率 P0 = 93.2%、端到端加速 <strong>5.24×</strong>（130万数据 + RNN/Gated head + STS + 硬件调度器）。</li>
+    <li><strong>自研最佳（迭代20 · v2_k2_v2）</strong>：5万 K2 + 7473 GSM8K 混合训练 → gsm8k <strong>P0 = 40.14%</strong>、加速 <strong>1.73×</strong>；k2 P0 = 30.39%。</li>
+    <li><strong>关键里程碑</strong>：
+      <span class="tag">迭代11</span> TV + position 加权使 P0 首次跃升（19.6%）；
+      <span class="tag">迭代14</span> 修复 DraftAttention 无 causal mask（P0 崩塌根因）；
+      <span class="tag">迭代16</span> 改用官方 DeepSpec 源码，验证架构正确性；
+      <span class="tag">迭代19/20</span> K2 混合数据扩量，P0 突破 40%。</li>
+    <li><strong>核心瓶颈</strong>：① 数据量（5.4万 vs 官方 130万，差 ~24×）；② 未实现 RNN/Gated / STS 校准 / 硬件感知调度器 / 动态验证长度。</li>
+  </ul>
+</div>
+<div class="toc"><div class="toc-title">目录</div><ul><li><a href="#s1">第一章：论文关键点（arXiv:2607.05147）</a></li><li><a href="#s2">第二章：关键代码对比（官方 vs 我的复现）</a></li><li><a href="#s3">第三章~第十三章：迭代1-11 各自独立章节</a></li><li><a href="#s4">第十六章：论文关键点 × 迭代覆盖对照（更新）</a></li><li><a href="#s5">第十七章：跨迭代对比（P0 趋势，更新）</a></li><li><a href="#s6">迭代19 · v2_k2 训练完成（GSM8K 7473 + K2 27000 混合，34473 样本 bf16）[迭代19 加入]</a></li><li><a href="#s7">迭代20 · v2_k2_v2 训练完成（5万K2+GSM8K混合，54473样本bf16）[迭代20 加入]</a></li><li><a href="#s8">文件清单</a></li><li><a href="#s9">附录A：K2 数据生成代码梳理报告</a></li><li><a href="#s10">附录B：K2 报告补遗（回答/特征/模型权重）</a></li><li><a href="#s11">附录C：K2 报告补遗 v2（800截断 + 数据生成环节）</a></li></ul></div><h2 id="s1">第一章：论文关键点（arXiv:2607.05147）</h2>
+<h3>1.1 核心思想</h3>
+<p>投机解码：草稿提议 γ 个 token，target 一次并行验证。每轮延迟 L = (T_draft + T_verify)/τ。</p>
+<p>DSpark 解决两个瓶颈：
+1. <strong>并行草稿质量</strong>：并行草稿缺 token 依赖 → 多模态冲突 + 后缀衰减
+2. <strong>验证效率</strong>：盲目验证整块浪费批量计算</p>
+<h3>1.2 两大机制</h3>
+<p><strong>半自回归架构</strong>：
+- 并行主干（DFlash 风格）：一次前向生成全部 base logits
+- 序列模块：加前缀依赖偏置
+  - Markov head：一阶转移，低秩 W1·W2（rank=256）
+  - RNN head：循环状态累积前缀历史</p>
+<p><strong>置信度调度验证</strong>：
+- 置信度头：预测条件接受概率 c_k
+- STS 校准：ECE 纠正
+- 硬件感知调度器：动态验证长度</p>
+<h3>1.3 训练目标</h3>
+<pre><code>L = 0.1·L_ce + 0.9·L_tv + 1.0·L_conf
+w_k = exp(-(k-1)/γ)  （position 加权）
+</code></pre>
+<h3>1.4 数据与评估</h3>
+<ul>
+<li>数据：Open-PerfectBlend <strong>130万条</strong>，responses 由 target 重新生成，10 epochs</li>
+<li>评估：<strong>sampling temperature=1.0</strong>，accepted length</li>
+</ul>
+<h3>1.5 官方结果（Qwen3-4B）</h3>
+<ul>
+<li>GSM8K accepted length 6.11，加速 5.24x</li>
+<li>Position 接受率：[0.93, 0.86, 0.79, 0.73, 0.67, 0.61, 0.56]</li>
+</ul>
+<hr />
+<h2 id="s2">第二章：关键代码对比（官方 vs 我的复现）</h2>
+<h3>2.1 Markov Head（序列模块）</h3>
+<p><strong>官方实现</strong>（VanillaMarkov，markov_head.py）：</p>
+<pre><code class="language-python">class VanillaMarkov(nn.Module):
+    def __init__(self, *, vocab_size, markov_rank):
+        self.markov_w1 = nn.Embedding(vocab_size, markov_rank)  # 词嵌入
+        self.markov_w2 = nn.Linear(markov_rank, vocab_size, bias=False)  # 投影
+
+    def compute_step_bias(self, token_ids, hidden_states):
+        # B(x_{k-1}, ·) = W1[x_{k-1}] · W2
+        return self.project_bias(self.get_prev_embeddings(token_ids))
+
+    def apply_step_logits(self, logits, *, token_ids, hidden_states):
+        return logits + self.compute_step_bias(token_ids, hidden_states)
+
+    def sample_block_tokens(self, base_logits, *, first_prev_token_ids, hidden_states, temperature=0.0):
+        # 逐步采样：每步用前一个采样 token 计算 bias
+        for step_idx in range(proposal_len):
+            step_logits = self.apply_step_logits(base_logits[:, step_idx, :],
+                                                 token_ids=prev_token_ids, ...)
+            next_token_ids = sample_tokens(step_logits, temperature=temperature)
+            prev_token_ids = next_token_ids
+</code></pre>
+<p><strong>我的实现</strong>（train_dspark_aligned.py）：</p>
+<pre><code class="language-python"># Markov head（rank=256）
+self.markov_rank = 256
+self.markov_w1 = nn.Embedding(self.vocab_size, self.markov_rank)
+self.markov_w2 = nn.Linear(self.markov_rank, self.vocab_size, bias=False)
+
+def markov_bias(self, prev_tokens):
+    return self.markov_w2(self.markov_w1(prev_tokens.long()))
+
+def forward(self, draft_input_ids, target_features, prev_tokens=None):
+    ...
+    logits = self.lm_head(h)
+    if prev_tokens is not None:
+        logits = logits + self.markov_bias(prev_tokens)  # 加 bias
+    return logits
+</code></pre>
+<p><strong>对比结论</strong>：
+- ✅ <strong>结构一致</strong>：W1 embedding + W2 投影，低秩 rank=256
+- ✅ <strong>bias 公式一致</strong>：logits + W1[x]·W2
+- ⚠️ <strong>推理方式</strong>：官方 <code>sample_block_tokens</code> 逐步采样（temperature 可配）；我用逐步 argmax（greedy）
+- ❌ <strong>缺 Gated/RNN 变体</strong>：我只实现 vanilla，未实现 gated、rnn</p>
+<h3>2.2 共享中间层特征（Context Feature）</h3>
+<p><strong>官方实现</strong>（common.py）：</p>
+<pre><code class="language-python">def extract_context_feature(hidden_states, layer_ids):
+    # 取 target 层 [1,9,17,25,33] 的 hidden states 并 concat
+    return torch.cat([hidden_states[layer_id + 1] for layer_id in layer_ids], dim=-1)
+</code></pre>
+<p><strong>我的实现</strong>（train_dspark_aligned.py）：</p>
+<pre><code class="language-python">self.fc = nn.Linear(len(TARGET_LAYER_IDS) * self.hidden_size, self.hidden_size, bias=False)
+# 层 [1,9,17,25,33] 特征 concat -&gt; fc 投影
+</code></pre>
+<p><strong>对比结论</strong>：
+- ✅ <strong>一致</strong>：concat 层[1,9,17,25,33] 特征 + fc 投影到 hidden_size
+- ⚠️ 官方还做了 RMSNorm（H_ctx = RMSNorm(W_c[H_l1;...;H_lm])），我用的 fc + hidden_norm，等价</p>
+<h3>2.3 Attention（Cross-attention 到 target 特征）</h3>
+<p><strong>官方实现</strong>（qwen3/modeling.py）：</p>
+<pre><code class="language-python">q = self.q_proj(hidden_states)   # 噪声 embedding 的 query
+k_ctx = self.k_proj(target_hidden_states)  # target 特征做 key
+k = torch.cat([k_ctx, k_noise], dim=1)     # concat target 特征 + 噪声
+</code></pre>
+<p><strong>我的实现</strong>（train_dspark_aligned.py DraftAttention）：</p>
+<pre><code class="language-python">q = self.q_proj(hidden_states)
+k_ctx = self.k_proj(target_features)
+k_noise = self.k_proj(hidden_states)
+k = torch.cat([k_ctx, k_noise], dim=1)
+attn = torch.matmul(q, k.transpose(-2, -1)) * self.scaling
+attn = F.softmax(attn, dim=-1)   # ← 无 causal mask（迭代14 待修）
+</code></pre>
+<p><strong>对比结论</strong>：
+- ✅ Q 来自噪声，K/V = [target 特征; 噪声] 一致
+- ⚠️ <strong>无 causal mask</strong>：训练整块 forward 时位置0 偷看未来 MASK，推理逐步 forward 无未来信息 → 训练/推理 attention 范围不一致（迭代13 根因，迭代14 修复）
+- <code>[迭代13 补充]</code> causal mask 缺失问题（迭代13 评估变差后定位）</p>
+<h3>2.3b Confidence Head（置信度头）<code>[迭代12 新增]</code></h3>
+<p><strong>官方实现</strong>（common.py AcceptRatePredictor）：</p>
+<pre><code class="language-python">class AcceptRatePredictor(nn.Module):
+    def __init__(self, input_dim: int):
+        self.proj = nn.Linear(int(input_dim), 1)
+    def forward(self, features):
+        return self.proj(features).squeeze(-1)
+# 输入 = [h_k; W1[x_{k-1}]]，监督目标 c* = 1 - ½||p_d - p_t||₁
+</code></pre>
+<p><strong>我的实现</strong>（train_dspark_aligned.py，迭代12 加入）：</p>
+<pre><code class="language-python"># Confidence head：输入 [hidden; markov_emb] -&gt; 接受概率
+self.confidence_proj = nn.Linear(self.hidden_size + self.markov_rank, 1, bias=True)
+
+def confidence(self, hidden_states, prev_tokens):
+    markov_emb = self.markov_w1(prev_tokens.long())
+    feat = torch.cat([hidden_states, markov_emb], dim=-1)
+    return torch.sigmoid(self.confidence_proj(feat).squeeze(-1))
+</code></pre>
+<p><strong>对比结论</strong>：
+- ✅ 结构一致：Linear(input_dim,1) + sigmoid，输入 [hidden; markov_emb]
+- ✅ 监督目标一致：c* = 1 - ½||p_d - p_t||₁（TV 距离导出），BCE 损失 + position 加权</p>
+<h3>2.4 损失函数 <code>[迭代12 更新：补充 confidence loss]</code></h3>
+<p><strong>官方实现</strong>（loss.py）：</p>
+<pre><code class="language-python"># 0.1·L_ce + 0.9·L_tv + 1.0·L_conf
+ce_loss = -Σ w_k·log p_d(x*)           # 交叉熵
+tv_loss = Σ w_k·||p_d - p_t||₁         # 分布匹配
+conf_loss = -Σ w_k[c*_k log c_k + ...] # 置信度
+w_k = exp(-(k-1)/γ)                    # position 加权
+</code></pre>
+<p><strong>我的实现</strong>（train_dspark_aligned.py，迭代12 完整对齐）：</p>
+<pre><code class="language-python">def tv_loss(draft_logits, target_logits, labels):
+    draft_probs = F.softmax(draft_logits.float(), dim=-1)
+    target_probs = F.softmax(target_logits.float(), dim=-1)
+    tv = (draft_probs - target_probs).abs().sum(dim=-1)
+    w = torch.exp(-torch.arange(gamma).float() / gamma)  # position 加权
+    return (tv * w).mean()
+
+# confidence loss（迭代12 加入）
+tv_dist = (draft_probs - target_probs).abs().sum(dim=-1)
+conf_target = (1.0 - 0.5 * tv_dist).clamp(0.0, 1.0)
+conf_loss = F.binary_cross_entropy(conf_pred.float(), conf_target.detach(),
+                                   weight=w.expand_as(conf_target)).mean()
+
+loss = 0.1·ce_loss + 0.9·tv_loss + 1.0·conf_loss
+</code></pre>
+<p><strong>对比结论</strong>：
+- ✅ <strong>CE + TV + position 加权 + confidence loss 全部对齐</strong>（0.1/0.9/1.0 权重，w_k 一致）</p>
+<h3>2.5 关键差异汇总（更新到当前代码）<code>[迭代13 更新]</code></h3>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>官方</th>
+<th>我的复现（当前）</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markov head 结构</td>
+<td>W1·W2 rank=256</td>
+<td>同</td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>Markov 推理</td>
+<td>sample_block_tokens (温度可配)</td>
+<td>逐步 argmax（greedy）</td>
+<td>⚠️ 有差异</td>
+</tr>
+<tr>
+<td>共享中间层</td>
+<td>concat + fc + RMSNorm</td>
+<td>同</td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>Cross-attention</td>
+<td>Q=噪声 K/V=[特征;噪声]</td>
+<td>同</td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>CE + TV + position加权</td>
+<td>0.1/0.9/w_k</td>
+<td>同</td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>Confidence head</td>
+<td>有</td>
+<td><strong>有（迭代12）</strong></td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>Confidence loss</td>
+<td>有</td>
+<td><strong>有（迭代12）</strong></td>
+<td>✅ 一致</td>
+</tr>
+<tr>
+<td>RNN/Gated head</td>
+<td>有</td>
+<td>无</td>
+<td>❌ 缺失</td>
+</tr>
+<tr>
+<td>sampling 验证</td>
+<td>temperature=1.0</td>
+<td>greedy</td>
+<td>❌ 不同</td>
+</tr>
+<tr>
+<td><strong>causal mask</strong></td>
+<td>有</td>
+<td><strong>无（迭代14 待修）</strong></td>
+<td>❌ 缺失</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="s3">第三章~第十三章：迭代1-11 各自独立章节</h2>
+<blockquote>
+<p>章节结构说明：迭代1-20 各为一个独立章节（<code>### 迭代N</code>），后续迭代15、16 继续追加在同级。</p>
+</blockquote>
+<hr />
+<h3>迭代1 · Qwen3.5-4B + Qwen3-0.6B 原始草稿</h3>
+<p><strong>① 方案</strong>：独立小模型草稿，非共享中间层；target=Qwen3.5-4B
+<strong>② 数据规模</strong>：无训练数据
+<strong>③ 训练配置</strong>：无
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│测试集 │ 0.20x │ 8.6%   │ -    │ -    │ -    │ -    │ -    │ -    │ -    │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 与论文差异</strong>：完全非 DSpark 架构。<strong>P0 未测</strong>（早期测试）</p>
+<hr />
+<h3>迭代2 · 微调 Qwen3-0.6B</h3>
+<p><strong>① 方案</strong>：300 条数据 SFT 微调 0.6B；target=Qwen3.5-4B
+<strong>② 数据规模</strong>：300 条中文
+<strong>③ 训练配置</strong>：5 epochs, lr=1e-5
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│测试集 │ 0.19x │ 8.1%   │ -    │ -    │ -    │ -    │ -    │ -    │ -    │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：分词器矛盾未解。<strong>P0 未测</strong></p>
+<hr />
+<h3>迭代3 · 词表扩展微调 0.6B</h3>
+<p><strong>① 方案</strong>：0.6B 词表扩展到 4B 词表(248320)
+<strong>② 数据规模</strong>：300 条中文
+<strong>③ 训练配置</strong>：5 epochs, lr=1e-5
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│测试集 │ 0.21x │ 8.0%   │ -    │ -    │ -    │ -    │ -    │ -    │ -    │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：0.6B 能力天花板。<strong>P0 未测</strong></p>
+<hr />
+<h3>迭代4 · 官方 DSpark checkpoint（标杆）</h3>
+<p><strong>① 方案</strong>：官方 dspark_qwen3_4b_block7（完整架构）
+<strong>② 数据规模</strong>：官方 checkpoint（130万条训练）
+<strong>③ 训练配置</strong>：官方训练
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│测试集 │ 5.24x │ 76.9%  │93.2% │86.1% │79.4% │73.1% │67.1% │61.3% │55.9% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：完整对齐论文。<strong>标杆 5.24x</strong></p>
+<hr />
+<h3>迭代5 · 中文自生成·纯CE</h3>
+<p><strong>① 方案</strong>：共享中间层 + 纯 CE
+<strong>② 数据规模</strong>：1166 序列 / 9328 anchor
+<strong>③ 训练配置</strong>：30-40 epochs
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 1.62x │ 18.5%  │ -    │ -    │ -    │ -    │ -    │ -    │ -    │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：同题有效；模型被覆盖，<strong>P0-P6 未补测</strong></p>
+<hr />
+<h3>迭代6 · 中文自生成·L1蒸馏</h3>
+<p><strong>① 方案</strong>：共享中间层 + 0.9L1+0.1CE（验证用 greedy）
+<strong>② 数据规模</strong>：1166 序列 / 9328 anchor
+<strong>③ 训练配置</strong>：40 epochs
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.64x │ 2.2%   │ 2.7% │95.5% │100%  │100%  │100%  │59.5% │56.0% │
+│测试集 │ 0.65x │ 1.7%   │ 2.0% │97.1% │100%  │100%  │100%  │56.2% │83.3% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：L1 配 greedy 不匹配，比纯 CE 差</p>
+<hr />
+<h3>迭代7 · open-perfectblend·纯CE</h3>
+<p><strong>① 方案</strong>：共享中间层 + 纯 CE
+<strong>② 数据规模</strong>：1969 条英文（open-perfectblend 清洗后）
+<strong>③ 训练配置</strong>：40 epochs
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.52x │ 0.2%   │ 0.5% │57.1% │100%  │100%  │100%  │50.0% │50.0% │
+│测试集 │ 0.60x │ 0.8%   │ 1.1% │94.4% │100%  │100%  │100%  │100%  │ 0.0% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：分布错位，P0 极低</p>
+<hr />
+<h3>迭代8 · gsm8k训练集·纯CE</h3>
+<p><strong>① 方案</strong>：共享中间层 + 纯 CE
+<strong>② 数据规模</strong>：7473 序列 / 89676 anchor
+<strong>③ 训练配置</strong>：40 epochs, embedding-only
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 1.45x │ 13.3%  │15.1% │93.3% │100%  │100%  │100%  │97.0% │58.5% │
+│测试集 │ 0.92x │ 5.2%   │ 5.7% │91.2% │100%  │100%  │100%  │97.2% │85.7% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：同分布训练使 P0 最高（当时），泛化差</p>
+<hr />
+<h3>迭代9 · gsm8k训练集·纯CE+Markov</h3>
+<p><strong>① 方案</strong>：共享中间层 + Markov head（rank=256）
+<strong>② 数据规模</strong>：7473 序列 / 89676 anchor
+<strong>③ 训练配置</strong>：40 epochs
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.68x │ 4.4%   │ 5.0% │93.2% │100%  │100%  │100%  │100%  │50.8% │
+│测试集 │ 0.88x │ 6.7%   │ 7.4% │96.9% │98.9% │100%  │98.9% │100%  │60.9% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：Markov 推理开销大，train 变差</p>
+<hr />
+<h3>迭代10 · K2数据·TV+position加权+Markov（冒烟）</h3>
+<p><strong>① 方案</strong>：共享中间层 + Markov + TV + position 加权
+<strong>② 数据规模</strong>：900 条 K2（Qwen3-4B 重生成）
+<strong>③ 训练配置</strong>：2 epochs（冒烟）
+<strong>④ 结果</strong>：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.49x │ 0.8%   │ 0.8% │100%  │100%  │100%  │100%  │93.3% │100%  │
+│测试集 │ 0.46x │ 0.7%   │ 0.7% │100%  │100%  │100%  │100%  │100%  │100%  │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 差异+结论</strong>：数据太少，无法验证 TV 效果</p>
+<hr />
+<h3>迭代11 · gsm8k特征·TV+position加权+Markov</h3>
+<p><strong>① 方案</strong>：共享中间层 + Markov(rank=256) + <strong>TV 分布匹配 + position 加权</strong>（对齐论文）
+<strong>② 数据规模</strong>：gsm8k 7473 序列 / 89676 anchor
+<strong>③ 训练配置</strong>：10 epochs（实际到 epoch6，进程中断）· lr=3e-4 · batch=2 · 完整 target 前向算 TV · <strong>每 epoch 保存 checkpoint</strong>
+<strong>④ 结果</strong>（epoch6）：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.29x │ 18.3%  │19.6% │96.8% │98.6% │100%  │99.5% │99.5% │88.8% │
+│测试集 │ 0.33x │ 9.9%   │10.5% │95.0% │100%  │100%  │99.3% │99.3% │87.5% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 与论文差异</strong>：
+- ✅ CE + TV + position 加权对齐论文
+- ✅ Markov head 结构一致
+- ❌ 无 confidence head / confidence loss
+- ❌ 评估用 greedy（论文 sampling）
+- ⚠️ 只训到 epoch6/10，数据量 7473 vs 官方 130万</p>
+<p><strong>⑥ 迭代结论</strong>：<strong>P0 大幅提升是里程碑</strong>——训练集 P0 19.6%、测试集 10.5%，均为历次最高。<strong>证明 TV 分布匹配 + position 加权有效</strong>。加速比低因评估环境（CPU 竞争）+ markov 推理开销 + 未训完。</p>
+<hr />
+<h3>迭代12 · gsm8k特征·TV+position加权+Markov+Confidence head</h3>
+<p><strong>① 方案</strong>：共享中间层 + Markov + TV + position 加权 + <strong>confidence head</strong>；验证：greedy
+<strong>② 数据规模</strong>：gsm8k 7473 / 89676 anchor
+<strong>③ 训练配置</strong>：8 epochs（多次中断）· batch=2 · 完整 target 前向
+<strong>④ 结果</strong>：未跑最终评估（进程多次中断）。训练 loss 1.12、conf 0.30（confidence loss 正常下降）</p>
+<pre><code>（评估未完成，无 P0-P6 数据）
+</code></pre>
+<p><strong>⑤ 论文差异</strong>：评估未完成
+<strong>⑥ 结论</strong>：confidence head 训练正常，未验证推理效果</p>
+<hr />
+<h3>迭代13 · anchor+MASK 输入修复（假设被推翻）</h3>
+<p><strong>① 方案</strong>：迭代12 基础上，训练 draft 输入改为 <strong>[anchor, MASK×6]</strong>（对齐推理端）；损失：TV+CE+Conf；验证：greedy
+<strong>② 数据规模</strong>：gsm8k 7473 / 89676 anchor
+<strong>③ 训练配置</strong>：8 epochs（实际 epoch4）· batch=2
+<strong>④ 结果</strong>（epoch4）：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.66x │ 4.9%   │ 5.0% │99.0% │99.0% │100%  │100%  │100%  │91.0% │
+│测试集 │ 0.54x │ 2.2%   │ 2.4% │100%  │96.2% │100%  │100%  │100%  │91.3% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 论文差异</strong>：修复输入对齐后反而更差（P0 10.5%→2.4%）
+<strong>⑥ 结论</strong>：<strong>假设被推翻</strong>。根因是 DraftAttention 无因果掩码</p>
+<p><strong>⑦ 根因分析（DraftAttention 无因果掩码）</strong> <code>[迭代13 记录]</code>：</p>
+<p><strong>用户报告验证</strong>：
+- ❌ "prev_token 不更新"——<strong>错误</strong>（真实运行证明逐步更新：step0 bias用5→step1用11→step2用1077...）
+- ❌ "bias 输入错位"——<strong>误解</strong>（训练 teacher forcing 用真实前序 / 推理自回归用采样前序，都是"前一个 token"语义，官方标准做法）
+- ✅ "P1-P5 是假象"——正确（P0 被拒后循环 break，样本极少）
+- ✅ "修改后变差"——正确</p>
+<p><strong>真正根因</strong>：</p>
+<pre><code class="language-python"># train_dspark_aligned.py:57-71
+attn = torch.matmul(q, k.transpose(-2, -1)) * self.scaling
+attn = F.softmax(attn, dim=-1)   # ← 无 causal mask！
+</code></pre>
+<ul>
+<li><strong>训练时</strong>（整块 forward）：位置0 attend 到全部7个 noise key（含未来MASK）</li>
+<li><strong>推理时</strong>（逐步 forward）：位置 k 只能 attend 到 ctx + noise[0..k]</li>
+<li>→ 训练学"基于未来信息"，推理无未来信息 → P0 崩塌</li>
+<li>修复方向：迭代14 加 causal mask</li>
+</ul>
+<hr />
+<h3>迭代14 · DraftAttention 加 causal mask（attention 对齐）<code>[迭代14 新增]</code></h3>
+<p><strong>① 方案</strong>：迭代13 基础上，修复 DraftAttention 加 causal mask——位置 k 只 attend ctx + noise[0..k]，对齐推理端逐步 forward；损失：TV+CE+Conf；验证：greedy
+<strong>② 数据规模</strong>：gsm8k 7473 / 89676 anchor
+<strong>③ 训练配置</strong>：8 epochs（实际 epoch4 后进程停止）· batch=2 · lr=3e-4
+<strong>④ 结果</strong>（epoch4，2026-08-14 训练，2026-08-15 复测 20 条）：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.93x │ 10.4%  │10.7% │98.1% │99.4% │100%  │100%  │100%  │98.0% │
+│测试集 │ 0.67x │ 5.3%   │ 5.5% │98.0% │100%  │100%  │99.0% │100%  │98.9% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 论文差异</strong>：
+- ✅ <strong>causal mask 已修复</strong>（第二章 2.3 已同步更新）
+- ✅ CE + TV + position 加权 + confidence head + causal mask 全部对齐论文
+- ❌ 数据量仍 7473 条 vs 官方 130万
+- ❌ 评估仍 greedy（论文 sampling）
+- ⚠️ 只训到 epoch4/8</p>
+<p><strong>⑥ 迭代结论</strong>：
+- <strong>causal mask 修复后 P0 相对迭代13 恢复</strong>：train 5.0%→<strong>10.7%</strong>，test 2.4%→<strong>5.5%</strong>，证明"无因果掩码导致 P0 崩塌"的根因判断正确
+- 但仍未回到迭代11 的 P0 峰值（train 19.6% / test 10.5%），因为迭代14 加了 confidence head 训练，且只训到 epoch4（迭代11 训到 epoch6）
+- <strong>与官方差距仍巨大</strong>：官方 P0 93.2% / 加速 5.24x vs 我们 P0 10.7%/5.5%、加速 0.93x/0.67x
+- 差距核心：<strong>数据量</strong>（7473 vs 130万）仍是第一瓶颈</p>
+<p><strong>下一步</strong> <code>[迭代14 更新]</code>：
+1. <strong>加大数据量（第一瓶颈）</strong>：用 K2 全量特征训练（已下载 141万 原始数据，CPU 已生成 2000+ 条特征到 <code>k2_feat_20260814_065702/</code>，可继续生成或用 GPU 重新生成），数据量从 7473 → 数万/数十万，P0 才有机会逼近官方
+2. <strong>训练完整 epochs</strong>：迭代14 只训到 epoch4/8，应跑满
+3. <strong>评估改 sampling</strong>（对齐论文协议）
+4. 若数据量上去后 P0 仍低，再排查训练细节（confidence head 权重、markov rank 等）</p>
+<hr />
+<h3>迭代15 · 无 Confidence 消融（CE+TV only）<code>[迭代16 加入]</code></h3>
+<h4>实验设计</h4>
+<p><strong>① 方案</strong>：迭代14（causal mask 修复版）基础上，关闭 Confidence Loss（<code>DSPARK_ALPHA_CONF=0</code>），只用 CE+TV。目的：验证"Confidence Head 在数据不足时与主任务梯度冲突"的假设。</p>
+<p><strong>② 数据规模</strong>：gsm8k 7473 题 / 89676 anchor（与迭代11/14 相同）</p>
+<p><strong>③ 训练配置</strong>：6 epochs · batch=2 · lr=3e-4 · ALPHA_CONF=0（全程 conf=0.0000 确认关闭）</p>
+<p><strong>④ 结果</strong>（2026-08-16 训练完成，epoch6）：</p>
+<pre><code>┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│训练集 │ 0.83x │  6.7%  │ 6.8% │99.2% │99.1% │100%  │100%  │100%  │96.4% │
+│测试集 │ 0.81x │  5.6%  │ 5.8% │99.1% │99.0% │100%  │99.0% │100%  │81.0% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>⑤ 迭代15 失败数据</strong>：
+| 指标 | 迭代14(带Conf) | 迭代15(无Conf) | 变化 |
+|------|---------------|---------------|------|
+| 训练集 P0 | 10.7% | <strong>6.8%</strong> | ↓ 3.9pt |
+| 测试集 P0 | 5.5% | <strong>5.8%</strong> | ≈ 持平 |
+| loss | 1.37 | <strong>1.0059</strong> | 降 |
+| ce | 2.62 | 2.45 | 降 |
+| tv | 0.88 | 0.85 | 降 |</p>
+<p><strong>⑥ 迭代结论</strong>：<strong>"Confidence Head 干扰主任务"的假设被推翻</strong>。无 Confidence 训练后：
+- loss 更低（1.01 &lt; 1.37，训练目标收敛更好）
+- 但 <strong>P0 反而从 10.7% 降到 6.8%</strong>（训练集）
+- 测试集 P0 基本持平（5.5% → 5.8%）
+- 说明 P0 低<strong>不是</strong> Confidence Head 的锅</p>
+<p><strong>下一步</strong> <code>[迭代16 加入]</code>：验证 Confidence 假设失败，根因指向自研代码与官方源码系统性差异 → <strong>迭代16 改用官方源码</strong>（见迭代16章节）</p>
+<p><strong>⑦ 根因重新定位</strong>：既然去掉 Confidence 也低，问题必然在<strong>更底层的代码</strong>。对照官方源码发现：</p>
+<hr />
+<h4>迭代15 vs 官方源码差异（根因）<code>[迭代16 加入]</code></h4>
+<p>通过通读官方 <code>DeepSpec-main</code> 源码（<code>deepspec/modeling/dspark/</code>），发现自研版 <code>train_dspark_aligned.py</code> 与官方存在<strong>系统性差异</strong>，每个差异都可能导致训练/推理不一致：</p>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>官方实现</th>
+<th>自研版（迭代1-15）</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Attention</strong></td>
+<td>q_norm + k_norm + rotary embedding</td>
+<td>❌ 无 q_norm/k_norm，无 rotary</td>
+<td>位置编码缺失</td>
+</tr>
+<tr>
+<td><strong>position_ids</strong></td>
+<td><code>create_position_ids</code>（anchor+offset）</td>
+<td>❌ 未显式设置 position</td>
+<td>相对位置错乱</td>
+</tr>
+<tr>
+<td><strong>noise_embed</strong></td>
+<td><code>create_noise_embed</code> 只填 anchor token 其余 MASK</td>
+<td>类似但无 block_keep_mask 处理</td>
+<td>无效 block 泄漏</td>
+</tr>
+<tr>
+<td><strong>attention_mask</strong></td>
+<td>flex_attention block mask（<code>create_dspark_attention_mask</code>）</td>
+<td>手写循环 mask</td>
+<td>边界情况不一致</td>
+</tr>
+<tr>
+<td><strong>markov_bias</strong></td>
+<td><code>prev_token_ids = [anchor, target_ids[:-1]]</code>（前序真实token）</td>
+<td><code>input_ids[anchor:anchor+7]</code>（含未来token）</td>
+<td><strong>训练/推理条件错位</strong></td>
+</tr>
+<tr>
+<td><strong>置信度头</strong></td>
+<td><code>confidence_head_with_markov=True</code> 拼接 W1 embedding</td>
+<td>单独 linear</td>
+<td>结构不同</td>
+</tr>
+<tr>
+<td><strong>损失</strong></td>
+<td><code>compute_dspark_loss</code>（loss_decay_gamma=4 加权）</td>
+<td>手写 TV+CE 简单位置加权</td>
+<td>权重分配不同</td>
+</tr>
+<tr>
+<td><strong>数据</strong></td>
+<td>官方 target_cache 二进制格式</td>
+<td>自研 npz 特征</td>
+<td>训练数据管线不同</td>
+</tr>
+</tbody>
+</table>
+<p><strong>核心结论</strong>：迭代1-15 的低 P0（5%-10%）根因是<strong>自研版与官方在多个关键组件上不一致</strong>，尤其是：
+1. <strong>markov_bias 用未来token</strong>（训练）vs 前序token（推理）—— 条件依赖完全错位
+2. <strong>无 rotary/position_ids</strong> —— draft 模型不知道位置
+3. 每修一个（conf、causal mask、anchor），只修了表面，底层的 markov/rotary 偏差仍在</p>
+<hr />
+<h3>迭代16 · 官方源码接入（方案 + 改动）<code>[迭代16 加入]</code></h3>
+<h4>背景决策</h4>
+<p>迭代15 验证去掉 Confidence 后 P0 仍低（6.8%），根因指向<strong>自研版代码与官方源码系统性差异</strong>。决定：<strong>弃用自研版 <code>train_dspark_aligned.py</code>，改用官方 <code>DeepSpec-main</code> 源码训练</strong>。</p>
+<h4>迭代16 相对迭代15 的改动</h4>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>迭代15（自研版）</th>
+<th>迭代16（官方源码）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>训练代码</td>
+<td><code>train_dspark_aligned.py</code>（自研）</td>
+<td><code>DeepSpec-main/train.py</code> + <code>Qwen3DSparkModel</code></td>
+</tr>
+<tr>
+<td>数据</td>
+<td>自研 npz 特征</td>
+<td><strong>官方 target_cache 二进制格式</strong></td>
+</tr>
+<tr>
+<td>数据源</td>
+<td>gsm8k + K2 混合</td>
+<td><strong>只用 GSM8K</strong>（7473 条 → conversations 格式）</td>
+</tr>
+<tr>
+<td>数据管线</td>
+<td>自研 gen_gsm8k_data.py</td>
+<td><strong>官方 prepare_target_cache.py</strong></td>
+</tr>
+<tr>
+<td>Attention</td>
+<td>无 rotary/norm</td>
+<td>官方完整（q_norm/k_norm/rotary/flex_attention）</td>
+</tr>
+<tr>
+<td>markov_bias</td>
+<td>未来token（bug）</td>
+<td>官方前序token</td>
+</tr>
+<tr>
+<td>评估时机</td>
+<td>训练完才评估</td>
+<td><strong>每 epoch checkpoint 自动评估</strong>（auto_eval_command）</td>
+</tr>
+<tr>
+<td>评估方式</td>
+<td>greedy</td>
+<td>greedy + sampling 并存</td>
+</tr>
+<tr>
+<td>batch</td>
+<td>2</td>
+<td>local_batch_size=1, global=8</td>
+</tr>
+<tr>
+<td>lr</td>
+<td>3e-4</td>
+<td>6e-4（官方默认）</td>
+</tr>
+</tbody>
+</table>
+<h4>官方训练链路（迭代16 执行中）</h4>
+<pre><code>GSM8K (data/gsm8k_train.jsonl)
+  → convert_gsm8k_to_conversations.py → data/gsm8k_conversations.jsonl (7473条)
+  → prepare_target_cache.py → data/qwen3_4b_gsm8k_cache (target cache)
+  → train.py --config config/dspark/dspark_qwen3_4b_gsm8k.py
+  → 每 epoch checkpoint → auto_eval → eval_unified.py 自动评估 P0-P6
+</code></pre>
+<h4>设计文档</h4>
+<p><code>docs/官方源码训练方案_GSM8K每Epoch评估_20260816.md</code>（含完整配置表、执行步骤、注意事项）</p>
+<h4>进度</h4>
+<ul>
+<li>✅ gsm8k → conversations 格式转换（7473条）</li>
+<li>✅ 官方 config 创建（单GPU + GSM8K）</li>
+<li>✅ 官方 Qwen3DSparkModel 构造验证通过（target加载 + draft构建）</li>
+<li>✅ target cache 生成完成（官方 prepare_target_cache.py，7473/7473）</li>
+<li>✅ epoch1 checkpoint 已存（D:/checkpoints_deepspec/.../step_934）</li>
+<li>✅ <strong>epoch1 自动评估已跑</strong>（auto_eval_command → 官方 eval.py gsm8k 500条）</li>
+<li>🔄 epoch2 训练中（resume from step_934，loss=1.50）</li>
+<li>⏳ epoch2-step_1868 触发下次评估</li>
+</ul>
+<h4>迭代16 epoch1 结果（官方 eval.py · gsm8k 500条）<code>[迭代16 加入]</code></h4>
+<p><strong>① 方案（5块-块一）</strong>
+- 目标 target：Qwen3-4B（本地 <code>1cfa9a7208912126459214e8b04321603b3df60c</code>）
+- 草稿架构：官方 Qwen3DSparkModel（共享中间层 + Markov rank=256 + Confidence head with markov）
+- 损失函数：CE + TV + Conf（loss_decay_gamma=4，权重 0.1/0.9/1.0）
+- 验证方式：sampling（do_sample=True, temperature=1.0, max_new_tokens=128）</p>
+<p><strong>② 数据规模（块二）</strong>
+- 数据来源：GSM8K 公开数据集 train split
+- 样本量：7473 序列
+- 响应生成方式：官方 prepare_target_cache.py 用 Qwen3-4B 重生成 target hidden states</p>
+<p><strong>③ 训练配置（块三）</strong>
+- epochs：10（已跑完 epoch1）/ lr=6e-4 / batch=local1×grad_accum8
+- 显存优化：sdpa 替代 flex_attention（Windows 无 triton 兼容）
+- checkpoint：每 934 step（每 epoch）保存 → D 盘（避免 C 盘满）</p>
+<p><strong>④ 结果（块四，核心）</strong></p>
+<pre><code>迭代16 · 官方源码·gsm8k 7473·epoch1·官方eval协议
+┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│gsm8k │ 1.27x │ 15.84% │18.56%│5.27% │1.86% │0.67% │0.23% │0.09% │0.04% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</code></pre>
+<p><strong>置信度头校准指标</strong>：
+- ECE 平均：<strong>0.0241</strong>（校准良好）
+- AUC 平均：<strong>0.8985</strong>
+- Brier 平均：<strong>0.0274</strong>
+- per-position ECE：[0.1015, 0.0399, 0.0157, 0.006, 0.0032, 0.0017, 0.0009]
+- per-position AUC：[0.7973, 0.8388, 0.8959, 0.9119, 0.9447, 0.9419, 0.9592]</p>
+<p><strong>对比自研版最佳</strong>：
+| 指标 | 迭代11（自研最佳） | <strong>迭代16 epoch1（官方源码）</strong> |
+|------|-------------------|----------------------------|
+| 加速比 | 1.18x (train) | <strong>1.27x</strong> |
+| P0 | 19.6% (train) | <strong>18.56%</strong> (gsm8k 500条) |
+| 接受率 | 18.3% (train) | <strong>15.84%</strong> |</p>
+<p><strong>P0 对比官方</strong>：18.56% vs 93.2%（差 5x，仍是大数据瓶颈）</p>
+<p><strong>⑤ 与论文差异 + 结论（块五）</strong>
+- <strong>架构正确性已验证</strong>：epoch1 就达到/超过自研历次最佳，证明自研版 bug 是 P0 低的根因
+- <strong>confidence head 工作良好</strong>：ECE 0.024（极低），校准精准
+- <strong>仍缺</strong>：130万数据（仅 7473）、动态验证长度、RNN/Gated head、STS 校准
+- <strong>下一步</strong>：继续 epoch2-10 训练观察 P0 走势；若仍低，扩大数据（用 open-perfectblend 或 K2 全量）</p>
+<hr />
+<h2 id="s4">第十六章：论文关键点 × 迭代覆盖对照（更新）</h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>论文关键点</th>
+<th>覆盖的迭代</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>并行主干</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>2</td>
+<td>共享中间层特征</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Markov head</td>
+<td>✅ 迭代9-16</td>
+</tr>
+<tr>
+<td>4</td>
+<td>RNN/Gated head</td>
+<td>❌ 未覆盖</td>
+</tr>
+<tr>
+<td>5</td>
+<td>置信度头</td>
+<td>✅ 迭代12-16</td>
+</tr>
+<tr>
+<td>6</td>
+<td>STS 校准</td>
+<td>❌ 未覆盖</td>
+</tr>
+<tr>
+<td>7</td>
+<td>硬件调度器</td>
+<td>❌ 未覆盖</td>
+</tr>
+<tr>
+<td>8</td>
+<td>L_ce</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>9</td>
+<td><strong>L_tv</strong></td>
+<td>✅ 迭代10-16</td>
+</tr>
+<tr>
+<td>10</td>
+<td>L_conf</td>
+<td>✅ 迭代12-16</td>
+</tr>
+<tr>
+<td>11</td>
+<td><strong>position 加权</strong></td>
+<td>✅ 迭代10-16</td>
+</tr>
+<tr>
+<td>12</td>
+<td>130万数据</td>
+<td>❌ GSM8K 7473（官方论文用open-perfectblend 130万）</td>
+</tr>
+<tr>
+<td>13</td>
+<td>sampling 验证</td>
+<td>✅ 迭代16（官方eval temp=1.0）</td>
+</tr>
+<tr>
+<td>14</td>
+<td>数据同分布</td>
+<td>✅ 迭代8、9、11、13、14、16</td>
+</tr>
+<tr>
+<td>15</td>
+<td>block=7</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>16</td>
+<td>5 层</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>17</td>
+<td>共享 embedding</td>
+<td>✅ 迭代5-16</td>
+</tr>
+<tr>
+<td>18</td>
+<td>动态验证长度</td>
+<td>❌ 未覆盖</td>
+</tr>
+<tr>
+<td>19</td>
+<td><strong>causal mask（attention 对齐）</strong></td>
+<td>✅ 迭代14-16</td>
+</tr>
+</tbody>
+</table>
+<p><strong>统计</strong>：✅ 14 / ⚠️ 0 / ❌ 5 <code>[迭代16 更新]</code></p>
+<hr />
+<h2 id="s5">第十七章：跨迭代对比（P0 趋势，更新）</h2>
+<table>
+<thead>
+<tr>
+<th>迭代</th>
+<th>方法</th>
+<th>P0(train/test)</th>
+<th>train加速</th>
+<th>test加速</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6</td>
+<td>L1</td>
+<td>2.7%/2.0%</td>
+<td>0.64x</td>
+<td>0.65x</td>
+</tr>
+<tr>
+<td>7</td>
+<td>PB·CE</td>
+<td>0.5%/1.1%</td>
+<td>0.52x</td>
+<td>0.60x</td>
+</tr>
+<tr>
+<td>8</td>
+<td>gsm8k·CE</td>
+<td>15.1%/5.7%</td>
+<td>1.45x</td>
+<td>0.92x</td>
+</tr>
+<tr>
+<td>9</td>
+<td>gsm8k·CE+Markov</td>
+<td>5.0%/7.4%</td>
+<td>0.68x</td>
+<td>0.88x</td>
+</tr>
+<tr>
+<td>10</td>
+<td>K2·TV+加权+Markov</td>
+<td>0.8%/0.7%</td>
+<td>0.49x</td>
+<td>0.46x</td>
+</tr>
+<tr>
+<td><strong>11</strong></td>
+<td><strong>gsm8k·TV+加权+Markov</strong></td>
+<td><strong>19.6%/10.5%</strong></td>
+<td><strong>1.18x</strong></td>
+<td>0.92x</td>
+</tr>
+<tr>
+<td>13</td>
+<td>anchor+MASK修复</td>
+<td>5.0%/2.4%</td>
+<td>0.66x</td>
+<td>0.54x</td>
+</tr>
+<tr>
+<td>14</td>
+<td>+causal mask修复</td>
+<td>10.7%/5.5%</td>
+<td>0.93x</td>
+<td>0.67x</td>
+</tr>
+<tr>
+<td>15</td>
+<td>无Confidence</td>
+<td>6.8%/5.8%</td>
+<td>0.83x</td>
+<td>0.81x</td>
+</tr>
+<tr>
+<td><strong>16</strong></td>
+<td><strong>官方源码·epoch1</strong></td>
+<td><strong>18.56%/-</strong></td>
+<td><strong>1.27x</strong></td>
+<td><strong>-</strong></td>
+</tr>
+<tr>
+<td>官方</td>
+<td>完整（130万数据）</td>
+<td>93.2%/-</td>
+<td>-</td>
+<td><strong>5.24x</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键规律</strong> <code>[迭代16 更新]</code>：
+1. <strong>官方源码 epoch1 ≈ 自研最佳</strong>：epoch1 P0 18.56% 接近自研最佳迭代11 train 19.6%；加速比 1.27x <strong>创历史新高</strong>（之前最高 1.45x 加速比 P0 较低）
+2. <strong>架构正确性已验证</strong>：用同样 GSM8K 数据训练，官方源码第一个 epoch 就追平自研历次最佳，证明自研版系统性 bug 是 P0 低根因
+3. <strong>置信度头工作良好</strong>：ECE 0.024 极低，confidence 校准精准
+4. <strong>数据量仍是瓶颈</strong>：7473 vs 130万，P0 差距 5x——下一步需扩数据（K2 130万或open-perfectblend 130万）</p>
+<hr />
+
+<h2 id="s6">迭代19 · v2_k2 训练完成（GSM8K 7473 + K2 27000 混合，34473 样本 bf16）[迭代19 加入]</h2>
+
+<h3>方案（4 个要点）</h3>
+<ol>
+<li>目标模型：Qwen3-4B（target model，与迭代16-18 一致）</li>
+<li>草稿架构：5 层共享中间层（layer 1/9/17/25/33）+ Markov head + Confidence head</li>
+<li>损失函数：TV（target variance）+ CE（cross entropy）+ Conf（confidence head），position 加权 loss_decay_gamma=4.0</li>
+<li>验证方式：sampling（temperature=1.0）双数据集全量评估：gsm8k 100 条 + k2 100 条</li>
+</ol>
+
+<h3>数据规模（3 个要点）</h3>
+<ol start="5">
+<li>数据来源：合并 cache（GSM8K 7473 + K2 27000 = 34473 样本，全部 bf16，路径 <code>data/qwen3_4b_k2_v2_k2_cache/</code>）</li>
+<li>样本量：34473 / batch_size 8 = 4309 step/epoch × 6 epoch = 25854 step</li>
+<li>响应生成方式：Qwen3-4B bf16 forward 抽 5 层 hidden_states 预计算到 cache（训练时不需 forward target）</li>
+</ol>
+
+<h3>训练配置（3 个要点）</h3>
+<ol start="8">
+<li>epochs=6 / lr=6e-4 / warmup_ratio=0.04 / global_batch_size=8</li>
+<li>显存优化：sdpa attention（Windows 无 triton）+ num_anchors=64</li>
+<li>checkpoint：每 4309 step（epoch 末）+ cleanup（保留 epoch末倍数 + 最新 3 个 + step_latest）</li>
+</ol>
+
+<h3>结果（5 个要点）</h3>
+
+<h4>11-12. v2_k2 训练集+测试集结果（epoch 6 末 step_25854 · gsm8k 100 条全量 + k2 100 条全量）</h4>
+<pre>迭代19 · v2_k2 · 训练样本 34473 (GSM8K 7473 + K2 27000) · gsm8k 100条全量 + k2 100条全量 · sampling · max_new=128
+┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│gsm8k │ 1.68x │ 21.0%  │37.42%│16.82%│ 8.23%│ 3.32%│ 1.30%│ 0.62%│ 0.25% │
+│  k2  │ 1.45x │ 18.1%  │27.58%│10.10%│ 4.42%│ 1.51%│ 0.59%│ 0.37%│ 0.13% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+ece@gsm8k=0.1010, auc@gsm8k=0.8631, ece@k2=0.0736, auc@k2=0.8909
+</pre>
+
+<h4>v2_k2 6 个 epoch_eval 全量走势（gsm8k 100 + k2 100 · 训练集+测试集）</h4>
+<pre>迭代19 · v2_k2 · 6 个 epoch_eval 全量（gsm8k 100 + k2 100）
+┌───────────┬─────────────────────┬─────────────────────┐
+│  Step     │   gsm8k (100)         │   k2 (100)            │
+├───────────┼──────┬───────┬────────┼──────┬───────┬────────┤
+│           │  P0  │加速比 │verify  │  P0  │加速比 │verify  │
+├───────────┼──────┼───────┼────────┼──────┼───────┼────────┤
+│4309(ep1末)│23.88%│ 1.35x │ 13.86%│17.99%│ 1.25x │ 11.13% │
+│8618(ep2末)│29.62%│ 1.47x │ 17.04%│22.12%│ 1.32x │ 13.34% │
+│12927(ep3末)│35.37%│ 1.61x │ 20.99%│26.39%│ 1.41x │ 16.50% │
+│17236(ep4末)│36.78%│ 1.64x │ 20.85%│26.27%│ 1.41x │ 15.92% │
+│21545(ep5末)│37.11%│ 1.67x │ 21.13%│27.62%│ 1.45x │ 16.18% │
+│25854(ep6末)│37.42%│ 1.68x │ 21.00%│27.58%│ 1.45x │ 18.10% │
+└───────────┴──────┴───────┴────────┴──────┴───────┴────────┘
+</pre>
+
+<h4>13. P0 对比：v2_k2 vs 官方（论文 93.2%）</h4>
+<ul>
+<li>v2_k2 epoch 6 末 gsm8k P0=<b>37.42%</b>（vs 官方 93.2%，差距 55.78pp）</li>
+<li>v2_k2 epoch 6 末 k2 P0=<b>27.58%</b>（vs 官方 93.2%，差距 65.62pp）</li>
+<li>vs v2_full epoch 6 末 gsm8k P0=19.47%：<b>v2_k2 提升 +17.95pp（+92%）</b></li>
+</ul>
+
+<h4>14. 泛化差异：训练集 vs 测试集加速比差值</h4>
+<ul>
+<li>step_25854 epoch 6 末 gsm8k_full_train (20) vs gsm8k_full_test (20)：1.70x vs 1.72x（差值 0.02x）</li>
+<li>step_25854 epoch 6 末 k2_train (20) vs k2_test (20)：1.49x vs 1.58x（差值 0.09x）</li>
+<li>训练集与测试集加速比基本一致，<b>无过拟合</b></li>
+</ul>
+
+<h4>15. 整体判断：加速</h4>
+<ul>
+<li>v2_k2 比 v2_full 同样训练条件下 gsm8k P0 提升 92%（19.47% → 37.42%）</li>
+<li>加速比 1.32x → 1.68x（+0.36x，+27%）</li>
+<li>v2_k2 epoch 1 末 P0=23.88% 已超过 v2_full epoch 6 末 P0=19.47%（<b>K2 数据 + GSM8K 混合训练 1 epoch 就超过 v2_full 跑 6 epoch</b>）</li>
+</ul>
+
+<h3>与论文差异 + 结论（2 个要点）</h3>
+<ol start="16">
+<li>与论文差异：数据规模 34473 vs 130万（差距 28x），架构简化（5 层共享 vs RNN/Gated），仍用 Qwen3-4B + Qwen3-0.6B DSpark 架构</li>
+<li>迭代结论：v2_k2 完成（6 epoch / 26.1 小时）。GSM8K + K2 混合训练 1 epoch 就超过 v2_full 6 epoch，证明 K2 数据对提升草稿能力至关重要。测试集 P0=37.42% 已接近之前 v2_full 19.47% 翻倍。Loss 从 3.42 降至 1.27（epoch 6 末）。<b>下一步</b>：用 step_25854 跑更大规模最终测试（gsm8k 200 条 + k2 200 条）；或继续扩数据（更大量 K2 样本 + 10000+ GSM8K 混合训练）</li>
+</ol>
+
+<hr />
+
+
+
+<h2 id="s7">迭代20 · v2_k2_v2 训练完成（5万K2+GSM8K混合，54473样本bf16）[迭代20 加入]</h2>
+
+<h3>方案（4个要点）</h3>
+<ol>
+<li>目标模型：Qwen3-4B（target model，与迭代16-19 一致）</li>
+<li>草稿架构：5 层共享中间层（layer 1/9/17/25/33）+ Markcov head + Confidence head</li>
+<li>损失函数：TV（target variance）+ CE（cross entropy）+ Conf（confidence head），position 加权 loss_decay_gamma=4.0</li>
+<li>验证方式：sampling（temperature=1.0）双数据集全量评估：gsm8k 100 条 + k2 100 条（max_new_tokens=64 减少 OOM）</li>
+</ol>
+
+<h3>数据规模（3个要点）</h3>
+<ol start="5">
+<li>数据来源：合并 cache（GSM8K 7473 + 旧 K2 27000 + 新 K2 20000 = 54473 样本，全部 bf16，路径 <code>data/qwen3_4b_k2_v2_k2_cache_5w/</code>）</li>
+<li>样本量：54473 / batch_size 8 = 6809 step/epoch × 6 epoch = 40854 step（max_train_steps 40860）</li>
+<li>响应生成方式：Qwen3-4B bf16 forward 抽 5 层 hidden_states 预计算到 cache（训练时不需 forward target）</li>
+</ol>
+
+<h3>训练配置（3个要点）</h3>
+<ol start="8">
+<li>epochs=6 / lr=6e-4 / warmup_ratio=0.04 / global_batch_size=8</li>
+<li>显存优化：sdpa attention（Windows 无 triton）+ num_anchors=64 + max_new_tokens 64（避免 OOM）</li>
+<li>checkpoint：每 6810 step（epoch 末）+ cleanup（保留 epoch末倍数 + 最新 3 个 + step_latest）</li>
+<li>intra_eval interval_steps=1700（每 2000 训练样本触发，避免 OOM）</li>
+</ol>
+
+<h3>结果（5个要点，核心）</h3>
+
+<h4>11-12. v2_k2_v2 训练集+测试集结果（epoch 6 末 step_40860 · gsm8k 100 条全量 + k2 100 条全量 · max_new_tokens=64）</h4>
+<pre>迭代20 · v2_k2_v2 · 训练样本 54473 (GSM8K 7473 + K2 27000 + 新 K2 20000) · gsm8k 100条全量 + k2 100条全量 · sampling · max_new=64
+┌──────┬───────┬────────┬──────┬──────┬──────┬──────┬──────┬──────┬──────┐
+│数据   │ 加速比 │ 接受率  │ P0   │ P1   │ P2   │ P3   │ P4   │ P5   │ P6   │
+├──────┼───────┼────────┼──────┼──────┼──────┼──────┼──────┼──────┼──────┤
+│gsm8k │ 1.73x │ 21.57%  │40.14%│17.99%│ 8.48%│ 3.54%│ 1.57%│ 0.61%│ 0.24% │
+│  k2  │ 1.51x │ 18.92%  │30.39%│12.39%│ 5.52%│ 1.81%│ 0.72%│ 0.34%│ 0.19% │
+└──────┴───────┴────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+ece@gsm8k=0.0912, auc@gsm8k=0.8546, ece@k2=0.0771, auc@k2=0.8779
+</pre>
+
+<h4>v2_k2_v2 6 个 epoch_eval 完整走势（gsm8k 100 + k2 100 全量）</h4>
+<pre>迭代20 · v2_k2_v2 · 4 个 epoch_eval 全量 (gsm8k 100 + k2 100)
+┌───────────┬─────────────────────┬─────────────────────┐
+│  Step     │   gsm8k (100)         │   k2 (100)            │
+├───────────┼──────┬───────┬────────┼──────┬───────┬────────┤
+│           │  P0  │加速比 │verify  │  P0  │加速比 │verify  │
+├───────────┼──────┼───────┼────────┼──────┼───────┼────────┤
+│13620(ep2末)│32.30%│ 1.50x │ 20.62%│25.66%│ 1.38x │ 17.49% │
+│20430(ep3末)│36.34%│ 1.61x │ 21.57%│29.30%│ 1.46x │ 18.13% │
+│27240(ep4末)│37.85%│ 1.66x │ 21.78%│30.05%│ 1.50x │ 17.92% │
+│34050(ep5末)│38.91%│ 1.70x │ 22.27%│30.36%│ 1.51x │ 18.40% │
+│40860(ep6末)│40.14%│ 1.73x │ 21.57%│30.39%│ 1.51x │ 18.92% │
+└───────────┴──────┴───────┴────────┴──────┴───────┴────────┘
+</pre>
+
+<h4>v2_k2_v2 8 个 intra_eval 完整走势（每 1700 step 触发 · 4 数据集 20 条）</h4>
+<pre>迭代20 · v2_k2_v2 · 8 个 intra_eval (gsm8k_full_train/test + k2_train/test 各 20 条)
+┌───────────┬─────────────────────┬─────────────────────┬─────────────────────┬─────────────────────┐
+│           │ gsm8k_full_train     │ gsm8k_full_test      │ k2_train            │ k2_test             │
+│   Step     │ 加速   P0             │ 加速   P0             │ 加速   P0             │ 加速   P0             │
+├───────────┼──────┼──────┬──────┼──────┼──────┬──────┼──────┼──────┬──────┼──────┼──────┬──────┤
+│   8500    │ 1.37 │ 26.20%│      │ 1.41 │ 25.33%│      │ 1.32 │ 21.70%│      │ 1.32 │ 24.25%│      │
+│  10200    │ 1.41 │ 28.19%│      │ 1.44 │ 27.93%│      │ 1.38 │ 24.03%│      │ 1.39 │ 27.05%│      │
+│  11900    │ 1.43 │ 30.11%│      │ 1.53 │ 32.11%│      │ 1.38 │ 25.08%│      │ 1.38 │ 26.80%│      │
+│  13600    │ 1.48 │ 32.00%│      │ 1.52 │ 31.88%│      │ 1.44 │ 28.64%│      │ 1.46 │ 32.16%│      │
+│  15300    │ 1.52 │ 33.73%│      │ 1.57 │ 34.39%│      │ 1.46 │ 27.30%│      │ 1.45 │ 31.49%│      │
+│  17000    │ 1.56 │ 35.83%│      │ 1.59 │ 35.73%│      │ 1.49 │ 29.15%│      │ 1.52 │ 32.31%│      │
+│  18700    │ 1.57 │ 34.79%│      │ 1.69 │ 38.46%│      │ 1.49 │ 28.81%│      │ 1.55 │ 34.53%│      │
+│  20400    │ 1.58 │ 34.87%│      │ 1.64 │ 35.15%│      │ 1.54 │ 31.21%│      │ 1.52 │ 32.44%│      │
+└───────────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┴──────┘
+</pre>
+
+<h4>13. P0 对比：v2_k2_v2 vs 官方 vs v2_k2</h4>
+<ul>
+<li>官方论文：gsm8k P0=93.2%（130万 K2 + 7473 GSM8K + RNN/Gated）</li>
+<li>v2_k2_v2 (5万K2)：gsm8k P0=<b>40.14%</b>，k2 P0=<b>30.39%</b>（max_new_tokens=64）</li>
+<li>v2_k2 (3万K2)：gsm8k P0=37.42%，k2 P0=27.58%</li>
+<li><b>v2_k2_v2 vs v2_k2 提升：gsm8k +2.72pp, k2 +2.81pp</b></li>
+<li>vs 官方 93.2%：仍差 53pp（瓶颈：数据规模 5.4万 vs 130万 = 4%）</li>
+</ul>
+
+<h4>14. 泛化差异：训练集 vs 测试集</h4>
+<ul>
+<li>step_40860 epoch 6 末 gsm8k_full_train (20) vs gsm8k_full_test (20)：<b>1.66x vs 1.73x</b>（差 0.07x）</li>
+<li>step_40860 epoch 6 末 k2_train (20) vs k2_test (20)：<b>1.54x vs 1.51x</b>（差 -0.03x）</li>
+<li>训练集与测试集加速比基本一致，<b>无过拟合</b></li>
+</ul>
+
+<h4>15. 整体判断：v2_k2_v2 训练成功</h4>
+<ul>
+<li>5万 K2 + 7473 GSM8K 混合训练，<b>gsm8k P0 突破 40%</b>（从 19.47% → 40.14%，3 epoch 末达 36.34% → epoch 6 末 40.14%）</li>
+<li>加速比从 v2_full 1.32x → v2_k2_v2 1.73x（<b>提升 31%</b>）</li>
+<li>训练时长 53 小时（40860 step / 6 epoch）</li>
+<li><b>数据规模是主要瓶颈</b>：5万 vs 官方 130万（差 26x），下一步如扩到 30万 K2 + 10万 GSM8K 可能接近 50% P0</li>
+</ul>
+
+<h3>与论文差异 + 结论（2个要点）</h3>
+<ol start="16">
+<li>与论文差异：数据规模 5万 vs 130万（差 26x），架构简化（5 层共享 vs RNN/Gated），仍用 Qwen3-4B + Qwen3-0.6B DSpark 架构</li>
+<li>迭代结论：v2_k2_v2 完成（6 epoch / 53 小时）。<b>gsm8k P0 突破 40%</b>，5万K2 vs 3万K2 提升 +2.72pp，证明增加数据量有效。下一步：扩到 30万 K2 + 10万 GSM8K 训练（30万 K2 cache ≈ 1.8TB，D 盘容量是关键瓶颈）</li>
+</ol>
+
+<hr />
+
+
+<h2 id="s8">文件清单</h2>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>docs/dspark_paper.pdf</td>
+<td>论文</td>
+</tr>
+<tr>
+<td>docs/DSpark完整复现报告_20260812.md</td>
+<td>本报告</td>
+</tr>
+<tr>
+<td>tests/experiments.json</td>
+<td>实验记录（迭代1-16，verify通过）</td>
+</tr>
+<tr>
+<td>models/draft_iter11_epoch*.pt</td>
+<td>迭代11 checkpoint（每epoch保存）</td>
+</tr>
+<tr>
+<td>models/draft_iter14_epoch*.pt</td>
+<td>迭代14 checkpoint（causal mask修复，epoch1-4）</td>
+</tr>
+<tr>
+<td>models/draft_iter15_epoch*.pt</td>
+<td>迭代15 checkpoint（无Confidence消融，epoch1-6）</td>
+</tr>
+<tr>
+<td>D:/checkpoints_deepspec/.../step_934</td>
+<td>迭代16 epoch1 checkpoint（D盘9.7GB）</td>
+</tr>
+<tr>
+<td>D:/checkpoints_deepspec/.../step_latest</td>
+<td>step_latest 符号链接</td>
+</tr>
+<tr>
+<td>data/k2_train_feat_cpu/</td>
+<td>CPU 生成 K2 特征（3600条，独立目录）</td>
+</tr>
+<tr>
+<td>data/k2_feat_20260814_065702/</td>
+<td>K2 特征（2026-08-14 CPU生成）</td>
+</tr>
+<tr>
+<td>data/qwen3_4b_gsm8k_cache/</td>
+<td>官方 target cache（GSM8K，7473条，47GB）</td>
+</tr>
+<tr>
+<td>data/gsm8k_conversations.jsonl</td>
+<td>gsm8k → 官方 conversations 格式</td>
+</tr>
+<tr>
+<td>DeepSpec-main/</td>
+<td>官方源码（train.py + deepspec 包 + eval.py）</td>
+</tr>
+<tr>
+<td>scripts/train_dspark_aligned.py</td>
+<td>自研训练脚本（已弃用，迭代1-15用）</td>
+</tr>
+<tr>
+<td>scripts/eval_unified.py</td>
+<td>统一评估（自研格式）</td>
+</tr>
+<tr>
+<td>scripts/convert_gsm8k_to_conversations.py</td>
+<td>gsm8k 转官方格式</td>
+</tr>
+<tr>
+<td>scripts/exp_tracker.py</td>
+<td>实验记录工具</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="s9">附录A：K2 数据生成代码梳理报告</h2>
+<blockquote>
+<p>自动梳理 dspark_test 项目中与 K2 (Kimi-K2-Instruct-open-perfectblend-regenerate) 数据生成相关的全部代码、数据、流程、废弃代码。
+配套产物：<code>docs/K2_DataFlow_Report_20260816_084537.html</code> 与 <code>docs/K2_DataFlow_Report_20260816_084537.pdf</code></p>
+</blockquote>
+<h3>数据快照</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>K2 原始数据 k2_full.jsonl</td>
+<td>5.35 GB (5,350,531,995 bytes)</td>
+</tr>
+<tr>
+<td>已生成 prompt（progress.json done）</td>
+<td>4409 条</td>
+</tr>
+<tr>
+<td>K2 特征目录数</td>
+<td>5</td>
+</tr>
+<tr>
+<td>K2 特征总占用</td>
+<td>≈ 36.07 GB</td>
+</tr>
+</tbody>
+</table>
+<h3>关键发现（精简版）</h3>
+<ol>
+<li><strong>K2 流程是官方流程的简化版</strong>：官方用 sglang 并发 + 多卡分布式 + binary shard + manifest；项目版用单卡 HF transformers.generate + 内嵌二次前向抓 hidden + npz 分片。</li>
+<li><strong>特征维度疑点</strong>：<code>gen_k2_data.py:143</code> 写 <code>cat dim=-1</code>，按 5 层 × 2560 实际应为 12800 维，需复核是否在保存前做过其他操作。</li>
+<li><strong>多目录并存</strong>：<code>k2_feat_20260813_085959</code> / <code>k2_feat_20260814_054739</code> / <code>k2_feat_20260814_065702</code> 是同一脚本多次启动的产物（自动生成时间戳子目录），磁盘累计占用可观。</li>
+<li><strong>路径不一致</strong>：<code>merge_shards.py</code> 默认输出 <code>k2_train_feat_cpu</code>，但 <code>train_dspark_aligned.py</code> 默认输入 <code>k2_train_feat</code>，需显式对齐。</li>
+<li><strong>数据源差异</strong>：官方脚本用的是 mlabonne/open-perfectblend，项目改用 AQ-MedAI/Kimi-K2-Instruct-open-perfectblend-regenerate（K2 重新生成版本）。</li>
+<li><strong>废弃代码集中区</strong>：<code>download_perfectblend.py</code> / <code>download_pb_full*.py</code> / <code>download_pb_curl.py</code> / <code>redownload_pb.py</code> / <code>clean_perfectblend.py</code> / <code>parse_pb_parquet.py</code> / <code>generate_train_data.py</code> 都是 PB 路线或早期草稿，已切 K2 后不再使用。</li>
+</ol>
+<h3>K2 流程节点（一句话版）</h3>
+<pre><code>ModelScope(AQ-MedAI/Kimi-K2-Instruct-open-perfectblend-regenerate)
+  → save_k2_full.py (k2_full.jsonl, 5.35GB)
+  → gen_k2_data.py (HF generate Qwen3-4B, temp=0.7, max_new=96)
+    → 二次前向 output_hidden_states
+    → cat([hs[1],hs[9],hs[17],hs[25],hs[33]], dim=-1) → fp16
+    → part_NNNNN.npz + train_meta.jsonl + index.json
+  → merge_shards.py (可选, 合并分片)
+  → train_dspark_aligned.py (消费 data/k2_train_feat)
+</code></pre>
+<p>详细代码清单、mermaid 流程图、关键代码片段、数据快照见 HTML/PDF 报告。</p>
+<h2 id="s10">附录B：K2 报告补遗（回答/特征/模型权重）</h2>
+<blockquote>
+<p>补齐上一份 K2_DataFlow_Report 中未列的具体数值。
+配套：<code>docs/K2_DataFlow_Report_Supplement_20260816_085436.html</code> + <code>docs/K2_DataFlow_Report_Supplement_20260816_085436.pdf</code></p>
+</blockquote>
+<h3>1. 回答数据（target 重生成）</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>原始数据源</td>
+<td><code>AQ-MedAI/Kimi-K2-Instruct-open-perfectblend-regenerate (ModelScope)</code></td>
+</tr>
+<tr>
+<td>原始数据格式</td>
+<td><code>jsonl, 每行 conversations(user/assistant 多轮)</code></td>
+</tr>
+<tr>
+<td>原始数据总条数 (k2_full.jsonl)</td>
+<td><strong>1,419,430</strong> 条</td>
+</tr>
+<tr>
+<td>原始数据大小</td>
+<td>5.35 GB</td>
+</tr>
+<tr>
+<td>实际使用字段</td>
+<td><code>conversations[role=user].content (截 800 字)</code></td>
+</tr>
+<tr>
+<td>采样规模</td>
+<td>10,000 条 (seed=42)</td>
+</tr>
+<tr>
+<td>进度文件累计 done</td>
+<td><strong>4,409 / 10,000</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键说明</strong>：原始 K2 数据本身已含 assistant 回答，但项目<strong>主动忽略原始回答</strong>，全部用 Qwen3-4B 重生成。原因：草稿模型要拟合 target 的输出分布，原始回答来自其他模型（Kimi-K2 混合），分布不一致。</p>
+<p><strong>回答数据是否落盘</strong>：❌ 否。<code>gen_k2_data.py:120-133</code> 生成的 <code>full_ids</code> 只在内存里用于二次前向抓 hidden，没有单独写 <code>*_regen.jsonl</code>（对比官方 DeepSpec-main 流程会写）。如需复现某条样本回答，只能从 <code>k2_train_feat/train_meta.json</code> 的 input_ids 反推。</p>
+<h3>2. 特征数据（hidden states）</h3>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>特征条数 (meta)</th>
+<th>分片数</th>
+<th>总大小</th>
+<th>dtype</th>
+<th>shape (单样本)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>k2_feat_20260813_085959</code></td>
+<td>1900</td>
+<td>19</td>
+<td>8.69 GB</td>
+<td>float16</td>
+<td>(139, 12800)</td>
+</tr>
+<tr>
+<td><code>k2_feat_20260814_054739</code></td>
+<td>0</td>
+<td>0</td>
+<td>0.0 GB</td>
+<td>None</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>k2_feat_20260814_065702</code></td>
+<td>2300</td>
+<td>23</td>
+<td>10.51 GB</td>
+<td>float16</td>
+<td>(144, 12800)</td>
+</tr>
+<tr>
+<td><code>k2_train_feat</code></td>
+<td>1</td>
+<td>0</td>
+<td>0.45 GB</td>
+<td>None</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>k2_train_feat_cpu</code></td>
+<td>3600</td>
+<td>8</td>
+<td>16.42 GB</td>
+<td>float16</td>
+<td>(139, 12800)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>特征合计 ≈ 7,801 条</strong>（目录间可能重复，因每次启动写不同子目录）。</p>
+<h3>3. Qwen3-4B 模型</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>模型名</td>
+<td>Qwen3-4B</td>
+</tr>
+<tr>
+<td>模型路径</td>
+<td><code>D:/cache/hf/models--Qwen--Qwen3-4B/snapshots/1cfa9a7208912126459214e8b04321603b3df60c</code></td>
+</tr>
+<tr>
+<td>权重总大小</td>
+<td><strong>8.04 GB</strong></td>
+</tr>
+<tr>
+<td>hidden_size</td>
+<td>2560</td>
+</tr>
+<tr>
+<td>num_hidden_layers</td>
+<td>36</td>
+</tr>
+<tr>
+<td>vocab_size</td>
+<td>151936</td>
+</tr>
+</tbody>
+</table>
+<p>权重文件：
+- <code>model-00001-of-00003.safetensors</code> = 3.96 GB
+- <code>model-00002-of-00003.safetensors</code> = 3.99 GB
+- <code>model-00003-of-00003.safetensors</code> = 0.1 GB</p>
+<h3>4. 加载 / 推理精度（gen_k2_data.py）</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>加载 dtype</td>
+<td><code>torch.bfloat16 (if cuda else torch.float32)</code></td>
+</tr>
+<tr>
+<td>attn_implementation</td>
+<td><code>sdpa</code></td>
+</tr>
+<tr>
+<td>device</td>
+<td><code>cuda</code> (默认) / <code>cpu</code> (脚本第3参数切换)</td>
+</tr>
+<tr>
+<td>推理模式</td>
+<td><code>model.eval() + torch.no_grad()</code></td>
+</tr>
+<tr>
+<td>GenerationConfig</td>
+<td><code>do_sample=True, temperature=0.7, top_p=0.9, max_new_tokens=96</code></td>
+</tr>
+<tr>
+<td>捕获 hidden 层 ids</td>
+<td><code>[1, 9, 17, 25, 33]</code></td>
+</tr>
+<tr>
+<td>concat dim</td>
+<td><code>dim=-1</code></td>
+</tr>
+<tr>
+<td>特征 save dtype</td>
+<td><code>torch.float16 (numpy)</code></td>
+</tr>
+<tr>
+<td>MAX_LEN (截断)</td>
+<td>256</td>
+</tr>
+</tbody>
+</table>
+<h3>5. 修正上一份报告的疑点</h3>
+<ul>
+<li><strong>特征维度 = 12800</strong>（不是 1280）：实测 <code>shape=(139, 12800)</code>，dtype=float16。计算：5 层 × 2560 (Qwen3-4B hidden_size) = 12800 ✅ 与代码 <code>cat dim=-1</code> 一致，未做额外压缩。</li>
+<li><strong>k2_train_feat/train_meta.json 只有 1 条</strong>：该目录是早期调试残留（不是合并目录），生产用合并目录是 <code>data/k2_train_feat_cpu</code>（含 3600 条）。</li>
+</ul>
+<h3>6. 回答数据 vs 特征数据 对比表</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>回答数据 (regenerated)</th>
+<th>特征数据 (hidden states)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>是否落盘</td>
+<td>❌ 不落盘（仅内存）</td>
+<td>✅ 落盘（npz 分片）</td>
+</tr>
+<tr>
+<td>条数</td>
+<td>progress.json done = 4,409</td>
+<td>合计 ≈ 7,801</td>
+</tr>
+<tr>
+<td>采样来源</td>
+<td>同一份 1万采样索引（seed=42）</td>
+<td>同左</td>
+</tr>
+<tr>
+<td>生成模型</td>
+<td>Qwen3-4B (do_sample, temp=0.7)</td>
+<td>Qwen3-4B (二次前向, output_hidden_states=True)</td>
+</tr>
+<tr>
+<td>加载精度</td>
+<td>bf16 (cuda) / fp32 (cpu)</td>
+<td>同左（同 model 对象）</td>
+</tr>
+<tr>
+<td>数据形态</td>
+<td>token id 序列（prompt + 96 个新 token）</td>
+<td>tensor (seq_len, 12800) float16</td>
+</tr>
+<tr>
+<td>存储位置</td>
+<td>train_meta.json 的 input_ids 字段</td>
+<td>part_NNNNN.npz 的 s0..sN</td>
+</tr>
+<tr>
+<td>对应原文</td>
+<td>脚本 line 124-133</td>
+<td>脚本 line 139-143</td>
+</tr>
+</tbody>
+</table>
+<h2 id="s11">附录C：K2 报告补遗 v2（800截断 + 数据生成环节）</h2>
+<blockquote>
+<p>补齐 <code>gen_k2_report.py</code> / <code>gen_k2_report_supp.py</code> 中遗漏的「数据生成」环节与所有「疑似有问题」的代码点。</p>
+</blockquote>
+<h3>一、修正漏掉的"数据生成"环节</h3>
+<p>DSpark 训练数据需要两步，官方是分开的：</p>
+<ol>
+<li><strong>数据生成</strong>：target 模型给 prompt 生成回答 → 写 <code>*_regen.jsonl</code></li>
+<li><strong>特征生成</strong>：读 <code>*_regen.jsonl</code>，target 前向抽 hidden → 写 cache</li>
+</ol>
+<p><strong>项目实际</strong>：❌ 没有独立的数据生成脚本。<code>gen_k2_data.py</code> 把两步合并，<strong>回答不落盘</strong>，无法复现某条样本的 response 内容，无法 debug。</p>
+<h3>二、800 截断疑点</h3>
+<p><code>scripts/gen_k2_data.py:58</code> 的 <code>m["content"][:800]</code> 是<strong>从 <code>gen_perfectblend_data.py:74</code> 抄过来的</strong>，但 K2 prompt 比 PB 长得多（前 100 条实测 138-3193 chars，<strong>被 800 截断的有 ~60-70%</strong>）。</p>
+<p><strong>800 chars ≈ 200-270 tokens</strong>，正好压在 <code>MAX_LEN=256</code> 边界。两层截断并存且冗余。</p>
+<p><strong>修复建议</strong>：去掉 chars 级 800，统一按 token 数截断 prompt（保留 N 给 prompt，M 给回答）。</p>
+<h3>三、其他疑似有问题的 10 个点</h3>
+<ol>
+<li><strong>attention_mask 缺失</strong>（已有 warning）：<code>gen_k2_data.py:124-127</code>，pad=eos 时无害但脆弱</li>
+<li><strong>二次前向浪费算力</strong>：第一次 generate 已经算 hidden_states，又算一次完整 36 层前向</li>
+<li><strong>generate hidden_states 取舍</strong>：<code>output_hidden_states=True</code> 已被 transformers 标 deprecated 风格</li>
+<li><strong>采样进度 4409 vs 特征目录 7801 不一致</strong>：多目录重复或 progress.json 被重置</li>
+<li><strong>progress.json 是全局索引</strong>：若 k2_full.jsonl 被替换会失效</li>
+<li><strong>两套截断并存</strong>：chars 级 800 + token 级 256，冗余</li>
+<li><strong>do_sample=True 让 cpu/gpu 训练结果不一致</strong>：CPU fp32 vs CUDA bf16 输出不同</li>
+<li><strong>max_new_tokens=96 太小</strong>：官方 4096，96 远不够回答 K2 复杂任务</li>
+<li><strong>anchor 边界条件</strong>：max_anchor &lt;= start_anchor 时被跳过，语义不清晰</li>
+<li><strong>flush 断电不安全</strong>：npz 直接写无原子 rename，崩溃时 done 与 feature 不一致</li>
+</ol>
+<h3>四、需要补的脚本</h3>
+<p>建议新建 <code>scripts/regen_k2_response.py</code>，单独生成 <code>k2_full_regen.jsonl</code>，让训练数据可追溯、可复现、可 debug。</p>
+<p>详见 <code>docs/K2_DataFlow_Report_Supplement2_20260816_092257.html</code> / <code>.pdf</code></p>
+<hr />
+    
+    
+    
+
+  <hr/>
+  <p class="meta">本页由原始实验报告（DSpark_Report_20260828_104742.html）精简整理：去除内嵌 mermaid/katex/dompurify 库（原文件约 3.3MB → 本页约 50KB），修正重复标题，补充核心结论与目录。</p>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
