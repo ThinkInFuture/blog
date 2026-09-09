@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qwen3.8 MTP · 完整架构解析（含双路径机制、时序、决策、计算量、实测）</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script>hljs.highlightAll();</script>
+    <style>
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', Roboto, sans-serif;
+            background: #f4f6f9;
+            margin: 0;
+            padding: 20px;
+            color: #1e2a3a;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: #ffffff;
+            border-radius: 16px;
+            padding: 30px 40px;
+            margin-bottom: 30px;
+            border: 1px solid #e2e8f0;
+        }
+        .header h1 {
+            margin: 0 0 8px 0;
+            font-size: 2.4rem;
+            font-weight: 700;
+            color: #0b2b4a;
+        }
+        .header h1 small {
+            font-size: 1rem;
+            font-weight: 400;
+            color: #4a6a85;
+            margin-left: 20px;
+        }
+        .header p { margin: 0; font-size: 1.1rem; color: #3a5a75; }
+        .badge {
+            display: inline-block;
+            background: #dbeafe;
+            border-radius: 30px;
+            padding: 4px 16px;
+            font-size: 0.85rem;
+            color: #1a4b8c;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 14px;
+            padding: 24px 28px;
+            margin-bottom: 28px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 2px 12px rgba(0,20,40,0.04);
+        }
+        .card h2 {
+            margin-top: 0;
+            font-weight: 600;
+            font-size: 1.6rem;
+            color: #0b2b4a;
+            border-bottom: 3px solid #dce5f2;
+            padding-bottom: 10px;
+        }
+        .card h2 i {
+            font-style: normal;
+            background: #eef4ff;
+            padding: 2px 12px;
+            border-radius: 30px;
+            font-size: 0.9rem;
+            color: #1a5a9c;
+            margin-left: 10px;
+        }
+        .card .sub { color: #4a6a85; margin-top: -8px; margin-bottom: 20px; font-size: 0.95rem; }
+        .card h3 { color: #0b2b4a; margin-top: 26px; }
+        .mermaid-wrapper {
+            background: #fafcff;
+            border-radius: 12px;
+            padding: 20px 10px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .note-box {
+            background: #f0f7ff;
+            border-left: 6px solid #3b82f6;
+            padding: 14px 20px;
+            border-radius: 8px;
+            margin: 20px 0 10px 0;
+            color: #1e3a5f;
+            line-height: 1.8;
+        }
+        .note-box strong { color: #1a4b8c; }
+        .note-box.warn { background: #fff7ed; border-left-color: #fb923c; color: #7c2d12; }
+        .note-box.warn strong { color: #c2410c; }
+        .highlight {
+            background: #fef9e7;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-weight: 600;
+            color: #b45309;
+        }
+        pre {
+            background: #1e293b !important;
+            padding: 20px 24px;
+            border-radius: 12px;
+            overflow-x: auto;
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            border: 1px solid #334155;
+        }
+        pre code { color: #e2e8f0; font-family: inherit; }
+        .footer {
+            text-align: center;
+            color: #6a7f9b;
+            font-size: 0.9rem;
+            padding: 20px 0 10px;
+            border-top: 1px solid #dce5f2;
+            margin-top: 20px;
+        }
+        @media (max-width: 700px) { .header h1 { font-size: 1.8rem; } .card { padding: 18px; } }
+        .compare-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0 5px;
+            font-size: 0.95rem;
+            background: #ffffff;
+            border: 1px solid #dce5f2;
+        }
+        .compare-table th {
+            background: #eef4ff;
+            text-align: left;
+            padding: 12px 16px;
+            border: 1px solid #dce5f2;
+            font-weight: 600;
+        }
+        .compare-table td {
+            padding: 12px 16px;
+            border: 1px solid #dce5f2;
+            background: #ffffff;
+            vertical-align: top;
+        }
+        .compare-table tr:nth-child(even) td { background: #fafcff; }
+        .tag {
+            display: inline-block;
+            background: #dbeafe;
+            padding: 0 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: #1a4b8c;
+        }
+        .toc {
+            background: #f8faff;
+            border: 1px dashed #93c5fd;
+            border-radius: 12px;
+            padding: 18px 26px;
+            margin-bottom: 28px;
+            line-height: 2;
+        }
+        .toc b { color: #0b2b4a; }
+        .toc a { color: #1a5a9c; text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+    </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🧠 Qwen3.8 MTP · 完整架构解析 <small>双路径机制 / 时序 / 决策 / 计算量 / 实测</small></h1>
+        <p><strong>MTP Head（Multi-Token Prediction Head，也叫 NextN 块）</strong> 是挂载在主干之后的<strong>一个额外轻量 Transformer 层</strong>。它和主模型<strong>共用同一份主干权重、同一份词嵌入、同一份 LM Head</strong>，因此几乎不增加显存，却能充当"自带的草稿模型"，用于推测解码加速。</p>
+        <span class="badge">⚡ 推理加速 30%~2.5× · MTP Head 在 GGUF 中通常为 blk.64（nextn 张量）</span>
+    </div>
+
+    <div class="toc">
+        <b>📑 阅读顺序：</b><br>
+        ① <a href="#c1">MTP 解决什么问题（动机）</a> &nbsp;→&nbsp;
+        ② <a href="#c2">标准 LLM 一次前向在干什么（基础回顾）</a> &nbsp;→&nbsp;
+        ③ <a href="#c3">Qwen3.8 总体架构</a> &nbsp;→&nbsp;
+        ④ <a href="#c4">三大模块拆解（主干 / 主LM头 / MTP Head）</a> &nbsp;→&nbsp;
+        ⑤ <a href="#c5">同权重双路径机制（核心）</a> &nbsp;→&nbsp;
+        ⑥ <a href="#c6">单个生成步的时序</a> &nbsp;→&nbsp;
+        ⑦ <a href="#c7">调度决策（接受/拒绝）</a> &nbsp;→&nbsp;
+        ⑧ <a href="#c8">计算量对比</a> &nbsp;→&nbsp;
+        ⑨ <a href="#c9">工程实现（调度器 / GGUF 层索引）</a> &nbsp;→&nbsp;
+        ⑩ <a href="#c10">标准 vs MTP 对比表</a> &nbsp;→&nbsp;
+        ⑪ <a href="#c11">实测与部署（来自社区）</a>
+    </div>
+
+    <!-- 1. 动机 -->
+    <div class="card" id="c1">
+        <h2>🚀 1. MTP 解决什么问题 <i>背景与动机</i></h2>
+        <div class="sub">理解"为什么需要 MTP"，才能理解它为什么长这样。</div>
+        <div class="note-box">
+            <strong>标准自回归的瓶颈：</strong> 传统 LLM 每生成一个 token 都要跑<strong>一整次主干前向</strong>。GPU 大部分时间在"等显存搬权重"（memory-bandwidth bound），算力闲置。生成 5 个 token = 5 次串行全量前向，严格顺序、无法并行。<br><br>
+            <strong>MTP 的思路 = 自推测解码（self-speculative decoding）：</strong><br>
+            • 不需要额外加载一个"小草稿模型"（那样会多吃一份显存）。<br>
+            • 直接把 MTP Head 训练进主模型自身，让它<strong>顺便学会"猜后面几个 token"</strong>。<br>
+            • 代价极小：只多 1 层（参数量约为整模型的 1/L，L 为层数），显存开销通常 &lt;1%。<br>
+            • 用"轻量草稿 + 一次全量验证"替代"多次全量生成"，把串行的延迟问题转化为并行的吞吐问题。
+        </div>
+        <div class="note-box warn">
+            <strong>关键前提：</strong> MTP 不是随便开个开关就能用的。模型<strong>必须在训练/微调时就带 MTP Head</strong>（Qwen3 / Qwen3-Next / DeepSeek-V3 等原生支持）。普通 LLaMA、Mistral 这类没训过的模型无法直接启用。
+        </div>
+    </div>
+
+    <!-- 2. 标准 LLM 基线回顾 -->
+    <div class="card" id="c2">
+        <h2>🔁 2. 标准 LLM 一次前向在干什么 <i>基础回顾</i></h2>
+        <div class="sub">先建立基线：一个普通 Decoder Block 的内部结构（Qwen3.8 每个标准块约 <strong>1.1B</strong> 参数），后面 MTP Head 就是在这个结构上"加一层"。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    Input["输入 (4096维)"] --> LN1["LayerNorm"]
+                    LN1 --> MultiHead
+                    subgraph MultiHead["多头注意力 (32头, 每头128维) — 合计 268M"]
+                        Q["Q 投影 (4096×4096) <br> 67M"] --> AttnCalc["注意力计算 <br> (Q·K^T/√d)"]
+                        K["K 投影 (4096×4096) <br> 67M"] --> AttnCalc
+                        V["V 投影 (4096×4096) <br> 67M"] --> AttnCalc
+                        AttnCalc --> O["O 投影 (4096×4096) <br> 67M"]
+                    end
+                    MultiHead --> Add1["残差连接 +"]
+                    Add1 --> LN2["LayerNorm"]
+                    LN2 --> FFN
+                    subgraph FFN["FFN (SwiGLU) — 合计 805M"]
+                        Up["上投影 (up) <br> 4096×11008 = 45M"] --> SwiGLU["SwiGLU 激活"]
+                        Gate["门控投影 (gate) <br> 4096×11008 = 45M"] --> SwiGLU
+                        SwiGLU --> Down["下投影 (down) <br> 11008×4096 = 45M"]
+                    end
+                    FFN --> Add2["残差连接 +"]
+                    Add2 --> Out["输出 (4096维)"]
+                    style MultiHead fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+                    style FFN fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>参数量分解：</strong> 每个标准 Block 约 1.1B 参数（注意力 0.27B + FFN 0.8B + LayerNorm 等）。<br>
+            • Qwen3.8 共 64 层标准 Block（blk.0~63），主干总参数量约 27B。<br>
+            • <strong>这就是"主干 Trunk"——草稿和验证都要先经过它。</strong>
+        </div>
+    </div>
+
+    <!-- 3. 总体架构 -->
+    <div class="card" id="c3">
+        <h2>📊 3. Qwen3.8 总体架构 <i>宏观：主干 + 两个下游分支</i></h2>
+        <div class="sub">重点标出 MTP Head 是"叠"在主干之后的额外一层，以及主干的输出 h 如何被两种用法复用。这是理解后续一切的基础。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    UserInput["用户输入"] --> Tokenizer["Token 化 (词表 128k)"]
+                    Tokenizer --> Embed["Token 嵌入 (128k × 4096 = 0.52B)"]
+                    Embed --> Trunk["主干 Trunk: 全部 blk.0~63 串行前向<br>产出隐藏状态序列 h<br>(每个位置只算一次, 进 KV Cache 被两分支复用)"]
+
+                    Trunk --> VerifyBranch["验证流程: 主干隐藏状态 → 主 LM Head"]
+                    Trunk --> DraftBranch["草稿流程: 主干隐藏状态 + 上一token embedding → MTP Head(额外1层) → 主 LM Head"]
+
+                    VerifyBranch --> MainLM["主 LM Head<br>(与草稿共享同一份权重)"]
+                    MainLM --> MainOut["真实概率分布<br>= 验证基准 (verifier)"]
+
+                    DraftBranch --> MTP["MTP Head blk.64: 额外 1 层 Transformer<br>+ 拼接 已预测 token 的 embedding"]
+                    MTP --> SharedLM["同一份 主 LM Head"]
+                    SharedLM --> DraftOut["后续 token 草稿 logits<br>= 候选草稿 (drafter)"]
+
+                    NoteTrunk["主干参数见 第2/4章"] -.-> Trunk
+                    NoteMTP["MTP Head 内部结构见 第4章"] -.-> MTP
+
+                    style NoteTrunk fill:#f1f5f9,stroke:#94a3b8
+                    style NoteMTP fill:#f1f5f9,stroke:#94a3b8
+                    style Trunk fill:#f0fdf4,stroke:#16a34a,stroke-width:3px
+                    style VerifyBranch fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+                    style DraftBranch fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+                    style MainLM fill:#dbeafe,stroke:#2563eb
+                    style SharedLM fill:#dbeafe,stroke:#2563eb
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>「分叉」到底指什么（最容易卡住的地方）：</strong><br>
+            主干本身是一条<strong>直筒</strong>：输入序列从 blk.0 一路算到 blk.63，<strong>内部并不会分叉</strong>。所谓"分叉"发生在主干"<strong>输出之后</strong>"——它只产出一个东西：隐藏状态序列 <code>h</code>。然后这个 <code>h</code> 被两种下游用法复用：<br><br>
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    graph TD
+                        Ctx["上下文 token"] --> Trunk["主干 Trunk (blk.0~63)<br>前向 → 隐藏状态 h"]
+                        Trunk --> H["隐藏状态 h<br>(同一份张量, 被两种用法复用)"]
+                        H --> V["验证流程: 直接送入 主 LM Head"]
+                        V --> Vout["验证分布 (verifier 基准)"]
+                        H --> Concat["草稿流程: 与 上一个 token 的 embedding 拼接"]
+                        Concat --> MTP["MTP Head (额外 1 层)"]
+                        MTP --> D["再送入 同一份 主 LM Head"]
+                        D --> Dout["草稿分布 (drafter 候选)"]
+
+                        style H fill:#f0fdf4,stroke:#16a34a,stroke-width:3px
+                        style V fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+                        style MTP fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+                        style D fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+                </div>
+            </div>
+            • 所谓"分支"，本质就是<strong>同一个张量 h 被喂进了两个不同的函数</strong>：一个直接进 LM Head（验证），一个先过 MTP Head 再过 LM Head（草稿）。没有魔法，就是张量复用。<br><br>
+            <strong>更关键的一点（避免被"只算一次"误导）：</strong> 在一个生成步里，主干其实会被<strong>调用两次</strong>，但第二次极便宜——<br>
+            　① <strong>草稿阶段</strong>：对"当前上下文"跑一次主干 → 得到 h_上下文；取 h_上下文 的末位 + 上一个 token 的 embedding 喂给 MTP Head，串联想出多个草稿。<br>
+            　② <strong>验证阶段</strong>：把"上下文 + 刚猜的草稿"拼起来<strong>再跑一次主干</strong> → 得到完整 h；LM Head 在每个位置给出真实分布，与草稿比对。<br>
+            第二次调用因为 KV Cache 已经缓存了"上下文"那些位置的计算结果，<strong>只需真正计算新拼进来的草稿位置</strong>，所以浪费极小。两次调用用的是<strong>同一份主干权重</strong>，这才是"复用"的真正含义。<br><br>
+            <strong>两个常见误解：</strong><br>
+            • 不是"浅层给 MTP、深层给验证"——是<strong>完整主干先算完，输出 h 再被两种用法消费</strong>。<br>
+            • MTP Head 是<strong>有独立参数的额外模块</strong>（blk.64），"叠"在主干之上，不是插在主干中间；草稿与验证<strong>共用主 LM Head 权重</strong>，不存在"两个 LM Head"。
+        </div>
+    </div>
+
+    <!-- 4. 三大模块拆解 -->
+    <div class="card" id="c4">
+        <h2>🧱 4. 三大模块拆解 <i>主干 / 主LM头 / MTP Head</i></h2>
+        <div class="sub">把第 3 章的"主干 + 两个下游分支"拆开看清楚每块的参数与结构。</div>
+
+        <h3>4.1 主干 Trunk（blk.0~63，约 27B，与标准 LLM 完全一致）</h3>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    SharedLoop["循环 N 个标准 Block (深层) <br> 例如 N=64，每层 ≈1.1B"]
+                    SharedLoop --> Output["主 LM Head (输出层) <br> 与嵌入共享权重"]
+                    Output --> Result["生成下一个 Token (主模型验证)"]
+                    style SharedLoop fill:#f0fdf4,stroke:#16a34a,stroke-width:2px
+                    style Output fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+            </div>
+        </div>
+        <div class="note-box">主干就是标准的 64 层 Decoder（结构见第 2 章）。它产出的隐藏状态 h 被两种下游用法复用：直接进 LM Head 做验证，或先过 MTP Head 再做草稿。在单个生成步里主干会被调用两次（上下文一次、上下文+草稿一次），但第二次靠 KV Cache 只算新位置，所以整体仍很省。</div>
+
+        <h3>4.2 MTP Head 内部结构（blk.64，轻量草稿生成器，约 0.45B）</h3>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    M_Input["来自主干的隐藏状态 h (4096维)"] --> M_Concat["与 已预测 token 的 embedding 拼接/融合"]
+                    M_Concat --> M_LN1["LayerNorm"]
+                    M_LN1 --> M_MultiHead
+                    subgraph M_MultiHead["压缩多头注意力 (4头, 每头256维) — 合计 16M"]
+                        M_Q["Q 投影 (4096×1024) <br> 4M"] --> M_AttnCalc["注意力计算 <br> (Q·K^T/√d)"]
+                        M_K["K 投影 (4096×1024) <br> 4M"] --> M_AttnCalc
+                        M_V["V 投影 (4096×1024) <br> 4M"] --> M_AttnCalc
+                        M_AttnCalc --> M_O["O 投影 (1024×4096) <br> 4M"]
+                    end
+                    M_MultiHead --> M_Add1["残差连接 +"]
+                    M_Add1 --> M_LN2["LayerNorm"]
+                    M_LN2 --> M_FFN
+                    subgraph M_FFN["压缩 FFN (SwiGLU) — 合计 35M"]
+                        M_Up["上投影 (up) <br> 4096×2048 = 8M"] --> M_SwiGLU["SwiGLU 激活"]
+                        M_Gate["门控投影 (gate) <br> 4096×2048 = 8M"] --> M_SwiGLU
+                        M_SwiGLU --> M_Down["下投影 (down) <br> 2048×4096 = 8M"]
+                    end
+                    M_FFN --> M_Add2["残差连接 +"]
+                    M_Add2 --> M_Proj["融合后再经 主 LM Head (共享权重) <br> ~0.3B (与主模型同一份)"]
+                    M_Proj --> M_Out["草稿 Logits (用于采样)"]
+                    style M_MultiHead fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+                    style M_FFN fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+                    style M_Proj fill:#f0fdf4,stroke:#16a34a
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>MTP Head 的轻量化手段（所以草稿极便宜）：</strong><br>
+            • 注意力头数从 32 减至 4，维度从 4096 压缩到 1024。<br>
+            • FFN 中间维度从 11008 压缩到 2048。<br>
+            • 仅 <strong>1 层</strong>而非 64 层，参数量只有标准块的 <strong>约 1/60</strong>（≈0.45B）。<br>
+            • 与主模型<strong>共享嵌入层和 LM Head 权重</strong>，不另起炉灶。
+        </div>
+    </div>
+
+    <!-- 5. 双路径机制 -->
+    <div class="card" id="c5">
+        <h2>⭐ 5. 同权重双路径机制（核心） <i>草稿 vs 验证，到底差在哪</i></h2>
+        <div class="sub">本章解释最容易被讲糊涂的一点：同一份权重怎么会既出草稿又出校验。结论——权重完全一样，差的是"喂什么输入"和"过不过 MTP 那 1 层"，即两段不同的前向流程复用了同一份权重。</div>
+
+        <div class="note-box">
+            <strong>一句话本质（最直观的理解）：</strong> 把 MTP 想成<strong>「两套模型塞进同一份权重」</strong>——<br>
+            　• <strong>验证模型（目标）</strong> = 主干 + 主 LM Head，负责"标准地"预测下一个 token；<br>
+            　• <strong>草稿模型（草案）</strong> = 主干 + MTP Head（额外 1 层）+ 主 LM Head，负责"贪心地"多猜几个 token。<br>
+            这两套模型<strong>共用同一份主干权重和同一份 LM Head</strong>，只多出 MTP Head 那 1 层（≈0.45B）。所以与其说是"两份独立模型"，不如说是<strong>"一个主干撑起两个头"</strong>——草稿模型和验证模型在主干上是<strong>同一份参数</strong>，区别只在是否多过 MTP 那一层、以及喂入时是否带"上一个 token 的 embedding"。这正好解释了前面"同权重为何出两种输出"。
+        </div>
+
+        <div class="note-box">
+            <strong>逐位置拆开看（这是理解的关键）：</strong><br>
+            整个模型里被"共享"的权重其实只有两份：<strong>① 主干（所有标准层 blk.0~63）</strong> 和 <strong>② 最后的 LM Head</strong>。草稿和验证都调用这两份权重，区别只在于<strong>走了哪段前向、喂进去的 tensor 是什么</strong>。<br><br>
+            <strong>一、出"草稿"时（draft 流程）：</strong><br>
+            　1. 跑一次主干，拿到当前位置 t 的隐藏状态 h_t（这是唯一的"重"计算）。<br>
+            　2. 把 h_t 和"上一个 token x_t 的 embedding"拼成一个向量，送进 <strong>MTP Head（额外 1 层 Transformer）</strong>，再交给<strong>共享的 LM Head</strong>，采样得到候选草稿 x_{t+1}。<br>
+            　3. <strong>MTP Head 是串联的</strong>：接着把"MTP 块的输出"和"草稿 x_{t+1} 的 embedding"再拼起来，送进同一（或下一个）MTP 块，得到 x_{t+2}；如此循环。所以猜 k 个草稿，代价 = 1 次主干 + k 次"1 层"，极便宜。<br><br>
+            <strong>二、出"校验"时（verify 流程）：</strong><br>
+            　1. 把"上下文 + 刚猜出的 k 个草稿"作为一个整体，<strong>再跑一次主干（就 1 次）</strong>。主干会在每个位置都吐出隐藏状态。<br>
+            　2. 共享的 LM Head 在这些隐藏状态上分别给出"真实分布"：位置 t+1 的真实分布、位置 t+2 的真实分布……<br>
+            　3. 拿这些真实分布和草稿 x_{t+1}, x_{t+2}… 逐个比对，一致的就收下，遇到第一个不一致就在此截断、用真实分布修正。
+        </div>
+
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    Ctx["当前上下文 (已生成 token)"] --> Trunk2["主干 Trunk 一次前向 blk.0~63<br>产出隐藏状态 h_t"]
+
+                    Trunk2 --> A["验证流程: 主干隐藏状态 → 主 LM Head"]
+                    Trunk2 --> B["草稿流程: 主干隐藏状态 + x_t 的 embedding → MTP Head (额外1层) → 主 LM Head"]
+
+                    A --> A1["得到 t+1 的真实分布<br>(这是验证基准)"]
+                    B --> B1["得到 x_t 之后的候选草稿 x_t+1<br>(可串联继续猜 x_t+2 ...)"]
+
+                    style Trunk2 fill:#f0fdf4,stroke:#16a34a,stroke-width:3px
+                    style A fill:#dbeafe,stroke:#2563eb,stroke-width:2px
+                    style B fill:#e0f2fe,stroke:#0284c7,stroke-width:2px
+            </div>
+        </div>
+
+        <table class="compare-table">
+            <thead>
+                <tr><th>对比维度</th><th>验证流程</th><th>草稿流程</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="tag">经过哪些层</span></td>
+                    <td>主干全部 blk.0~63 → 主 LM Head</td>
+                    <td>主干全部 blk.0~63（同左）→ <strong>MTP Head blk.64（多这一层，且 MTP 块之间串联）</strong> → 主 LM Head</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">喂入的输入</span></td>
+                    <td>完整上下文（含已拼接的 k 个草稿 token），<strong>一次主干前向</strong>得到每个位置的隐藏状态</td>
+                    <td>主干隐藏状态 h_t + <strong>已预测 token x_t 的 embedding</strong>（让 MTP 知道"刚出的是哪个 token"）；猜下个时再用 MTP 输出 + x_{t+1} 的 embedding 接龙</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">产出的含义</span></td>
+                    <td>每个位置的<strong>真实</strong>概率分布（ground truth），用于比对</td>
+                    <td>后续 token 的<strong>候选</strong>草稿分布（可能错，待验证）</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">计算代价</span></td>
+                    <td>高：1 次完整主干前向（但同时验证 k 个草稿）</td>
+                    <td>极低：1 次主干（拿 h_t）+ k 次"1 层"MTP 块，≈1/L 主干代价</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">权重来源</span></td>
+                    <td colspan="2" style="text-align:center;">✅ 两条流程<strong>共用同一份主干 + 同一份 embedding + 同一份 LM Head</strong>，唯一多出来的是 MTP Head 的 0.45B 参数</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>5.1 落到代码：同权重、两条 forward</h3>
+        <div class="sub">GGUF 中层按索引存储；MTP Head 通常作为 <code>blk.N.nextn.*</code> 张量存在。调度器通过"选不同前向 + 喂不同输入"来控制路径。</div>
+        <pre><code class="language-python"># 加载模型权重（同一份）
+weights   = load("qwen3.8.gguf")
+trunk     = weights.blocks[0:64]   # blk.0 ~ blk.63  主干(草稿/验证共用)
+mtp_head  = weights.blocks[64]     # blk.64 (nextn)  MTP Head 额外层
+lm_head   = weights.lm_head       # 主 LM Head (草稿/验证共用同一份)
+
+def trunk_forward(context):
+    h = embed(context)             # 共享 embedding
+    for layer in trunk:            # 标准层跑一遍
+        h = layer(h)
+    return h                       # 隐藏状态 h
+                                 # 注: 每步会被调用两次——上下文一次、上下文+草稿一次,
+                                 #      第二次靠 KV Cache 只算新拼接的草稿位置
+
+def draft_step(mtp_hidden, prev_token_emb):
+    # 草稿流程: (MTP隐藏状态 + 上个token的embedding) → MTP Head(额外1层) → 共享 LM Head
+    mtp_hidden = mtp_head(concat(mtp_hidden, prev_token_emb))  # 多走 blk.64 这一层
+    draft_logits = lm_head(mtp_hidden)                            # 与验证共用同一份 lm_head
+    return mtp_hidden, sample(draft_logits)                      # 返回(隐藏状态, 采样token)
+
+def verify_step(context_with_draft):
+    # 验证流程: 完整上下文 → 主干 → 共享 LM Head, 一次性并行
+    h = trunk_forward(context_with_draft)
+    return lm_head(h)              # 同一份 lm_head, 得到各位置真实分布
+
+def generate_step(context):
+    h = trunk_forward(context)               # 主干算1次(上下文) → 隐藏状态 h
+    mtp_hidden = h                           # 首步 MTP 输入 = 主干输出 h (即 h_t)
+    prev_emb = embed(last_token(context))    # 上一个 token x_t 的 embedding
+    drafts = []
+    for _ in range(N):                       # 轻量草稿阶段(串联)
+        mtp_hidden, t = draft_step(mtp_hidden, prev_emb)  # 上一步 MTP 输出作为本步输入
+        drafts.append(t)
+        prev_emb = embed(t)                  # 下一步喂入刚猜出的 token 的 embedding
+    verify_logits = verify_step(context + drafts)   # 全量验证1次(上下文+草稿)
+    accepted = accept_reject(drafts, verify_logits) # 接受/拒绝
+    return accepted</code></pre>
+        <div class="note-box">
+            <strong>关键点：</strong> 调度器并没有"换权重"，它只是 <span class="highlight">切换前向 + 切换输入</span>：草稿时多过 MTP Head 那 1 层、并喂入"上一个 token 的 embedding"；验证时直接主干 + LM Head。主干在草稿和验证间<strong>通过两次调用复用（第二次靠 KV Cache）</strong>，避免重复计算。
+        </div>
+
+        <div class="note-box">
+            <strong>一句话点透：</strong> "同权重出两种输出"的本质 = <strong>同一份主干 + LM Head 权重，被两段不同的前向代码调用</strong>。验证流程"主干输出直接进 LM Head"；草稿流程"主干输出上再叠 MTP 块（并喂入上一 token 的 embedding）才进 LM Head"。所以<strong>不是权重变了，是调用的代码路径和喂入的 tensor 变了</strong>。
+        </div>
+        <div class="note-box">
+            <strong>为什么 MTP 草稿质量高（接受率高）？</strong> 普通"小草稿模型"是另一个架构，猜的方向可能和大模型不一致；而 MTP Head 是<strong>用大模型自己的隐藏状态训练出来的</strong>，它"贴着"验证器的分布去猜，所以社区实测接受率能到 70%~83%，远高于跨家族小模型草稿。代价比 c（草稿/验证计算比）因此降到约 1/L，加速才成立。
+        </div>
+        <div class="note-box warn">
+            <strong>谁来决定"走草稿"还是"走全量验证"？——是外部引擎控制，不是模型自己。</strong><br>
+            模型只是一堆权重，<strong>它不会做任何"决定"</strong>。真正驱动整个流程的是<strong>推理引擎里的推测解码调度循环</strong>（llama.cpp / vLLM / MLX 等运行时代码，俗称 scheduler）：<br>
+            　• 调度器先主动调用 <strong>MTP Head</strong> 出 k 个草稿（这是"走草稿"）；<br>
+            　• 再主动调用 <strong>主干 + LM Head</strong> 对"上下文 + 草稿"做一次前向，拿到真实分布（这是"走全量验证"）；<br>
+            　• 最后用<strong>固定的接受/拒绝算法</strong>（把草稿分布和验证分布做比对，按既定采样规则裁决）决定收下哪些、丢弃哪些。<br>
+            所以"走哪条路径"是<strong>外部硬编码的循环逻辑</strong>，模型完全被动。用户能调的只是引擎层面的超参，例如草稿长度（llama.cpp 的 <code>--spec-draft-n-max</code>）、接受阈值（<code>--spec-draft-p-min</code>）——这些也是引擎配置，不是模型内部产生的。
+        </div>
+    </div>
+
+    <!-- 6. 时序 -->
+    <div class="card" id="c6">
+        <h2>⏱️ 6. 单个生成步的时序 <i>先草稿、后验证、再接受/拒绝</i></h2>
+        <div class="sub">每步内：先轻量草稿（连续猜 2~3 个），再全量验证（一次并行前向）。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                sequenceDiagram
+                    participant Scheduler as 推理调度器
+                    participant Trunk as 主干 Trunk<br>(~27B, 只算1次)
+                    participant MTP as MTP Head<br>(0.45B, 额外1层)
+                    participant Main as 主 LM Head<br>(与草稿共享)
+
+                    loop 每一个生成步
+                        Note over Scheduler: 🔽 阶段1：主干前向 (算1次)
+                        Scheduler->>Trunk: 当前上下文前向
+                        Trunk-->>Scheduler: 隐藏状态 h
+
+                        Note over Scheduler: 🔽 阶段2：轻量草稿 (低消耗)
+                        Scheduler->>MTP: h + token_t 的 embedding
+                        loop 2~3 次 (串行猜后续)
+                            MTP-->>Main: 过 共享 LM Head
+                            Main-->>MTP: 草稿 token (t+1, t+2...)
+                        end
+                        MTP-->>Scheduler: 返回草稿序列 [T1, T2]
+
+                        Note over Scheduler: 🔽 阶段3：全量验证 (高消耗, 仅1次)
+                        Scheduler->>Trunk: 将 [T1,T2] 拼入上下文, 一次性前向
+                        activate Trunk
+                        Trunk-->>Main: 各位置隐藏状态
+                        Main-->>Scheduler: 返回验证概率 (真实分布)
+                        deactivate Trunk
+
+                        Note over Scheduler: ✅ 接受 / 拒绝
+                        alt 两个都正确
+                            Scheduler-->>Scheduler: 全部接受, 步进 +2
+                        else 第2个错误
+                            Scheduler-->>Scheduler: 接受第1个, 丢弃第2个<br>(用主模型修正)
+                        end
+                    end
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>为什么快？</strong> 原需 2 次全量 (2×27B)，现只需 1 次全量 (1×27B) + 2 次轻量 (2×0.45B，仅多 1 层)。主干在草稿和验证间<strong>通过 KV Cache 复用</strong>，避免重复计算。总计算量大幅下降。
+        </div>
+    </div>
+
+    <!-- 7. 决策流程 -->
+    <div class="card" id="c7">
+        <h2>🔄 7. 调度决策流程图 <i>接受 / 拒绝逻辑</i></h2>
+        <div class="sub">详细展示从草稿生成到最终接受 token 的完整分支。</div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                graph TD
+                    Start["开始生成步"] --> Draft["调用 MTP Head 生成 N 个草稿 token"]
+                    Draft --> Verify["主模型一次性并行验证<br>(主干1次前向 + 主LM Head)"]
+                    Verify --> Check{"逐个检查草稿<br>与验证分布是否一致"}
+                    Check -->|"第 i 个正确"| Accept["接受该 token, 继续检查下一个"]
+                    Check -->|"第 i 个错误"| Correct["接受前面所有正确的,<br>用主模型输出替换当前 token,<br>并丢弃后续草稿"]
+                    Accept -->|"还有下一个"| Check
+                    Accept -->|"全部正确"| Done["步进 N"]
+                    Correct --> Done2["步进 i (部分接受)"]
+                    Done --> Next["进入下一个生成步"]
+                    Done2 --> Next
+
+                    style Start fill:#e0f2fe,stroke:#0284c7
+                    style Draft fill:#fef9c3,stroke:#ca8a04
+                    style Verify fill:#dbeafe,stroke:#2563eb
+                    style Check fill:#fee2e2,stroke:#dc2626
+                    style Accept fill:#dcfce7,stroke:#16a34a
+                    style Correct fill:#fef08a,stroke:#a16207
+                    style Done fill:#f8fafc,stroke:#64748b
+                    style Done2 fill:#f8fafc,stroke:#64748b
+                    style Next fill:#f8fafc,stroke:#64748b
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>精髓：</strong> 草稿越长，潜在加速越大，但过长会降低接受率。社区实测 <span class="highlight">草稿长度=2~3</span> 性价比最高（Qwen3 系列常见 2~4）。
+        </div>
+    </div>
+
+    <!-- 8. 计算量 -->
+    <div class="card" id="c8">
+        <h2>📊 8. 计算量对比 <i>传统自回归 vs 推测解码</i></h2>
+        <div class="sub">直观展示 MTP 如何用"轻量草稿 + 一次全量验证"替代"多次全量生成"。</div>
+        <div class="mermaid-wrapper" style="background:#f8faff;">
+            <div class="mermaid">
+                graph TD
+                    subgraph Traditional["传统自回归 (生成 3 个 token)"]
+                        A1["生成 T1 (全量)"] --> A2["生成 T2 (全量)"] --> A3["生成 T3 (全量)"]
+                    end
+
+                    subgraph MTP["推测解码 (生成 3 个 token)"]
+                        D["草稿: 2~3次轻量 (MTP Head, 仅多1层)"] --> V["验证: 1次全量 (主模型主干)"]
+                    end
+
+                    style Traditional fill:#fee2e2,stroke:#dc2626
+                    style MTP fill:#dcfce7,stroke:#16a34a
+                    style A1 fill:#fca5a5,stroke:#dc2626
+                    style A2 fill:#fca5a5,stroke:#dc2626
+                    style A3 fill:#fca5a5,stroke:#dc2626
+                    style D fill:#bbf7d0,stroke:#16a34a
+                    style V fill:#bfdbfe,stroke:#2563eb
+            </div>
+        </div>
+        <div style="display:flex; gap:30px; justify-content:center; flex-wrap:wrap; margin:15px 0;">
+            <div style="background:#fee2e2; padding:10px 20px; border-radius:8px; color:#b91c1c; font-weight:bold;">
+                ❌ 3 次全量 (3×27B)
+            </div>
+            <div style="background:#dcfce7; padding:10px 20px; border-radius:8px; color:#15803d; font-weight:bold;">
+                ✅ 1 次全量 (1×27B) + 2~3 次轻量 (≈1/L 代价)
+            </div>
+        </div>
+        <div class="note-box">
+            <strong>加速公式直觉（Leviathan）：</strong> 加速比 ≈ (1 − α·c) / (1 − α) 的变体，其中 α 是接受率、c 是"草稿/验证计算比"。MTP 的 c≈1/L（极小），且 α 高（70%~83%），所以加速才显著。传统"小草稿模型"的 c 大、α 低，常常加速不明显甚至负优化。
+        </div>
+    </div>
+
+    <!-- 10. 对比表 -->
+    <div class="card" id="c10">
+        <h2>📋 10. 标准架构 vs MTP 架构 <i>全方位对比</i></h2>
+        <div class="sub">从宏观结构、参数量、前向次数、推理延迟四个维度对比。</div>
+        <table class="compare-table">
+            <thead>
+                <tr><th>对比维度</th><th>标准 LLM (如 LLaMA)</th><th>Qwen3.8 MTP</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="tag">网络结构</span></td>
+                    <td>单一深度序列 (N层全连接) → 1 个 LM Head</td>
+                    <td>主干 (N层) + 额外 MTP Head (1层) + 共享 LM Head，形成"双下游分支"</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">总参数量</span></td>
+                    <td>~27B (全量)</td>
+                    <td>~27B (主干) + 0.45B (MTP Head) = 27.45B（显存增量 &lt;1%）</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">生成 2 个 token 的前向次数</span></td>
+                    <td>2 次全量 (2×27B)</td>
+                    <td>1 次全量 (1×27B) + 2 次轻量 (仅多 1 层，≈1/L)</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">推理延迟 (相对)</span></td>
+                    <td>1.0 (基准)</td>
+                    <td>~0.7（轻量场景）~ 0.4（高接受率场景），提速 30%~2.5×</td>
+                </tr>
+                <tr>
+                    <td><span class="tag">是否需额外草稿模型</span></td>
+                    <td>若做推测解码，需另载一个小模型（多吃显存）</td>
+                    <td>否，MTP Head 内置于主模型自身</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="note-box" style="margin-top:20px;">
+            <strong>核心差异：</strong> 标准模型是"每步全量"，MTP 是"<strong>主干算一次，轻量草稿多次 + 一次全量验证</strong>"，利用硬件并行性减少总计算量，且输出质量与原始模型一致（验证不通过就丢弃）。
+        </div>
+    </div>
+
+    <!-- 11. 实测与部署 -->
+    <div class="card" id="c11">
+        <h2>🛠️ 11. 实测与部署（来自社区，2026） <i>让理论落地</i></h2>
+        <div class="sub">补充"工程现实"，帮助判断实际能吃到多少加速。</div>
+        <div class="note-box">
+            <strong>llama.cpp 怎么开：</strong> Qwen3.8 的 GGUF（如 unsloth 量化版）会携带 <code>blk.*.nextn.*</code> 张量，llama.cpp 在 PR #22673（2026-07）后支持 draft-mtp 推测解码。常用参数：<code>--spec-draft-mtp</code> / <code>--spec-draft-n-max</code>（草稿长度，建议 2~4）/ <code>--spec-draft-p-min</code>（接受概率阈值）。<strong>不带该标志时，MTP Head 被直接忽略、退化成普通模型。</strong>
+        </div>
+        <div class="note-box">
+            <strong>社区实测（Qwen3.6 / 3.8 27B 级别）：</strong><br>
+            • 草稿长度 γ=2、接受率 ~83% 时，约 <strong>2.4×</strong> 加速；γ=3、接受率 ~72% 时，约 <strong>2.5×</strong> 加速。<br>
+            • 轻量本地部署常见 <strong>30%~40%</strong> 到数倍不等，取决于上下文长度、并发数（并发 &gt;1 时推测优势会被摊薄）。<br>
+            • MTP Head 在 64 层 27B 目标上约占 <strong>0.45B 参数（Q8 约 430MB）</strong>，显存代价极小。<br>
+            • 接受率按任务波动（编码 0.70~1.00，中位 ~0.88）。
+        </div>
+        <div class="note-box warn">
+            <strong>踩坑提示：</strong><br>
+            • 并非所有转换格式都保留 MTP 权重（如部分 MLX 转换会静默丢弃 <code>mtp.*</code> 张量），部署前需确认权重确实 resident。<br>
+            • 某些后端（如早期 Vulkan/ROCm 路径）因缺少"部分回滚（partial rollback）"支持，接受率会暴跌，需等内核修复。<br>
+            • 草稿长度不是越长越好：过长 → 接受率下降 → 反而更慢。先用 2~3 试起。
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>📌 本页所有图表均采用 TD / 时序图布局，完全对标标准 Transformer 架构图风格 · Mermaid 语法已全部加引号，适配 v10.9.8</p>
+        <p>🧩 核心一句话：<strong>主干算一次，双下游分支复用同一份权重；调度器"先草稿后验证"，所以看起来同一份权重在干两件事。</strong></p>
+    </div>
+</div>
+
+<script>
+    mermaid.initialize({
+        theme: 'base',
+        themeVariables: {
+            background: '#ffffff',
+            primaryColor: '#3b82f6',
+            primaryTextColor: '#1e293b',
+            primaryBorderColor: '#3b82f6',
+            lineColor: '#64748b',
+            secondaryColor: '#f1f5f9',
+            tertiaryColor: '#f8fafc',
+            nodeBackground: '#ffffff',
+            nodeBorder: '#cbd5e1',
+            mainBkg: '#f8fafc',
+            clusterBkg: '#ffffff',
+            clusterBorder: '#e2e8f0',
+            edgeLabelBackground: '#ffffff',
+        },
+        sequence: { actorMargin: 80, messageMargin: 40, mirrorActors: false },
+        flowchart: { useMaxWidth: true, htmlLabels: true }
+    });
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>

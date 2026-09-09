@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态混合精度量化 · 流程详解与源码对照</title>
+
+    <!-- Mermaid -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <!-- Highlight.js 使用浅色 github 主题 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/python.min.js"></script>
+    <script>hljs.highlightAll();</script>
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background: #f5f8fc;
+            color: #1e293b;
+            padding: 2rem 1.5rem;
+            line-height: 1.7;
+        }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+            background: #ffffff;
+            border-radius: 28px;
+            box-shadow: 0 12px 48px rgba(0,0,0,0.04);
+            padding: 2.8rem 3rem;
+        }
+        h1 {
+            font-size: 2.4rem;
+            font-weight: 600;
+            letter-spacing: -0.01em;
+            background: linear-gradient(145deg, #0b1e33, #1e3a5f);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.25rem;
+        }
+        .subtitle {
+            font-size: 1rem;
+            color: #64748b;
+            border-left: 4px solid #cbd5e1;
+            padding-left: 1.25rem;
+            margin-bottom: 2.2rem;
+            font-weight: 400;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 2.8rem;
+            margin-bottom: 1.2rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+        }
+        .section-title .badge {
+            font-size: 0.7rem;
+            font-weight: 500;
+            background: #e2e8f0;
+            padding: 0.15rem 0.8rem;
+            border-radius: 30px;
+            color: #334155;
+        }
+        .mermaid-wrapper {
+            background: #f8fafc;
+            border-radius: 18px;
+            padding: 1.8rem 1.2rem;
+            margin: 1rem 0 2rem 0;
+            border: 1px solid #e9edf2;
+            overflow-x: auto;
+        }
+        .code-section {
+            margin: 1.8rem 0 2.5rem 0;
+            border: 1px solid #e2e8f0;
+            border-radius: 18px;
+            background: #fafcff;
+            overflow: hidden;
+        }
+        .code-section .code-header {
+            background: #f1f5f9;
+            padding: 0.8rem 1.5rem;
+            font-weight: 600;
+            font-size: 1.1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.8rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .code-section .code-header .step-tag {
+            background: #ddeeff;
+            padding: 0.1rem 0.8rem;
+            border-radius: 30px;
+            font-size: 0.7rem;
+            font-weight: 500;
+            color: #1a5a8c;
+        }
+        .code-section .code-body {
+            padding: 0.8rem 1.5rem 1.5rem 1.5rem;
+        }
+        .code-section .code-body pre {
+            background: #f6f8fa;
+            border-radius: 12px;
+            padding: 1.2rem 1.5rem;
+            overflow-x: auto;
+            margin: 0.5rem 0 0 0;
+            border: 1px solid #e1e4e8;
+        }
+        .code-section .code-body pre code {
+            font-family: "JetBrains Mono", "SF Mono", "Menlo", monospace;
+            font-size: 0.82rem;
+            line-height: 1.6;
+            color: #24292e;
+        }
+        .code-section .flow-wrapper {
+            margin-bottom: 0.8rem;
+            background: #f8fafc;
+            border-radius: 14px;
+            padding: 0.8rem 0.8rem 0.2rem 0.8rem;
+            border: 1px solid #eef2f6;
+        }
+        .code-section .flow-wrapper .mermaid { text-align: center; }
+        .grid-2col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            margin: 1.8rem 0 1.2rem 0;
+        }
+        .card {
+            background: #fafcff;
+            border-radius: 18px;
+            padding: 1.6rem 1.8rem;
+            border: 1px solid #eef2f6;
+        }
+        .card h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.7rem; color: #0f172a; }
+        .card ul { padding-left: 1.25rem; color: #334155; font-size: 0.95rem; }
+        .card ul li { margin-bottom: 0.35rem; }
+        .tag {
+            display: inline-block;
+            border-radius: 30px;
+            padding: 0.1rem 0.8rem;
+            font-size: 0.7rem;
+            font-weight: 500;
+            margin-right: 0.3rem;
+        }
+        .tag-green { background: #dff0e6; color: #1f6b4a; }
+        .tag-blue { background: #ddeeff; color: #1a5a8c; }
+        .tag-amber { background: #fef0da; color: #9c6b2e; }
+        .tag-red { background: #fde2e2; color: #b91c1c; }
+        .optimization-list { margin-top: 0.8rem; }
+        .optimization-item {
+            display: flex;
+            gap: 1rem;
+            padding: 1rem 0;
+            border-bottom: 1px solid #edf2f7;
+        }
+        .optimization-item:last-child { border-bottom: none; }
+        .opt-icon { font-size: 1.2rem; min-width: 2.2rem; text-align: center; padding-top: 0.1rem; }
+        .opt-content .opt-title { font-weight: 600; color: #0f172a; }
+        .opt-content .opt-desc { color: #475569; font-size: 0.93rem; }
+        .opt-content .opt-desc code { background: #f1f5f9; padding: 0.1rem 0.4rem; border-radius: 4px; font-size: 0.82rem; }
+        .footnote {
+            margin-top: 2.5rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid #e9edf2;
+            color: #64748b;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+            flex-wrap: wrap;
+        }
+        .sub-section-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-top: 1.8rem;
+            margin-bottom: 0.8rem;
+            color: #1e293b;
+        }
+        @media (max-width: 760px) {
+            .container { padding: 1.5rem; }
+            .grid-2col { grid-template-columns: 1fr; gap: 1.2rem; }
+            h1 { font-size: 1.8rem; }
+        }
+        /* 高亮颜色调整 */
+        .hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-name, .hljs-tag { color: #005cc5 !important; }
+        .hljs-string { color: #032f62 !important; }
+        .hljs-comment { color: #6a737d !important; }
+        .hljs-function .hljs-title { color: #6f42c1 !important; }
+        .hljs-number { color: #005cc5 !important; }
+    </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+
+<div class="container">
+
+    <h1>🧊 动态混合精度量化 · 流程 & 源码</h1>
+    <div class="subtitle">
+        <code>quant.py</code> + <code>pipeline.py</code>  ·  分组非对称 RTN  ·  激活感知敏感度  ·  贪心比特分配
+    </div>
+
+    <!-- ========== 总览流程图 ========== -->
+    <div class="section-title">
+        📐 总览流程图
+        <span class="badge">TD 自上而下</span>
+    </div>
+    <div class="mermaid-wrapper">
+        <div class="mermaid">
+            %%{init: { 'theme': 'base', 'themeVariables': {
+                'background': '#ffffff',
+                'primaryColor': '#e6edf5',
+                'primaryBorderColor': '#b8c9dd',
+                'secondaryColor': '#f2f6fc',
+                'tertiaryColor': '#fafcff',
+                'lineColor': '#7f9bb3',
+                'textColor': '#1e293b',
+                'fontSize': '14px',
+                'fontFamily': 'system-ui, sans-serif'
+            }}}%%
+
+            flowchart TD
+                A[加载 FP16 模型 + 校准数据] --> B[collect_target_linears<br>跳过 vision / lm_head]
+                B --> C[compute_sensitivity<br>▸ 预量化各层 2/3/4/8 bit <span style=background:#eef2f6;padding:0 6px;border-radius:4px;>CPU 一次</span><br>▸ 前向 hook 反量化 + 累加重建误差<br>▸ 输出：每层 err2/err3/err4/err8 + nparams]
+                C --> D[allocate_bits<br>▸ Pass 1：贪心降级 8→4→3→2 直到加权平均 ≤ avg_bits<br>▸ Pass 2：强制下限 floor 单调上调]
+                D --> E{实际落地}
+                E --> F[apply_quantization<br>▸ 4/8 bit 层 → QuantLinear<br>▸ 2/3 bit 暂不落地]
+                E --> G[save_quantized<br>▸ model_quant.safetensors + quant_config.json]
+                F --> H[load_quantized_into<br>▸ 从 safetensors 恢复量化层<br>▸ 装配回同结构模型]
+
+                style A fill:#e9f0fa,stroke:#b4c9df
+                style C fill:#e6f3ed,stroke:#aacfc0
+                style D fill:#f4f0e6,stroke:#d4c9ae
+                style F fill:#e9eef6,stroke:#b7c6db
+                style G fill:#eaeef6,stroke:#b7c6db
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 详细步骤：每个步骤配流程图 + 源码（高亮，不折叠） -->
+    <!-- ============================================================ -->
+
+    <!-- Step 1: collect_target_linears -->
+    <div class="code-section">
+        <div class="code-header">
+            <span class="step-tag">Step 1</span> 收集可量化线性层
+            <span style="margin-left: auto; font-weight:400; font-size:0.85rem; color:#475569;">跳过 vision / lm_head</span>
+        </div>
+        <div class="code-body">
+            <div class="flow-wrapper">
+                <div class="mermaid">
+                    flowchart LR
+                        A[遍历 named_modules] --> B{isinstance Linear?}
+                        B -- 否 --> A
+                        B -- 是 --> C{名称含 vision 或 lm_head?}
+                        C -- 是 --> A
+                        C -- 否 --> D[加入 targets 列表]
+                        D --> A
+                </div>
+            </div>
+            <pre><code class="language-python">
+def collect_target_linears(model):
+    """
+    收集可量化线性层，跳过 vision 塔与 lm_head（保留 FP16 稳定输出）。
+    """
+    targets = []                                # 存储 (层名, 模块) 的列表
+    for name, module in model.named_modules():  # 遍历模型所有模块
+        if not isinstance(module, nn.Linear):   # 只关注线性层
+            continue
+        nl = name.lower()
+        if "vision" in nl or "lm_head" in nl:   # 跳过视觉塔和输出头
+            continue
+        targets.append((name, module))          # 加入目标列表
+    return targets
+            </code></pre>
+        </div>
+    </div>
+
+    <!-- Step 2: compute_sensitivity -->
+    <div class="code-section">
+        <div class="code-header">
+            <span class="step-tag">Step 2</span> 计算逐层重建误差敏感度
+            <span style="margin-left: auto; font-weight:400; font-size:0.85rem; color:#475569;">预量化 CPU + Hook 反量化 GPU</span>
+        </div>
+        <div class="code-body">
+            <div class="flow-wrapper">
+                <div style="display: flex; flex-wrap: wrap; gap: 1rem; justify-content: center;">
+                    <div style="flex: 1; min-width: 180px;">
+                        <div style="font-weight:600; text-align:center; margin-bottom:0.3rem;">CPU 预计算 (一次)</div>
+                        <div class="mermaid">
+                            flowchart TD
+                                A1[遍历目标层] --> A2[取出权重 W]
+                                A2 --> A3[quantize_weight W 转为 2/3/4/8 bit]
+                                A3 --> A4[存入 pre 字典]
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; font-size:2rem; color:#b0b0b0;">→</div>
+                    <div style="flex: 1; min-width: 180px;">
+                        <div style="font-weight:600; text-align:center; margin-bottom:0.3rem;">GPU 前向 Hook (每个 batch)</div>
+                        <div class="mermaid">
+                            flowchart TD
+                                B1[hook 获得 Wf 和输入 A] --> B2[Y = Wf @ A^T]
+                                B2 --> B3[累加分母 normY2]
+                                B3 --> B4[对 2/3/4/8 bit]
+                                B4 --> B5[从 pre 取量化参数]
+                                B5 --> B6[dequant_weight 得到 Wq]
+                                B6 --> B7[Yq = Wq @ A^T]
+                                B7 --> B8[累加平方误差 errSum]
+                                B8 --> B9[计算相对误差]
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <pre><code class="language-python">
+@torch.no_grad()
+def compute_sensitivity(model, calib_batches, group_size=128, device="cuda"):
+    targets = collect_target_linears(model)      # 获取所有目标层
+    err_keys = [2, 3, 4, 8]                      # 需要评估的比特数
+
+    # ---------- CPU 预计算：各层 4 种比特的量化结果 ----------
+    pre = {}
+    for name, module in targets:
+        W = module.weight.detach().float().cpu()    # 权重移到 CPU
+        pre[id(module)] = {
+            "nparams": W.numel(),                    # 该层参数量
+            "packed": {b: quantize_weight(W, b, group_size) for b in err_keys},
+        }
+
+    # 统计量：累计误差和分母 ||Y||²
+    stats = {id(m): {f"err{b}": 0.0 for b in err_keys} | {"y2": 0.0}
+             for _, m in targets}
+    name_of = {id(m): n for n, m in targets}
+
+    def make_hook(mid):
+        layer = pre[mid]   # 该层的预量化结果
+        def hook(module, inp, out):
+            Wf = module.weight.detach().float().to(device)  # 原始权重到 GPU
+            A = inp[0].detach().reshape(-1, Wf.shape[1]).to(device).float()
+            ns = stats[mid]
+            Y = (Wf @ A.T).T                    # 原始输出
+            ns["y2"] += float((Y * Y).sum())   # 累积分母
+            for b in err_keys:                  # 对每个比特位宽
+                qw, sc, zp = layer["packed"][b]
+                Wq = dequant_weight(qw.to(device), sc.to(device), zp.to(device),
+                                    b, group_size, Wf.shape[1])
+                Yq = (Wq @ A.T).T               # 量化后的输出
+                ns[f"err{b}"] += float(((Y - Yq) ** 2).sum())  # 累加平方误差
+                del qw, sc, zp, Wq
+            del Wf, A, Y, Yq
+        return hook
+
+    # 注册前向 hook
+    handles = [m.register_forward_hook(make_hook(id(m))) for _, m in targets]
+    model.eval()
+    for batch in calib_batches:                # 遍历校准数据
+        batch = {k: v.to(device) for k, v in batch.items()}
+        model(**batch)
+    for h in handles:                         # 移除 hook
+        h.remove()
+
+    # 汇总相对误差
+    sens = {}
+    for _, m in targets:
+        mid = id(m)
+        s = stats[mid]
+        y2 = s["y2"] + 1e-12
+        sens[name_of[mid]] = {f"err{b}": s[f"err{b}"] / y2 for b in err_keys} | {
+            "nparams": pre[mid]["nparams"]}
+    return sens
+            </code></pre>
+        </div>
+    </div>
+
+    <!-- Step 3: allocate_bits -->
+    <div class="code-section">
+        <div class="code-header">
+            <span class="step-tag">Step 3</span> 贪心比特分配（含 floor 后置）
+            <span style="margin-left: auto; font-weight:400; font-size:0.85rem; color:#475569;">Pass 1 达标 → Pass 2 强制下限</span>
+        </div>
+        <div class="code-body">
+            <div class="flow-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                        A[初始全 8bit] --> B{加权平均 ≤ 目标?}
+                        B -- 否 --> C[遍历所有可降级的层]
+                        C --> D[计算每层降档代价 cost]
+                        D --> E[选择 cost 最小的层]
+                        E --> F[将该层降一档 8→4→3→2]
+                        F --> B
+                        B -- 是 --> G[Pass 1 结束]
+                        G --> H{存在层 < floor?}
+                        H -- 是 --> I[将该层向上调一档]
+                        I --> H
+                        H -- 否 --> J[最终分配表]
+                </div>
+            </div>
+            <pre><code class="language-python">
+def allocate_bits(sens, avg_bits=4.0, floor=2):
+    nxt_lower = {8: 4, 4: 3, 3: 2}         # 降级路径
+    nparams = {n: sens[n]["nparams"] for n in sens}
+    total = sum(nparams.values()) + 1e-12
+    prec = {n: 8 for n in sens}            # 初始全 8bit
+
+    def weighted(p):
+        return sum(p[n] * nparams[n] for n in p) / total
+
+    # ---------- Pass 1: 贪心降级直到达标 ----------
+    guard = 0
+    while weighted(prec) > avg_bits + 1e-9 and guard < 10 ** 6:
+        guard += 1
+        best = None
+        for n in sens:
+            c = prec[n]
+            if c == 2 or c not in nxt_lower:
+                continue
+            nx = nxt_lower[c]
+            dec = sens[n][f"err{c}"] - sens[n][f"err{nx}"]   # 降档带来的误差增量
+            bits_saved = c - nx
+            cost = (dec * nparams[n]) / bits_saved          # 每释放 1 bit 的代价
+            if best is None or cost < best[0]:
+                best = (cost, n, nx)
+        if best is None:
+            break
+        _, n, nx = best
+        prec[n] = nx
+
+    # ---------- Pass 2: 强制下限（单调上调，必然终止） ----------
+    if floor and floor > 2:
+        bump = {2: 3, 3: 4}
+        changed = True
+        while changed:
+            changed = False
+            for n in sens:
+                if prec[n] < floor and prec[n] in bump:
+                    prec[n] = bump[prec[n]]
+                    changed = True
+    return prec
+            </code></pre>
+        </div>
+    </div>
+
+    <!-- Step 4: apply_quantization -->
+    <div class="code-section">
+        <div class="code-header">
+            <span class="step-tag">Step 4</span> 应用量化（替换为 QuantLinear）
+            <span style="margin-left: auto; font-weight:400; font-size:0.85rem; color:#475569;">仅 4/8 bit 落地</span>
+        </div>
+        <div class="code-body">
+            <div class="flow-wrapper">
+                <div class="mermaid">
+                    flowchart LR
+                        A[遍历 named_modules] --> B{条件: 是 Linear 且名在 prec 且 prec 为 4 或 8?}
+                        B -- 否 --> A
+                        B -- 是 --> C[QuantLinear.from_linear]
+                        C --> D[setattr 替换原模块]
+                        D --> A
+                </div>
+            </div>
+            <pre><code class="language-python">
+def apply_quantization(model, prec, group_size=128):
+    replaced = {}
+    for name, module in model.named_modules():
+        # 只替换 4/8 bit 的线性层
+        if isinstance(module, nn.Linear) and name in prec and prec[name] in (4, 8):
+            ql = QuantLinear.from_linear(module, prec[name], group_size)
+            # 处理嵌套路径，找到父模块并替换属性
+            if "." in name:
+                parent_name, attr = name.rsplit(".", 1)
+                parent = model.get_submodule(parent_name)
+            else:
+                parent, attr = model, name
+            setattr(parent, attr, ql)          # 原地替换为量化层
+            replaced[name] = prec[name]        # 记录已替换的层
+    return replaced
+            </code></pre>
+        </div>
+    </div>
+
+    <!-- Step 5: save_quantized / load_quantized_into -->
+    <div class="code-section">
+        <div class="code-header">
+            <span class="step-tag">Step 5</span> 保存 / 加载量化产物
+            <span style="margin-left: auto; font-weight:400; font-size:0.85rem; color:#475569;">safetensors + config</span>
+        </div>
+        <div class="code-body">
+            <div class="flow-wrapper">
+                <div class="mermaid">
+                    flowchart LR
+                        S1[遍历 QuantLinear] --> S2[收集 qweight/scale/zp]
+                        S2 --> S3[写入 safetensors 和 config]
+                        L1[读取 config] --> L2[读取 safetensors]
+                        L2 --> L3[重建 QuantLinear 并 setattr]
+                </div>
+            </div>
+            <pre><code class="language-python">
+def save_quantized(model, out_dir, prec, group_size, meta=None):
+    from safetensors.torch import save_file
+    os.makedirs(out_dir, exist_ok=True)
+    tensors, keys = {}, {}
+    for name, module in model.named_modules():
+        if isinstance(module, QuantLinear):
+            key = name.replace(".", "__")    # 替换 '.' 为 '__' 作为 safetensors key
+            tensors[f"{key}.qweight"] = module.qweight
+            tensors[f"{key}.scale"] = module.scale
+            tensors[f"{key}.zp"] = module.zp
+            keys[name] = {"bits": module.bits, "group_size": module.group_size,
+                          "qweight": f"{key}.qweight", "scale": f"{key}.scale", "zp": f"{key}.zp"}
+    save_file(tensors, os.path.join(out_dir, "model_quant.safetensors"))
+    out = {"group_size": group_size, "precision_map": prec, "quant_keys": keys, "meta": meta or {}}
+    with open(os.path.join(out_dir, "quant_config.json"), "w", encoding="utf-8") as f:
+        json.dump(out, f, ensure_ascii=False, indent=2)
+    return out_dir
+
+def load_quantized_into(model, out_dir):
+    from safetensors.torch import load_file
+    cfg = json.load(open(os.path.join(out_dir, "quant_config.json"), encoding="utf-8"))
+    sd = load_file(os.path.join(out_dir, "model_quant.safetensors"))
+    gs = cfg["group_size"]
+    replaced = 0
+    for name, info in cfg["quant_keys"].items():
+        if not isinstance(model.get_submodule(name), nn.Linear):
+            continue
+        bits = info["bits"]
+        qw, sc, zp = sd[info["qweight"]], sd[info["scale"]], sd[info["zp"]]
+        if "." in name:
+            parent_name, attr = name.rsplit(".", 1)
+            parent = model.get_submodule(parent_name)
+        else:
+            parent, attr = model, name
+        bias = getattr(parent, attr).bias   # 保留原偏置
+        ql = QuantLinear(bits, gs, qw, sc, zp, bias)
+        setattr(parent, attr, ql)           # 替换为量化层
+        replaced += 1
+    return replaced
+            </code></pre>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 对比与优化 -->
+    <!-- ============================================================ -->
+    <div class="section-title">
+        📊 与竞品对比 & 优化方向
+    </div>
+    <div class="grid-2col">
+        <div class="card">
+            <h3>✅ 当前亮点</h3>
+            <ul>
+                <li><span class="tag tag-green">高效</span> 敏感度预量化一次，hook 只反量化，显存约 14 GB</li>
+                <li><span class="tag tag-blue">灵活</span> 支持 2/3/4/8 bit 位打包（LSB-first）</li>
+                <li><span class="tag tag-green">可控</span> 贪心+floor 保证任意平均比特可达</li>
+                <li><span class="tag tag-blue">工程化</span> safetensors + config 离线复用</li>
+            </ul>
+        </div>
+        <div class="card">
+            <h3>🚧 与 Unsloth 等差距</h3>
+            <ul>
+                <li><strong>敏感度</strong>：仅重建误差，缺梯度/海森信息</li>
+                <li><strong>分配</strong>：贪心局部最优，非全局搜索</li>
+                <li><strong>校准数据</strong>：5 万 token vs 30~150 万</li>
+                <li><strong>评估</strong>：仅 PPL，无 MMLU/GSM8K</li>
+                <li><strong>产物</strong>：safetensors，需外部转 GGUF</li>
+            </ul>
+        </div>
+    </div>
+
+    <div style="margin-top: 1.5rem;">
+        <div class="optimization-list">
+
+            <!-- P0 -->
+            <div class="optimization-item">
+                <div class="opt-icon">🔴</div>
+                <div class="opt-content">
+                    <div class="opt-title">P0 · 评估闭环扩展</div>
+                    <div class="opt-desc">增加 MMLU (5-shot)、GSM8K、HumanEval 等基准，避免单指标失真。</div>
+                </div>
+            </div>
+            <div class="optimization-item">
+                <div class="opt-icon">🔴</div>
+                <div class="opt-content">
+                    <div class="opt-title">P0 · 原生 GGUF 导出</div>
+                    <div class="opt-desc">仿照 <code>llama.cpp</code> 格式直接生成合规 GGUF，无需二次转换。</div>
+                </div>
+            </div>
+
+            <!-- P1 -->
+            <div class="optimization-item">
+                <div class="opt-icon">🟡</div>
+                <div class="opt-content">
+                    <div class="opt-title">P1 · 敏感度升级</div>
+                    <div class="opt-desc">引入 gradient×weight 或 Hessian 迹，提高敏感度与真实 loss 的关联性。</div>
+                </div>
+            </div>
+            <div class="optimization-item">
+                <div class="opt-icon">🟡</div>
+                <div class="opt-content">
+                    <div class="opt-title">P1 · 校准数据扩充</div>
+                    <div class="opt-desc">将 token 量从 5 万提升至 20~50 万，覆盖更多长尾分布。</div>
+                </div>
+            </div>
+
+            <!-- P2: 分配算法升级（详细展开） -->
+            <div class="optimization-item" style="border-bottom: none; padding-bottom: 0.5rem;">
+                <div class="opt-icon">🟢</div>
+                <div class="opt-content">
+                    <div class="opt-title" style="font-size: 1.05rem;">P2 · 分配算法升级 — 从贪心到贝叶斯优化 / 动态规划</div>
+                    <div class="opt-desc" style="margin-top: 0.3rem;">
+                        当前贪心算法存在局部最优、路径固定、优化目标偏差等问题。下面详细展开两种升级方案。
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- ========== P2 详细展开 ========== -->
+    <div style="margin-top: 0.5rem; padding-left: 3.2rem;">
+
+        <!-- 3.1 贪心局限 -->
+        <div class="card" style="margin: 1rem 0 1.5rem 0;">
+            <h3>⚠️ 贪心算法的局限</h3>
+            <ul>
+                <li><strong>局部最优</strong>：每一步选择“当前代价最小”的层降级，但可能把某层降到 4 后再降到 3 时代价剧增，而另一层从 8 直接跳到 2 可能全局更优。</li>
+                <li><strong>路径固定</strong>：硬编码 8→4→3→2，忽略了不同层的“最优比特”可能不是相邻档位。</li>
+                <li><strong>优化目标偏差</strong>：代价基于重建误差 <code>err</code>，与实际下游任务（PPL, MMLU）的退化不一定强相关。</li>
+            </ul>
+        </div>
+
+        <!-- 3.2 贝叶斯优化 -->
+        <div class="sub-section-title">🧬 方案一：贝叶斯优化 <span style="font-size:0.8rem; font-weight:400; color:#64748b;">黑盒优化 · 采样高效</span></div>
+        <div class="flow-wrapper">
+            <div class="mermaid">
+                flowchart LR
+                    A[随机初始化 20 组分配] --> B[评估每组 → 得到 PPL]
+                    B --> C[高斯过程拟合]
+                    C --> D[采集函数建议下一组]
+                    D --> B
+                    D --> E[迭代 50 轮后输出最优]
+            </div>
+        </div>
+        <div class="code-section" style="margin-top: 0.8rem;">
+            <div class="code-header">
+                <span class="step-tag">伪代码</span> 贝叶斯优化实现
+            </div>
+            <div class="code-body">
+                <pre><code class="language-python">
+from bayes_opt import BayesianOptimization
+
+def objective(prec_map):
+    """输入分配表，返回 PPL 退化（负值，贝叶斯优化默认最大化）"""
+    apply_quantization(prec_map)
+    ppl = compute_ppl()
+    restore()
+    return -ppl
+
+# 搜索空间：每层比特数 {2,3,4,8}，映射为连续变量 [2,8]
+pbounds = {f"layer_{i}_bits": (2, 8) for i in range(num_layers)}
+optimizer = BayesianOptimization(f=objective, pbounds=pbounds)
+optimizer.maximize(init_points=20, n_iter=50)
+best = optimizer.max["params"]
+# 将连续值离散化为最近的 {2,3,4,8}
+                </code></pre>
+            </div>
+        </div>
+        <div class="card" style="margin: 1rem 0 1.5rem 0;">
+            <h4>✅ 优势</h4>
+            <ul>
+                <li>直接优化真实 PPL / MMLU，而非重建误差。</li>
+                <li>采样效率高，50~100 次评估即可找到较优解。</li>
+                <li>易于扩展：可加权组合多个指标（PPL + MMLU）。</li>
+            </ul>
+            <h4 style="margin-top:0.5rem;">⚠️ 注意</h4>
+            <ul>
+                <li>每次评估需跑一次完整的 PPL 计算（耗时约 2~3 分钟），总时间可控制在 2 小时内。</li>
+                <li>需将离散比特映射到连续空间，或使用整数约束。</li>
+            </ul>
+        </div>
+
+        <!-- 3.3 动态规划 -->
+        <div class="sub-section-title">📊 方案二：动态规划 <span style="font-size:0.8rem; font-weight:400; color:#64748b;">全局最优 · 可解释</span></div>
+        <div class="flow-wrapper">
+            <div class="mermaid">
+                flowchart TD
+                    A[层 0] --> B[层 1] --> C[...] --> D[层 N-1]
+                    style A fill:#e6f3ed
+                    style D fill:#e6f3ed
+            </div>
+            <div style="text-align:center; margin-top:0.5rem;">
+                <code>dp[i][b] = min_{k ∈ {2,3,4,8}} dp[i-1][b - k·nparams_i] + err_i[k]</code>
+            </div>
+        </div>
+        <div class="code-section" style="margin-top: 0.8rem;">
+            <div class="code-header">
+                <span class="step-tag">伪代码</span> 0-1 背包式动态规划
+            </div>
+            <div class="code-body">
+                <pre><code class="language-python">
+def dp_allocate(sens, avg_bits):
+    n_layers = len(sens)
+    total_bits_budget = int(avg_bits * sum(nparams) + 0.5)
+    # dp[i][b] = 前 i 层使用 b 比特预算时的最小误差
+    dp = [[inf] * (total_bits_budget + 1) for _ in range(n_layers + 1)]
+    dp[0][0] = 0
+    for i, name in enumerate(sens):
+        for b in range(total_bits_budget + 1):
+            if dp[i][b] == inf: continue
+            for bits in [2, 3, 4, 8]:
+                cost = bits * sens[name]["nparams"]
+                if b + cost <= total_bits_budget:
+                    new_err = dp[i][b] + sens[name][f"err{bits}"]
+                    if new_err < dp[i+1][b + cost]:
+                        dp[i+1][b + cost] = new_err
+    # 回溯得到最优分配
+    return best_prec
+                </code></pre>
+            </div>
+        </div>
+        <div class="card" style="margin: 1rem 0 1.5rem 0;">
+            <h4>✅ 优势</h4>
+            <ul>
+                <li>保证在给定的重建误差度量下获得 <strong>全局最优</strong> 分配。</li>
+                <li>完全可解释，每个决策都有迹可循。</li>
+                <li>适合写入论文或技术报告。</li>
+            </ul>
+            <h4 style="margin-top:0.5rem;">⚠️ 挑战</h4>
+            <ul>
+                <li>状态空间：<code>n_layers × total_bits_budget</code>。对于 346 层 × 50 万 ≈ 1.7 亿，需内存优化（如只保留上一行）或分块处理。</li>
+                <li>仍然依赖重建误差 <code>err_i[k]</code>，未直接优化真实 PPL。</li>
+            </ul>
+        </div>
+
+        <!-- 3.4 混合方案 -->
+        <div class="sub-section-title">🧩 混合方案（推荐） <span style="font-size:0.8rem; font-weight:400; color:#64748b;">粗筛 + 精调 + 验证</span></div>
+        <div class="flow-wrapper">
+            <div class="mermaid">
+                flowchart LR
+                    A[重建误差粗筛] --> B[选出 top-20% 敏感层]
+                    B --> C[贝叶斯精调这些层]
+                    C --> D[固定其余层为低比特]
+                    D --> E[最终 PPL/MMLU 验证]
+            </div>
+        </div>
+        <div class="card" style="margin: 1rem 0 1.5rem 0;">
+            <ul>
+                <li><strong>步骤</strong>：先用现有 <code>compute_sensitivity</code> 得到各层重建误差，将前 20% 敏感层作为候选。</li>
+                <li><strong>精调</strong>：对候选层使用贝叶斯优化（搜索空间小），其余层直接压到 2 bit（或 3 bit）。</li>
+                <li><strong>验证</strong>：最终分配跑一次真实 PPL 和 MMLU，确认质量。</li>
+                <li><strong>优势</strong>：兼顾效率（避免全量搜索）与质量（聚焦关键层），同时保持工程简洁。</li>
+            </ul>
+        </div>
+
+        <!-- 3.5 整合示例 -->
+        <div class="sub-section-title">🔧 整合到现有 pipeline</div>
+        <div class="code-section" style="margin-top: 0.8rem;">
+            <div class="code-header">
+                <span class="step-tag">扩展</span> allocate_bits 新接口
+            </div>
+            <div class="code-body">
+                <pre><code class="language-python">
+def allocate_bits_hybrid(sens, avg_bits, method='bayesian'):
+    """
+    支持三种分配模式：
+    - 'greedy' : 原始贪心
+    - 'bayesian' : 贝叶斯优化（全部层）
+    - 'hybrid' : 粗筛 + 贝叶斯精调
+    """
+    if method == 'greedy':
+        return allocate_bits(sens, avg_bits)
+    elif method == 'bayesian':
+        return bayesian_allocate(sens, avg_bits)
+    elif method == 'hybrid':
+        # 1. 按 err8 排序，选出 top 20% 敏感层
+        sorted_layers = sorted(sens, key=lambda x: sens[x]['err8'], reverse=True)
+        sensitive = sorted_layers[:int(0.2 * len(sorted_layers))]
+        # 2. 其余层全部给 2 bit（或根据 avg_bits 调整）
+        prec = {n: 2 for n in sens}
+        # 3. 对敏感层做贝叶斯搜索
+        return bayesian_allocate_with_fixed(sens, prec, sensitive, avg_bits)
+                </code></pre>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- 脚注 -->
+    <!-- ============================================================ -->
+    <div class="footnote">
+        <span>📄 基于 <code>quant.py</code> + <code>pipeline.py</code>  ·  2026-08</span>
+        <span>⚡ 浅色主题 · 语法高亮 · 流程辅助图 · 源码默认展开</span>
+    </div>
+
+</div>
+
+<script>
+    mermaid.initialize({
+        startOnLoad: true,
+        theme: 'base',
+        themeVariables: {
+            background: '#ffffff',
+            primaryColor: '#e6edf5',
+            primaryBorderColor: '#b8c9dd',
+            secondaryColor: '#f2f6fc',
+            tertiaryColor: '#fafcff',
+            lineColor: '#7f9bb3',
+            textColor: '#1e293b',
+            fontSize: '14px',
+            fontFamily: 'system-ui, sans-serif'
+        },
+        flowchart: { curve: 'basis', padding: 20 }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('pre code').forEach((block) => {
+            hljs.highlightElement(block);
+        });
+    });
+</script>
+
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>

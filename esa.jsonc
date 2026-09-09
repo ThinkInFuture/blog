@@ -1,5 +1,6 @@
 {
   "name": "blog",
-  "buildType": "static",
-  "outputDirectory": "."
+  "assets": {
+    "directory": "."
+  }
 }

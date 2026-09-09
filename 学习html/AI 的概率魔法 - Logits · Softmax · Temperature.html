@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI 的概率魔法：Logits · Softmax · Temperature</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background: #f5f7fb;
+            color: #1e293b;
+            line-height: 1.7;
+            padding: 2rem 1.5rem;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .hero {
+            background: #ffffff;
+            border-radius: 28px;
+            padding: 2.8rem 3rem;
+            margin-bottom: 2.5rem;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.04);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+        }
+        .hero h1 {
+            font-size: 2.6rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            background: linear-gradient(135deg, #1e293b 0%, #3b82f6 80%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+        .hero .sub {
+            font-size: 1.15rem;
+            color: #64748b;
+            border-left: 4px solid #3b82f6;
+            padding-left: 1.2rem;
+            margin-top: 0.25rem;
+        }
+        .hero .meta {
+            margin-top: 1.2rem;
+            font-size: 0.95rem;
+            color: #94a3b8;
+            display: flex;
+            gap: 1.5rem;
+            flex-wrap: wrap;
+        }
+        .hero .meta span {
+            background: #f1f5f9;
+            padding: 0.2rem 1rem;
+            border-radius: 40px;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 2.5rem 3rem;
+            margin-bottom: 2.2rem;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.02);
+            border: 1px solid rgba(0, 0, 0, 0.03);
+            transition: box-shadow 0.2s;
+        }
+        .card:hover {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
+        }
+        .card h2 {
+            font-size: 1.9rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .card h2 .badge {
+            font-size: 0.75rem;
+            font-weight: 500;
+            background: #dbeafe;
+            color: #2563eb;
+            padding: 0.1rem 0.8rem;
+            border-radius: 40px;
+            margin-left: 0.5rem;
+        }
+        .card h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1e293b;
+            margin: 1.6rem 0 0.6rem 0;
+        }
+        .card p {
+            font-size: 1.05rem;
+            color: #334155;
+            margin-bottom: 1rem;
+        }
+        .card .highlight {
+            background: #f0f7ff;
+            padding: 0.1rem 0.4rem;
+            border-radius: 6px;
+            color: #1d4ed8;
+            font-weight: 500;
+        }
+        .card ul,
+        .card ol {
+            margin: 0.8rem 0 1.2rem 1.8rem;
+            color: #334155;
+            font-size: 1.02rem;
+        }
+        .card ul li,
+        .card ol li {
+            margin-bottom: 0.35rem;
+        }
+        .mermaid-wrapper {
+            background: #f0f4ff;
+            border-radius: 18px;
+            padding: 1.8rem 1rem;
+            margin: 1.6rem 0 1.2rem 0;
+            border: 1px solid #cbd5e1;
+            display: flex;
+            justify-content: center;
+            overflow-x: auto;
+        }
+        .mermaid-wrapper .mermaid {
+            max-width: 100%;
+        }
+        .fig-caption {
+            text-align: center;
+            font-size: 0.92rem;
+            color: #475569;
+            margin-top: 0.2rem;
+            margin-bottom: 0.8rem;
+            font-style: italic;
+        }
+        .code-block {
+            background: #0f172a;
+            border-radius: 16px;
+            padding: 1.6rem 2rem;
+            margin: 1.2rem 0 0.4rem 0;
+            overflow-x: auto;
+            border: 1px solid #1e293b;
+        }
+        .code-block pre {
+            font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Menlo', monospace;
+            font-size: 0.92rem;
+            line-height: 1.7;
+            color: #e2e8f0;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+        .code-block .comment {
+            color: #94a3b8;
+            font-style: italic;
+        }
+        .code-block .keyword {
+            color: #c084fc;
+            font-weight: 600;
+        }
+        .code-block .func {
+            color: #60a5fa;
+        }
+        .code-block .string {
+            color: #a3e635;
+        }
+        .code-block .number {
+            color: #fbbf24;
+        }
+        .code-block .builtin {
+            color: #f472b6;
+        }
+        .code-block .op {
+            color: #f87171;
+        }
+        .code-label {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #94a3b8;
+            background: #1e293b;
+            display: inline-block;
+            padding: 0.15rem 1rem;
+            border-radius: 30px;
+            margin-bottom: 0.6rem;
+            font-weight: 500;
+        }
+        .tip {
+            background: #f1f5f9;
+            border-radius: 14px;
+            padding: 1.2rem 1.8rem;
+            margin: 1.4rem 0 0.8rem 0;
+            border-left: 5px solid #3b82f6;
+            font-size: 1rem;
+            color: #1e293b;
+        }
+        .tip .emoji {
+            font-size: 1.2rem;
+            margin-right: 0.4rem;
+        }
+        .footer {
+            text-align: center;
+            padding: 2.5rem 0 1rem 0;
+            color: #94a3b8;
+            font-size: 0.95rem;
+            border-top: 1px solid #e9edf4;
+            margin-top: 1.5rem;
+        }
+        @media (max-width: 700px) {
+            body {
+                padding: 1rem 0.8rem;
+            }
+            .hero {
+                padding: 1.8rem 1.5rem;
+            }
+            .hero h1 {
+                font-size: 1.9rem;
+            }
+            .card {
+                padding: 1.8rem 1.4rem;
+            }
+            .card h2 {
+                font-size: 1.5rem;
+                flex-wrap: wrap;
+            }
+            .code-block {
+                padding: 1rem 1.2rem;
+            }
+            .code-block pre {
+                font-size: 0.82rem;
+            }
+            .mermaid-wrapper {
+                padding: 1rem 0.4rem;
+            }
+        }
+        @media print {
+            body {
+                background: #fff;
+                padding: 0.5in;
+            }
+            .card {
+                box-shadow: none;
+                border: 1px solid #ddd;
+                page-break-inside: avoid;
+            }
+            .mermaid-wrapper {
+                border: 1px solid #ccc;
+            }
+        }
+    </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+    <div class="container">
+
+        <header class="hero">
+            <h1>🧠 AI 的概率魔法</h1>
+            <div class="sub">Logits · Softmax · Temperature —— 模型脑子里的「裸分 · 分蛋糕 · 胆量旋钮」</div>
+            <div class="meta">
+                <span>📐 通俗科普</span>
+                <span>⚡ 含 Mermaid 图解</span>
+                <span>🐍 附 Python 源码</span>
+            </div>
+        </header>
+
+        <!-- 第〇章 -->
+        <section class="card">
+            <h2>第〇章 · 从大模型架构看 Logits 在哪里产生 <span class="badge">架构</span></h2>
+            <p>要真正理解 Logits、Softmax 和 Temperature，先得知道 <strong>它们在大模型里到底住在哪一层</strong>。这一章从大模型（以 GPT、LLaMA、Qwen 等为代表）的 <strong>整体架构</strong> 出发，定位 Logits 的"出生地"。</p>
+
+            <h3>🏗️ 大模型的三层拆解</h3>
+            <p>大语言模型（LLM）的本质是 <strong>N 层 Transformer Block 的堆叠</strong>。每一层 Block 都包含两个核心子模块：<strong>多头注意力（MHA）</strong> 和 <strong>前馈网络（FFN）</strong>，再加上残差连接和 LayerNorm。</p>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A["用户输入（一句话）"] --> B["Token 嵌入层（词表→向量）"]
+                    B --> C["Transformer Block × N 层"]
+                    C --> D["输出层 LM Head（线性映射）"]
+                    D --> E["Logits（词表大小维）"]
+                    E --> F["Softmax → 概率分布"]
+                    F --> G["采样 → 输出 Token"]
+                    H["每个 Block 内部：MHA + FFN"] -.-> C
+                </div>
+            </div>
+            <div class="fig-caption">图〇-1 · 大模型整体流程：Logits 在最后一层产生</div>
+
+            <h3>🧩 单个 Transformer Block 长什么样？</h3>
+            <p>每个 Block 由两部分组成：</p>
+            <ol>
+                <li><strong>多头注意力（MHA）</strong>：让每个 Token "看到"上下文中其他 Token 的信息，本质是 Q/K/V 三个投影矩阵 + 注意力计算。Qwen3.8-27B 用 64 头，每头 128 维，合计 268M 参数。</li>
+                <li><strong>前馈网络（FFN）</strong>：对注意力输出做非线性变换，现代模型多用 SwiGLU 变体（上投影 + 门控 + 下投影三个矩阵）。Qwen3.8-27B 每层 FFN 约 805M 参数。</li>
+            </ol>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    In["输入（如 8192 维）"] --> LN1["LayerNorm"]
+                    LN1 --> MHA["多头注意力 MHA"]
+                    MHA --> Add1["残差 +"]
+                    Add1 --> LN2["LayerNorm"]
+                    LN2 --> FFN["前馈网络 FFN（SwiGLU）"]
+                    FFN --> Add2["残差 +"]
+                    Add2 --> Out["输出（如 8192 维）"]
+                    MHA -.-> QKV["Q / K / V 投影"]
+                    FFN -.-> UpGate["Up + Gate + Down 投影"]
+                </div>
+            </div>
+            <div class="fig-caption">图〇-2 · 单个 Transformer Block 内部结构</div>
+
+            <h3>🎯 Logits 在哪里诞生？</h3>
+            <p>经过 N 层 Transformer Block 之后，模型得到一个 <strong>高维隐藏向量</strong>（如 4096 维或 8192 维）。这个向量浓缩了"当前语境下，下一个 Token 应该长什么样"的全部信息。</p>
+            <p>最后一步：<strong>LM Head</strong>（输出层）将这个向量通过一个 <strong>线性映射</strong>（无激活函数），投影到 <strong>词表大小</strong> 的维度（如 50000 或 128000），得到的就是 <strong>Logits</strong>。</p>
+
+            <div class="code-label">🐍 PyTorch 风格的 Logits 生成</div>
+            <div class="code-block">
+                <pre>
+<span class="comment"># 假设 hidden_size=4096, vocab_size=50000</span>
+lm_head = nn.Linear(<span class="number">4096</span>, <span class="number">50000</span>, bias=<span class="keyword">False</span>)
+
+<span class="comment"># hidden 是 Transformer 最后一层的输出 (batch, seq, 4096)</span>
+logits = lm_head(hidden)   <span class="comment"># → (batch, seq, 50000)</span>
+
+<span class="comment"># 然后除以 Temperature，过 Softmax，采样得到下一个 Token</span>
+logits = logits / temperature
+probs  = softmax(logits)
+next_token = sample(probs)
+                </pre>
+            </div>
+
+            <div class="tip"><span class="emoji">🔑</span> <strong>关键结论：</strong> Logits 不是"凭空产生"的 —— 它是 Transformer 最后一层的隐藏向量与词表中每一个 Token 做<strong>点积（相似度计算）</strong>的结果。哪个 Token 与当前语境最像，它的 Logit 分就最高。接下来才是 Softmax 把这些分数变成概率，Temperature 控制"胆量"。</div>
+
+            <h3>📊 各组件参数量一览（以 Qwen3.8-27B 为例）</h3>
+            <ul>
+                <li><strong>Token 嵌入</strong>：256K × 5120 ≈ 1.3B（词表 × 隐藏维度）</li>
+                <li><strong>每个 Block</strong>：≈ 1.1B（MHA 268M + FFN 805M + LayerNorm 等）</li>
+                <li><strong>64 个 Block</strong>：≈ 70B 总参数</li>
+                <li><strong>LM Head</strong>：5120 × 256K ≈ 1.3B（与嵌入层共享权重时为 0）</li>
+            </ul>
+
+            <p style="margin-top:1rem;"><strong>总结这一章</strong>：大模型 = N 层 Transformer Block 堆叠 → 最后一层的隐藏向量过一个线性层 → 得到 Logits → 除以 Temperature → Softmax → 概率 → 采样。Logits 是整个流程的"第一站"，后续的 Softmax 和 Temperature 都是对它的加工。</p>
+        </section>
+
+        <!-- 第一章 -->
+        <section class="card">
+            <h2>第一章 · 为什么 AI 不直接算概率？ <span class="badge">困境</span></h2>
+            <p>我们总说 AI 输出「80% 是猫，20% 是狗」—— 但 <strong>在模型内部，它从来不会直接算概率</strong>。因为概率必须乖乖待在 <strong>0 到 1</strong> 之间，而神经网络天生是个「暴躁的算术家」，内部全是矩阵乘法，动辄算出 <span class="highlight">几千</span> 或 <span class="highlight">负数</span>。</p>
+            <p>如果强行让每一层神经元都「守规矩」，结果必须卡在 0~1 之间，那就像让短跑运动员裹着棉被跑步 —— <strong>又慢又使不出全力</strong>（梯度消失，模型学不动）。</p>
+            <div class="tip"><span class="emoji">💡</span> <strong>结论：</strong> 模型需要「言论自由」—— 先随便算，算出什么数都行，最后再统一「翻译」成概率。这个随便算出来的「原始裸分」，就叫 <strong>Logits</strong>。</div>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A[输入数据] --> B[神经网络<br>自由计算]
+                    B --> C[Logits 裸分<br>（任意实数）]
+                    C --> D[Temperature 调节<br>（缩放差距）]
+                    D --> E[Softmax 归一化<br>（变成概率）]
+                    E --> F[概率分布<br>（总和等于1）]
+                    F --> G[采样抽签<br>（随机选择）]
+                    G --> H[输出 Token<br>（最终答案）]
+                </div>
+            </div>
+            <div class="fig-caption">图1 · 完整的计算流水线（从上到下）</div>
+
+            <h3>🤔 那到底什么是「梯度消失」？</h3>
+            <p>简单说：模型靠「误差反向传播」来学习，如果中间某一步的导数（变化率）接近 0，那前面的层就收不到有效的学习信号，相当于 <strong>教了半天，前排学生全睡着了</strong>。而 Logits 是线性运算，它的导数是常数 1，信号可以畅通无阻地传回每一层。</p>
+            <div class="code-label">🐍 直觉对比 · 为什么 Logits 更友好</div>
+            <div class="code-block">
+                <pre>
+<span class="comment"># 假设我们硬把输出限制在 [0,1]</span>
+<span class="keyword">def</span> <span class="func">clamped_forward</span>(x):
+    <span class="keyword">return</span> <span class="builtin">max</span>(<span class="number">0</span>, <span class="builtin">min</span>(<span class="number">1</span>, x))  <span class="comment"># 强行截断</span>
+
+<span class="comment"># 当 x > 1 或 x < 0 时，导数为 0 → 梯度消失！</span>
+<span class="comment"># 而 Logits 直接输出 x，导数为 1 → 学习信号满格 💪</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 第二章 -->
+        <section class="card">
+            <h2>第二章 · Logits —— 模型的「裸分」 <span class="badge">自由</span></h2>
+            <p><strong>Logits</strong> 就是神经网络在最后一层算出来的 <strong>原始分数</strong>，它可以是 <span class="highlight">正数</span>、<span class="highlight">负数</span>、<span class="highlight">大数</span> 或 <span class="highlight">小数</span>，完全没有限制。模型在 Logits 空间里 <strong>随便撒欢</strong>，想打多少分就打多少分。</p>
+            <p>在二分类场景下，Logits 确实来源于 <strong>「对数几率」</strong>（Log Odds）：如果某件事发生的概率是 <em>p</em>，那么胜算比 Odds = p/(1-p)，取自然对数后就是 ln(p/(1-p))，范围从 <strong>负无穷 到 正无穷</strong>。这正好把概率空间「展开」成了整个实数轴，模型可以自由翱翔。</p>
+            <div class="tip"><span class="emoji">🎯</span> <strong>通俗比喻：</strong> Logits 就像选秀节目中导师打的「原始分」—— 可以给 +999，也可以给 −999，怎么爽怎么来。最后再统一换算成百分比。</div>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A["事件概率 p（0 到 1）"] --> B["Odds = p/(1-p)（0 到 正无穷）"]
+                    B --> C["Logits = ln(Odds)（负无穷 到 正无穷）"]
+                    C --> D["模型自由计算，任意实数都允许"]
+                    D --> E["最后用 Softmax 翻译回概率"]
+                </div>
+            </div>
+            <div class="fig-caption">图2 · 从概率到 Logits 的「展开」过程</div>
+
+            <h3>🧪 一个具体的例子</h3>
+            <p>假设猫的概率 p = 0.8，那么 Odds = 0.8/0.2 = 4，Logits = ln(4) ≈ 1.386。如果 p = 0.99，Odds = 99，Logits ≈ 4.595。你看，<strong>越接近 1，Logits 就越大</strong>，模型就越「自信」。反过来 p = 0.1，Logits ≈ −2.197，表示模型觉得这事儿不靠谱。</p>
+            <div class="code-label">🐍 从概率到 Logits 的转换</div>
+            <div class="code-block">
+                <pre>
+<span class="keyword">import</span> math
+
+<span class="keyword">def</span> <span class="func">prob_to_logits</span>(p):
+    <span class="comment"># 将概率 p 转换为 Logits（对数几率）</span>
+    <span class="keyword">if</span> p <= <span class="number">0</span> <span class="keyword">or</span> p >= <span class="number">1</span>:
+        <span class="keyword">raise</span> ValueError(<span class="string">"p 必须在 (0,1) 之间"</span>)
+    <span class="keyword">return</span> math.log(p / (<span class="number">1</span> - p))
+
+<span class="builtin">print</span>(prob_to_logits(<span class="number">0.8</span>))   <span class="comment"># 输出 ≈ 1.386</span>
+<span class="builtin">print</span>(prob_to_logits(<span class="number">0.99</span>))  <span class="comment"># 输出 ≈ 4.595</span>
+<span class="builtin">print</span>(prob_to_logits(<span class="number">0.1</span>))   <span class="comment"># 输出 ≈ −2.197</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 第三章 -->
+        <section class="card">
+            <h2>第三章 · Softmax —— 「分蛋糕机器」 <span class="badge">归一化</span></h2>
+            <p>模型打了一堆 Logits 裸分，比如针对「猫 / 狗 / 车」打出了 <span class="highlight">[2.0, 1.0, 0.0]</span>。怎么把这些乱七八糟的分数变成 <strong>加起来刚好等于 100%</strong> 的靠谱概率？ <strong>Softmax 就是那个「操盘手」</strong>，它分三步走：</p>
+            <ol>
+                <li><strong>取指数 e^x</strong>：把负数变正数，且永远 > 0。2 → 7.39，1 → 2.72，0 → 1.00。</li>
+                <li><strong>求和</strong>：7.39 + 2.72 + 1.00 = 11.11。</li>
+                <li><strong>归一化</strong>：每个指数除以总和，得到概率。7.39/11.11 ≈ 66.5%，2.72/11.11 ≈ 24.5%，1.00/11.11 ≈ 9%。</li>
+            </ol>
+            <div class="tip"><span class="emoji">🍰</span> <strong>分蛋糕比喻：</strong> Logits 是每个人「喊出的胃口」，取指数后变成「实际饭量」，然后 Softmax 把整块蛋糕按饭量比例分给大家，<strong>分完正好 100%</strong>。</div>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A[Logits: 2, 1, 0] --> B[取指数: e^2, e^1, e^0]
+                    B --> C[求和: 7.39 + 2.72 + 1.00 = 11.11]
+                    C --> D[归一化: 各除以 11.11]
+                    D --> E[概率: 66.5%, 24.5%, 9.0%]
+                    E --> F[总和等于100% 且每个大于0]
+                </div>
+            </div>
+            <div class="fig-caption">图3 · Softmax 把裸分变成概率分布</div>
+
+            <h3>🔍 为什么偏偏用「e 的指数」？</h3>
+            <p>因为指数函数 <strong>e^x</strong> 有两个绝佳特性：</p>
+            <ul>
+                <li><strong>永远正数</strong>：再负的 Logits 取指数后也无限接近 0，但绝不会是负数，完美解决「负概率」的荒谬。</li>
+                <li><strong>放大差距</strong>：Logits 差 1 分，取指数后差距变成 2.718 倍。这会让高分选项「赢家通吃」，符合模型自信地给出最优解的设计。</li>
+            </ul>
+            <div class="code-label">🐍 Softmax 的 Python 实现</div>
+            <div class="code-block">
+                <pre>
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">def</span> <span class="func">softmax</span>(logits):
+    <span class="comment"># 输入: logits 列表或数组</span>
+    <span class="comment"># 输出: 概率分布，总和为 1</span>
+    exp_vals = np.exp(logits)               <span class="comment"># 取指数</span>
+    sum_exp = np.sum(exp_vals)              <span class="comment"># 求和</span>
+    <span class="keyword">return</span> exp_vals / sum_exp               <span class="comment"># 归一化</span>
+
+logits = [<span class="number">2.0</span>, <span class="number">1.0</span>, <span class="number">0.0</span>]
+probs = softmax(logits)
+<span class="builtin">print</span>(probs)   <span class="comment"># 输出: [0.665, 0.245, 0.090]</span>
+<span class="builtin">print</span>(<span class="builtin">sum</span>(probs)) <span class="comment"># 输出: 1.0</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 第四章 -->
+        <section class="card">
+            <h2>第四章 · Temperature —— 「胆量调节旋钮」 <span class="badge">创造</span></h2>
+            <p>在把 Logits 扔进 Softmax 之前，我们可以先除以一个 <strong>温度 T</strong>。这个 T 就像 AI 的 <strong>「胆量调节旋钮」</strong>，直接控制着模型是「死磕最优解」还是「天马行空」。</p>
+            <ul>
+                <li><strong>低温 T 小于 1（如 0.5）</strong>：Logits 差距被放大。原本 10 和 8 变成 20 和 16，指数后差距更夸张，概率分布 <strong>非常尖锐</strong>，模型几乎只选第一名，像个「固执的专家」。</li>
+                <li><strong>高温 T 大于 1（如 2.0）</strong>：Logits 差距被压缩。10 和 8 变成 5 和 4，概率分布 <strong>更加平坦</strong>，冷门选项也有机会被选中，像个「脑洞大开的诗人」。</li>
+                <li><strong>T = 1</strong>：标准模式，不放大也不缩小。</li>
+            </ul>
+            <div class="tip"><span class="emoji">🎛️</span> <strong>旋钮比喻：</strong> T 调低，AI 胆子变小，只敢说最稳妥的话；T 调高，AI 胆子变大，敢尝试各种新鲜词汇，<strong>创造力爆棚</strong>（但也可能胡言乱语）。</div>
+
+            <div class="mermaid-wrapper" style="font-size: 1.1em;">
+                <div class="mermaid" style="font-size: 20px;">
+                    flowchart TD
+                    A["Logits: 10, 9, 8"] --> B["除以 T"]
+                    B --> C{"T 小于 1（低温）"}
+                    B --> D{"T = 1（常温）"}
+                    B --> E{"T 大于 1（高温）"}
+                    C --> F["概率尖锐，第一名大于99%"]
+                    D --> G["概率正常，按原始差距"]
+                    E --> H["概率平坦，各选项接近"]
+                </div>
+            </div>
+            <div class="fig-caption">图4 · 不同温度下的概率分布形态</div>
+
+            <h3>📊 直观感受：T 从 0.1 到 10 的变化</h3>
+            <p>假设 Logits = [10, 9, 8]：</p>
+            <ul>
+                <li><strong>T = 0.1</strong>：Logits 变成 [100, 90, 80]，Softmax 后第一名概率 ≈ 99.99% → 回答几乎固定。</li>
+                <li><strong>T = 1.0</strong>：Logits 保持 [10, 9, 8]，第一名概率 ≈ 57.6%，第二名 ≈ 31.3%，第三名 ≈ 11.1%。</li>
+                <li><strong>T = 10.0</strong>：Logits 变成 [1.0, 0.9, 0.8]，概率 ≈ [38.7%, 34.9%, 26.4%] → 三者非常接近。</li>
+            </ul>
+            <div class="code-label">🐍 带 Temperature 的 Softmax</div>
+            <div class="code-block">
+                <pre>
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">def</span> <span class="func">softmax_with_temp</span>(logits, temperature):
+    scaled = np.array(logits) / temperature
+    exp_vals = np.exp(scaled)
+    <span class="keyword">return</span> exp_vals / np.sum(exp_vals)
+
+logits = [<span class="number">10</span>, <span class="number">9</span>, <span class="number">8</span>]
+<span class="builtin">print</span>(softmax_with_temp(logits, <span class="number">0.5</span>))   <span class="comment"># 尖锐</span>
+<span class="builtin">print</span>(softmax_with_temp(logits, <span class="number">1.0</span>))   <span class="comment"># 正常</span>
+<span class="builtin">print</span>(softmax_with_temp(logits, <span class="number">10.0</span>))  <span class="comment"># 平坦</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 第五章 -->
+        <section class="card">
+            <h2>第五章 · 采样 —— 「抽签转盘」 <span class="badge">随机</span></h2>
+            <p>Softmax 算出的只是概率分布，比如「猫 60%，狗 40%」。但模型 <strong>并不总是直接选概率最大的</strong>（那叫「贪心解码」）。实际中，模型会把这个概率分布做成一个 <strong>「抽签转盘」</strong>，然后随机拨动指针。</p>
+            <p><strong>这就是为什么问同一个问题两次，答案可能不一样！</strong> 因为转盘每次停的位置可能不同。Temperature 越高，转盘上各扇区面积越接近，抽中冷门选项的概率越大；Temperature 越低，最大扇区几乎占满整个转盘，结果就变得死板且确定。</p>
+            <div class="tip"><span class="emoji">🎰</span> <strong>抽签比喻：</strong> 概率是「转盘上扇区的大小」，采样就是「拨动指针，看它停在哪儿」。<strong>随机性 = 创造力</strong>，但也要控制温度别太放飞。</div>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A[概率分布<br>猫 60%, 狗 40%] --> B[构建累积分布<br>猫 0到0.6, 狗 0.6到1.0]
+                    B --> C[生成随机数<br>r 在 0 到 1 之间]
+                    C --> D{随机数落在哪个区间？}
+                    D -->|r 小于 0.6| E[选择「猫」]
+                    D -->|r 大于等于 0.6| F[选择「狗」]
+                </div>
+            </div>
+            <div class="fig-caption">图5 · 根据概率分布进行随机采样</div>
+
+            <h3>🧪 采样的工程实现</h3>
+            <p>实际代码中，我们使用 <strong>多项式分布</strong>（Multinomial Distribution）或 <strong>torch.multinomial</strong> 来实现采样。核心逻辑就是：按照概率大小，给每个选项分配一个「区间」，然后扔一个 0~1 的随机数，看落在哪个区间里。</p>
+            <div class="code-label">🐍 从概率分布中采样</div>
+            <div class="code-block">
+                <pre>
+<span class="keyword">import</span> numpy <span class="keyword">as</span> np
+
+<span class="keyword">def</span> <span class="func">sample_from_probs</span>(probs):
+    cumsum = np.cumsum(probs)           <span class="comment"># 累积分布 [0.6, 1.0]</span>
+    r = np.random.rand()                <span class="comment"># 生成 0~1 随机数</span>
+    <span class="keyword">for</span> i, threshold <span class="keyword">in</span> <span class="builtin">enumerate</span>(cumsum):
+        <span class="keyword">if</span> r < threshold:
+            <span class="keyword">return</span> i                    <span class="comment"># 返回选中的索引</span>
+    <span class="keyword">return</span> <span class="builtin">len</span>(probs) - <span class="number">1</span>
+
+probs = [<span class="number">0.6</span>, <span class="number">0.4</span>]   <span class="comment"># 猫 60%, 狗 40%</span>
+<span class="builtin">print</span>(sample_from_probs(probs))  <span class="comment"># 可能是 0（猫）或 1（狗）</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 第六章 -->
+        <section class="card">
+            <h2>第六章 · Transformer 中的 Logits 生成 <span class="badge">幕后</span></h2>
+            <p>在 Transformer 架构（比如 GPT 系列）里，Logits 是怎么算出来的？其实最后一步非常简单：</p>
+            <ol>
+                <li><strong>编码</strong>：输入一句话，经过几十层 Transformer 解码器后，得到一个 <strong>高维向量</strong>（比如 4096 维）。</li>
+                <li><strong>线性映射</strong>：这个向量通过一个 <strong>全连接层</strong>（没有激活函数），被映射到 <strong>词表大小</strong> 的维度（比如 50000 维）。</li>
+                <li><strong>输出 Logits</strong>：映射的结果就是 <strong>Logits</strong>，形状为 [batch, 序列长度, 词表大小]。</li>
+            </ol>
+            <p>可以理解为：模型把「当前语境」浓缩成一个「灵魂向量」，然后去跟词表里的每一个单词「做点积」（算相似度），得到的相似度分数就是 Logits。哪个词跟当前语境最像，它的 Logits 分就最高。</p>
+            <div class="tip"><span class="emoji">🔧</span> <strong>工程比喻：</strong> 销售（模型）把客户需求（输入）整理成一张「需求清单」（向量），然后去仓库（词表）里跟 5 万件商品逐一比对，每件商品打一个「匹配分」—— <strong>这一堆匹配分就是 Logits</strong>。</div>
+
+            <div class="mermaid-wrapper">
+                <div class="mermaid">
+                    flowchart TD
+                    A["输入文本（如 今天天气）"] --> B["Transformer 解码器（几十层）"]
+                    B --> C["隐藏向量（如 4096 维）"]
+                    C --> D["线性映射层（无激活函数）"]
+                    D --> E["词表打分（如 50000 维）"]
+                    E --> F["Logits 输出（每个词的原始分数）"]
+                </div>
+            </div>
+            <div class="fig-caption">图6 · Transformer 最后一层生成 Logits 的过程</div>
+
+            <h3>🧩 代码层面：PyTorch 风格的伪代码</h3>
+            <p>在 PyTorch 中，这通常就是 <code>nn.Linear(hidden_size, vocab_size)</code> 一层搞定。不需要任何激活函数，直接输出原始分数。</p>
+            <div class="code-label">🐍 PyTorch 风格的 Logits 生成</div>
+            <div class="code-block">
+                <pre>
+<span class="keyword">import</span> torch
+<span class="keyword">import</span> torch.nn <span class="keyword">as</span> nn
+
+linear_layer = nn.Linear(<span class="number">4096</span>, <span class="number">50000</span>, bias=<span class="keyword">True</span>)
+
+hidden = torch.randn(<span class="number">1</span>, <span class="number">1</span>, <span class="number">4096</span>)   <span class="comment"># 模拟 Transformer 输出</span>
+logits = linear_layer(hidden)           <span class="comment"># 形状: (1, 1, 50000)</span>
+
+<span class="builtin">print</span>(logits.shape)  <span class="comment"># torch.Size([1, 1, 50000])</span>
+                </pre>
+            </div>
+        </section>
+
+        <!-- 总结 -->
+        <section class="card" style="border-left: 6px solid #3b82f6;">
+            <h2>🎯 总结 · 一条流水线，三个关键词</h2>
+            <p style="font-size: 1.1rem;">
+                <strong>Logits</strong> 是模型的「原始裸分」—— 任意实数，自由奔放。<br />
+                <strong>Softmax</strong> 是「分蛋糕机器」—— 把裸分变成概率，总和 1，每个 > 0。<br />
+                <strong>Temperature</strong> 是「胆量旋钮」—— 调低变保守，调高变创造。
+            </p>
+            <div class="mermaid-wrapper" style="background: #e8f0fe; border-color: #a0c4ff;">
+                <div class="mermaid">
+                    flowchart TD
+                    A[模型打分<br>Logits 裸分] --> B[调节差距<br>除以 Temperature]
+                    B --> C[归一化<br>Softmax]
+                    C --> D[概率分布]
+                    D --> E[采样抽签]
+                    E --> F[输出 Token]
+                </div>
+            </div>
+            <div class="fig-caption">最终 · 完整流程再回顾</div>
+            <p style="margin-top: 1.2rem;"><strong>记住这句话：</strong> 概率是给人类看的，<strong>Logits 才是模型真正「爱」的</strong>。而 Temperature 和采样，则决定了这个模型是 <strong>「严肃的专家」</strong> 还是 <strong>「天马行空的诗人」</strong>。</p>
+            <div class="tip" style="border-left-color: #8b5cf6; background: #f5f3ff;">
+                <span class="emoji">🚀</span> <strong>最后的小彩蛋：</strong> 下次你问 AI 同一个问题两次得到不同答案，别觉得它「精分」—— 它只是按照你给的 Temperature，在转盘上重新抽了一次签而已！
+            </div>
+        </section>
+
+        <footer class="footer">
+            <p>✨ 用 <strong>Mermaid</strong> 图解 · 所有图表均为 <strong>TD（Top-Down）</strong> 模式 · 无 subgraph · 代码块深色背景，页面浅色主题</p>
+            <p style="margin-top: 0.4rem; font-size: 0.85rem;">Made with ❤️ · 通俗科普 · 欢迎分享</p>
+        </footer>
+    </div>
+
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'base',
+            themeVariables: {
+                'background': '#ffffff',
+                'primaryColor': '#eef2f6',
+                'primaryBorderColor': '#4b5563',
+                'primaryTextColor': '#0f172a',
+                'lineColor': '#334155',
+                'secondaryColor': '#f1f5f9',
+                'tertiaryColor': '#ffffff',
+                'fontSize': '22px',
+                'fontFamily': 'Segoe UI, sans-serif'
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis',
+                padding: 20,
+                nodeSpacing: 60,
+                rankSpacing: 70,
+            },
+            securityLevel: 'loose',
+        });
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+        });
+    </script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>

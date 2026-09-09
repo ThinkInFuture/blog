@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>大模型训练并行技术全解析 · DP/TP/PP/SP/EP</title>
+    <!-- 引入 Mermaid 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, system-ui, -apple-system, sans-serif;
+            background: #f6f8fc;
+            color: #1e293b;
+            padding: 2rem 1.5rem;
+            line-height: 1.6;
+        }
+        .container {
+            max-width: 1300px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            padding: 2rem 0 1rem;
+            border-bottom: 2px solid #e2e8f0;
+            margin-bottom: 2.5rem;
+        }
+        header h1 {
+            font-size: 2.6rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+        header p {
+            font-size: 1.1rem;
+            color: #475569;
+            margin-top: 0.5rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 2.5rem;
+        }
+        .card {
+            background: #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0, 0, 0, 0.02);
+            padding: 2rem 2rem 2.5rem;
+            transition: transform 0.15s ease;
+            border: 1px solid #eef2f6;
+        }
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 20px 35px rgba(0, 0, 0, 0.08);
+        }
+        .card h2 {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.9rem;
+            font-weight: 700;
+            margin-bottom: 1.2rem;
+            color: #0f172a;
+            border-left: 6px solid #3b82f6;
+            padding-left: 1rem;
+        }
+        .card h2 .badge {
+            font-size: 0.85rem;
+            background: #dbeafe;
+            color: #1d4ed8;
+            padding: 0.1rem 0.8rem;
+            border-radius: 30px;
+            font-weight: 600;
+            margin-left: 0.5rem;
+        }
+        .section {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            margin-top: 0.5rem;
+        }
+        .section .text {
+            flex: 2;
+            min-width: 280px;
+        }
+        .section .text p {
+            margin-bottom: 0.8rem;
+            color: #334155;
+        }
+        .section .text ul, .section .text ol {
+            margin: 0.6rem 0 0.8rem 1.5rem;
+            color: #334155;
+        }
+        .section .text li {
+            margin-bottom: 0.3rem;
+        }
+        .section .text strong {
+            color: #0f172a;
+        }
+        .diagram {
+            flex: 1.2;
+            min-width: 280px;
+            background: #fafcff;
+            border-radius: 1rem;
+            padding: 0.8rem;
+            border: 1px solid #e9edf2;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .diagram .mermaid {
+            width: 100%;
+            max-width: 500px;
+        }
+        .code-block {
+            margin-top: 1.8rem;
+            background: #0f172a;
+            border-radius: 1rem;
+            padding: 1.2rem 1.5rem;
+            overflow-x: auto;
+            position: relative;
+        }
+        .code-block code {
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            font-size: 0.9rem;
+            color: #e2e8f0;
+            white-space: pre;
+            display: block;
+            line-height: 1.5;
+        }
+        .code-block .lang-tag {
+            position: absolute;
+            top: 0.5rem;
+            right: 1rem;
+            font-size: 0.7rem;
+            background: #334155;
+            color: #cbd5e1;
+            padding: 0.2rem 0.7rem;
+            border-radius: 20px;
+            letter-spacing: 0.3px;
+        }
+        .footer {
+            margin-top: 3.5rem;
+            text-align: center;
+            font-size: 0.95rem;
+            color: #64748b;
+            border-top: 1px solid #e2e8f0;
+            padding-top: 2rem;
+        }
+        @media (max-width: 700px) {
+            body { padding: 1rem; }
+            .card { padding: 1.5rem; }
+            .section { flex-direction: column; }
+            .diagram { min-width: unset; }
+            header h1 { font-size: 2rem; }
+        }
+        /* Mermaid 适应 */
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>⚡ 大模型训练并行技术 · 完全指南</h1>
+            <p>数据并行 · 张量并行 · 流水线并行 · 序列并行 · 专家并行</p>
+        </header>
+
+        <div class="grid">
+
+            <!-- ==================== DP ==================== -->
+            <div class="card">
+                <h2>📦 数据并行 <span class="badge">Data Parallelism</span></h2>
+                <div class="section">
+                    <div class="text">
+                        <p><strong>核心思想</strong>：将训练数据切分成多个小批次，每张 GPU 上保存一份完整的模型副本，独立处理各自的数据。各卡独立计算梯度后，通过 <strong>All‑Reduce</strong> 通信同步梯度并取平均，最后所有卡用相同的平均梯度更新模型权重。</p>
+                        <ul>
+                            <li><strong>通信模式</strong>：All‑Reduce（梯度同步），通信量与模型参数量成正比。</li>
+                            <li><strong>优点</strong>：实现简单，是提高训练吞吐量的最直接手段。</li>
+                            <li><strong>缺点</strong>：每张卡都要存储完整模型、梯度和优化器状态，显存冗余严重。</li>
+                            <li><strong>适用场景</strong>：模型能单卡装下，且希望快速扩展数据吞吐量。</li>
+                            <li><strong>代表框架</strong>：PyTorch DDP, Horovod, DeepSpeed ZeRO (FSDP)。</li>
+                        </ul>
+                    </div>
+                    <div class="diagram">
+                        <div class="mermaid">
+                            graph LR
+                                subgraph "数据并行 (DP)"
+                                    A[数据批次] --> B1[GPU 0<br>完整模型]
+                                    A --> B2[GPU 1<br>完整模型]
+                                    A --> B3[GPU N<br>完整模型]
+                                    B1 --> C1[梯度1]
+                                    B2 --> C2[梯度2]
+                                    B3 --> C3[梯度N]
+                                    C1 & C2 & C3 --> D[All-Reduce<br>平均梯度]
+                                    D --> E1[更新权重]
+                                    D --> E2[更新权重]
+                                    D --> E3[更新权重]
+                                end
+                        </div>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="lang-tag">PyTorch DDP</span>
+                    <code>import torch
+                        import torch.distributed as dist
+                        from torch.nn.parallel import DistributedDataParallel as DDP
+
+                        dist.init_process_group("nccl")
+                        model = MyModel().cuda()
+                        model = DDP(model)   # 自动包装
+
+                        for data, target in dataloader:
+                            data, target = data.cuda(), target.cuda()
+                            output = model(data)
+                            loss = criterion(output, target)
+                            loss.backward()          # 反向传播，DDP自动同步梯度
+                            optimizer.step()
+                            optimizer.zero_grad()
+                    </code>
+                </div>
+            </div>
+
+            <!-- ==================== TP ==================== -->
+            <div class="card">
+                <h2>🧠 张量并行 <span class="badge">Tensor Parallelism</span></h2>
+                <div class="section">
+                    <div class="text">
+                        <p><strong>核心思想</strong>：将模型 <strong>同一层</strong>（如 Transformer 的注意力头或前馈网络）的权重矩阵按列或行切分到多张 GPU 上，各卡计算自己负责的部分，最后通过通信合并结果。最典型的实现是 Megatron‑LM 的 1D 张量并行。</p>
+                        <ul>
+                            <li><strong>通信模式</strong>：前向和反向均需要 <strong>All‑Reduce</strong> 或 All‑Gather，通信频繁且数据量大。</li>
+                            <li><strong>优点</strong>：能解决单层超大（如超大隐藏层）的显存瓶颈，精细分配计算。</li>
+                            <li><strong>缺点</strong>：通信开销极大，通常只能在单机内部（NVLink 高速互联）使用。</li>
+                            <li><strong>适用场景</strong>：单卡无法容纳单个大层（例如 10B+ 参数的 FFN 层）。</li>
+                            <li><strong>代表框架</strong>：Megatron‑LM, PyTorch 原生 TP（实验性）。</li>
+                        </ul>
+                    </div>
+                    <div class="diagram">
+                        <div class="mermaid">
+                            graph TD
+                                subgraph "张量并行 (TP) 示例：MLP 切列"
+                                    X[输入 X] --> A1[GPU 0: W1 列切片]
+                                    X --> A2[GPU 1: W1 列切片]
+                                    A1 --> B1[线性部分1]
+                                    A2 --> B2[线性部分2]
+                                    B1 & B2 --> C[All-Reduce 合并]
+                                    C --> D[激活函数]
+                                end
+                        </div>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="lang-tag">Megatron‑LM 风格 (概念)</span>
+                    <code># 假设 hidden_size = 4096, 切分为2卡 (每卡负责 2048 维)
+                        class ColumnParallelLinear(nn.Module):
+                            def __init__(self, in_features, out_features, world_size):
+                                super().__init__()
+                                self.out_features_per_part = out_features // world_size
+                                self.weight = nn.Parameter(torch.empty(in_features, self.out_features_per_part))
+                                # ... 前向: 本地线性变换，然后 All-Gather 或 All-Reduce 合并
+
+                        # 在模型中使用：
+                        self.linear1 = ColumnParallelLinear(hidden_size, hidden_size*4, world_size=2)
+                        self.linear2 = RowParallelLinear(hidden_size*4, hidden_size, world_size=2)
+                    </code>
+                </div>
+            </div>
+
+            <!-- ==================== PP ==================== -->
+            <div class="card">
+                <h2>⛓️ 流水线并行 <span class="badge">Pipeline Parallelism</span></h2>
+                <div class="section">
+                    <div class="text">
+                        <p><strong>核心思想</strong>：将模型按 <strong>层</strong> 分成多个阶段（Stage），每个 GPU 负责一个或多个连续层的计算。数据像流水线一样依次经过各阶段，前一个阶段的输出直接作为后一个阶段的输入。为了提升效率，通常使用 <strong>微批次（Micro‑batch）</strong> 流水线来减少空闲时间。</p>
+                        <ul>
+                            <li><strong>通信模式</strong>：阶段间 <strong>点对点 (P2P)</strong> 传递激活值和梯度，通信量相对较小。</li>
+                            <li><strong>优点</strong>：适合跨多机扩展（通信不密集），能解决模型过深的问题。</li>
+                            <li><strong>缺点</strong>：存在 <strong>流水线气泡（Bubble）</strong>（设备空闲），且需要处理微批次的调度。</li>
+                            <li><strong>适用场景</strong>：模型层数非常多（如 100+ 层），且希望跨多服务器部署。</li>
+                            <li><strong>代表框架</strong>：GPipe, PipeDream, PyTorch 的 `torch.distributed.pipeline.sync`。</li>
+                        </ul>
+                    </div>
+                    <div class="diagram">
+                        <div class="mermaid">
+                            sequenceDiagram
+                                participant GPU0 as GPU 0<br>层1-3
+                                participant GPU1 as GPU 1<br>层4-6
+                                participant GPU2 as GPU 2<br>层7-9
+                                Note over GPU0,GPU2: 微批次 1,2,3 流水线执行
+                                GPU0->>GPU1: 微批次1 前向
+                                GPU0->>GPU1: 微批次2 前向
+                                GPU1->>GPU2: 微批次1 前向
+                                GPU0->>GPU1: 微批次3 前向
+                                GPU1->>GPU2: 微批次2 前向
+                                GPU2-->>GPU1: 微批次1 反向
+                                GPU1-->>GPU0: 微批次1 反向
+                                Note over GPU2: 存在少量气泡
+                        </div>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="lang-tag">PyTorch Pipe (概念)</span>
+                    <code>from torch.distributed.pipeline.sync import Pipe
+
+                        # 假设 model 是 nn.Sequential 分成多个 stage
+                        model = nn.Sequential(layer1, layer2, layer3, ...)
+                        model = Pipe(model, chunks=4)   # chunks = 微批次数量
+
+                        for data, target in dataloader:
+                            data = data.cuda()
+                            output = model(data)        # 自动流水线并行
+                            loss = criterion(output, target)
+                            loss.backward()
+                            optimizer.step()
+                    </code>
+                </div>
+            </div>
+
+            <!-- ==================== SP ==================== -->
+            <div class="card">
+                <h2>📜 序列并行 <span class="badge">Sequence Parallelism</span></h2>
+                <div class="section">
+                    <div class="text">
+                        <p><strong>核心思想</strong>：将输入序列按 <strong>长度维度</strong> 切分到多张 GPU 上，以降低单卡处理长序列时的激活显存占用。早期 SP 是 TP 的补充（例如 Megatron‑LM 将 LayerNorm 和 Dropout 在序列维度切分），更现代的 SP（如 DeepSpeed Ulysses）则通过 <strong>All‑to‑All</strong> 通信在序列维度和注意力头维度间转换，优化长序列的注意力计算。</p>
+                        <ul>
+                            <li><strong>通信模式</strong>：All‑Gather / Reduce‑Scatter（Megatron 风格）或 All‑to‑All（Ulysses 风格）。</li>
+                            <li><strong>优点</strong>：显著降低激活显存，支持超长上下文窗口（如 128k tokens）。</li>
+                            <li><strong>缺点</strong>：引入了额外的通信开销，且需要配合 TP 或 DP 使用。</li>
+                            <li><strong>适用场景</strong>：处理超长序列（如文档级、长视频）的训练。</li>
+                            <li><strong>代表框架</strong>：Megatron‑LM (SP), DeepSpeed Ulysses, ColossalAI。</li>
+                        </ul>
+                    </div>
+                    <div class="diagram">
+                        <div class="mermaid">
+                            graph LR
+                                subgraph "序列并行 (SP) 示意"
+                                    S[长序列<br>L tokens] --> S1[GPU 0: 前 L/2]
+                                    S --> S2[GPU 1: 后 L/2]
+                                    S1 --> A1[本地 Attention]
+                                    S2 --> A2[本地 Attention]
+                                    A1 & A2 --> C[All‑Gather 拼接<br>或 All‑to‑All]
+                                    C --> O[输出完整序列]
+                                end
+                        </div>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="lang-tag">Megatron‑LM 序列并行 (概念)</span>
+                    <code># 在 Transformer 层中，将 LayerNorm 和 Dropout 沿序列维度切分
+                        class ParallelTransformerLayer(nn.Module):
+                            def __init__(self, ...):
+                                self.input_layernorm = LayerNorm(hidden_size, sequence_parallel=True)
+                                self.attention = Attention(...)   # 使用 TP 的注意力
+                                self.post_attention_dropout = Dropout(..., sequence_parallel=True)
+                                # 前向时，每个 GPU 只处理自己序列分片上的激活值
+                                # 但注意力计算内部会通过 TP 通信合并头
+                    </code>
+                </div>
+            </div>
+
+            <!-- ==================== EP ==================== -->
+            <div class="card">
+                <h2>🧩 专家并行 <span class="badge">Expert Parallelism</span></h2>
+                <div class="section">
+                    <div class="text">
+                        <p><strong>核心思想</strong>：专为 <strong>混合专家模型 (MoE)</strong> 设计。MoE 模型包含多个“专家”网络（通常是 FFN）和一个“门控”网络。EP 将不同的专家分配到不同的 GPU 上，每个 Token 通过门控网络路由到最合适的几个专家进行计算，最后聚合结果。</p>
+                        <ul>
+                            <li><strong>通信模式</strong>：Token 在专家间路由产生巨大的 <strong>All‑to‑All</strong> 通信开销。</li>
+                            <li><strong>优点</strong>：使得 MoE 模型可以在不显著增加计算量的情况下，大幅扩展参数量（如 1.6T 参数）。</li>
+                            <li><strong>缺点</strong>：通信复杂，负载均衡难以保证（需辅助损失函数），且对显存和带宽要求极高。</li>
+                            <li><strong>适用场景</strong>：超大规模 MoE 模型（如 Switch Transformer, GLaM, DeepSeek‑MoE）。</li>
+                            <li><strong>代表框架</strong>：DeepSpeed (MoE), Megatron‑LM (MoE), GShard。</li>
+                        </ul>
+                    </div>
+                    <div class="diagram">
+                        <div class="mermaid">
+                            graph TD
+                                subgraph "专家并行 (EP)"
+                                    X[输入 Token] --> G[门控网络]
+                                    G -->|路由到专家1| E1[GPU 0: 专家1]
+                                    G -->|路由到专家2| E2[GPU 1: 专家2]
+                                    G -->|路由到专家K| EK[GPU N: 专家K]
+                                    E1 --> A[聚合/All‑to‑All]
+                                    E2 --> A
+                                    EK --> A
+                                    A --> O[输出]
+                                end
+                        </div>
+                    </div>
+                </div>
+                <div class="code-block">
+                    <span class="lang-tag">DeepSpeed MoE (配置示例)</span>
+                    <code># 在 DeepSpeed 配置文件中启用 MoE
+                        {
+                            "train_batch_size": 1024,
+                            "fp16": {"enabled": true},
+                            "model_parallel": {
+                                "moe": {
+                                    "enabled": true,
+                                    "ep_size": 4,            # 专家并行度 (GPU数)
+                                    "num_experts": 16,
+                                    "top_k": 2,
+                                    "capacity_factor": 1.5,
+                                    "moe_param_group": true
+                                }
+                            }
+                        }
+
+                        # 模型定义中使用 deepspeed.moe.layer.MoE 层
+                    </code>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="footer">
+            <p>📌 五种并行策略并非互斥，在实际大模型训练中通常组合使用（如 3D 并行 = DP + TP + PP，辅以 SP 和 EP）。</p>
+            <p style="margin-top: 0.4rem;">通信效率是决定扩展性的关键，NVLink 和 InfiniBand 等高速互联不可或缺。</p>
+        </div>
+    </div>
+
+    <script>
+        // 初始化 Mermaid
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'neutral',
+            themeVariables: {
+                fontFamily: 'Segoe UI, sans-serif',
+                primaryColor: '#2563eb',
+                primaryTextColor: '#0f172a',
+                primaryBorderColor: '#1e293b',
+                lineColor: '#475569',
+                secondaryColor: '#e2e8f0',
+                tertiaryColor: '#f8fafc'
+            },
+            flowchart: {
+                useMaxWidth: true,
+                htmlLabels: true,
+                curve: 'basis'
+            },
+            sequence: {
+                useMaxWidth: true,
+                showSequenceNumbers: false,
+                actorMargin: 50
+            }
+        });
+    </script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
+</body>
+</html>
