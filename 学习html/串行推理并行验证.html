@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Transformer推理全景：策略对比 + 内部原理（带编号与矩阵）</title>
+    <title>Transformer推理全景：图3修正为拒绝叫+生成哀</title>
     <script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.8/dist/mermaid.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,21 +34,23 @@
         }
         .chart-box {
             width: 100%;
-            max-width: 1200px;
+            max-width: 1400px;
             background: #ffffff;
             border-radius: 24px;
             padding: 20px 20px 10px 20px;
             margin-bottom: 40px;
             box-shadow: 0 8px 30px rgba(0, 0, 0, 0.06);
             border: 1px solid #e9edf2;
+            overflow-x: auto;
         }
         .chart-box .header {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding-bottom: 12px;
-            margin-bottom: 15px;
+            padding-bottom: 8px;
+            margin-bottom: 10px;
             border-bottom: 2px dashed #dce2ea;
+            flex-wrap: wrap;
         }
         .chart-box .header h2 { font-size: 20px; font-weight: 600; }
         .chart-box .header .tag {
@@ -59,7 +61,23 @@
             color: #475569;
         }
         .chart-box .header .tag.highlight { background: #dbeafe; color: #1d4ed8; }
+        .chart-box .header .tag.orange { background: #fef3c7; color: #d97706; }
         .chart-box .header .tag.purple { background: #ede9fe; color: #7c3aed; }
+        .chart-box .header .tag.red { background: #fee2e2; color: #dc2626; }
+        
+        /* 新增：图表顶部场景说明文字 */
+        .chart-desc {
+            background: #f8fafc;
+            padding: 8px 16px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #475569;
+            border-left: 4px solid #94a3b8;
+            line-height: 1.6;
+        }
+        .chart-desc strong { color: #0f172a; }
+
         .mermaid-wrapper {
             background: #fafbfc;
             border-radius: 16px;
@@ -69,7 +87,7 @@
         }
         .mermaid { text-align: center; }
         .footnote {
-            max-width: 1200px;
+            max-width: 1400px;
             width: 100%;
             background: #ffffff;
             padding: 24px 32px;
@@ -83,6 +101,7 @@
         .footnote .blue { color: #2563eb; font-weight: 600; }
         .footnote .orange { color: #d97706; font-weight: 600; }
         .footnote .purple { color: #7c3aed; font-weight: 600; }
+        .footnote .green { color: #16a34a; font-weight: 600; }
         .footnote .matrix-code {
             background: #f1f5f9;
             padding: 2px 8px;
@@ -94,94 +113,165 @@
 </head>
 <body>
 
-    <div class="main-title">⚡ 统一架构 · 推理全景解析</div>
-    <div class="sub-desc">图1-2：宏观策略对比（串行依赖 vs 并行验证） ｜ 图3：微观内部原理（Token → Logits 矩阵）</div>
+    <div class="main-title">⚡ 统一架构 · 推理全景解析（3+1 视角）</div>
+    <div class="sub-desc">图1-3：宏观策略（每个位置独立展示，无缩写） ｜ 图4：微观原理（Logits 矩阵全部展开）</div>
 
     <!-- ================= 图1：标准串行推理 ================= -->
     <div class="chart-box">
         <div class="header">
             <h2>📌 图1：标准串行生成</h2>
-            <span class="tag">只取最后一位 Logits</span>
+            <span class="tag red">只取最后一位 · 其余全部丢弃</span>
+        </div>
+        <div class="chart-desc">
+            💬 <strong>场景说明</strong>：输入为已知上下文“风急天高猿啸”。因每一步都需等待前一个采样结果，本次前向传播虽并行算出全部6个位置 Logits，但前5个（急天高猿啸）无法利用，只能丢弃，仅用位置5的 Logits 采样生成“哀”。
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
                 flowchart LR
                     subgraph I1["输入序列 (全部是已知上下文)"]
-                        A1["你<br><small>上下文</small>"] --> B1["好<br><small>上下文</small>"] --> C1["我<br><small>上下文</small>"] --> D1["是<br><small>上下文</small>"]
+                        A1["风<br><small>上下文</small>"] --> B1["急<br><small>上下文</small>"] --> C1["天<br><small>上下文</small>"] --> D1["高<br><small>上下文</small>"] --> E1["猿<br><small>上下文</small>"] --> F1["啸<br><small>上下文</small>"]
                     end
 
                     subgraph M1["因果 Transformer (单次前向传播)"]
                         M1_core["并行计算所有位置 Logits"]
                     end
 
-                    subgraph O1["输出处理 (受采样依赖限制)"]
-                        O1_1["位置0 Logits<br>预测 好"] --> R1_1["❌ 丢弃"]
-                        O1_2["位置1 Logits<br>预测 我"] --> R1_2["❌ 丢弃"]
-                        O1_3["位置2 Logits<br>预测 是"] --> R1_3["❌ 丢弃"]
-                        O1_4["位置3 Logits<br>预测 苹果"] --> R1_4["✅ 采样输出<br>生成新词"]
+                    subgraph O1["输出处理 (6个位置全部独立)"]
+                        direction LR
+                        O1_0["位置0 Logits<br>预测 急"] --> R1_0["❌ 丢弃"]
+                        O1_1["位置1 Logits<br>预测 天"] --> R1_1["❌ 丢弃"]
+                        O1_2["位置2 Logits<br>预测 高"] --> R1_2["❌ 丢弃"]
+                        O1_3["位置3 Logits<br>预测 猿"] --> R1_3["❌ 丢弃"]
+                        O1_4["位置4 Logits<br>预测 啸"] --> R1_4["❌ 丢弃"]
+                        O1_5["位置5 Logits<br>预测 哀"] --> R1_5["✅ 采样输出<br>生成 哀"]
                     end
 
                     I1 --> M1 --> O1
 
+                    style R1_0 fill:#fee2e2,stroke:#f87171,color:#991b1b
                     style R1_1 fill:#fee2e2,stroke:#f87171,color:#991b1b
                     style R1_2 fill:#fee2e2,stroke:#f87171,color:#991b1b
                     style R1_3 fill:#fee2e2,stroke:#f87171,color:#991b1b
-                    style R1_4 fill:#dcfce7,stroke:#4ade80,color:#166534
+                    style R1_4 fill:#fee2e2,stroke:#f87171,color:#991b1b
+                    style R1_5 fill:#dcfce7,stroke:#4ade80,color:#166534
             </div>
-        </div>
-        <div style="color:#64748b; font-size:13px; padding:8px 0 0 12px;">
-            ⚠️ 前面位置的 Logits 虽已并行算出，但必须等待采样结果，逻辑依赖导致无法提前使用。
         </div>
     </div>
 
-    <!-- ================= 图2：草稿并行验证 ================= -->
+    <!-- ================= 图2：草稿全接受 ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图2：草稿并行验证</h2>
-            <span class="tag highlight">全部位置都用上</span>
+            <h2>📌 图2：草稿并行验证（全部接受）</h2>
+            <span class="tag highlight">草稿到“啸”全接受 · 验证再产出“哀”</span>
+        </div>
+        <div class="chart-desc">
+            💬 <strong>场景说明</strong>：草稿模型只提前填入“急天高猿啸”（到“啸”为止），消除了因果依赖。本次前向传播算出的全部位置 Logits 同时参与验证，前5个（急天高猿啸）全部命中（概率达标）被接受；与此同时，大模型在<strong>同一次前向</strong>中直接基于位置5 的 Logits <strong>保底新产出“哀”</strong>这一个新 Token。于是一次性拿到“风急天高猿啸哀”，无需回退——这也体现了“一次验证还能额外输出一个新 Token”。
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
                 flowchart LR
                     subgraph I2["输入序列 (含外部填入的草稿)"]
-                        A2["你<br><small>上下文</small>"] --> B2["好<br><small>上下文</small>"] --> C2["我<br><small>草稿</small>"] --> D2["是<br><small>草稿</small>"]
+                        A2["风<br><small>上下文</small>"] --> B2["急<br><small>草稿</small>"] --> C2["天<br><small>草稿</small>"] --> D2["高<br><small>草稿</small>"] --> E2["猿<br><small>草稿</small>"] --> F2["啸<br><small>草稿</small>"]
                     end
 
                     subgraph M2["因果 Transformer (单次前向传播)"]
                         M2_core["并行计算所有位置 Logits"]
                     end
 
-                    subgraph O2["输出处理 (打破依赖，并行验证)"]
-                        O2_1["位置0 Logits<br>预测 好"] --> R2_1["⏭️ 不用<br>对应已知上下文"]
-                        O2_2["位置1 Logits<br>预测 我"] --> R2_2["✅ 验证<br>对比草稿概率"]
-                        O2_3["位置2 Logits<br>预测 是"] --> R2_3["✅ 验证<br>对比草稿概率"]
-                        O2_4["位置3 Logits<br>预测 苹果"] --> R2_4["🔄 新推理<br>推测下一个词"]
+                    subgraph O2["验证结果：草稿位接受 + 大模型保底新产出"]
+                        direction LR
+                        O2_0["位置0 Logits<br>验证 急"] --> R2_0["✅ 接受"]
+                        O2_1["位置1 Logits<br>验证 天"] --> R2_1["✅ 接受"]
+                        O2_2["位置2 Logits<br>验证 高"] --> R2_2["✅ 接受"]
+                        O2_3["位置3 Logits<br>验证 猿"] --> R2_3["✅ 接受"]
+                        O2_4["位置4 Logits<br>验证 啸"] --> R2_4["✅ 接受"]
+                        O2_new["位置5 Logits<br>大模型新产出 哀"] --> R2_new["✅ 新 Token 输出"]
+                        R2_0 --> OUT["🎉 输出完整句子<br>风急天高猿啸哀"]
+                        R2_1 --> OUT
+                        R2_2 --> OUT
+                        R2_3 --> OUT
+                        R2_4 --> OUT
+                        R2_new --> OUT
                     end
 
                     I2 --> M2 --> O2
 
-                    style R2_1 fill:#f1f5f9,stroke:#cbd5e1,color:#475569
+                    style R2_0 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R2_1 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
                     style R2_2 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
                     style R2_3 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
-                    style R2_4 fill:#fef3c7,stroke:#fbbf24,color:#78350f
+                    style R2_4 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R2_new fill:#fef9c3,stroke:#eab308,color:#854d0e
+                    style OUT fill:#dcfce7,stroke:#4ade80,color:#166534
             </div>
-        </div>
-        <div style="color:#64748b; font-size:13px; padding:8px 0 0 12px;">
-            ✅ 外部草稿提前占位，消除了“等待采样”的串行依赖，本次算出的所有 Logits 全部派上用场。
         </div>
     </div>
 
-    <!-- ================= 图3：微观原理拆解（含具体矩阵数值） ================= -->
+    <!-- ================= 图3：草稿末位拒接（拒绝“叫”，生成“哀”） ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图3：微观视角 · Logits 矩阵的诞生（QKV/Attention/FFN）</h2>
-            <span class="tag purple">矩阵并行 · 每个位置独立打分</span>
+            <h2>📌 图3：草稿并行验证（拒绝“叫”，回退生成“哀”）</h2>
+            <span class="tag orange">前5个接受 · 最后1个回退重采样</span>
+        </div>
+        <div class="chart-desc">
+            💬 <strong>场景说明</strong>：草稿模型填入“急天高猿啸<strong>叫</strong>”。验证时前5个（急天高猿啸）命中，最后一个“叫”因概率不达标被拒绝。此时 <strong>无需重新计算</strong>，直接利用本次已算出的位置5 Logits 重采样，生成正确的“哀”，最终输出“风急天高猿啸哀”。这是投机解码中典型的“部分接受”加速场景。
+        </div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                flowchart LR
+                    subgraph I3["输入序列 (含外部填入的草稿)"]
+                        A3["风<br><small>上下文</small>"] --> B3["急<br><small>草稿</small>"] --> C3["天<br><small>草稿</small>"] --> D3["高<br><small>草稿</small>"] --> E3["猿<br><small>草稿</small>"] --> F3["啸<br><small>草稿</small>"] --> G3["叫<br><small>草稿</small>"]
+                    end
+
+                    subgraph M3["因果 Transformer (单次前向传播)"]
+                        M3_core["并行计算所有位置 Logits"]
+                    end
+
+                    subgraph O3["验证结果 (6个位置全部独立)"]
+                        direction LR
+                        O3_0["位置0 Logits<br>验证 急"] --> R3_0["✅ 接受"]
+                        O3_1["位置1 Logits<br>验证 天"] --> R3_1["✅ 接受"]
+                        O3_2["位置2 Logits<br>验证 高"] --> R3_2["✅ 接受"]
+                        O3_3["位置3 Logits<br>验证 猿"] --> R3_3["✅ 接受"]
+                        O3_4["位置4 Logits<br>验证 啸"] --> R3_4["✅ 接受"]
+                        O3_5["位置5 Logits<br>验证 叫"] --> R3_5["❌ 拒绝"]
+                    end
+
+                    subgraph O3b["回退重采样 → 生成 哀"]
+                        R3_0 --> PART["📝 保留前5个<br>风急天高猿啸"]
+                        R3_5 --> ROLL["⏪ 回退到位置5<br>丢弃草稿 '叫'"]
+                        PART --> RES["🔄 用位置5 Logits 重采样<br>→ 生成 <strong>哀</strong>"]
+                        ROLL --> RES
+                        RES --> FINAL["✅ 最终输出<br>风急天高猿啸哀"]
+                    end
+
+                    I3 --> M3 --> O3
+                    O3 --> O3b
+
+                    style R3_0 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R3_1 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R3_2 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R3_3 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R3_4 fill:#dbeafe,stroke:#60a5fa,color:#1e3a8a
+                    style R3_5 fill:#fee2e2,stroke:#f87171,color:#991b1b
+                    style ROLL fill:#fef3c7,stroke:#fbbf24,color:#78350f
+                    style RES fill:#e0e7ff,stroke:#818cf8,color:#3730a3
+                    style FINAL fill:#dcfce7,stroke:#4ade80,color:#166534
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= 图4：微观原理拆解（无省略） ================= -->
+    <div class="chart-box">
+        <div class="header">
+            <h2>📌 图4：微观视角 · Logits 矩阵的诞生</h2>
+            <span class="tag purple">V=4 · 7行 · 全部展开无省略</span>
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
                 flowchart TD
                     subgraph S1["① 输入表示层"]
-                        T["Token IDs<br>你, 好, 我, 是"] --> E["Embedding 查表<br>+ 位置编码"]
+                        T["Token IDs<br>风, 急, 天, 高, 猿, 啸, 哀"] --> E["Embedding 查表<br>+ 位置编码"]
                     end
 
                     subgraph S2["② 多头自注意力 (并行核心)"]
@@ -192,13 +282,13 @@
 
                     subgraph S3["③ 前馈网络 (FFN) 与残差"]
                         CON --> FFN["两层线性层 + 激活"]
-                        FFN --> H["最终隐藏状态<br>形状: [4 × d_model]"]
+                        FFN --> H["最终隐藏状态<br>形状: [7 × d_model]"]
                     end
 
-                    subgraph S4["④ 输出投影 (LM Head) → 得到 Logits 矩阵"]
-                        H --> HEAD["线性层 (权重 W_out)<br>维度: d_model → |Vocab|"]
-                        HEAD --> MATRIX["<b>Logits 矩阵 (原始分数)</b><br>形状: [4 × 词表大小 V]<br><br>位置0 (预测'好'): [2.1, -0.5, 0.8, ...]<br>位置1 (预测'我'): [1.3, 3.2, -1.1, ...]<br>位置2 (预测'是'): [0.7, 1.8, 2.4, ...]<br>位置3 (预测'苹果'): [2.5, 0.2, 1.6, ...]"]
-                        MATRIX --> PROB["(可选) Softmax<br>转为概率分布"]
+                    subgraph S4["④ 输出投影 (LM Head) → Logits 矩阵（无省略）"]
+                        H --> HEAD["线性层 (权重 W_out)<br>d_model → |Vocab| (设定 V=4)"]
+                        HEAD --> MATRIX["**Logits 矩阵 [7 × 4]**<br><br>位置0 (预测'急'): [0.12, -0.34, 0.89, 2.41]<br>位置1 (预测'天'): [0.55, 1.82, -1.13, 0.22]<br>位置2 (预测'高'): [2.31, 0.74, 1.55, -0.88]<br>位置3 (预测'猿'): [-0.44, 1.14, 0.66, 3.22]<br>位置4 (预测'啸'): [0.92, -0.71, 2.21, 1.33]<br>位置5 (预测'哀'): [1.12, 2.54, -0.24, 0.95]<br>位置6 (预测下一个词): [0.78, -0.53, 1.46, 2.12]<br><br>⭐ 共7行，每行4个数字，全部逐个写出"]
+                        MATRIX --> PROB["(可选) Softmax"]
                     end
 
                     S1 --> S2 --> S3 --> S4
@@ -211,18 +301,18 @@
             </div>
         </div>
         <div style="color:#64748b; font-size:13px; padding:8px 0 0 12px; display: flex; flex-wrap: wrap; gap: 20px;">
-            <span>📊 <strong>Logits 矩阵</strong>：每一行对应一个输入位置，每一列对应词表中的一个词。上图展示了 4 个位置各自独立的原始置信分数（未归一化）。</span>
-            <span>⚡ <strong>并行奥秘</strong>：Attention 中的 Q·K^T 和 FFN 均为矩阵乘法，一次前向传播直接算出整个 <strong>[4 × V]</strong> 矩阵，无需 for 循环。</span>
-            <span>🧩 <strong>因果掩码</strong>：在 Attention 中屏蔽未来位置，保证位置 i 只依赖 i 及之前的信息，但<strong>不影响矩阵并行计算</strong>。</span>
+            <span>📊 <strong>无省略矩阵</strong>：固定 V=4，7个位置每行4个数字，全部列明，无 `...`。</span>
+            <span>⚡ <strong>并行核心</strong>：矩阵乘法一次算出全部 28 个数值。</span>
         </div>
     </div>
 
-    <!-- 底部核心结论（带编号引用） -->
+    <!-- 底部核心结论 -->
     <div class="footnote">
-        <strong>💡 完整结论（策略层 + 原理层）：</strong><br>
-        1. <span class="purple">微观本质（图3）</span>：Logits 是 <strong>LM Head（线性层）</strong> 对每个位置隐藏状态映射出的原始分数矩阵 <span class="matrix-code">[4 × V]</span>。自注意力（Q/K/V）和前馈网络（FFN）全是矩阵运算，天然为所有位置同时输出 Logits。<br>
-        2. <span class="blue">宏观限制（图1）</span>：标准推理时，<strong>因果依赖</strong>（等前一个采样结果）迫使你只能使用 <strong>最后一个位置</strong>（位置3）的 Logits 来生成新词，其余位置的 Logits 算完即弃。<br>
-        3. <span class="orange">策略突破（图2）</span>：草稿验证时，外部模型提前填入未来 Token 作为占位，消除了因果依赖。因此，同一趟前向传播算出的 <strong>所有位置 Logits（整个矩阵）</strong> 都能用于并行验证，实现了“一次计算，多处评分”的加速效果。
+        <strong>💡 完整结论（图1-3每个位置独立，图4数字全展开）：</strong><br>
+        1. <span class="purple">微观（图4）</span>：模型一次前向算出 <span class="matrix-code">[7×4]</span> Logits矩阵，7行数字全部展示。<br>
+        2. <span class="blue">串行（图1）</span>：位置0-4（急天高猿啸）的Logits算完即弃，只取位置5（哀）采样。<br>
+        3. <span class="green">全接受（图2）</span>：草稿填到“啸”（位置0-4）全部接受，大模型同一次前向再保底产出“哀”，直接出句。<br>
+        4. <span class="orange">末位拒接（图3）</span>：草稿为“急天高猿啸<strong>叫</strong>”，位置0-4接受，位置5（叫）拒绝，直接用图4第6行 <span class="matrix-code">[1.12, 2.54, -0.24, 0.95]</span> 重采样，成功生成“哀”，输出“风急天高猿啸哀”。
     </div>
 
     <script>
@@ -250,5 +340,7 @@
         });
     </script>
 
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js"></script>
 </body>
 </html>
