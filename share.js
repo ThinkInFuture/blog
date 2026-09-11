@@ -17,8 +17,18 @@ copyItem.innerHTML='<svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14
 var wxItem=document.createElement('button');
 wxItem.className='hs-share-item';
 wxItem.innerHTML='<svg viewBox="0 0 24 24"><path d="M8.7 3C4.9 3 1.8 5.6 1.8 8.9c0 1.9 1 3.5 2.7 4.7l-.7 2.1 2.4-1.2c.6.2 1.3.4 2 .4h.4c-.1-.4-.2-.9-.2-1.3 0-3.1 3-5.6 6.6-5.6h.4C14.8 5.3 12 3 8.7 3zM6.4 7.3c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zm4.8 0c-.5 0-.9-.4-.9-.9s.4-.9.9-.9.9.4.9.9-.4.9-.9.9zM22.2 13.6c0-2.8-2.8-5.1-5.9-5.1s-5.9 2.3-5.9 5.1 2.6 5.1 5.9 5.1c.6 0 1.2-.1 1.8-.3l2.1 1-.6-1.8c1.6-1 2.6-2.5 2.6-4zm-7.9-.9c-.4 0-.8-.3-.8-.8s.4-.8.8-.8.8.3.8.8-.4.8-.8.8zm4 0c-.4 0-.8-.3-.8-.8s.4-.8.8-.8.8.3.8.8-.4.8-.8.8z"/></svg><span>微信扫码</span>';
+var sysItem=document.createElement('button');
+sysItem.className='hs-share-item';
+sysItem.innerHTML='<svg viewBox="0 0 24 24"><path d="M18 16.1c-.8 0-1.5.3-2 .8l-7.1-4.2c0-.2.1-.5.1-.7s0-.5-.1-.7L16 7.2c.5.5 1.2.8 2 .8 1.7 0 3-1.3 3-3s-1.3-3-3-3-3 1.3-3 3c0 .2 0 .5.1.7L8 9.8C7.5 9.3 6.8 9 6 9c-1.7 0-3 1.3-3 3s1.3 3 3 3c.8 0 1.5-.3 2-.8l7.1 4.2c0 .2-.1.4-.1.6 0 1.6 1.3 2.9 2.9 2.9s2.9-1.3 2.9-2.9-1.2-2.9-2.8-2.9z"/></svg><span>更多分享</span>';
 panel.appendChild(copyItem);
 panel.appendChild(wxItem);
+if(navigator.share&&window.matchMedia&&matchMedia('(pointer: coarse)').matches){
+panel.appendChild(sysItem);
+sysItem.addEventListener('click',function(){
+panel.classList.remove('open');
+try{navigator.share({title:document.title,url:location.href}).catch(function(){})}catch(e){}
+});
+}
 var mask=document.createElement('div');
 mask.className='hs-share-mask';
 mask.innerHTML='<div class="hs-share-qr"><div class="hs-share-qr-title"></div><div class="hs-share-qr-desc">微信扫一扫，手机阅读</div><div id="hs-share-qrcode"></div></div>';
