@@ -25,12 +25,18 @@ th,td{border:1px solid #eee;padding:8px 12px;text-align:left;vertical-align:top}
 th{background:#f9f9f9;font-weight:600}
 td code{white-space:nowrap}
 </style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
 </head>
 <body>
 <div class="wrap">
 <a class="back" href="../index.html">&larr; 返回首页</a>
 <div class="meta"><span class="tag">vLLM 源码</span>2026-09-09 发布</div>
 <h1>vLLM-Ascend 源码解读</h1>
+
+<div style="background:#eef4ff;border:1px solid #d6e4ff;border-radius:8px;padding:14px 18px;margin-bottom:24px;font-size:14px">
+<strong>配套源码文档站：</strong>本文的完整配套导航已上线 —— <a href="../code-docs/index.html" style="color:#3b82f6;font-weight:600">vLLM Ascend 架构总览（源码导航）</a>，包含架构总览、各模块详解、全量源码查看器与性能故事，建议对照阅读。
+</div>
 
 <p><a href="https://github.com/vllm-project/vllm-ascend" target="_blank" rel="nofollow">vLLM-Ascend</a> 是 vLLM 社区官方维护的昇腾 NPU 硬件插件，遵循 <a href="https://github.com/vllm-project/vllm/issues/11162" target="_blank" rel="nofollow">RFC: Hardware pluggable</a> 的硬件可插拔设计，让 Transformer、MoE、Embedding、多模态等主流模型无需修改即可运行在昇腾 NPU 上。本文基于 <code>v0.23.0</code> 源码梳理其整体架构与核心模块。</p>
 
@@ -112,7 +118,7 @@ td code{white-space:nowrap}
 <li>第二步：读 <code>worker/model_runner_v1.py</code>，串起一次完整推理的生命周期；</li>
 <li>第三步：挑 <code>ops/triton/docs/rms_norm.md</code> + 对应 kernel 精读，掌握 Triton on Ascend 的写法；</li>
 <li>第四步：按兴趣深入 <code>fused_moe + eplb</code>（MoE 部署）或 <code>spec_decode</code>（投机解码）；</li>
-<li>第五步：对照 <code>docs/source/</code> 官方文档与 <code>benchmarks/</code> 跑通端到端压测。</li>
+<li>第五步：对照 <a href="../code-docs/index.html" style="color:#3b82f6">源码导航文档站</a>逐模块阅读（每个 .py 都有对应解读页），并用 <a href="../code-docs/src-viewer.html" style="color:#3b82f6">源码查看器</a>直接浏览代码。</li>
 </ul>
 
 <div class="note">阅读提示：v2 执行路径（worker/v2）是未来的主力方向，新特性优先落在 v2；排查线上问题时 v1/v2 的行为差异值得留意。</div>
@@ -120,6 +126,6 @@ td code{white-space:nowrap}
 <p style="margin-top:32px;font-size:13px;color:#999">源码版本：vllm-ascend v0.23.0（main 分支） · 仅供学习交流</p>
 </div>
 <script defer src="../qrcode.min.js"></script>
-<script defer src="../share.js"></script>
+<script defer src="../share.js?v=2"></script>
 </body>
 </html>
