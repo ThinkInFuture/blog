@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qwen3.5-0.8B 推理蒸馏实战 - 华杉的技术博客</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:800px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.5px}
+h2{font-size:19px;font-weight:700;margin:36px 0 12px;padding-top:20px;border-top:1px solid #eee}
+h3{font-size:16px;font-weight:600;margin:20px 0 8px}
+p{font-size:15px;color:#444;margin-bottom:12px}
+ul{margin:0 0 12px 22px}
+li{font-size:14px;color:#444;margin-bottom:6px}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+.note{background:#eef4ff;border-left:3px solid #3b82f6;padding:14px 18px;font-size:14px;color:#444;margin:16px 0;border-radius:0 6px 6px 0}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+th,td{border:1px solid #eee;padding:8px 12px;text-align:left}
+th{background:#f9f9f9;font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.hl-row{background:#f0f9ff}
+.big{display:flex;gap:16px;margin:20px 0;flex-wrap:wrap}
+.stat{flex:1;min-width:180px;background:#f7f8fa;border-radius:10px;padding:18px 20px;text-align:center}
+.stat .v{font-size:26px;font-weight:700;color:#3b82f6}
+.stat .l{font-size:12px;color:#888;margin-top:4px}
+footer-note{display:block;margin-top:32px;font-size:13px;color:#999}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">自研模型</span>2026-09-11 发布</div>
+<h1>Qwen3.5-0.8B 推理蒸馏实战：把大模型的推理轨迹炼进小模型</h1>
+
+<p style="background:#f0f9ff;border:1px solid #d6e4ff;border-radius:8px;padding:12px 18px;font-size:14px"><strong>模型权重已发布：</strong><a href="https://modelscope.cn/models/conanfans/Qwen3.8-0.8B-Distill" target="_blank" rel="nofollow" style="color:#3b82f6;font-weight:600">conanfans/Qwen3.8-0.8B-Distill</a>（ModelScope · 约 1.4GB bf16）</p>
+
+<div class="note"><strong>一句话结论：</strong>0.8B 小模型也能吃到推理蒸馏红利。用 Qwen3.8-Max 生成 5 万条推理轨迹，对 Qwen3.5-0.8B 做全参 SFT，GSM8K 从 49.28% 提升到 56.56%（+7.28pp），MMLU 基本持平。</div>
+
+<div class="big">
+<div class="stat"><div class="v">+7.28pp</div><div class="l">GSM8K：49.28% → 56.56%</div></div>
+<div class="stat"><div class="v">+0.48pp</div><div class="l">MMLU：49.34% → 49.82%</div></div>
+<div class="stat"><div class="v">1.70%</div><div class="l">seq4096 截断率（原 2.83%）</div></div>
+</div>
+
+<h2>一、实验背景与目标</h2>
+<p>本模型是 <code>Qwen3.5-0.8B</code> 的推理蒸馏版本——将 <code>Qwen3.8-Max</code> 的推理能力全参数蒸馏至 <code>Qwen3.5-0.8B</code> 架构（该系列中最小尺寸的成员），基于 <code>qwen3.8-max-distillation-50k</code> 的 5 万条高质量推理轨迹数据进行 SFT，验证大模型推理蒸馏配方在更小参数量模型上的普适性与增益效果。</p>
+<p>具体设定：</p>
+<ul>
+<li>学生模型是 Qwen3.5-0.8B，门控 DeltaNet 混合架构，原生支持 262K 上下文；</li>
+<li>蒸馏数据取 train split 全量 44,796 条，构成约为 math 33%、code 28%、reasoning 24%、instruction 15%；</li>
+<li>其中 84% 的回答带有 <code>&lt;think&gt;</code> 推理段；</li>
+<li>训练方式是全参 SFT，不是 LoRA；</li>
+<li>评测用 EvalScope + vLLM，基线和蒸馏模型各跑 MMLU 和 GSM8K。</li>
+</ul>
+<p>实验目标并非刷单一榜单，而是验证一个判断：<strong>推理蒸馏的核心，是让模型学"推理过程"，而不是单纯背答案。</strong></p>
+
+<h2>二、结果：提升了多少</h2>
+<table>
+<tr><th>基准</th><th>基线 Qwen3.5-0.8B</th><th>蒸馏后 (seq4096)</th><th>提升</th></tr>
+<tr class="hl-row"><td>GSM8K（CoT, 4-shot, 1319 题）</td><td class="num">49.28%</td><td class="num">56.56%</td><td class="num">+7.28pp</td></tr>
+<tr><td>MMLU（CoT, 5-shot, 14042 题）</td><td class="num">49.34%</td><td class="num">49.82%</td><td class="num">+0.48pp</td></tr>
+<tr><td>MMLU macro</td><td class="num">50.70%</td><td class="num">50.93%</td><td class="num">+0.23pp</td></tr>
+</table>
+<p>MMLU 分域成绩（seq4096 版）：STEM 58.48%、社科 54.53%、其他 48.86%、人文 41.85%。</p>
+<p>横向参考，此前 2B 模型的蒸馏结果：</p>
+<table>
+<tr><th>任务</th><th>Qwen3.5-2B (基础)</th><th>Qwen3.8-2B</th><th>Δ</th></tr>
+<tr><td>MMLU (CoT, 57个科目)</td><td class="num">0.283</td><td class="num">0.548</td><td class="num">+0.265</td></tr>
+<tr><td>GSM8K_cot</td><td class="num">0.330</td><td class="num">0.640</td><td class="num">+0.310</td></tr>
+</table>
+<p>三个值得注意的点：</p>
+<ul>
+<li><strong>数学推理提升进一步扩大</strong>：截断率从 2.83% 降到 1.70% 后，长样本的"答案收尾"得到完整监督，让 GSM8K 在 seq3072 版（+6.22pp）基础上再涨 1.06pp；</li>
+<li><strong>MMLU 基本持平</strong>：MMLU 考知识广度，这份蒸馏数据里知识密集型内容占比不高，想拉 MMLU 需掺知识类语料；</li>
+<li><strong>0.8B 守住了绝大部分蒸馏增益</strong>：对比 2B 蒸馏版的 GSM8K 0.640，0.8B 在容量缩水 60% 的前提下拿到 56.56%，非常接近 2B 版本。</li>
+</ul>
+
+<h2>三、训练与评测细节</h2>
+<h3>1. 数据</h3>
+<p>qwen3.8-max-distillation-50k 的 train split 全量 44,796 条，以数学、代码、推理为主。84% 的样本带 <code>&lt;think&gt;</code> 推理段——学生模型学的不只是最终答案，还有中间推理路径。</p>
+<h3>2. 训练配置</h3>
+<ul>
+<li>全参 SFT；精度：bf16 + bitsandbytes 8-bit AdamW；</li>
+<li>序列长度 4096，截断率约 1.70%；</li>
+<li>批量：per-device batch 1，梯度累积 32，有效 batch 32；</li>
+<li>学习率 1e-5，cosine 衰减，warmup 3%；2 epochs，耗时约 7.5 小时；</li>
+<li>框架：transformers Trainer + flash-linear-attention；loss 平稳收敛，grad_norm 稳定；</li>
+<li>硬件：消费级单卡，WSL2 + flash-linear-attention 快速内核。</li>
+</ul>
+<h3>3. 评测</h3>
+<ul>
+<li>EvalScope 1.11.1 + vLLM 0.29.0；标准对话协议（chat 模板 + few-shot CoT），temperature=0，全量测试集；</li>
+<li>MMLU 5-shot CoT 14,042 题；GSM8K 4-shot CoT 1,319 题；基线与蒸馏模型评测设置完全一致；</li>
+<li>模型卡中另提供 lm-eval 裸补全协议的对照结果，避免因评测方式不同导致误判。</li>
+</ul>
+
+<h2>四、相关技术点</h2>
+<h3>1. 推理轨迹蒸馏，而不是只蒸答案</h3>
+<p>用的不是传统 logits 蒸馏，而是大模型生成的完整推理轨迹做 SFT。学生模型在训练时看到的是"怎么一步步想出来"。直接结果：模型学会"按需调用"推理——简单题直答，复杂题分步推导，而不是无脑输出长思维链。</p>
+<h3>2. 全参 SFT 与 LoRA 的选择</h3>
+<p>0.8B 参数量不大，全参 SFT 够得着。推理轨迹蒸馏要改的是模型整体的推理风格，全参微调的上限更高。核心策略：bf16 训练、8-bit AdamW、梯度检查点、bs1 × 梯度累积 32、动态 padding。</p>
+<h3>3. 混合架构与快速内核</h3>
+<p>Qwen3.5-0.8B 是门控 DeltaNet 混合架构，部分转换层依赖 flash-linear-attention 的 triton 内核。训练日志里要关注内核加载情况——快速内核没生效，训练会明显变慢，不能只看 loss。</p>
+<h3>4. 序列长度与截断率的权衡</h3>
+<p>序列长度从 3072 扩展到 4096，截断率从 2.83% 降到 1.70%，这是本次实验最关键的改进。长样本的"答案收尾"包含关键结论推导，被截断学生模型就学不到完整推理链的收尾逻辑。seq4096 带来 GSM8K 额外 +1.06pp。</p>
+<h3>5. 评测并发控制</h3>
+<p>EvalScope 1.x 移除了 <code>--parallel</code>，改用 <code>--eval-batch-size 32</code>，吞吐从 1.4 it/s 提升到 6.6 it/s。这类细节不影响模型效果，但影响迭代效率。</p>
+
+<h2>五、生成质量观察</h2>
+<p>temperature=0 抽了三道题（seq4096 版）：</p>
+<ul>
+<li>口算：17×23=391，直接回答；</li>
+<li>应用题：60km / 45min 求时速，分步推导正确；</li>
+<li>常识题：火星，带一句成因。</li>
+</ul>
+<p>行为分化明显：简单题直答，复杂题分步推理。对 0.8B 这个体量来说，这种克制比单纯涨点更有价值。抽查三题依旧全对。</p>
+
+<h2>六、可复现要点</h2>
+<ul>
+<li>torch 2.6.0+cu124 · transformers 5.9.0 · flash-linear-attention 0.5.2 · triton 3.2.0 · bitsandbytes 0.49.2 · vLLM 0.29.0 · EvalScope 1.11.1</li>
+</ul>
+<p>核心公式：<strong>bf16 + 8bit 优化器 + 梯度检查点 + bs1 × 梯度累积 + 序列长度优先</strong>。模型权重约 1.4GB（bf16），消费级单卡约 7.5 小时即可完成训练。推荐采用 seq4096 版本为最终模型。</p>
+<div class="note"><strong>限制说明：</strong>训练数据为英文，多语言能力未在本实验范围内；seq 4096 下约 1.70% 的超长样本依然存在截断；本次微调仅使用文本路径，未涉及多模态能力。</div>
+
+<h2>七、模型权重与获取</h2>
+<ul>
+<li><strong>模型权重下载</strong>：<a href="https://modelscope.cn/models/conanfans/Qwen3.8-0.8B-Distill" target="_blank" rel="nofollow" style="color:#3b82f6">conanfans/Qwen3.8-0.8B-Distill</a>（ModelScope，约 1.4GB bf16）</li>
+<li><strong>基础模型</strong>：<a href="https://modelscope.cn/models/Qwen/Qwen3.5-0.8B" target="_blank" rel="nofollow" style="color:#3b82f6">Qwen/Qwen3.5-0.8B</a>（ModelScope）</li>
+<li><strong>训练数据集</strong>：<a href="https://modelscope.cn/datasets/r0b0tlab/qwen3.8-max-distillation-50k" target="_blank" rel="nofollow" style="color:#3b82f6">r0b0tlab/qwen3.8-max-distillation-50k</a>（ModelScope Datasets）</li>
+</ul>
+
+<h2>八、结论</h2>
+<p>0.8B 小模型也能吃到推理蒸馏红利。推理蒸馏的关键不是让学生模型背答案，而是让它学推理过程：数据里 math / code / reasoning 占比高，数学推理就涨得最多；知识类内容少，MMLU 涨幅就有限。把序列长度拉到 4096、截断率压到 1.70%，让长样本的答案收尾被完整监督，能进一步放大数学推理上的提升。</p>
+<p>下一步拉高 MMLU 的方向：往蒸馏数据里掺知识密集型语料，而不是继续加推理轨迹。</p>
+
+<footernote>训练数据：r0b0tlab/qwen3.8-max-distillation-50k · 学生模型：Qwen3.5-0.8B（门控 DeltaNet 混合架构） · 评测：EvalScope 1.11.1 + vLLM 0.29.0 · 权重：ModelScope conanfans/Qwen3.8-0.8B-Distill</footernote>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
