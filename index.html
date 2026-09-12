@@ -109,16 +109,22 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-07</span></div>
-<div class="cc-title">PD分离组网介绍</div>
-<div class="cc-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</div>
-<a class="cc-link" href="学习html/PD分离组网介绍.html">阅读 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">自研模型</span><span class="cc-date">2026-09-11</span></div>
+<div class="cc-title">Qwen3.5-0.8B 推理蒸馏</div>
+<div class="cc-desc">Qwen3.8-Max 5万条推理轨迹全参 SFT 蒸馏：GSM8K 49.28%→56.56%（+7.28pp），MMLU 基本持平</div>
+<a class="cc-link" href="模型html/Qwen3.5-0.8B推理蒸馏.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-09-09</span></div>
 <div class="cc-title">vLLM-Ascend 源码解读</div>
 <div class="cc-desc">vLLM 昇腾插件的整体架构：平台注册、Worker、Triton 算子、量化与投机解码</div>
 <a class="cc-link" href="学习html/vLLM-Ascend 源码解读.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-07</span></div>
+<div class="cc-title">PD分离组网介绍</div>
+<div class="cc-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</div>
+<a class="cc-link" href="学习html/PD分离组网介绍.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-08-31</span></div>
@@ -132,12 +138,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">动态混合精度量化方案的设计思路与工程实践</div>
 <a class="cc-link" href="学习html/自研动态混合精度量化.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">模型架构</span><span class="cc-date">2026-08-28</span></div>
-<div class="cc-title">Qwen3.8 MTP · 完整架构解析</div>
-<div class="cc-desc">Qwen3.8 多Token预测（MTP）模块的完整架构与实现细节</div>
-<a class="cc-link" href="学习html/Qwen3.8 MTP · 完整架构解析.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
@@ -146,7 +146,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="metrics">
 <div class="metric"><div class="mv">22</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">实验专区</div></div>
-<div class="metric"><div class="mv dim">敬请期待</div><div class="ml">模型专区</div></div>
+<div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
 
 <div class="sec" id="learning">
@@ -216,19 +216,22 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="models">
 <div class="sec-head">
 <div class="sec-title">模型专区</div>
-<div class="sec-badge todo">待完善</div>
+<div class="sec-badge">1 个模型 · 持续训练中</div>
 </div>
 <div class="sec-desc">自己动手训练的模型，训练记录、评测结果与下载入口都将发布在这里</div>
-<div class="cols2">
+<ul class="list">
+<li class="li"><a href="模型html/Qwen3.5-0.8B推理蒸馏.html"><span class="li-date">2026-09-11</span><span class="li-main"><span class="li-title">Qwen3.5-0.8B 推理蒸馏<span class="li-tag">自研模型</span></span><span class="li-desc">Qwen3.8-Max 5万条推理轨迹全参 SFT 蒸馏：GSM8K 49.28%→56.56%（+7.28pp），MMLU 基本持平</span></span></a></li>
+</ul>
+<div class="cols2" style="margin-top:24px">
 <div class="pcard">
-<div class="pcard-tag"><span>训练记录</span><span class="todo-tag">待完善</span></div>
-<div class="pcard-title">自研模型（规划中）</div>
-<div class="pcard-text">记录自己训练模型的全过程：数据处理、训练配置、_loss 曲线与踩坑总结。</div>
+<div class="pcard-tag"><span>多语言增强版</span><span class="todo-tag">规划中</span></div>
+<div class="pcard-title">下一轮训练（规划中）</div>
+<div class="pcard-text">往蒸馏数据中掺入知识密集型语料，拉高 MMLU；同时扩展多语言能力，弥补当前训练数据全英文的限制。</div>
 </div>
 <div class="pcard">
-<div class="pcard-tag"><span>评测发布</span><span class="todo-tag">待完善</span></div>
-<div class="pcard-title">模型发布（规划中）</div>
-<div class="pcard-text">训练完成的模型将在此发布：评测基准、性能指标与使用方式。</div>
+<div class="pcard-tag"><span>模型下载</span><span class="todo-tag" style="background:#d1fae5;color:#065f46">已发布</span></div>
+<div class="pcard-title">Qwen3.8-0.8B-Distill</div>
+<div class="pcard-text">seq4096 最终版权重已发布至 ModelScope（约 1.4GB bf16），含基础模型与训练数据集链接。<a href="https://modelscope.cn/models/conanfans/Qwen3.8-0.8B-Distill" target="_blank" rel="nofollow" style="color:#3b82f6">前往下载 &rarr;</a></div>
 </div>
 </div>
 </div>
