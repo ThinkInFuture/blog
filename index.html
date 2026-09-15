@@ -109,6 +109,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">模型演进</span><span class="cc-date">2026-09-15</span></div>
+<div class="cc-title">如何用 RSI 做模型自我演进</div>
+<div class="cc-desc">递归自我改进的工程化落地：自训练闭环、三层奖励、五层验证与阶段 A–F 路线</div>
+<a class="cc-link" href="学习html/如何用RSI做模型自我演进.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">自研模型</span><span class="cc-date">2026-09-11</span></div>
 <div class="cc-title">把大模型的推理轨迹炼进小模型：Qwen3.5-0.8B 推理蒸馏</div>
 <div class="cc-desc">Qwen3.8-Max 5万条推理轨迹全参 SFT 蒸馏：GSM8K 49.28%→56.56%（+7.28pp），MMLU 基本持平</div>
@@ -132,19 +138,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">从 logits 到采样概率的完整链路，理解温度参数对生成多样性的影响</div>
 <a class="cc-link" href="学习html/AI 的概率魔法 - Logits · Softmax · Temperature.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">量化技术</span><span class="cc-date">2026-08-29</span></div>
-<div class="cc-title">自研动态混合精度量化</div>
-<div class="cc-desc">动态混合精度量化方案的设计思路与工程实践</div>
-<a class="cc-link" href="学习html/自研动态混合精度量化.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">22</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">23</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
@@ -152,11 +152,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">22 篇 · 6 个专题</div>
+<div class="sec-badge">23 篇 · 7 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">22</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">23</span></button>
+<button class="chip" data-topic="evolve">模型演进<span class="count">1</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">4</span></button>
 <button class="chip" data-topic="vllm">vLLM 源码<span class="count">2</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
@@ -165,6 +166,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">5</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="evolve" data-ts="20260915"><a href="学习html/如何用RSI做模型自我演进.html"><span class="li-date">2026-09-15</span><span class="li-main"><span class="li-title">如何用 RSI 做模型自我演进<span class="li-tag">模型演进</span></span><span class="li-desc">递归自我改进的工程化落地：自训练闭环、三层奖励、五层验证与阶段 A–F 路线</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20260909"><a href="code-docs/index.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">vLLM-Ascend 源码导航<span class="li-tag">vLLM 源码</span></span><span class="li-desc">vLLM-Ascend 全量源码文档站：架构总览、模块详解与源码查看器</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20260909"><a href="学习html/vLLM-Ascend 源码解读.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">vLLM-Ascend 源码解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">昇腾插件整体架构：平台注册、Worker、Triton 算子、量化与投机解码</span></span></a></li>
 <li class="li" data-topic="accel" data-ts="20260907"><a href="学习html/PD分离组网介绍.html"><span class="li-date">2026-09-07</span><span class="li-main"><span class="li-title">PD分离组网介绍<span class="li-tag">推理加速</span></span><span class="li-desc">Prefill 与 Decode 分离部署的组网架构、通信链路与调度策略</span></span></a></li>
