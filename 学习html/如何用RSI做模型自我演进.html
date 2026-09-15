@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>如何用 RSI 做模型自我演进 - 华杉的技术博客</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:860px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.5px}
+h2{font-size:19px;font-weight:700;margin:36px 0 12px;padding-top:20px;border-top:1px solid #eee}
+h3{font-size:16px;font-weight:600;margin:20px 0 8px}
+p{font-size:15px;color:#444;margin-bottom:12px}
+ul{margin:0 0 12px 22px}
+li{font-size:14px;color:#444;margin-bottom:6px}
+strong{color:#111}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+.note{background:#eef4ff;border-left:3px solid #3b82f6;padding:14px 18px;font-size:14px;color:#444;margin:16px 0;border-radius:0 6px 6px 0}
+.warn{background:#fffbeb;border-left:3px solid #f59e0b;padding:14px 18px;font-size:14px;color:#78350f;margin:16px 0;border-radius:0 6px 6px 0}
+.mermaid-box{background:#fff;border:1px solid #eee;border-radius:12px;padding:56px 8px 20px;margin:18px 0;overflow-x:auto}
+.mermaid{display:inline-block;width:100%;text-align:center}
+.mermaid svg{overflow:visible !important;max-width:100%;height:auto}
+.mermaid svg text,.mermaid svg .nodeLabel,.mermaid svg .edgeLabel text,.mermaid svg .titleText{font-size:15px !important;font-weight:500}
+.mermaid svg .cluster-label foreignObject,.mermaid svg .cluster-label span,.mermaid svg .nodeLabel foreignObject{overflow:visible !important;white-space:nowrap}
+.figcap{text-align:center;font-size:13px;color:#999;margin-top:8px}
+.footnote{display:block;margin-top:32px;font-size:13px;color:#999}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">模型演进</span>2026-09-15 发布</div>
+<h1>如何用 RSI 做模型自我演进</h1>
+
+<p><strong>RSI（Recursive Self-Improvement，递归自我改进）</strong>指系统改进自身能力、并用改进后的自身去产出下一代改进的闭环。这个概念早在 I. J. Good 的"智能爆炸"设想和 Schmidhuber 的 Gödel machine 中就被提出：一个足够强的系统，如果能改造自己的核心，改进会复利式放大。大模型出现之前，这只停留在思想实验层面——因为"改进自身"既没有可执行的载体，也没有客观的验收标准。</p>
+<p>今天这两块拼图都凑齐了：<strong>可验证的任务域</strong>（代码可以跑单测、数学可以对答案）让"改进是否有效"可以被机器判定；<strong>强基座模型 + RL 后训练范式</strong>（如 GRPO）让"自己生成训练信号"成为可执行的工程。本文以一套已跑通阶段 A 的 RSI 工程实践为骨架，讲清如何用 RSI 做模型自我演进：飞轮怎么转、奖励怎么设计、验证怎么兜底、验收怎么判定，以及离真正的"递归"还差哪几步。</p>
+
+<div class="warn"><strong>先统一口径：</strong>当前实现是<strong>自训练闭环</strong>（self-training loop）——同一代模型内自我产数据、自我优化。完整的 RSI 还要求跨代递归：下一代系统在上一代搭建的环境中训练，且改进本身可复利。两者不能混为一谈，对外表述请用"自训练闭环"。</div>
+
+<h2>一、总览飞轮：整个系统怎么转</h2>
+<p>整个系统是一个双层飞轮。<strong>内层</strong>是同一代内的自训练闭环：从种子任务和真实环境出发，模型自己生成任务、生成解题脚手架、生成解题轨迹，经过外部验证后聚合奖励，再用 GRPO 对任务生成、脚手架生成、轨迹生成三个模块做联合优化，然后评估、判断停止条件。<strong>外层</strong>是跨代递归：内层跑出的高价值数据与失败案例回流到任务池、轨迹库和验证器，环境自造与基础设施自优化产出的成果用于搭建下一代系统 S(t+1)，并验证"递归增益"是否成立——固定基准不衰减、单位算力增益不下降，递归才算成立；否则诊断修正后重新进入循环。</p>
+<p>按 RSI 的六条判据（自训练闭环、外部验证、改进改进器、递归增益、跨代继承、环境自造）对照，当前进度是：阶段 A（自训练闭环）已跑通，阶段 B（外部验证与数据回流）部分启用，阶段 C/D/E 尚未实现但架构已预留。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    A["种子任务 / 真实环境"] --> B["阶段A：任务自生成<br/>难度递进 · 能力缺口"]
+    B --> C["阶段A：脚手架自生成<br/>工具 · 分解 · 验证器草案"]
+    C --> D["阶段A：轨迹自生成<br/>采样 K 条解题轨迹"]
+    D --> E["阶段B：外部验证<br/>沙箱执行 · 单元测试<br/>变异杀灭 · 平凡解检测"]
+    E --> F["阶段A：奖励聚合<br/>validity × difficulty × novelty<br/>轨迹奖励 + 过程奖励"]
+    F --> G["阶段A：GRPO 三阶段联合优化<br/>taskgen → scaffoldgen → trajgen<br/>奖励回传"]
+    G --> H["阶段B：评估与监控<br/>Pass@K · Wilson CI<br/>奖励方差 · 奖励黑客检查"]
+    H --> I{"停止条件?<br/>当前：人工<br/>目标：系统自主"}
+    I -->|否| B
+    I -->|是| J["阶段B：高价值数据 / 失败案例回流<br/>任务池 · 轨迹库 · 验证器"]
+    J --> K["阶段C/D：环境自造 / 基础设施自优化<br/>Gym 环境 · 算子 · 调度 · 缓存"]
+    K --> L["阶段E：下一代系统 S(t+1)<br/>在 S(t) 搭建的环境中训练"]
+    L --> M{"递归增益?<br/>固定基准 Pass@1 不衰减<br/>单位算力增益不下降"}
+    M -->|是| A
+    M -->|否| N["诊断与修正<br/>奖励函数 · 课程 · 验证器"]
+    N --> A
+
+    classDef stageA fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef stageB fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef stageC fill:#fef3c7,stroke:#d97706,color:#92400e;
+    classDef stageE fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+
+    class B,C,D,F,G stageA;
+    class E,H,J stageB;
+    class K stageC;
+    class L,M,N stageE;
+</div><div class="figcap">图 1 · RSI 总览飞轮：内层自训练闭环 + 外层跨代递归</div></div>
+
+<h2>二、阶段 A：任务、脚手架、轨迹三阶段联合优化</h2>
+<p>自我演进的第一步，是让模型自己生产训练信号。阶段 A 把这件事拆成三个角色：<strong>TaskGen</strong> 生成任务（控制题型、难度、新颖性），<strong>ScaffoldGen</strong> 生成解题脚手架（指令、工具、任务分解、验证器草案），<strong>TrajGen</strong> 采样 K 条解题轨迹。三者共享同一个冻结基座（Qwen3.5-4B，bf16，LoRA r=32），但各自挂独立的 LoRA 适配器。</p>
+<p>三个角色不是并列关系，而是<strong>串行依赖</strong>：任务决定脚手架，脚手架决定轨迹。所以奖励也是串行回传的——轨迹奖励会经几何加权回传给上游的脚手架和任务阶段，让"出题人"也能从"答题人"的表现中学习。工程上三个阶段串行训练、独立 LoRA 用完即毁以防显存溢出，KL 系数显式配置（beta=0.04）防止跑偏，每阶段结束 <code>save_model</code> 落盘。</p>
+<p>这套设计的意义在于：<strong>数据不再是人喂的，而是模型自己长出来的</strong>。人工标注数据总有天花板，而自产数据的规模只受算力和验证器约束。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    subgraph Shared["共享基座 Qwen3.5-4B"]
+        base["冻结基座<br/>bf16 · LoRA r=32"]
+    end
+
+    subgraph T1["TaskGen"]
+        tg["任务生成<br/>prompt：题型 · 难度 · 新颖性"]
+        tgR["奖励<br/>validity × difficulty × novelty"]
+    end
+
+    subgraph T2["ScaffoldGen"]
+        sg["脚手架生成<br/>指令 · 工具 · 分解 · 验证器草案"]
+        sgR["奖励<br/>对齐 × 判分保真 × 抗作弊"]
+    end
+
+    subgraph T3["TrajGen"]
+        rg["轨迹生成<br/>采样 K 条解题轨迹"]
+        rgR["奖励<br/>正确性 + 过程 + 格式"]
+    end
+
+    base --> tg --> sg --> rg
+    tg --> tgR
+    sg --> sgR
+    rg --> rgR
+
+    tgR -.奖励回传.-> sg
+    sgR -.奖励回传.-> rg
+    rgR -.奖励回传.-> tg
+
+    classDef base fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+    classDef tg fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef sg fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef rg fill:#fef3c7,stroke:#d97706,color:#92400e;
+
+    class base base;
+    class tg,tgR tg;
+    class sg,sgR sg;
+    class rg,rgR rg;
+</div><div class="figcap">图 2 · 阶段 A 三阶段联合优化：共享基座、独立 LoRA、奖励串行回传</div></div>
+
+<h2>三、奖励设计：三层乘法结构，任一趋零即归零</h2>
+<p>自训练最大的风险是模型学会"作弊"——刷高奖励指标而不真正提升能力。奖励设计是整个系统的第一道防线。这套方案对三类生成物分别定义奖励，且结构上全部采用<strong>乘法</strong>而非加法：任务奖励 = validity × difficulty × novelty；脚手架奖励 = 对齐度 × 判分保真 × 抗作弊；轨迹奖励 = 正确性 + 过程 + 格式。乘法结构的好处是<strong>任一维度趋零，总奖励即归零</strong>——模型无法靠牺牲某一维度来刷高另一维度。</p>
+<p>几个值得展开的细节：</p>
+<ul>
+<li><strong>validity（有效性）</strong>是硬门：任务本身必须合法可解，才有部分分阶梯；</li>
+<li><strong>difficulty（难度）</strong>按 <code>exp(-|pass_rate - 0.2| / 0.2)</code> 计算——目标通过率压在 20% 附近，太简单的题没有训练价值，太难的全错也没有梯度信号；</li>
+<li><strong>novelty（新颖性）</strong>用嵌入余弦距离度量，并对"方差趋零"（任务池同质化）的场景自动上调权重，防止模型反复生成同一类任务；</li>
+<li><strong>过程奖励</strong>不用结果倒推，而是用前缀蒙特卡洛（prefix Monte Carlo）价值估计，对推理的中间步骤给分——这直接影响模型能不能学会"一步步想"。</li>
+</ul>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    R["最终奖励"] --> T["任务奖励<br/>validity × difficulty × novelty"]
+    R --> S["脚手架奖励<br/>对齐 × 判分保真 × 抗作弊"]
+    R --> G["轨迹奖励<br/>正确性 + 过程 + 格式"]
+
+    T --> T1["validity<br/>硬门 + 部分分阶梯"]
+    T --> T2["difficulty<br/>exp(-|pass_rate - 0.2| / 0.2)"]
+    T --> T3["novelty<br/>嵌入余弦距离<br/>方差趋零时上调权重"]
+
+    S --> S1["对齐度<br/>任务指令一致性"]
+    S --> S2["判分保真<br/>参考解过 draft + 变异被杀"]
+    S --> S3["抗作弊<br/>防泄露 / 防放水"]
+
+    G --> G1["正确性<br/>沙箱单测通过率"]
+    G --> G2["过程<br/>prefix Monte Carlo 价值"]
+    G --> G3["格式<br/>签名 / 结构 / 长度"]
+
+    classDef root fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+    classDef layer fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef leaf fill:#f1f5f9,stroke:#94a3b8,color:#334155;
+
+    class R root;
+    class T,S,G layer;
+    class T1,T2,T3,S1,S2,S3,G1,G2,G3 leaf;
+</div><div class="figcap">图 3 · 三层奖励结构：乘法组合、过程奖励用前缀蒙特卡洛估计</div></div>
+
+<h2>四、外部验证：自我演进必须踩得住的五道关卡</h2>
+<p>纯靠模型自评的奖励迟早被"黑客"。模型既是运动员又是裁判时，唯一能信任的是<strong>模型之外的物理事实</strong>：代码在沙箱里真的跑通了、单元测试真的通过了、错误解真的被测试判死了。这也是 RSI 六判据里"外部验证"被列为强判据的原因。</p>
+<p>验证层设计成五道串联的关卡：<strong>① 规则校验</strong>（格式、类型、边界）→ <strong>② 沙箱执行</strong>（子进程、超时、隔离）→ <strong>③ 单元测试</strong>（参考解 + 测试用例）→ <strong>④ 变异杀灭</strong>（对参考解做变异，错误解必须被判死，防止"弱测试"放水）→ <strong>⑤ 奖励黑客门禁</strong>（对比代理指标与真实任务表现）。任何一关拒绝，样本进入 <code>reject_reason</code> 统计——这个归因非常关键：首轮分布 <code>weak_tests=6</code>、<code>reference_tests=5</code>，用来说明被拒样本到底是"出题质量问题"还是"验证器过严"，两者的修法完全不同。</p>
+<p>所有验证结果落盘 <code>metrics.jsonl</code>，支持离线重算——验收时不需要重跑训练，只看日志就能复核。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    V1["① 规则校验<br/>格式 · 类型 · 边界"] --> V2["② 沙箱执行<br/>子进程 · 超时 · 隔离"]
+    V2 --> V3["③ 单元测试<br/>参考解 + 测试用例"]
+    V3 --> V4["④ 变异杀灭<br/>错误解必须被判死"]
+    V4 --> V5["⑤ 奖励黑客门禁<br/>代理指标 vs 真实任务"]
+
+    V1 -.拒绝.-> X["reject_reason 统计"]
+    V2 -.拒绝.-> X
+    V3 -.拒绝.-> X
+    V4 -.拒绝.-> X
+    V5 -.拒绝.-> X
+
+    X --> M["metrics.jsonl<br/>可离线重算"]
+
+    classDef v fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef rej fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    classDef m fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+
+    class V1,V2,V3,V4,V5 v;
+    class X rej;
+    class M m;
+</div><div class="figcap">图 4 · 外部验证层级：五道关卡，拒绝样本统一归因</div></div>
+
+<h2>五、评估与回流：隔离保护 + 双侧过滤</h2>
+<p>"自己出题自己考"最大的陷阱是<strong>评测污染</strong>：训练任务混进了评测题，分数涨了但能力没涨。这套方案用 <code>in_benchmark</code> 标记把固定 Benchmark（50 题）从训练池中硬隔离——每轮启动跑 <code>assert_isolation()</code> 硬断言，评测任务只要缺标记就拒绝开训。</p>
+<p>评测本身也讲究统计纪律：固定 50 题、k=8 采样、temperature=0.2、种子冻结，产出带 <strong>Wilson 95% 置信区间</strong>的 Pass@1 / Pass@4——点估计会骗人，区间不会。</p>
+<p>训练池里的样本做<strong>双侧过滤</strong>：高价值样本回流轨迹库，失败案例回流失败案例库（失败案例往往比成功更有训练价值），回流前再过一次 <code>in_benchmark</code> 检查做隔离保护。任务池与轨迹库因此可以随训练轮次自增，这是"数据自产"闭环的最后一环。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    TR["训练轮次 rollout"] --> BQ{"任务是否<br/>in_benchmark?"}
+    BQ -->|是| SKIP["rollouter 跳过<br/>bench_reserved 计数"]
+    BQ -->|否| TRAIN["进入训练池"]
+
+    TRAIN --> EVAL["固定 Benchmark 50 题<br/>k=8 · t=0.2 · 种子冻结"]
+    EVAL --> CI["Wilson 95% CI<br/>Pass@1 / Pass@4"]
+
+    TRAIN --> RF{"高价值<br/>或失败案例?"}
+    RF -->|高价值| RF1["refluxer 回流<br/>轨迹库"]
+    RF -->|失败| RF2["refluxer 回流<br/>失败案例库"]
+    RF1 --> BQ2{"in_benchmark?"}
+    RF2 --> BQ2
+    BQ2 -->|是| SKIP2["跳过回流<br/>隔离保护"]
+    BQ2 -->|否| POOL["任务池 / 轨迹库自增"]
+
+    POOL --> NEXT["下一轮"]
+    CI --> NEXT
+
+    classDef train fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef skip fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    classDef eval fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef pool fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+
+    class TR,TRAIN train;
+    class SKIP,SKIP2,BQ,BQ2,RF rej;
+    class EVAL,CI eval;
+    class POOL,RF1,RF2,NEXT pool;
+</div><div class="figcap">图 5 · 评估与回流闭环：Benchmark 隔离 + Wilson 置信区间 + 双侧过滤</div></div>
+
+<h2>六、工程落地：三方分工与当前优先级</h2>
+<p>RSI 是一个长周期系统工程，单人全链路既容易盲区也容易失速。这套实践把角色拆成三方：<strong>训练方</strong>负责工程实现、5–10 轮隔离长跑、指标落盘与 bug 修复；<strong>审阅方</strong>负责代码逐段审查（奖励核、MCTS、变异杀灭是重点）、按六判据收紧定义、识别泄露与估计偏差等陷阱；<strong>项目方</strong>负责设定 Code / Agent 双线目标、裁决优先级（边缘任务修复优先于新功能）、协调单卡与沙箱资源，并守住对外口径——"自训练闭环"不等于"RSI"。</p>
+<p>当前的最高优先级是一个具体 bug：<strong>边缘任务比例为 0</strong>——自产任务全部落在模型舒适区，难度反馈失效，训练失去梯度信号。处理顺序：训练方先跑隔离长跑冻结 baseline，审阅方核对 <code>estimator</code> 契约与隔离断言，项目方裁决 Code / Agent 双线的启动顺序。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart TB
+    subgraph Trainer["训练方"]
+        T1["工程实现<br/>任务生成 · 验证器 · GRPO · 回流"]
+        T2["长跑执行<br/>5–10 轮隔离版"]
+        T3["指标落盘<br/>metrics.jsonl · adapter"]
+        T4["bug 修复<br/>按审阅意见处置"]
+    end
+
+    subgraph Reviewer["审阅方"]
+        R1["代码逐段审查<br/>奖励核 · MCTS · 变异杀灭"]
+        R2["定义收紧<br/>六判据对照"]
+        R3["陷阱识别<br/>泄露 · 估计偏差 · 静默异常"]
+        R4["验收判定<br/>Pass@1 曲线 · 置信区间"]
+    end
+
+    subgraph Owner["项目方"]
+        O1["目标设定<br/>Code / Agent 双线"]
+        O2["优先级裁决<br/>边缘任务 > 新功能"]
+        O3["资源协调<br/>单卡 / 沙箱 / 长跑窗口"]
+        O4["对外口径<br/>自训练闭环 ≠ RSI"]
+    end
+
+    Trainer -->|提交进展报告| Reviewer
+    Reviewer -->|审查意见 + 修复清单| Trainer
+    Owner -->|阶段目标 + 验收标准| Trainer
+    Reviewer -->|验收结论| Owner
+    Trainer -->|指标 + 曲线| Owner
+
+    classDef trainer fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef reviewer fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef owner fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+
+    class T1,T2,T3,T4 trainer;
+    class R1,R2,R3,R4 reviewer;
+    class O1,O2,O3,O4 owner;
+</div><div class="figcap">图 6 · 分工与职责：训练方、审阅方、项目方三方协同</div></div>
+
+<h2>七、路线图：从自训练闭环到跨代递归</h2>
+<p>按六判据把 RSI 的完整路径切成 A–F 六个阶段：<strong>A</strong> 单域三阶段联合优化（已跑通，对应判据 1/2/4 的部分）；<strong>B</strong> 数据自产 + 五层验证（部分启用，判据 4 强化）；<strong>C</strong> 环境自造（判据 1、6——模型自己给自己造 Gym 环境）；<strong>D</strong> 基础设施自优化（判据 1——"改进改进器"，优化算子、调度、缓存这些用于训练的基础设施本身）；<strong>E</strong> 跨代递归（判据 5——下一代在上一代搭建的环境中训练）；<strong>F</strong> 规模化到 7B–32B（判据 3——递归增益的最终验证）。</p>
+<p>每个阶段都有明确的验收锚点，不允许"感觉变强了"这种模糊表述——这也是把 RSI 从叙事变成工程的关键。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    A["阶段A<br/>单域三阶段联合优化<br/>✅ 已跑通"] --> B["阶段B<br/>数据自产五层验证<br/>🔄 部分启用"]
+    B --> C["阶段C<br/>环境自造<br/>⬜ 未实现"]
+    C --> D["阶段D<br/>基础设施自优化<br/>⬜ 未实现"]
+    D --> E["阶段E<br/>跨代递归<br/>⬜ 未实现"]
+    E --> F["阶段F<br/>规模化 7B–32B<br/>⬜ 未实测"]
+
+    A -.判据1、2、4 部分.-> A1["自训练闭环"]
+    B -.判据4 强.-> B1["外部验证"]
+    C -.判据1、6.-> C1["环境自造"]
+    D -.判据1.-> D1["改进改进器"]
+    E -.判据5.-> E1["跨代继承"]
+    F -.判据3.-> F1["递归增益"]
+
+    classDef done fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef doing fill:#fef3c7,stroke:#d97706,color:#92400e;
+    classDef todo fill:#f1f5f9,stroke:#94a3b8,color:#475569;
+    classDef tag fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+
+    class A done;
+    class B doing;
+    class C,D,E,F todo;
+    class A1,B1,C1,D1,E1,F1 tag;
+</div><div class="figcap">图 7 · 阶段 A–F 路线图：六判据逐级验收</div></div>
+
+<h2>八、长跑验收：四项硬指标同时达标才过关</h2>
+<p>阶段 A 是否"靠谱跑通"，由隔离版长跑（5–10 轮）的四项硬指标判定：<strong>边缘任务 ≥ 15%</strong>（自产任务要有足够的难度分布）、<strong>有效任务 ≥ 40%</strong>（验证通过率不能塌）、<strong>Pass@1 提升 ≥ 5 点</strong>（带 Wilson CI，不是点估计）、<strong>奖励方差有信号且无长度爆炸</strong>（奖励要有区分度，同时模型不能靠把回答写长来骗奖励）。任何一项不达标，按对应分支诊断修复后重新长跑——难度反馈失效查 pass_rate 估计与指令消费，有效任务不足按 <code>reject_reason</code> 归因，分数涨了先查奖励黑客与过拟合，奖励无信号调 KL / 课程 / 难度分布。</p>
+<p>这套验收流程的本质是把"模型是否真的在自我演进"变成一个可证伪的工程判定，而不是玄学。</p>
+
+<div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    S1["冻结 v3 两轮结果<br/>作为 baseline"] --> S2["全修复代码启动<br/>隔离版长跑"]
+    S2 --> S3["每轮：rollout → 验证 → GRPO → 回流"]
+    S3 --> S4["固定 Benchmark 50 题<br/>k=8 · t=0.2 · 种子冻结"]
+    S4 --> S5["产出带 Wilson 95% CI 的<br/>Pass@1 跨轮曲线"]
+    S5 --> C1{"边缘任务 ≥ 15%?"}
+    C1 -->|否| FIX1["诊断难度反馈<br/>pass_rate 估计 / 指令消费"]
+    C1 -->|是| C2{"有效任务 ≥ 40%?"}
+    C2 -->|否| FIX2["按 reject_reason 归因<br/>出题质量 vs 验证器"]
+    C2 -->|是| C3{"Pass@1 提升 ≥ 5 点?"}
+    C3 -->|否| FIX3["查奖励黑客<br/>查过拟合训练分布"]
+    C3 -->|是| C4{"奖励方差有信号<br/>无长度爆炸?"}
+    C4 -->|否| FIX4["调 KL / 课程 / 任务难度"]
+    C4 -->|是| PASS["阶段 A 靠谱跑通<br/>进入阶段 B"]
+    FIX1 --> S2
+    FIX2 --> S2
+    FIX3 --> S2
+    FIX4 --> S2
+
+    classDef step fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef cond fill:#fef3c7,stroke:#d97706,color:#92400e;
+    classDef fix fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    classDef pass fill:#d1fae5,stroke:#059669,color:#065f46;
+
+    class S1,S2,S3,S4,S5 step;
+    class C1,C2,C3,C4 cond;
+    class FIX1,FIX2,FIX3,FIX4 fix;
+    class PASS pass;
+</div><div class="figcap">图 8 · 隔离版长跑验收流程：四项硬指标判定</div></div>
+
+<h2>结语：边界与下一步</h2>
+<p>这套实践的诚实之处在于它清楚自己的边界：<strong>自训练闭环不等于 RSI</strong>。真正困难的部分——环境自造（阶段 C）、改进改进器（阶段 D）、跨代递归与递归增益验证（阶段 E/F）——还没有实现，但架构已经为它们预留了位置：任务池、轨迹库、验证器库、环境接口，这些回流资产就是未来跨代训练的种子。</p>
+<p>同样值得警惕的是自训练的固有风险：<strong>奖励黑客</strong>（代理指标与真实能力脱钩）、<strong>模型坍塌</strong>（自产数据同质化导致分布收缩——novelty 权重的自适应上调正是针对它）、<strong>评测污染</strong>（隔离断言是对它的制度化防御）。RSI 能走多远，取决于验证体系的诚信度能维持多高。</p>
+<p>下一步：修复边缘任务比例归零的问题，跑通隔离版长跑拿到第一条带置信区间的 Pass@1 曲线，然后进入阶段 B 的数据自产全量验证。</p>
+
+<footernote>关键词：RSI · 递归自我改进 · GRPO · 自训练闭环 · 奖励黑客 · 变异杀灭 · Wilson CI · 六判据 · 阶段 A–F</footernote>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: {
+        'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif',
+        'fontSize': '15px',
+        'nodePadding': '12px',
+        'background': '#ffffff',
+        'primaryColor': '#f1f5f9',
+        'primaryTextColor': '#1a202c',
+        'primaryBorderColor': '#cbd5e1',
+        'lineColor': '#94a3b8',
+        'secondaryColor': '#eef2f7',
+        'tertiaryColor': '#f8fafc',
+        'clusterBkg': '#ffffff',
+        'clusterBorder': '#d1d5db'
+    },
+    flowchart: {
+        useMaxWidth: true,
+        htmlLabels: true,
+        curve: 'basis',
+        nodeSpacing: 40,
+        rankSpacing: 55,
+        padding: 12
+    }
+});
+setTimeout(function(){
+    mermaid.run();
+    setTimeout(function(){
+        document.querySelectorAll('svg .cluster-label').forEach(function(l){
+            var t = l.getAttribute('transform');
+            if(!t) return;
+            var m = t.match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/);
+            if(m){ l.setAttribute('transform', 'translate(' + m[1] + ',' + (parseFloat(m[2]) - 24) + ')'); }
+        });
+    }, 200);
+}, 200);
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
