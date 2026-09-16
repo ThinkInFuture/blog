@@ -1,0 +1,867 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSI 的五个关键点：从核心逻辑到防退化</title>
+<style>
+  :root {
+    --bg: #f7f9fc;
+    --panel: #ffffff;
+    --border: #e2e8f0;
+    --text: #1a202c;
+    --muted: #64748b;
+    --accent: #2563eb;
+    --accent-soft: #dbeafe;
+    --ok: #059669;
+    --ok-soft: #d1fae5;
+    --warn: #d97706;
+    --warn-soft: #fef3c7;
+    --bad: #dc2626;
+    --bad-soft: #fee2e2;
+    --purple: #7c3aed;
+    --purple-soft: #ede9fe;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.85;
+    font-size: 16px;
+  }
+  .wrap {
+    max-width: 780px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+  header {
+    margin-bottom: 40px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid var(--border);
+  }
+  h1 {
+    font-size: 28px;
+    font-weight: 700;
+    margin: 0 0 10px;
+    line-height: 1.4;
+    letter-spacing: -0.01em;
+  }
+  .sub {
+    color: var(--muted);
+    font-size: 15px;
+  }
+  .meta {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  h2 {
+    font-size: 21px;
+    font-weight: 700;
+    margin: 48px 0 16px;
+    padding-left: 14px;
+    border-left: 4px solid var(--accent);
+    line-height: 1.5;
+    scroll-margin-top: 24px;
+  }
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: var(--text);
+  }
+  h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 20px 0 8px;
+    color: var(--muted);
+  }
+  p {
+    margin: 0 0 14px;
+  }
+  ul, ol {
+    margin: 0 0 16px;
+    padding-left: 22px;
+  }
+  li {
+    margin-bottom: 6px;
+  }
+  strong {
+    font-weight: 600;
+    color: var(--text);
+  }
+  code {
+    background: #eef2f7;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 14px;
+    font-family: "SF Mono", Monaco, Menlo, monospace;
+    color: var(--accent);
+  }
+  .callout {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin: 20px 0;
+    font-size: 15px;
+    color: #334155;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .callout.accent { border-left: 4px solid var(--accent); background: var(--accent-soft); }
+  .callout.ok { border-left: 4px solid var(--ok); background: var(--ok-soft); }
+  .callout.warn { border-left: 4px solid var(--warn); background: var(--warn-soft); }
+  .callout.bad { border-left: 4px solid var(--bad); background: var(--bad-soft); }
+  .callout.purple { border-left: 4px solid var(--purple); background: var(--purple-soft); }
+  .callout b { font-weight: 700; }
+  .lead {
+    font-size: 17px;
+    color: #334155;
+    line-height: 1.9;
+    margin-bottom: 28px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+    margin: 18px 0;
+    background: var(--panel);
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid var(--border);
+  }
+  th, td {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 13px;
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    background: #f1f5f9;
+    font-weight: 600;
+    color: var(--text);
+    font-size: 13px;
+  }
+  td { color: #334155; }
+  tr:last-child td { border-bottom: none; }
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 600;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .tag-p0 { background: #fee2e2; color: #991b1b; }
+  .tag-p1 { background: #fef3c7; color: #92400e; }
+  .tag-p2 { background: #dbeafe; color: #1e40af; }
+  .tag-ok { background: #d1fae5; color: #065f46; }
+  .tag-no { background: #f1f5f9; color: #475569; }
+  .formula {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 18px 0;
+    text-align: center;
+    font-size: 15px;
+    font-family: "SF Mono", Monaco, Menlo, monospace;
+    color: #334155;
+  }
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 44px 0;
+    border: none;
+  }
+  .toc {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 22px;
+    margin-bottom: 36px;
+  }
+  .toc-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 10px;
+  }
+  .toc ol {
+    margin: 0;
+    padding-left: 20px;
+    font-size: 14px;
+  }
+  .toc a {
+    color: var(--accent);
+    text-decoration: none;
+  }
+  .toc a:hover { text-decoration: underline; }
+  footer {
+    margin-top: 64px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+  @media (max-width: 640px) {
+    body { font-size: 15px; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 18px; }
+    .wrap { padding: 32px 16px 64px; }
+    table { font-size: 13px; }
+    th, td { padding: 8px 10px; }
+  }
+.back{display:inline-block;font-size:13px;color:#94a3b8;text-decoration:none;margin-bottom:18px}
+.back:hover{color:var(--accent)}
+.mermaid-box{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:52px 10px 18px;margin:26px 0;overflow-x:auto}
+.mermaid{display:inline-block;width:100%;text-align:center}
+.mermaid svg{overflow:visible !important;max-width:100%;height:auto}
+.mermaid svg text,.mermaid svg .nodeLabel,.mermaid svg .edgeLabel text{font-size:15px !important;font-weight:500}
+.mermaid svg .cluster-label foreignObject,.mermaid svg .cluster-label span,.mermaid svg .nodeLabel foreignObject{overflow:visible !important;white-space:nowrap}
+.figcap{text-align:center;font-size:13px;color:var(--muted);margin-top:12px}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="../index.html">&larr; 返回首页</a>
+
+  <header>
+    <h1>RSI 的五个关键点：从核心逻辑到防退化</h1>
+    <div class="sub">递归自我改进能 work 的条件、机制与边界</div>
+    <div class="meta"><span style="color:var(--accent);font-weight:600">模型演进</span> &middot; 2026-09-16 发布</div>
+  </header>
+
+  <div class="toc">
+    <div class="toc-title">目录</div>
+    <ol>
+      <li><a href="#s1">核心逻辑：把改进回路本身变成可优化对象</a></li>
+      <li><a href="#s2">为什么能 work：主动生成 + 外部验证</a></li>
+      <li><a href="#s3">弱点是怎么被发现的：不是自省，是统计</a></li>
+      <li><a href="#s4">关键环节：三个 P0，决定飞轮是否空转</a></li>
+      <li><a href="#s5">防退化：别按了葫芦起了瓢</a></li>
+    </ol>
+  </div>
+
+  <p class="lead">
+    递归自我改进（Recursive Self-Improvement, RSI）不是一个新名词，但近两年它在工程上第一次变得可操作。原因不是模型突然变聪明了，而是外部验证信号变得便宜了——沙箱、单元测试、形式化证明、可执行环境，这些让"模型自产内容"第一次有了客观的对错锚点。
+  </p>
+  <p class="lead">
+    这篇文章不讨论哲学，只讨论工程：RSI 的核心逻辑是什么、为什么能 work、弱点从哪里来、哪些环节决定成败、以及最容易被忽视的一件事——怎么防止提升一个能力的同时废掉另一个。
+  </p>
+
+  <hr class="divider">
+
+  <!-- 第一部分 -->
+  <h2 id="s1">一、核心逻辑：把改进回路本身变成可优化对象</h2>
+
+  <p>
+    普通自训练是这样运转的：模型产出数据，人设计奖励函数和训练流程，然后用这些数据更新模型权重。整个循环里，模型只被改了一次——它的参数。奖励函数、验证器、课程设计、数据筛选规则，全是人写的，从头到尾没变。
+  </p>
+
+  <p>
+    RSI 的区别只有一句：<strong>让模型参与改进"改进器"本身</strong>。
+  </p>
+
+  <div class="callout accent">
+    <b>一句话定义：</b>RSI 不是"模型自己训练自己"，而是"系统把自我改进这件事本身，也变成可优化、可验证、可继承的对象"，使每一代不仅能力更强，改进自己的能力也更强，形成跨代复利。
+  </div>
+
+  <p>
+    用公式表达。设第 <code>t</code> 代系统为 <code>S_t</code>，改进算子为 <code>I_t</code>，环境为 <code>E_t</code>：
+  </p>
+
+  <div class="formula">
+    S<sub>t+1</sub> = I<sub>t</sub>(S<sub>t</sub>, E<sub>t</sub>)
+  </div>
+
+  <p>
+    RSI 的关键要求不是这个式子本身，而是下一代的改进能力必须强于上一代：
+  </p>
+
+  <div class="formula">
+    ImproveAbility(S<sub>t+1</sub>) &gt; ImproveAbility(S<sub>t</sub>)
+  </div>
+
+  <p>
+    也就是说，下一代不仅要更强，还要<strong>更会改进自己</strong>。这条要求把 RSI 和普通的强化学习自训练彻底分开。
+  </p>
+
+  <h3>和普通自训练的分水岭</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:30%">维度</th>
+        <th style="width:35%">普通自训练</th>
+        <th style="width:35%">RSI</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>改进对象</td>
+        <td>模型权重</td>
+        <td>权重 + 数据 + 验证器 + 环境 + 流程</td>
+      </tr>
+      <tr>
+        <td>改进器</td>
+        <td>人写，固定</td>
+        <td>系统参与改进</td>
+      </tr>
+      <tr>
+        <td>停止判断</td>
+        <td>人</td>
+        <td>系统自主</td>
+      </tr>
+      <tr>
+        <td>代际关系</td>
+        <td>同代多轮</td>
+        <td>跨代继承</td>
+      </tr>
+      <tr>
+        <td>增益形态</td>
+        <td>有界、收敛</td>
+        <td>开放、复利</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p>
+    固定题库上刷 RL、自我反思、自我纠错，都不是 RSI。它们属于有界自我精炼（bounded self-refinement），能力提升有上界，因为任务集就那么大。RSI 要求系统自己生成新任务、新环境、新验证器，能力提升没有预设上界——前提是外部验证器能持续提供可靠信号。
+  </p>
+
+  <div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    subgraph ST["普通自训练 · 有界精炼"]
+        direction LR
+        A1["模型"] -->|"产出数据"| B1["固定奖励函数<br/>人写 · 不变"]
+        B1 -->|"更新"| A1
+    end
+    subgraph RS["RSI · 递归自我改进"]
+        direction LR
+        A2["系统 S(t)<br/>自产数据 · 验证器 · 环境"] -->|"外部验证通过"| B2["更新权重<br/>+ 改进改进器"]
+        B2 --> A2
+        A2 ==>|"ImproveAbility 提升"| C2["S(t+1)<br/>跨代继承"]
+    end
+
+    classDef st fill:#f1f5f9,stroke:#94a3b8,color:#334155;
+    classDef rs fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    classDef next fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+    class ST st;
+    class A2,B2 rs;
+    class C2 next;
+</div><div class="figcap">图 1 · 普通自训练与 RSI 的结构对比：改进器是否进入循环</div></div>
+
+
+  <hr class="divider">
+
+  <!-- 第二部分 -->
+  <h2 id="s2">二、为什么能 work：主动生成 + 外部验证</h2>
+
+  <p>
+    "模型自己出题能提升自己"这件事，第一次听会觉得玄。模型怎么能靠自己变强？它在跟谁学？
+  </p>
+
+  <p>
+    答案是：它不是在跟一个更强的老师学，而是在<strong>主动探索自己的输出空间，并用外部验证器筛选出有效的路径</strong>。
+  </p>
+
+  <h3>1. 固定数据集是死的，能力缺口是活的</h3>
+
+  <p>
+    拿一个固定题库训练，模型刷完就没了。有些题它早就会了，再练是浪费时间；有些题它永远不会，练了也没有梯度。真正有效的学习信号，集中在"它几乎会、但还差一点"的题上。
+  </p>
+
+  <p>
+    模型自己出题，可以针对自己的当前状态动态生成任务。只要难度控制得当，就能把训练信号集中在<strong>能力边缘</strong>——成功率约 20% 的区域。这个区域梯度最大，学习效率最高。这本质上是一种主动学习：模型自己决定下一步学什么。
+  </p>
+
+  <h3>2. 外部验证器提供了客观锚点</h3>
+
+  <p>
+    这是整个机制能成立的前提。自己出题能 work，关键不在于"自己"，而在于"外部验证"。
+  </p>
+
+  <div class="callout bad">
+    <b>如果验证器是模型自己：</b>它会生成一堆自己会做的题，给自己打高分，能力没有实际提升，只是循环放大了自我确认。这是奖励黑客最经典的形态。
+  </div>
+
+  <p>
+    可靠的验证器必须是程序化的、外部的、可复现的：沙箱执行代码、运行单元测试、形式化证明、真实环境反馈。有了外部锚点，模型自产的任务才有"对错"可言。
+  </p>
+
+  <h3>3. 难度适配 + 新颖性控制 = 持续的信息增益</h3>
+
+  <p>
+    光出题不够，还要控制两件事，否则飞轮会空转：
+  </p>
+
+  <ul>
+    <li><strong>难度</strong>：太简单，组内奖励全 1，方差为零，梯度消失；太难，全 0，同样没有梯度。必须卡在能力边缘。</li>
+    <li><strong>新颖性</strong>：模型倾向于反复生成同一类题。用嵌入去重、余弦距离控制，防止模型刷分但不长本事。</li>
+  </ul>
+
+  <p>
+    这两条同时满足，自产数据才能持续提供<strong>新信息</strong>，而不是原地打转。
+  </p>
+
+  <h3>4. 本质是一个正反馈，但外部验证是刹车</h3>
+
+  <p>
+    模型变强 → 能出更难、更高质量的任务 → 训练信号更好 → 模型更强。这是一个正反馈。
+  </p>
+
+  <p>
+    但正反馈容易失控：模型可能学会刷分、走捷径、生成垃圾任务。外部验证器就是这个正反馈上的刹车。任何自产内容必须通过独立验证，否则不进训练。这防止了循环退化成自我欺骗。
+  </p>
+
+  <div class="callout ok">
+    <b>核心结论：</b>模型给自己出题能提升自己，不是因为"自己"有魔力，而是因为它能持续生成"卡在能力边缘、且有外部验证"的训练样本。RSI 能 work，是因为它把这个过程跨代继承，让每一代都在改进自己的改进方式。
+  </div>
+
+  <div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    M["模型变强"] --> T["自产任务<br/>卡在能力边缘 · 成功率约 20%<br/>新颖性受控"]
+    T --> V{"外部验证器<br/>沙箱 · 单测 · 变异杀灭"}
+    V -->|"通过：进训练池"| G["GRPO 更新"]
+    G --> M
+    V -->|"拒绝：不进训练"| X["reject_reason 归因"]
+    X -. "堵住自我确认循环" .-> M
+
+    classDef ok fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef bad fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    class M,T ok;
+    class X bad;
+</div><div class="figcap">图 2 · 正反馈飞轮与外部验证刹车</div></div>
+
+
+  <hr class="divider">
+
+  <!-- 第三部分 -->
+  <h2 id="s3">三、弱点是怎么被发现的：不是自省，是统计</h2>
+
+  <p>
+    一个常见的误解是：模型"知道自己哪里弱"，然后针对性地出题。这是错的。
+  </p>
+
+  <div class="callout warn">
+    <b>模型并不知道自己的弱点。</b>如果它知道，它直接改就行了，不需要绕一圈出题。所谓"针对弱点出题"，不是模型自己判断的，而是外部系统通过统计推断出弱点，再把方向喂给出题模型。
+  </div>
+
+  <h3>1. 弱点的暴露：三个外部信号</h3>
+
+  <p>
+    弱点不是模型自省出来的，是外部程序化统计出来的：
+  </p>
+
+  <ul>
+    <li><strong>采样统计</strong>：同一个任务类型，模型采样 K 条轨迹，通过率是多少。通过率低，就是弱点。这不是模型自己说的，是沙箱执行结果统计出来的。</li>
+    <li><strong>失败案例归档</strong>：哪些任务失败了、失败原因是什么（编译错、超时、边界条件没处理）。这些失败模式被归档，形成弱点画像。</li>
+    <li><strong>难度桶统计</strong>：每个任务的通过率回写到 metadata，按 too_easy / edge / unsolved 分桶。如果某个题型大量落在 unsolved，说明这是当前的盲区。</li>
+  </ul>
+
+  <h3>2. 从统计到出题方向</h3>
+
+  <p>
+    外部统计出弱点后，转化成出题模型能消费的指令：
+  </p>
+
+  <ul>
+    <li>某个题型通过率低 → "多生成这类题型"</li>
+    <li>边缘任务比例低 → "提高难度"</li>
+    <li>某类失败集中 → "多生成带边界陷阱的题"</li>
+    <li>某个任务类型已刷满 → "换题型"</li>
+  </ul>
+
+  <p>
+    这些指令被注入任务生成的 prompt。模型看到的是<strong>具体的生成方向</strong>，不是"你哪里弱"。它只需要按方向生成任务，不需要理解自己为什么弱。
+  </p>
+
+  <div class="callout accent">
+    <b>分工：</b>模型负责生成，外部系统负责诊断。模型的价值在生成吞吐和变体多样性，不在自我诊断。弱点是外部统计发现的，出题方向是外部指令喂进去的。
+  </div>
+
+  <h3>3. 这个机制可能失效的地方</h3>
+
+  <h4>统计不准</h4>
+  <p>
+    如果通过率用训练中的轨迹估计，会虚高。模型带着最新权重自己解自己出的题，通过率假性偏高，系统误判"太简单"，发出"提高难度"的指令，结果越提越难，最后全挂。这是 RSI 工程里最常见的死法之一。必须用<strong>冻结基座</strong>估计通过率，估计器必须独立于被优化的策略。
+  </p>
+
+  <h4>指令没被消费</h4>
+  <p>
+    统计出了弱点，指令也写进了 prompt，但模型没照着生成。可能是 prompt 太长被截断、指令太模糊、或者模型没学会遵循这类指令。需要诊断"指令消费链路"，而不是简单认为指令生效了。
+  </p>
+
+  <h4>统计维度太粗</h4>
+  <p>
+    只说"数学题通过率低"不够。要说到"带负数输入的递归题通过率低"，才能精准生成对应变体。统计维度越细，出题方向越准。
+  </p>
+
+  <h4>模型生成能力有上界</h4>
+  <p>
+    模型能生成的题型，受限于它见过的题型。它生成不出自己完全没概念的任务类型。这时需要外部种子任务或环境自造来补充。
+  </p>
+
+  <div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    S1["采样统计<br/>K 条轨迹通过率"] --> W["弱点画像<br/>难度桶 · 失败归因"]
+    S2["失败案例归档<br/>编译错 · 超时 · 边界"] --> W
+    S3["难度桶统计<br/>too_easy / edge / unsolved"] --> W
+    W --> I["出题指令<br/>多出 X 类 · 提难度 · 换题型"]
+    I --> P["注入 TaskGen prompt"]
+    P --> G["模型生成任务"]
+    G -. "轨迹回写" .-> S1
+
+    classDef s fill:#f1f5f9,stroke:#94a3b8,color:#334155;
+    classDef w fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+    classDef g fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    class S1,S2,S3 s;
+    class W w;
+    class I,P,G g;
+</div><div class="figcap">图 3 · 弱点发现链路：外部统计 → 出题指令 → 任务生成</div></div>
+
+
+  <hr class="divider">
+
+  <!-- 第四部分 -->
+  <h2 id="s4">四、关键环节：三个 P0，决定飞轮是否空转</h2>
+
+  <p>
+    RSI 的效果不是由单一环节决定的，而是由一条串联链路决定。任何一环断了，整个飞轮就空转。按重要性排序，可以分成三个梯队。
+  </p>
+
+  <h3>第一梯队：决定 RSI 能不能 work</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">环节</th>
+        <th style="width:38%">断了会怎样</th>
+        <th style="width:40%">关键要求</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-p0">P0</span>验证器可靠性与独立性</td>
+        <td>自我欺骗，奖励黑客泛滥，代理指标上升但真实能力不变</td>
+        <td>必须外部程序化、可执行、可复现；防泄露、防放水；变异杀灭、平凡解检测</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p0">P0</span>难度适配</td>
+        <td>组内奖励无方差，GRPO 无梯度，飞轮空转</td>
+        <td>卡在能力边缘，成功率约 20%；通过率估计必须用冻结基座</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p0">P0</span>新颖性控制</td>
+        <td>反复生成同类任务，信息增益趋零，多轮迭代等于原地打转</td>
+        <td>嵌入去重、余弦距离控制；奖励方差趋零时自动上调新颖性权重</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>第二梯队：决定 RSI 能走多远</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">环节</th>
+        <th style="width:38%">断了会怎样</th>
+        <th style="width:40%">关键要求</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-p1">P1</span>跨代继承</td>
+        <td>无复利，退化为有界精炼，每代从零开始</td>
+        <td>下一代在上一代搭建的环境、验证器、课程、数据上训练</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p1">P1</span>自主判断与纠错</td>
+        <td>退化为人工设计的自动流水线，不是真 RSI</td>
+        <td>系统自主决定学什么、何时停、如何调整课程、如何发现失败模式</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p1">P1</span>数据回流质量</td>
+        <td>下一轮训练被污染</td>
+        <td>高价值轨迹 + 失败案例回流；弱测试任务不回流；基准任务双侧过滤</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>第三梯队：决定 RSI 能跑多快、多稳</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:22%">环节</th>
+        <th style="width:38%">断了会怎样</th>
+        <th style="width:40%">关键要求</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="tag tag-p2">P2</span>奖励抗刷分设计</td>
+        <td>代理指标上升，真实能力不变</td>
+        <td>乘积结构（任一趋零归零）；部分分阶梯；多目标辅助项</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p2">P2</span>训练稳定性</td>
+        <td>长跑跑不完，递归增益无从验证</td>
+        <td>KL 显式配置；沙箱结果缓存；异常不吞；每阶段落盘；分时调度防 OOM</td>
+      </tr>
+      <tr>
+        <td><span class="tag tag-p2">P2</span>评估统计严格性</td>
+        <td>Pass@1 曲线是噪声，"提升"无法证伪</td>
+        <td>固定基准、隔离断言、种子冻结；50 题以上、k=8、Wilson 95% CI</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout accent">
+    <b>一句话：</b>RSI 的效果由三个 P0 环节决定——验证器可靠、难度卡在边缘、新颖性持续。这三个断了，飞轮就是空转。跨代继承和自主纠错决定 RSI 能走多远；奖励设计、训练稳定性、评估严格性决定 RSI 能跑多快、多稳。
+  </div>
+
+  <div class="mermaid-box"><div class="mermaid">
+flowchart LR
+    subgraph G0["第一梯队 P0 · 能不能 work"]
+        P01["验证器可靠性"]
+        P02["难度适配"]
+        P03["新颖性控制"]
+    end
+    subgraph G1["第二梯队 P1 · 能走多远"]
+        P11["跨代继承"]
+        P12["自主纠错"]
+        P13["回流质量"]
+    end
+    subgraph G2["第三梯队 P2 · 多快多稳"]
+        P21["奖励抗刷分"]
+        P22["训练稳定性"]
+        P23["评估严格性"]
+    end
+    G0 ==> G1 ==> G2
+
+    classDef g0 fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    classDef g1 fill:#fef3c7,stroke:#d97706,color:#92400e;
+    classDef g2 fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+    class P01,P02,P03 g0;
+    class P11,P12,P13 g1;
+    class P21,P22,P23 g2;
+</div><div class="figcap">图 4 · 三个梯队串联：任何一环断了，飞轮空转</div></div>
+
+
+  <hr class="divider">
+
+  <!-- 第五部分 -->
+  <h2 id="s5">五、防退化：别按了葫芦起了瓢</h2>
+
+  <p>
+    这是 RSI 最容易被忽视的暗礁。提升目标能力的同时，其他能力退化，是 RSI 最常见的死法之一。学术上叫灾难性遗忘，但 RSI 语境下更复杂：不只是遗忘，还有<strong>分布窄化、奖励挤占、评估盲区</strong>三种叠加。
+  </p>
+
+  <h3>为什么会按葫芦起瓢</h3>
+
+  <ul>
+    <li><strong>灾难性遗忘</strong>：梯度更新会覆盖旧权重。模型在代码任务上刷多了，通用推理、语言理解、指令遵循可能退化。</li>
+    <li><strong>分布窄化</strong>：模型自己出题，会偏向当前奖励高的任务类型。训练分布越来越窄，分布外的能力被挤压。</li>
+    <li><strong>奖励挤占</strong>：单一奖励函数只优化目标能力。模型学会用某种模式刷分，其他能力被牺牲。</li>
+    <li><strong>评估盲区</strong>：只看目标 Benchmark，不看其他能力。退化发生了，但没人发现。</li>
+  </ul>
+
+  <h3>五层防御</h3>
+
+  <h4>第一层：数据混合，保留基础能力</h4>
+  <p>
+    训练数据里必须混入基础能力数据，不能全是自产的目标域任务。每轮训练的 prompt 池，混入固定比例的通用指令数据、数学推理、语言理解数据。自产任务占比控制在 60–70%，其余用历史高质量数据或基础能力数据。这是最直接、最有效的防遗忘手段。
+  </p>
+
+  <h4>第二层：KL 惩罚，限制策略偏离</h4>
+  <p>
+    KL 惩罚是防遗忘的核心旋钮。太小，策略偏离基座太远，旧能力丢得快；太大，学不到新东西。需要监控 KL 曲线：如果持续上升，说明策略在快速偏离，需要加大惩罚。更细的做法是对基础能力相关的 token 分布加更强的约束。
+  </p>
+
+  <h4>第三层：参数高效微调，减少对基座的破坏</h4>
+  <p>
+    LoRA 天然比全参微调更抗遗忘。只更新低秩适配器，基座权重冻结。如果发现多个能力冲突严重，可以用多个 LoRA 分别维护，推理时合并或路由。代码能力一个 LoRA，通用能力另一个，互不干扰。
+  </p>
+
+  <h4>第四层：多维评估矩阵，监控退化</h4>
+  <p>
+    不能只看目标能力。需要建立一组固定的哨兵任务集，覆盖多个能力维度，每轮训练后都跑。任何维度下降超过阈值，立刻暂停训练，归因。把上一代的能力基线作为硬门槛，下一代不能低于它。
+  </p>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:40%">评估维度</th>
+        <th style="width:60%">作用</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>目标域能力（如代码 Pass@1）</td><td>主指标，验证提升</td></tr>
+      <tr><td>通用推理（数学、逻辑）</td><td>监控推理能力退化</td></tr>
+      <tr><td>语言理解</td><td>监控基础语言能力</td></tr>
+      <tr><td>指令遵循</td><td>监控格式与对齐</td></tr>
+      <tr><td>安全对齐</td><td>监控安全边界</td></tr>
+    </tbody>
+  </table>
+
+  <h4>第五层：多目标奖励，防挤占</h4>
+  <p>
+    单一奖励会挤占其他能力。主奖励针对目标能力（代码通过率、任务完成率），辅助奖励覆盖格式合规、指令遵循、简洁性、安全性。同时加惩罚项：能力退化惩罚、长度爆炸惩罚、重复惩罚。目标能力提升到一定程度后，可以降低其权重，提升辅助项权重，防止过度优化单一指标。
+  </p>
+
+  <h3>RSI 特有的三种风险</h3>
+
+  <div class="callout purple">
+    <b>自产任务窄化。</b>模型自己出题，会偏向它会做的、奖励高的类型。需要新颖性约束加外部种子任务注入，强制维持任务分布多样性。
+  </div>
+
+  <div class="callout purple">
+    <b>跨代继承时的能力漂移。</b>下一代在上一代的环境里训练，如果环境只覆盖某类能力，下一代会在其他能力上退化。跨代继承时必须显式传递基础能力数据和回归测试集，不能只传目标域。
+  </div>
+
+  <div class="callout purple">
+    <b>自主停止判断的盲区。</b>如果停止判断只看目标指标，忽略了其他能力的退化信号，系统可能在高分但能力失衡的状态下停止。停止判断必须看多维指标，不能只看单一目标。
+  </div>
+
+  <h3>防御体系一览</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:16%">层次</th>
+        <th style="width:30%">手段</th>
+        <th style="width:28%">防什么</th>
+        <th style="width:26%">状态</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>数据层</td>
+        <td>混入基础能力数据</td>
+        <td>分布窄化、遗忘</td>
+        <td><span class="tag tag-no">需补</span></td>
+      </tr>
+      <tr>
+        <td>训练层</td>
+        <td>KL 惩罚</td>
+        <td>策略偏离</td>
+        <td><span class="tag tag-ok">需监控</span></td>
+      </tr>
+      <tr>
+        <td>参数层</td>
+        <td>LoRA / 参数隔离</td>
+        <td>灾难性遗忘</td>
+        <td><span class="tag tag-no">未隔离</span></td>
+      </tr>
+      <tr>
+        <td>评估层</td>
+        <td>多维哨兵任务集</td>
+        <td>评估盲区</td>
+        <td><span class="tag tag-no">需扩充</span></td>
+      </tr>
+      <tr>
+        <td>奖励层</td>
+        <td>多目标 + 退化惩罚</td>
+        <td>奖励挤占</td>
+        <td><span class="tag tag-no">需加</span></td>
+      </tr>
+      <tr>
+        <td>停止层</td>
+        <td>多维指标停止判断</td>
+        <td>自主判断盲区</td>
+        <td><span class="tag tag-no">需设计</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="callout ok">
+    <b>一句话：</b>RSI 防"按葫芦起瓢"，核心是三层——数据层混入基础能力数据防遗忘，训练层用 KL 和 LoRA 限制偏离，评估层用多维哨兵任务集监控退化。RSI 特有的风险是自产任务窄化、跨代继承漂移、自主停止盲区，需要额外的新颖性约束、显式能力传递、多维停止判断。
+  </div>
+
+  <div class="mermaid-box"><div class="mermaid">
+flowchart TD
+    R["退化风险<br/>遗忘 · 分布窄化 · 奖励挤占 · 评估盲区"] --> L1["数据层<br/>混入基础能力数据"]
+    R --> L2["训练层<br/>KL 惩罚限制偏离"]
+    R --> L3["参数层<br/>LoRA 隔离 · 基座冻结"]
+    R --> L4["评估层<br/>多维哨兵任务集"]
+    R --> L5["奖励层<br/>多目标 + 退化惩罚"]
+    R --> L6["停止层<br/>多维指标判断"]
+    L4 -->|"任一维度降超阈值"| S["暂停训练 · 归因"]
+
+    classDef r fill:#fee2e2,stroke:#dc2626,color:#991b1b;
+    classDef l fill:#d1fae5,stroke:#059669,color:#065f46;
+    classDef s fill:#ede9fe,stroke:#7c3aed,color:#5b21b6;
+    class R r;
+    class L1,L2,L3,L4,L5,L6 l;
+    class S s;
+</div><div class="figcap">图 5 · 防退化六层防御体系</div></div>
+
+
+  <hr class="divider">
+
+  <h2>结语</h2>
+
+  <p>
+    RSI 听起来像一个关于智能爆炸的宏大叙事，但落到工程上，它是一组非常具体的条件：外部验证器可靠、难度卡在能力边缘、新颖性持续、跨代继承、自主纠错、防退化监控。
+  </p>
+
+  <p>
+    这些条件缺一不可。只做模型自产数据、外部验证、GRPO 更新，那是有界自我精炼，是 RSI 的第一级台阶，不是 RSI 本身。真正的递归，发生在改进器本身进入循环、跨代继承成立、并且每一代的改进能力确实强于上一代的时候。
+  </p>
+
+  <p>
+    在那之前，所有关于 RSI 的讨论，都应该先问三个问题：验证器可靠吗？难度卡在边缘吗？新颖性持续吗？这三个问题的答案，决定飞轮是空转还是真的在转。
+  </p>
+
+</div>
+
+<div style="max-width:780px;margin:56px auto 28px;padding:16px 24px 0;border-top:1px solid var(--border);font-size:13px;color:var(--muted)"><a href="../index.html" style="color:var(--muted);text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:var(--muted);text-decoration:none">苏ICP备2026063680号-1</a></div>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: {
+        'fontFamily': '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", sans-serif',
+        'fontSize': '15px',
+        'nodePadding': '12px',
+        'background': '#ffffff',
+        'primaryColor': '#f1f5f9',
+        'primaryTextColor': '#1a202c',
+        'primaryBorderColor': '#cbd5e1',
+        'lineColor': '#94a3b8',
+        'clusterBkg': '#ffffff',
+        'clusterBorder': '#d1d5db'
+    },
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis', nodeSpacing: 40, rankSpacing: 55, padding: 12 }
+});
+setTimeout(function(){
+    mermaid.run();
+    setTimeout(function(){
+        document.querySelectorAll('svg .cluster-label').forEach(function(l){
+            var t = l.getAttribute('transform');
+            if(!t) return;
+            var m = t.match(/translate\(([-\d.]+)[,\s]+([-\d.]+)\)/);
+            if(m){ l.setAttribute('transform', 'translate(' + m[1] + ',' + (parseFloat(m[2]) - 24) + ')'); }
+        });
+    }, 200);
+}, 200);
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
