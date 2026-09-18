@@ -213,87 +213,87 @@
 
   <h2>层 4 · additional-config = AscendConfig（逐参数讲解）</h2>
   <p class="meta">数据源：ascend_config.py（pydantic，15 个配置类 91 字段）· 每个参数卡片含行号与两路源码跳转 · ★ = 本站案例涉及的参数</p>
-  <h3>稀疏注意力 / DSA 路径</h3>
+  <h3>稀疏注意力 / DSA 路径（本案核心开关）</h3>
     <div class="param" id="p_enable_sparse_sfa_c8">
       <h4><code>enable_sparse_sfa_c8</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：SFA 主注意力 KV 打包量化（int8/fp8）。</p>
-      <p><b>深入</b>：GLM-5.1-198k 案核心开关：0.26.0 下精度 100 分、0.27.1 下 0 分 ×3。两层含义（SFA packed KV / indexer C8）与 KV 布局变化见 glm51/sfa-c8.html。</p>
-      <p><b>调优</b>：精度异常时第一个对照的开关；生效前提是 model_uses_sfa_sparse。</p>
+      <p><b>是什么</b>：SFA 主注意力的 KV cache 打包量化：把 k_nope+k_pe 合并为单个 int8（A3）或 float8_e4m3fn（FP8 平台）张量 packed_kv，配合 scale（fp16/fp32）供 NPU 算子 npu_kv_quant_sparse_flash_attention 做稀疏反量化注意力计算。KV cache 槽位从 [k_nope, k_pe, indexer_k, scale] 变为 [packed_kv, indexer_k, scale, unused]。</p>
+      <p><b>深入</b>：生效前提：model_uses_sfa_sparse()（hf config 含 index_topk 且无 compress_ratios，即 GLM-5.1/5.2、DeepSeek-V3.2+ 等 DSA 模型）；同时伴随 q/k Hadamard 变换（L625-629 类级共享静态张量）。【GLM 案实证】0.26.0 得 100 分、0.27.1 起 0 分×3——精度回归的头号定位开关。</p>
+      <p><b>调优</b>：精度异常时第一个对照的开关；与 sparse_kv_offload_config 互斥（ascend_config L845-849 校验会 raise）。</p>
       <p class="src">源码：ascend_config.py L446 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L446">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L446">GitHub#L446</a></p>
     </div>
     <div class="param" id="p_enable_sparse_li_c8">
       <h4><code>enable_sparse_li_c8</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：Lightning Indexer 索引缓存量化。</p>
-      <p><b>深入</b>：与 sfa_c8 相互独立（sfa_v1.py L507 注释明示）；128k_90_50 与 198k 都开 li_c8。</p>
-      <p><b>调优</b>：对照实验变量。</p>
+      <p><b>是什么</b>：Lightning Indexer 的索引缓存量化（与 sfa_c8 是两个独立开关，sfa_v1.py L507 注释明示）。</p>
+      <p><b>深入</b>：只对拥有 indexer cache 的层生效；128k_90_50 的 93.33 基线即在 li_c8=true + sfa_c8=false 环境测得。</p>
+      <p><b>调优</b>：GLM 案 09-04 dual-nodes 同配置得 93.33 分 → li_c8 单独开不影响精度，说明劣化在 SFA 主路径而非 indexer。</p>
       <p class="src">源码：ascend_config.py L447 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L447">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L447">GitHub#L447</a></p>
     </div>
     <div class="param" id="p_enable_dsa_cp">
       <h4><code>enable_dsa_cp</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：DSA 跨机上下文并行。</p>
-      <p><b>深入</b>：两案 yaml 均开。与 dcp_size 强相关：GLM 案已验证 dcp_size=1 时 DCP 融合路径（5c59cfba9）不激活。</p>
-      <p><b>调优</b>：多机稀疏长上下文部署标配。</p>
+      <p><b>是什么</b>：DSA 跨机上下文并行（DeepSeek V3.2+ / GLM 系 DSA 模型的序列维跨机分片）。</p>
+      <p><b>深入</b>：联动：ascend_config L602 自动启用 FlashComm；L650-654 要求 has_indexer + use_sequence_parallel_moe，否则静默关闭；L638-641 警告 PCP 就绪后将废弃 enable_dsa_cp（迁移提示按 TP/PCP 分三档）。GLM 案已实证：dcp_size=1 时 DCP 融合路径（5c59cfba9）不激活。</p>
+      <p><b>调优</b>：多机稀疏长上下文部署标配；排查时确认 use_sequence_parallel_moe 是否为 true。</p>
       <p class="src">源码：ascend_config.py L394 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L394">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L394">GitHub#L394</a></p>
     </div>
-  <h3>通信 / 重叠</h3>
+  <h3>通信 / 重叠（MC2 / FlashComm / 共享专家）</h3>
     <div class="param" id="p_enable_fused_mc2">
       <h4><code>enable_fused_mc2</code></h4>
       <p class="meta">类型/默认：<code>0</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：融合 MC2 通信开关。</p>
-      <p><b>深入</b>：0=关闭；GLM/DSV 两案 yaml 均为 0，因此 MC2 相关提交（e24e09ca 等）对这些部署无效。</p>
-      <p><b>调优</b>：MC2 专用部署才考虑。</p>
+      <p><b>是什么</b>：融合 MC2 通信：把 MoE 的 dispatch/combine 通信融合进计算。int 枚举（0=关）。</p>
+      <p><b>深入</b>：互斥：MiniMax M3 不支持 =1（L688）；mc2_comm_alg='hierarchy' 也与它互斥（L838-842）。GLM-5.1/DSV32 两案 yaml 均为 0 → e24e09ca（MC2 profiling 跳编译）对这些部署无效。</p>
+      <p><b>调优</b>：MC2 专用部署才考虑非零值。</p>
       <p class="src">源码：ascend_config.py L415 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L415">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L415">GitHub#L415</a></p>
     </div>
     <div class="param" id="p_mc2_comm_alg">
       <h4><code>mc2_comm_alg</code></h4>
       <p class="meta">类型/默认：<code>未设</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：MC2 通信算法选择（32d9a3138 新增）。</p>
-      <p><b>深入</b>：additional_config.mc2_comm_alg 参数。</p>
-      <p><b>调优</b>：仅在 MC2 启用时有意义。</p>
+      <p><b>是什么</b>：MC2 通信算法选择（32d9a3138 新增）。可选值含 fullmesh_v2 / hierarchy。</p>
+      <p><b>深入</b>：校验：fullmesh_v2 需硬件 MC2_FULLMESH_V2_COMM 支持（L816-819）；hierarchy 需硬件支持 + 专家总数 ≤512 + 与 fused_mc2 互斥（L821-842）。</p>
+      <p><b>调优</b>：hierarchy 模式大 EP 部署时收益明显。</p>
       <p class="src">源码：ascend_config.py L407 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L407">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L407">GitHub#L407</a></p>
     </div>
     <div class="param" id="p_multistream_overlap_shared_expert">
       <h4><code>multistream_overlap_shared_expert</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：共享专家计算与路由专家通信多流重叠。</p>
-      <p><b>深入</b>：GLM/DSV 大 MoE 部署普遍开（两案 yaml 均 true）。纯性能开关。</p>
-      <p><b>调优</b>：与 balance_scheduling、EP 拓扑有交互，精度异常时保持默认。</p>
+      <p><b>深入</b>：实际生效有前置条件：需要 EP + TP>1（L590-594 联动，否则静默降级）。GLM/DSV 大 MoE 部署普遍开（两案 yaml 均 true）。纯性能开关，与精度无直接关系。</p>
+      <p><b>调优</b>：MoE+EP 部署建议开；排障时保持默认。</p>
       <p class="src">源码：ascend_config.py L390 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L390">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L390">GitHub#L390</a></p>
     </div>
     <div class="param" id="p_enable_prefill_mc2">
       <h4><code>enable_prefill_mc2</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：Prefill 阶段 MC2。</p>
+      <p><b>是什么</b>：Prefill 阶段启用 MC2 通信。</p>
       <p><b>深入</b>：默认关。</p>
-      <p><b>调优</b>：PD/大 EP 场景按部署指导。</p>
+      <p><b>调优</b>：PD/大 EP 按部署指导。</p>
       <p class="src">源码：ascend_config.py L389 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L389">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L389">GitHub#L389</a></p>
     </div>
     <div class="param" id="p_enable_mc2_hierarchy_comm">
       <h4><code>enable_mc2_hierarchy_comm</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：MC2 层级通信（将被 mc2_comm_alg 替代）。</p>
-      <p><b>深入</b>：旧开关，勿与 mc2_comm_alg 同时配置。</p>
-      <p><b>调优</b>：保持 False。</p>
+      <p><b>是什么</b>：MC2 层级通信（L453 注释 deprecated，被 mc2_comm_alg='hierarchy' 替代）。</p>
+      <p><b>深入</b>：旧开关。</p>
+      <p><b>调优</b>：保持 False，新配置用 mc2_comm_alg。</p>
       <p class="src">源码：ascend_config.py L392 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L392">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L392">GitHub#L392</a></p>
     </div>
-  <h3>调度器（scheduler_config）</h3>
+  <h3>调度器（scheduler_config 子配置）</h3>
     <div class="param" id="p_enable_balance_scheduling">
       <h4><code>enable_balance_scheduling</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.SchedulerConfig</p>
-      <p><b>是什么</b>：均衡调度：把长短请求混合编排，减少 decode 气泡。</p>
-      <p><b>深入</b>：GLM/DSV 大 MoE 部署普遍开（参数 1 脚本 scheduler_config 显式开）。prefix 案候选 D：它重排请求，改变到达/批次形态。</p>
-      <p><b>调优</b>：在线混合负载可开；精度排障时先关。</p>
+      <p><b>是什么</b>：均衡调度：把长短请求混合编排减少 decode 气泡。</p>
+      <p><b>深入</b>：GLM/DSV 大 MoE 部署普遍开（GLM-5.1 案 yaml scheduler_config 显式开）。互斥：profiling_chunk_config 启用时与其冲突会 raise（L581-585）。env 版 VLLM_ASCEND_BALANCE_SCHEDULING 已删除（9bef60ad5）。</p>
+      <p><b>调优</b>：在线混合负载可开；精度排障时先关（prefix 案候选 D）。</p>
       <p class="src">源码：ascend_config.py L1203 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L1203">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L1203">GitHub#L1203</a></p>
     </div>
     <div class="param" id="p_recompute_scheduler_enable">
       <h4><code>recompute_scheduler_enable</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.SchedulerConfig</p>
-      <p><b>是什么</b>：重计算调度器：对放不下的请求重算而非拒绝。</p>
-      <p><b>深入</b>：07482eb32 main2main 0.27.1 引入（Recompute scheduler）。</p>
-      <p><b>调优</b>：超长上下文/PD 场景按需。</p>
+      <p><b>是什么</b>：重计算调度器：KV 放不下时对请求做重计算而非拒绝。</p>
+      <p><b>深入</b>：07482eb32 main2main 0.27.1 引入；PD 分离场景尤为重要。</p>
+      <p><b>调优</b>：超长上下文/资源紧张场景按需。</p>
       <p class="src">源码：ascend_config.py L1204 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L1204">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L1204">GitHub#L1204</a></p>
     </div>
   <h3>动态负载均衡（DyntraLB / 批量作业 / 短请求优先）</h3>
@@ -301,8 +301,8 @@
       <h4><code>dyntra_lb_config</code></h4>
       <p class="meta">类型/默认：<code>enabled=False 等 8 字段</code> · 属于 additional-config.DyntraLBConfig</p>
       <p><b>是什么</b>：动态 DP 内负载均衡（ffa55704 DyntraLB）。</p>
-      <p><b>深入</b>：enabled/mode=start_step 250/end_step -1/bubble_threshold 5.0/long_req_block_threshold 700/dynamic_max_step 256/enable_diagnostics。</p>
-      <p><b>调优</b>：多 DP 负载不均场景。</p>
+      <p><b>深入</b>：字段：enabled/mode(dynamic)/start_step 250/end_step -1/bubble_threshold 5.0/long_req_block_threshold 700/dynamic_max_step 256/enable_diagnostics。</p>
+      <p><b>调优</b>：多 DP 负载不均场景（GLM-5.1-198k 案的 DP4 17/9/2/3 请求分布就是不均的实例）。</p>
       <p class="src">源码：ascend_config.py L1156 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L1156">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L1156">GitHub#L1156</a></p>
     </div>
     <div class="param" id="p_batch_job_sched_config">
@@ -325,8 +325,8 @@
     <div class="param" id="p_eplb_config">
       <h4><code>eplb_config</code></h4>
       <p class="meta">类型/默认：<code>9 字段</code> · 属于 additional-config.EplbConfig</p>
-      <p><b>是什么</b>：dynamic_eplb(False)/expert_map_path/expert_heat_collection_interval 600/algorithm_execution_interval 50/expert_map_record_path/num_redundant_experts 0/eplb_policy_type 2/eplb_heat_collection_stage/load_collection_phase。</p>
-      <p><b>深入</b>：EPLB 全家桶：静态映射、热度采集、均衡策略。0703581/8548ed2/d37529f（异步 EPLB）为窗口内同族提交。</p>
+      <p><b>是什么</b>：dynamic_eplb(False)/expert_map_path(None)/expert_heat_collection_interval 600/algorithm_execution_interval 50/expert_map_record_path(None)/num_redundant_experts 0/eplb_policy_type 2/eplb_heat_collection_stage(all)/load_collection_phase(all)。</p>
+      <p><b>深入</b>：EPLB 全家桶：静态映射、热度采集、均衡策略。0703581 集成上游 EPLB + d37529f 异步 EPLB 为窗口内同族提交。</p>
       <p><b>调优</b>：MoE 负载严重不均时再开。</p>
       <p class="src">源码：ascend_config.py L116 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L116">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L116">GitHub#L116</a></p>
     </div>
@@ -334,7 +334,7 @@
       <h4><code>enable_force_eplb</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：强制启用 EPLB。</p>
-      <p><b>深入</b>：绕过条件判断。</p>
+      <p><b>深入</b>：互斥：与 dynamic_eplb 同时开启会 raise（L552-557）。</p>
       <p><b>调优</b>：默认关。</p>
       <p class="src">源码：ascend_config.py L395 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L395">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L395">GitHub#L395</a></p>
     </div>
@@ -350,8 +350,8 @@
     <div class="param" id="p_enable_kv_nz">
       <h4><code>enable_kv_nz</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：KV cache NZ 布局。</p>
-      <p><b>深入</b>：与 weight NZ 同族。</p>
+      <p><b>是什么</b>：KV cache NZ 分形布局。</p>
+      <p><b>深入</b>：与 weight NZ 同族（128ecf890/035b8d407 同窗口 SFA 变更）。</p>
       <p><b>调优</b>：保持默认。</p>
       <p class="src">源码：ascend_config.py L391 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L391">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L391">GitHub#L391</a></p>
     </div>
@@ -359,7 +359,7 @@
       <h4><code>enable_transpose_kv_cache_by_block</code></h4>
       <p class="meta">类型/默认：<code>True</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：按块转置 KV cache。</p>
-      <p><b>深入</b>：251334c8 从 env 收编。</p>
+      <p><b>深入</b>：251334c8 从 env 收编进 pydantic。</p>
       <p><b>调优</b>：默认 True。</p>
       <p class="src">源码：ascend_config.py L424 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L424">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L424">GitHub#L424</a></p>
     </div>
@@ -375,8 +375,8 @@
       <h4><code>mega_moe_max_tokens</code></h4>
       <p class="meta">类型/默认：<code>65536</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：MegaMoE 单批 token 上限。</p>
-      <p><b>深入</b>：8548ed2 MegaMoE 支持相关。</p>
-      <p><b>调优</b>：A5/MegaMoE 部署相关。</p>
+      <p><b>深入</b>：L406 注释：同一值传给 dispatch_ffn_combine 的 max_output_size 和 CANN MegaMoe buffer 的 max_recv_token_num。实际每 rank 接收 token 数超过此值时 token 可能被截断导致精度劣化（注释原文'causing precision degradation'）——这是一个有明确精度风险的容量参数。设太大会线性增加 workspace 显存。</p>
+      <p><b>调优</b>：MoE 并行规模变化时需要重新评估此值。</p>
       <p class="src">源码：ascend_config.py L406 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L406">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L406">GitHub#L406</a></p>
     </div>
   <h3>MLAPO（MLA 预处理优化）</h3>
@@ -384,7 +384,7 @@
       <h4><code>enable_mlapo</code></h4>
       <p class="meta">类型/默认：<code>True</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：MLAPO：MLA prefill 优化路径。</p>
-      <p><b>深入</b>：GLM-5.1/DSV 部署 yaml 均为 true；895ca078b 移除其 env 版。</p>
+      <p><b>深入</b>：draft 模型强制关闭（748acedf runner_type 检测）；target 才生效。GLM-5.1/DSV 部署 yaml 均为 true；895ca078b 移除其 env 版。</p>
       <p><b>调优</b>：精度异常排障时可对照关。</p>
       <p class="src">源码：ascend_config.py L416 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L416">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L416">GitHub#L416</a></p>
     </div>
@@ -392,8 +392,8 @@
       <h4><code>mlapo_keep_prefill_weights</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：prefill 权重常驻 NPU。</p>
-      <p><b>深入</b>：ca5603874 新增（同期的性能选项）。</p>
-      <p><b>调优</b>：显存充裕时考虑。</p>
+      <p><b>深入</b>：L422 注释（ca5603874 新增）：设 True 避免 PD 分离 kv_consumer D 节点上权重释放后本地 prefill 路径（recompute/fallback/preempt）崩溃（issue #11882）。用 NPU 显存换稳定性。</p>
+      <p><b>调优</b>：PD 分离 D 节点部署时建议开。</p>
       <p class="src">源码：ascend_config.py L422 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L422">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L422">GitHub#L422</a></p>
     </div>
   <h3>采样 / 投机（附加）</h3>
@@ -401,15 +401,15 @@
       <h4><code>enable_reduce_sample</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：reduce 采样优化（实验特性）。</p>
-      <p><b>深入</b>：L789 警告 experimental；L793-802 与 lmhead TP、PD kv_producer 互斥。运行时可能走 non-reduce fallback（994765d7 sort-based top-k 为 non-reduce 路径的性能改造）。GLM-5.2 A5 参数 1 脚本里开着——prefix 案候选 B。</p>
-      <p><b>调优</b>：排障先去。</p>
+      <p><b>深入</b>：ascend_config L789 打 experimental 警告；L793-802 两道互斥校验：①与 finegrained_tp_config.lmhead_tensor_parallel_size 互斥（raise）②PD 分离 kv_producer 场景不支持（raise）。运行时投机采样可能回退 non-reduce 路径（994765d7 sort-based top-k 为该路径的性能改造）。GLM-5.2 A5 参数 1 脚本里开着——prefix 案候选 B。</p>
+      <p><b>调优</b>：排障先去；与 lmhead TP 不可同开。</p>
       <p class="src">源码：ascend_config.py L393 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L393">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L393">GitHub#L393</a></p>
     </div>
     <div class="param" id="p_rejection_sampler_config">
       <h4><code>rejection_sampler_config</code></h4>
       <p class="meta">类型/默认：<code>4 字段</code> · 属于 additional-config.RejectionSamplerConfig</p>
-      <p><b>是什么</b>：enable_block_verify/enable_entropy_verify/posterior_threshold 0.95/posterior_alpha 0.4。</p>
-      <p><b>深入</b>：rejection sampler 验证配置（27a94764 概率化 rejection sampling）。</p>
+      <p><b>是什么</b>：enable_block_verify(False)/enable_entropy_verify(False)/posterior_threshold 0.95/posterior_alpha 0.4。</p>
+      <p><b>深入</b>：rejection sampler 的验证配置（27a94764 概率化 rejection sampling、637417db synthetic RS on MRV2）。fallback 路径下 sort-based top-k（994765d7）会接管采样排序。</p>
       <p><b>调优</b>：RL/一致性场景。</p>
       <p class="src">源码：ascend_config.py L175 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L175">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L175">GitHub#L175</a></p>
     </div>
@@ -426,7 +426,7 @@
       <h4><code>finegrained_tp_config</code></h4>
       <p class="meta">类型/默认：<code>5 字段</code> · 属于 additional-config.FinegrainedTPConfig</p>
       <p><b>是什么</b>：oproj TP / lmhead TP / embedding TP / mlp TP / olora TP，各自独立设置（默认 0 跟随主 TP）。</p>
-      <p><b>深入</b>：lmhead TP 与 enable_reduce_sample 互斥（ascend_config 校验 raise）。</p>
+      <p><b>深入</b>：lmhead TP 与 enable_reduce_sample 互斥（ascend_config 校验 raise，L793-797）。</p>
       <p><b>调优</b>：分层 TP/PP 组合场景。</p>
       <p class="src">源码：ascend_config.py L934 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L934">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L934">GitHub#L934</a></p>
     </div>
@@ -444,7 +444,7 @@
       <h4><code>sparse_kv_offload_config</code></h4>
       <p class="meta">类型/默认：<code>5 字段</code> · 属于 additional-config.SparseKVOffloadConfig</p>
       <p><b>是什么</b>：enabled/topk_buffer_size 4096/dram_size_per_dp_GB 128/keep_device_kv_cache False/topk。</p>
-      <p><b>深入</b>：稀疏 KV 卸载（528276dc9 引入、6b52b112 限内存、d6d93c9 恢复同步写）。</p>
+      <p><b>深入</b>：稀疏 KV 卸载（528276dc9 引入、6b52b112 限内存、d6d93c9 恢复同步写）。互斥：与 enable_sparse_sfa_c8 同时启用会 raise（L845-849）——SFA 主 cache 不支持卸载。</p>
       <p><b>调优</b>：显存受限的长上下文。</p>
       <p class="src">源码：ascend_config.py L441 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L441">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L441">GitHub#L441</a></p>
     </div>
@@ -453,7 +453,7 @@
       <h4><code>kvpp_config</code></h4>
       <p class="meta">类型/默认：<code>—</code> · 属于 additional-config.KVPPConfig</p>
       <p><b>是什么</b>：KV 并行 prefill 配置。</p>
-      <p><b>深入</b>：ascend_config L89 校验：KVPP 仅支持 method='mtp'（Step3.5 MTP）。</p>
+      <p><b>深入</b>：ascend_config L89-90 校验：KVPP 仅支持 speculative method='mtp'（Step3.5 MTP）。</p>
       <p><b>调优</b>：KVPP 专用部署。</p>
       <p class="src">源码：ascend_config.py L0 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L0">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L0">GitHub#L0</a></p>
     </div>
@@ -467,9 +467,9 @@
     </div>
     <div class="param" id="p_ascend_log_path / dump_config_path / msmonitor_use_daemon">
       <h4><code>ascend_log_path / dump_config_path / msmonitor_use_daemon</code></h4>
-      <p class="meta">类型/默认：<code>—</code> · 属于 additional-config.杂项</p>
-      <p><b>是什么</b>：日志路径 / 配置 dump / msMonitor 守护进程（env 版已删）。</p>
-      <p><b>深入</b>：排障与监控。</p>
+      <p class="meta">类型/默认：<code>—</code> · 属于 additional-config.AscendConfig</p>
+      <p><b>是什么</b>：日志路径 / 配置 dump（L918-940：支持直接传 dict 自动物化到 .vllm_ascend/msprobe/）/ msMonitor 守护。</p>
+      <p><b>深入</b>：排障与监控。dump_config 与 dump_config_path 互斥。</p>
       <p><b>调优</b>：按需。</p>
       <p class="src">源码：ascend_config.py L407 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L407">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L407">GitHub#L407</a></p>
     </div>
@@ -477,22 +477,22 @@
       <h4><code>enable_cpu_binding</code></h4>
       <p class="meta">类型/默认：<code>True</code> · 属于 additional-config.AscendConfig</p>
       <p><b>是什么</b>：CPU 绑核。</p>
-      <p><b>深入</b>：A5 参数 2 脚本显式开。</p>
+      <p><b>深入</b>：A5 参数 2 脚本显式开启。</p>
       <p><b>调优</b>：默认即可。</p>
       <p class="src">源码：ascend_config.py L387 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L387">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L387">GitHub#L387</a></p>
     </div>
     <div class="param" id="p_enable_shared_expert_dp / enable_sp_by_pass">
       <h4><code>enable_shared_expert_dp / enable_sp_by_pass</code></h4>
       <p class="meta">类型/默认：<code>False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：共享专家 DP / SP 旁路。</p>
-      <p><b>深入</b>：3eb8dede 解耦 flashcomm 与 shared expert dp；625823bf 加 SP 旁路临时开关。</p>
-      <p><b>调优</b>：默认。</p>
+      <p><b>是什么</b>：共享专家 DP（需 EP+TP>1，L590-594）/ SP 序列并行旁路（625823bf 临时开关）。</p>
+      <p><b>深入</b>：默认关。</p>
+      <p><b>调优</b>：按拓扑。</p>
       <p class="src">源码：ascend_config.py L444 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L444">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L444">GitHub#L444</a></p>
     </div>
     <div class="param" id="p_pd_tp_ratio / pd_head_ratio / num_head_replica">
       <h4><code>pd_tp_ratio / pd_head_ratio / num_head_replica</code></h4>
       <p class="meta">类型/默认：<code>1</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：PD 分离 TP 比 / head 比 / head 副本。</p>
+      <p><b>是什么</b>：PD 分离 TP 比 / head 比 / head 副本数。</p>
       <p><b>深入</b>：PD 分离部署拓扑参数。</p>
       <p><b>调优</b>：按 PD 拓扑。</p>
       <p class="src">源码：ascend_config.py L448 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L448">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L448">GitHub#L448</a></p>
@@ -500,9 +500,9 @@
     <div class="param" id="p_pa_shape_list / mix_placement">
       <h4><code>pa_shape_list / mix_placement</code></h4>
       <p class="meta">类型/默认：<code>[]/False</code> · 属于 additional-config.AscendConfig</p>
-      <p><b>是什么</b>：PA 形状预注册 / 混合放置。</p>
-      <p><b>深入</b>：默认空/关。</p>
-      <p><b>调优</b>：按需。</p>
+      <p><b>是什么</b>：PA 形状预注册 / 混合放置（互斥：mix_placement 与 shared_expert_dp 或 multistream_overlap 冲突会 raise，L878-881）。</p>
+      <p><b>深入</b>：按需。</p>
+      <p><b>调优</b>：</p>
       <p class="src">源码：ascend_config.py L407 · <a href="../vllm-ascend-main/vllm_ascend/ascend_config.py#L407">本地源码</a> · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/ascend_config.py#L407">GitHub#L407</a></p>
     </div>
 
