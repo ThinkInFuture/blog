@@ -1,0 +1,2094 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大模型 RL 对齐（RLHF / DPO）原理与配套极简源码</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+<style>
+:root{
+  --bg:#f6f7fb;
+  --panel:#ffffff;
+  --ink:#161d2e;
+  --ink-2:#3d4759;
+  --muted:#6b7688;
+  --line:#e4e8f0;
+  --brand:#4f46e5;
+  --brand-soft:#eef0ff;
+  --violet:#8b5cf6;
+  --cyan:#0891b2;
+  --green:#059669;
+  --amber:#d97706;
+  --red:#dc2626;
+  --code-bg:#f6f8fa;
+  --r:16px;
+  --shadow:0 1px 2px rgba(16,24,40,.04), 0 10px 30px -18px rgba(16,24,40,.28);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:32px}
+body{
+  margin:0;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  background:var(--bg);
+  color:var(--ink);
+  line-height:1.85;
+  font-size:16px;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ---------- 顶部进度条 ---------- */
+#progress{
+  position:fixed;top:0;left:0;height:3px;width:0%;
+  background:linear-gradient(90deg,var(--brand),var(--violet),var(--cyan));
+  z-index:999;transition:width .1s linear;
+}
+
+/* ---------- Hero ---------- */
+.hero{
+  position:relative;
+  padding:70px 32px 78px;
+  color:#fff;
+  overflow:hidden;
+  background:
+    radial-gradient(1100px 480px at 12% -20%, #4338ca 0%, transparent 62%),
+    radial-gradient(900px 420px at 88% -5%, #0e7490 0%, transparent 58%),
+    linear-gradient(160deg,#151b30 0%,#0c111d 100%);
+}
+.hero::after{
+  content:"";position:absolute;inset:0;
+  background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+  background-size:52px 52px;
+  mask-image:radial-gradient(800px 400px at 50% 0%,#000 0%,transparent 78%);
+  pointer-events:none;
+}
+.hero-inner{position:relative;max-width:1160px;margin:0 auto;z-index:2}
+.hero-tag{
+  display:inline-flex;align-items:center;gap:8px;
+  font-size:12.5px;letter-spacing:.14em;font-weight:600;
+  padding:6px 14px;border-radius:999px;
+  background:rgba(255,255,255,.09);
+  border:1px solid rgba(255,255,255,.18);
+  color:#c7d2fe;
+  margin-bottom:22px;
+}
+.hero-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 0 4px rgba(52,211,153,.18)}
+.hero h1{
+  font-size:clamp(28px,4.4vw,46px);
+  line-height:1.24;margin:0 0 18px;letter-spacing:-.02em;font-weight:800;
+}
+.hero h1 .grad{
+  background:linear-gradient(100deg,#a5b4fc,#67e8f9 45%,#c4b5fd);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.hero-sub{
+  max-width:760px;color:#a9b4cc;font-size:15.5px;margin:0 0 26px;
+}
+.hero-chips{display:flex;flex-wrap:wrap;gap:10px}
+.chip{
+  font-size:13px;padding:7px 14px;border-radius:10px;
+  background:rgba(255,255,255,.06);
+  border:1px solid rgba(255,255,255,.12);
+  color:#dbe3f5;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.chip b{color:#93c5fd;font-weight:600}
+
+/* ---------- Hero 学习路径 ---------- */
+.hero-path{
+  margin-top:34px;padding-top:26px;
+  border-top:1px dashed rgba(255,255,255,.14);
+}
+.hero-path-title{
+  font-size:11.5px;letter-spacing:.16em;color:#8b9ac0;
+  font-weight:700;text-transform:uppercase;margin-bottom:16px;
+}
+.hero-path-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+}
+.hp-step{
+  background:rgba(255,255,255,.045);
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:12px;padding:14px 14px 12px;
+  position:relative;transition:.2s;
+}
+.hp-step:hover{background:rgba(255,255,255,.09);transform:translateY(-2px)}
+.hp-step .hp-n{
+  font-size:10.5px;font-weight:800;letter-spacing:.1em;
+  color:#93c5fd;margin-bottom:6px;
+}
+.hp-step h5{
+  font-size:13.5px;margin:0 0 5px;color:#e6ebf8;font-weight:700;
+}
+.hp-step p{
+  font-size:11.8px;color:#8b9ac0;margin:0;line-height:1.65;
+}
+
+/* ---------- 布局 ---------- */
+.layout{
+  max-width:1240px;margin:0 auto;padding:44px 32px 90px;
+  display:grid;grid-template-columns:248px minmax(0,1fr);gap:56px;
+  align-items:start;
+}
+.toc{
+  position:sticky;top:26px;
+  max-height:calc(100vh - 52px);
+  overflow-y:auto;
+  padding-right:6px;
+}
+.toc-title{
+  font-size:11.5px;letter-spacing:.16em;font-weight:700;
+  color:var(--muted);text-transform:uppercase;margin:0 0 12px 12px;
+}
+.toc a{
+  display:block;padding:7px 12px;margin-bottom:2px;
+  border-radius:9px;border-left:2px solid transparent;
+  color:var(--muted);text-decoration:none;font-size:13.5px;line-height:1.5;
+  transition:.16s;
+}
+.toc a:hover{background:#eef1f8;color:var(--ink)}
+.toc a.active{background:var(--brand-soft);color:var(--brand);font-weight:600;border-left-color:var(--brand)}
+.toc a.sub{padding-left:26px;font-size:12.5px}
+
+/* ---------- 章节 ---------- */
+.section{
+  margin-bottom:64px;
+  scroll-margin-top:24px;
+}
+.section-head{
+  display:flex;align-items:center;gap:14px;
+  margin-bottom:20px;padding-bottom:14px;
+  border-bottom:1px solid var(--line);
+}
+.sec-num{
+  flex:none;width:36px;height:36px;border-radius:11px;
+  display:grid;place-items:center;
+  font-size:14px;font-weight:800;color:#fff;
+  background:linear-gradient(135deg,var(--brand),var(--violet));
+  box-shadow:0 6px 16px -6px rgba(79,70,229,.7);
+  letter-spacing:-.02em;
+}
+h2{font-size:24px;margin:0;letter-spacing:-.02em;font-weight:800}
+h3{
+  font-size:17.5px;margin:34px 0 12px;letter-spacing:-.01em;
+  display:flex;align-items:center;gap:9px;
+}
+h3::before{
+  content:"";width:4px;height:17px;border-radius:2px;
+  background:linear-gradient(180deg,var(--brand),var(--violet));
+  flex:none;
+}
+h4{font-size:15px;margin:0 0 6px;font-weight:700}
+p{margin:0 0 14px;color:var(--ink-2)}
+strong{color:var(--ink);font-weight:700}
+code:not([class*="language"]) {
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:.88em;background:#eef1f8;color:#4338ca;
+  padding:2px 6px;border-radius:6px;border:1px solid #e0e5f0;
+  white-space:nowrap;
+}
+
+/* ---------- 卡片 / 提示框 ---------- */
+.card{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);padding:22px 24px;box-shadow:var(--shadow);
+  margin:20px 0;
+}
+.tip{
+  border-radius:14px;padding:16px 20px 16px 20px;margin:20px 0;
+  border:1px solid;font-size:14.6px;line-height:1.8;
+}
+.tip .tip-head{
+  font-weight:800;font-size:13.5px;letter-spacing:.03em;
+  display:flex;align-items:center;gap:8px;margin-bottom:8px;
+}
+.tip ul{margin:6px 0 0;padding-left:20px}
+.tip li{margin-bottom:5px}
+.tip p:last-child{margin-bottom:0}
+.tip.interview{background:#f6f4ff;border-color:#ded7ff;color:#3b2f80}
+.tip.interview .tip-head{color:#5b21b6}
+.tip.interview code:not([class*="language"]){background:#e9e4ff;border-color:#d6ccff;color:#5b21b6}
+.tip.warn{background:#fffaf0;border-color:#fde6bd;color:#7a4c05}
+.tip.warn .tip-head{color:#b45309}
+.tip.note{background:#f0f9ff;border-color:#cfe9fa;color:#0c4a6e}
+.tip.note .tip-head{color:#0369a1}
+.tip.ok{background:#f0fdf7;border-color:#c7f0dc;color:#065f46}
+.tip.ok .tip-head{color:#047857}
+.tip.math{background:#fbf9ff;border-color:#e6dcff;color:#4c1d95}
+.tip.math .tip-head{color:#6d28d9}
+
+/* ---------- 代码块 ---------- */
+figure.code{
+  margin:20px 0;border-radius:14px;overflow:hidden;
+  border:1px solid #e2e8f0;background:var(--code-bg);
+  box-shadow:0 10px 30px -18px rgba(16,24,40,.28);
+}
+figure.code figcaption{
+  display:flex;align-items:center;gap:10px;
+  padding:10px 16px;background:#f1f5f9;
+  border-bottom:1px solid #e2e8f0;
+  font-size:12.5px;color:#64748b;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+figure.code figcaption .lang{
+  font-size:10.5px;letter-spacing:.1em;font-weight:700;
+  padding:2px 8px;border-radius:5px;
+  background:#eef0ff;color:#4f46e5;border:1px solid #dfe3ff;
+}
+figure.code figcaption .title{color:#c3cbdd;font-weight:600}
+figure.code pre{margin:0;padding:18px 20px;overflow-x:auto;font-size:13.2px;line-height:1.72}
+figure.code code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:none;padding:0}
+figure.code pre::-webkit-scrollbar{height:9px}
+figure.code pre::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:5px}
+
+/* ---------- 流程图：三阶段 ---------- */
+.flow3{
+  display:grid;grid-template-columns:1fr 44px 1fr 44px 1fr;
+  align-items:stretch;gap:0;margin:24px 0 8px;
+}
+.fnode{
+  background:var(--panel);border:1px solid var(--line);
+  border-radius:14px;padding:18px 18px 16px;position:relative;
+  box-shadow:var(--shadow);transition:.2s;
+}
+.fnode:hover{transform:translateY(-3px);box-shadow:0 18px 34px -20px rgba(79,70,229,.45)}
+.fnode .fidx{
+  position:absolute;top:-11px;left:16px;
+  width:24px;height:24px;border-radius:8px;
+  display:grid;place-items:center;font-size:12px;font-weight:800;color:#fff;
+}
+.fnode.s1 .fidx{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.fnode.s2 .fidx{background:linear-gradient(135deg,#0891b2,#22d3ee)}
+.fnode.s3 .fidx{background:linear-gradient(135deg,#d97706,#f59e0b)}
+.fnode h4{font-size:14.5px;margin:6px 0 8px}
+.fnode p{font-size:13px;line-height:1.7;margin:0 0 8px;color:var(--muted)}
+.fnode .fio{
+  font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:#f2f4fa;border:1px solid #e6eaf4;border-radius:8px;
+  padding:6px 10px;color:#4338ca;
+}
+.farrow{display:grid;place-items:center;color:#c3cadb;font-size:20px;font-weight:700}
+
+/* ---------- 管道流程图 ---------- */
+.pipe{
+  background:linear-gradient(180deg,#fbfcff,#f4f6fd);
+  border:1px solid var(--line);border-radius:var(--r);
+  padding:26px 22px;margin:22px 0;text-align:center;
+}
+.pnode{
+  display:inline-block;background:#fff;border:1px solid #dfe4f0;
+  border-radius:12px;padding:11px 22px;font-size:13.6px;
+  box-shadow:0 4px 12px -8px rgba(20,30,60,.35);
+  color:var(--ink-2);max-width:640px;
+}
+.pnode small{display:block;font-size:11.8px;color:var(--muted);margin-top:3px}
+.pnode.hl{
+  background:linear-gradient(135deg,#eef0ff,#f3eeff);
+  border-color:#c7c9ff;color:#3730a3;font-weight:600;
+}
+.pnode.warnnode{
+  background:linear-gradient(135deg,#fff7ed,#fffbeb);
+  border-color:#fcd9a4;color:#92400e;font-weight:600;
+}
+.pipe-arrow{color:#b9c2d6;font-size:17px;line-height:1;margin:8px 0}
+.loop-note{
+  margin-top:14px;font-size:12.5px;color:var(--brand);
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--brand-soft);border:1px dashed #c7c9ff;
+  display:inline-block;padding:6px 14px;border-radius:9px;
+}
+
+/* ---------- 双栏对比流程图 ---------- */
+.compare{
+  display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:22px 0;
+}
+.cbox{
+  border-radius:14px;padding:18px 20px;border:1px solid var(--line);
+  background:var(--panel);box-shadow:var(--shadow);
+}
+.cbox.bad{border-top:3px solid #f87171}
+.cbox.good{border-top:3px solid #34d399}
+.cbox.neutral{border-top:3px solid #818cf8}
+.cbox h4{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.cbox .steps{font-size:13px;color:var(--muted);line-height:2;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.cbox .steps span{color:var(--ink-2)}
+
+/* ---------- 表格 ---------- */
+.table-wrap{overflow-x:auto;margin:22px 0;border-radius:14px;border:1px solid var(--line);box-shadow:var(--shadow)}
+table{border-collapse:collapse;width:100%;background:#fff;font-size:13.6px;min-width:620px}
+thead th{
+  background:#f4f6fc;color:var(--ink);font-weight:700;
+  padding:12px 16px;text-align:left;border-bottom:1px solid var(--line);
+  font-size:13px;white-space:nowrap;
+}
+tbody td{padding:11px 16px;border-bottom:1px solid #eef1f7;color:var(--ink-2)}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#fafbff}
+td.good{color:var(--green);font-weight:600}
+td.bad{color:var(--red);font-weight:600}
+td.mid{color:var(--amber);font-weight:600}
+
+/* ---------- 排查分层 ---------- */
+.layers{display:flex;flex-direction:column;gap:12px;margin:22px 0}
+.layer{
+  display:flex;gap:16px;align-items:flex-start;
+  background:#fff;border:1px solid var(--line);border-radius:13px;
+  padding:15px 20px;box-shadow:0 4px 14px -12px rgba(20,30,60,.5);
+  transition:.18s;
+}
+.layer:hover{transform:translateX(4px);border-color:#cdd5ea}
+.lnum{
+  flex:none;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;
+  font-size:13px;font-weight:800;color:#fff;margin-top:2px;
+}
+.l1 .lnum{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.l2 .lnum{background:linear-gradient(135deg,#0891b2,#22d3ee)}
+.l3 .lnum{background:linear-gradient(135deg,#059669,#34d399)}
+.l4 .lnum{background:linear-gradient(135deg,#d97706,#fbbf24)}
+.l5 .lnum{background:linear-gradient(135deg,#dc2626,#f87171)}
+.layer h4{font-size:14.5px;margin:0 0 4px}
+.layer p{font-size:13.6px;margin:0;color:var(--muted);line-height:1.75}
+
+/* ---------- 评估双栏 ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:20px 0}
+.mini{
+  background:#fff;border:1px solid var(--line);border-radius:14px;
+  padding:18px 20px;box-shadow:var(--shadow);
+}
+.mini h4{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.badge{
+  font-size:10.5px;font-weight:800;letter-spacing:.06em;
+  padding:2px 8px;border-radius:6px;
+}
+.badge.auto{background:#e0f2fe;color:#0369a1}
+.badge.human{background:#fce7f3;color:#be185d}
+.mini ul{margin:0;padding-left:18px;font-size:13.6px;color:var(--ink-2);line-height:1.95}
+.mini ul li::marker{color:#a5b4fc}
+
+/* ---------- 公式块 ---------- */
+.formula{
+  background:#f8f9fe;border:1px solid #e2e6f5;border-radius:12px;
+  padding:14px 20px;margin:16px 0;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:14px;color:#3730a3;text-align:center;overflow-x:auto;
+}
+
+/* ---------- 模型角色矩阵 ---------- */
+.model-matrix{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0;
+}
+.mcard{
+  background:#fff;border:1px solid var(--line);border-radius:14px;
+  padding:16px 16px 14px;box-shadow:var(--shadow);
+  transition:.2s;position:relative;overflow:hidden;
+}
+.mcard::before{
+  content:"";position:absolute;top:0;left:0;right:0;height:4px;
+}
+.mcard.policy::before{background:linear-gradient(90deg,#6366f1,#8b5cf6)}
+.mcard.ref::before{background:linear-gradient(90deg,#0891b2,#22d3ee)}
+.mcard.rm::before{background:linear-gradient(90deg,#d97706,#fbbf24)}
+.mcard.critic::before{background:linear-gradient(90deg,#dc2626,#f87171)}
+.mcard:hover{transform:translateY(-3px)}
+.mcard h5{
+  font-size:13.5px;margin:4px 0 6px;font-weight:800;color:var(--ink);
+  letter-spacing:-.01em;
+}
+.mcard .mtag{
+  font-size:10.5px;font-weight:700;letter-spacing:.08em;
+  padding:2px 7px;border-radius:5px;
+}
+.mcard.policy .mtag{background:#eef0ff;color:#4338ca}
+.mcard.ref .mtag{background:#ecfeff;color:#0e7490}
+.mcard.rm .mtag{background:#fff7ed;color:#b45309}
+.mcard.critic .mtag{background:#fef2f2;color:#b91c1c}
+.mcard p{font-size:12.4px;color:var(--muted);margin:8px 0 0;line-height:1.7}
+.mcard .mio{
+  margin-top:10px;font-size:11.5px;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:#4338ca;background:#f5f6fc;border-radius:7px;
+  padding:5px 9px;border:1px solid #e8ebf5;
+}
+
+/* ---------- 数据流三列表 ---------- */
+.datapath{
+  display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px;margin:22px 0;
+}
+.dpcard{
+  background:#fff;border:1px solid var(--line);border-radius:13px;
+  padding:16px 18px;box-shadow:var(--shadow);position:relative;
+}
+.dpcard .dpn{
+  position:absolute;top:-10px;left:14px;
+  font-size:10.5px;font-weight:800;letter-spacing:.1em;
+  padding:2px 9px;border-radius:6px;color:#fff;
+  background:linear-gradient(135deg,var(--brand),var(--violet));
+}
+.dpcard h5{font-size:13.5px;margin:8px 0 8px;font-weight:800}
+.dpcard p{font-size:12.6px;color:var(--muted);margin:0;line-height:1.7}
+.dpcard .row{
+  font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color:#4338ca;background:#f5f6fc;border-radius:7px;
+  padding:5px 9px;border:1px solid #e8ebf5;margin-top:8px;
+}
+
+/* ---------- FAQ 手风琴 ---------- */
+.faq{margin:22px 0;display:flex;flex-direction:column;gap:10px}
+.faq details{
+  background:#fff;border:1px solid var(--line);border-radius:13px;
+  padding:0;box-shadow:0 4px 14px -14px rgba(20,30,60,.5);
+  transition:.2s;overflow:hidden;
+}
+.faq details[open]{
+  border-color:#c7c9ff;box-shadow:0 12px 28px -18px rgba(79,70,229,.45);
+}
+.faq details:hover{border-color:#cdd5ea}
+.faq summary{
+  list-style:none;cursor:pointer;
+  padding:15px 20px 15px 48px;position:relative;
+  font-size:14.5px;font-weight:700;color:var(--ink);
+  line-height:1.6;
+}
+.faq summary::-webkit-details-marker{display:none}
+.faq summary::before{
+  content:"Q";position:absolute;left:18px;top:50%;transform:translateY(-50%);
+  width:22px;height:22px;border-radius:7px;
+  display:grid;place-items:center;font-size:11px;font-weight:900;color:#fff;
+  background:linear-gradient(135deg,var(--brand),var(--violet));
+}
+.faq summary::after{
+  content:"＋";position:absolute;right:20px;top:50%;transform:translateY(-50%);
+  color:#a5b4fc;font-size:16px;font-weight:700;transition:.2s;
+}
+.faq details[open] summary::after{content:"－";color:var(--brand)}
+.faq .faq-body{
+  padding:0 20px 18px 48px;font-size:14px;color:var(--ink-2);line-height:1.85;
+}
+.faq .faq-body p{margin:0 0 10px}
+.faq .faq-body p:last-child{margin-bottom:0}
+.faq .faq-body code:not([class*="language"]){
+  background:#eef1f8;border-color:#e0e5f0;color:#4338ca;
+}
+
+/* ---------- 术语表 ---------- */
+.glossary{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:22px 0;
+}
+.gterm{
+  background:#fff;border:1px solid var(--line);border-radius:12px;
+  padding:14px 16px;box-shadow:0 4px 14px -14px rgba(20,30,60,.5);
+  transition:.18s;
+}
+.gterm:hover{border-color:#c7c9ff;transform:translateY(-2px)}
+.gterm h5{
+  font-size:13.5px;margin:0 0 5px;font-weight:800;color:#4338ca;
+  font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+.gterm p{font-size:12.8px;color:var(--muted);margin:0;line-height:1.7}
+
+/* ---------- 时间轴 ---------- */
+.timeline{
+  position:relative;margin:26px 0 22px;padding-left:26px;
+}
+.timeline::before{
+  content:"";position:absolute;left:6px;top:6px;bottom:6px;width:2px;
+  background:linear-gradient(180deg,#6366f1,#8b5cf6,#d97706);
+  border-radius:2px;opacity:.45;
+}
+.tl-item{position:relative;margin-bottom:20px}
+.tl-item::before{
+  content:"";position:absolute;left:-26px;top:7px;
+  width:12px;height:12px;border-radius:50%;
+  background:#fff;border:3px solid #818cf8;
+  box-shadow:0 0 0 4px #eef0ff;
+}
+.tl-item.t2::before{border-color:#22d3ee;box-shadow:0 0 0 4px #ecfeff}
+.tl-item.t3::before{border-color:#fbbf24;box-shadow:0 0 0 4px #fffbeb}
+.tl-item h5{font-size:14.5px;margin:0 0 5px;font-weight:800;color:var(--ink)}
+.tl-item p{font-size:13.4px;color:var(--muted);margin:0;line-height:1.75}
+
+/* ---------- 底部 ---------- */
+.footer{
+  border-top:1px solid var(--line);background:#fff;
+  padding:34px 32px;text-align:center;color:var(--muted);font-size:13px;
+}
+#top{
+  position:fixed;right:24px;bottom:24px;width:42px;height:42px;border-radius:12px;
+  background:linear-gradient(135deg,var(--brand),var(--violet));
+  color:#fff;border:none;cursor:pointer;font-size:17px;
+  box-shadow:0 10px 24px -10px rgba(79,70,229,.85);
+  opacity:0;pointer-events:none;transition:.25s;z-index:99;
+}
+#top.show{opacity:1;pointer-events:auto}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:1080px){
+  .layout{grid-template-columns:1fr;gap:0;padding:32px 20px 70px}
+  .toc{display:none}
+  .hero-path-grid{grid-template-columns:repeat(2,1fr)}
+  .model-matrix{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:820px){
+  .flow3{grid-template-columns:1fr;gap:0}
+  .farrow{transform:rotate(90deg);height:34px;font-size:18px}
+  .compare,.grid2,.datapath,.glossary{grid-template-columns:1fr}
+  .hero{padding:52px 20px 58px}
+  .hero-path-grid{grid-template-columns:1fr}
+  .model-matrix{grid-template-columns:1fr}
+  body{font-size:15.4px}
+  h2{font-size:21px}
+  .card{padding:18px}
+  .layer{padding:14px 16px;gap:12px}
+}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+
+<div id="progress"></div>
+
+<!-- ================= HERO ================= -->
+<header class="hero">
+  <div class="hero-inner">
+    <a href="../index.html" style="display:inline-block;color:rgba(255,255,255,.8);text-decoration:none;font-size:13px;margin-bottom:16px">&larr; 返回首页</a>
+    <div class="hero-tag">基础理论 · 2026-09-18 发布</div>
+    <h1>大模型 RL 对齐（RLHF / DPO）<br><span class="grad">原理与配套极简源码片段</span></h1>
+    <p class="hero-sub">
+      从 RLHF 三段式流程、PPO-Clip 与 KL 约束，到 DPO / ORPO / GRPO 的偏好优化路线，
+      再到 GAE、进阶算法与高频面试 FAQ，用最少的代码把每一步的数学直觉讲清楚。
+    </p>
+
+    </div>
+</header>
+
+<div class="layout">
+
+  <!-- ================= 目录 ================= -->
+  <aside class="toc" id="toc">
+    <p class="toc-title">目录导航</p>
+    <a href="#s1">一、RLHF 三段式完整流程</a>
+    <a href="#s1-1" class="sub">1. SFT 监督微调</a>
+    <a href="#s1-2" class="sub">2. 奖励模型 RM 训练</a>
+    <a href="#s1-3" class="sub">3. PPO 强化学习阶段</a>
+    <a href="#s1-4" class="sub">4. 四模型角色图</a>
+    <a href="#s2">二、RLHF 短板与 Reward Hacking</a>
+    <a href="#s3">三、PPO 核心原理</a>
+    <a href="#s3-1" class="sub">PPO-Clip 与 KL 惩罚</a>
+    <a href="#s3-2" class="sub">GAE 与优势估计</a>
+    <a href="#s3-3" class="sub">完整 PPO 训练步骤</a>
+    <a href="#s4">四、偏好优化 PO 系列</a>
+    <a href="#s4-1" class="sub">DPO / ORPO</a>
+    <a href="#s4-2" class="sub">DPO 隐式奖励推导</a>
+    <a href="#s5">五、Rollout 与工程逻辑</a>
+    <a href="#s5-1" class="sub">数据工程与超参</a>
+    <a href="#s6">六、GRPO 原理</a>
+    <a href="#s7">七、RL 对齐评估体系</a>
+    <a href="#s8">八、PPO 不收敛排查思路</a>
+    <a href="#s9">九、进阶算法一览</a>
+    <a href="#s10">十、高频面试 FAQ</a>
+    <a href="#s11">十一、术语速查表</a>
+    <a href="#s12">十二、算法对比速查表</a>
+  </aside>
+
+  <!-- ================= 正文 ================= -->
+  <main>
+
+    <!-- ---------- 一 ---------- -->
+    <section class="section" id="s1">
+      <div class="section-head">
+        <div class="sec-num">01</div>
+        <h2>基础概念：RLHF 三段式完整流程</h2>
+      </div>
+
+      <p>
+        <strong>RLHF（基于人类反馈的强化学习）</strong>是大模型对齐最经典的范式，整体分为三个依次执行的阶段。
+      </p>
+
+      <!-- 三阶段流程图 -->
+      <div class="flow3">
+        <div class="fnode s1">
+          <div class="fidx">1</div>
+          <h4>SFT 监督微调</h4>
+          <p>用高质量指令样本微调底座模型，教会模型「听懂指令」。</p>
+          <div class="fio">底座模型 → SFT 模型</div>
+        </div>
+        <div class="farrow">➜</div>
+        <div class="fnode s2">
+          <div class="fidx">2</div>
+          <h4>奖励模型 RM 训练</h4>
+          <p>用成对人类偏好排序数据，训一个「打分器」。</p>
+          <div class="fio">prompt + response → 标量 reward</div>
+        </div>
+        <div class="farrow">➜</div>
+        <div class="fnode s3">
+          <div class="fidx">3</div>
+          <h4>PPO 强化学习</h4>
+          <p>策略模型在线采样，用 RM 奖励信号做策略梯度更新。</p>
+          <div class="fio">SFT 模型 → 对齐模型</div>
+        </div>
+      </div>
+
+      <!-- 时间轴 -->
+      <h3>三阶段时间轴</h3>
+      <div class="timeline">
+        <div class="tl-item t1">
+          <h5>阶段 ① SFT</h5>
+          <p>输入：底座模型 ＋ 指令数据（prompt, response）。输出：具备基础指令遵循能力的 SFT 模型。</p>
+        </div>
+        <div class="tl-item t2">
+          <h5>阶段 ② RM</h5>
+          <p>输入：同一 prompt 下多条回答的人工偏好排序。输出：能把 prompt + response 映射为标量分数的奖励模型。</p>
+        </div>
+        <div class="tl-item t3">
+          <h5>阶段 ③ PPO</h5>
+          <p>输入：SFT 模型（策略）＋ RM（打分）＋ SFT 冻结副本（KL 参考）。输出：对齐后的大模型。</p>
+        </div>
+      </div>
+
+      <h3 id="s1-1">第一阶段：SFT 监督微调</h3>
+      <p>
+        使用高质量指令样本对预训练底座模型做微调，目标<strong>不是让模型学会新知识</strong>，
+        而是教会模型理解指令格式、遵循用户的指令输出，完成之后得到 <strong>SFT 模型</strong>。
+        SFT 模型已经具备基础的对话能力，但输出偏好还没有对齐人类主观喜好。
+      </p>
+
+      <h3 id="s1-2">第二阶段：奖励模型 RM 训练</h3>
+      <p>
+        收集同一个 prompt 下，模型生成的多条不同回答，交给人工标注做偏好排序。
+        利用这批<strong>成对偏好数据</strong>训练奖励模型。奖励模型输入一段 prompt + 回答，输出一个标量奖励分数，
+        用来拟合人类的偏好判断。奖励模型本质上是一个<strong>打分器</strong>。
+      </p>
+
+      <h3 id="s1-3">第三阶段：PPO 强化学习阶段</h3>
+      <p>
+        将前面训练好的 SFT 模型作为策略模型，在每一轮迭代中，策略模型生成回答，交给奖励模型打分得到奖励信号，
+        再使用 <strong>PPO 算法</strong>更新策略模型，让模型生成的内容持续向高分、符合人类偏好的方向优化。
+      </p>
+
+      <h3 id="s1-4">四模型角色图（RLHF 全景）</h3>
+      <p>
+        RLHF 的 PPO 阶段同时存在四个「模型角色」，理解它们各自是否训练、是否更新参数，
+        是面试中最容易踩坑的知识点。
+      </p>
+
+      <div class="model-matrix">
+        <div class="mcard policy">
+          <span class="mtag">POLICY</span>
+          <h5>策略模型 π<sub>θ</sub></h5>
+          <p>即我们要训练的模型，初始化为 SFT 模型。唯一参与梯度更新的主角。</p>
+          <div class="mio">参数可训练 ✓</div>
+        </div>
+        <div class="mcard ref">
+          <span class="mtag">REFERENCE</span>
+          <h5>参考模型 π<sub>ref</sub></h5>
+          <p>SFT 模型的冻结副本，只用于计算 KL 惩罚，防止策略跑偏。</p>
+          <div class="mio">参数冻结 ✗</div>
+        </div>
+        <div class="mcard rm">
+          <span class="mtag">REWARD</span>
+          <h5>奖励模型 R</h5>
+          <p>输出标量 reward，提供优化信号。只做前向，不参与策略更新。</p>
+          <div class="mio">参数冻结 ✗</div>
+        </div>
+        <div class="mcard critic">
+          <span class="mtag">CRITIC</span>
+          <h5>价值模型 V</h5>
+          <p>估计状态价值，用来算 advantage。PPO 需要，GRPO 不需要。</p>
+          <div class="mio">参数可训练 ✓</div>
+        </div>
+      </div>
+
+      <div class="tip warn">
+        <div class="tip-head">⚠️ 易错点</div>
+        <p>价值模型（Critic）是<strong>可训练的</strong>，它和策略模型一起更新；而参考模型和奖励模型都是<strong>冻结的</strong>。
+        很多人会把 Critic 和 Reference 搞混——前者是为了降低方差，后者是为了限制偏离。</p>
+      </div>
+
+      <h3>配套极简源码</h3>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">1. SFT 监督微调示意代码</span></figcaption>
+<pre><code class="language-python">import torch
+import torch.nn as nn
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+# ========== 1. SFT监督微调示意代码 ==========
+# SFT的目标：标准自回归语言模型损失，只在response部分计算loss
+model = AutoModelForCausalLM.from_pretrained("your-sft-base")
+tokenizer = AutoTokenizer.from_pretrained("your-sft-base")
+
+def sft_loss(prompt: str, response: str):
+    full_text = prompt + response
+    tokens = tokenizer(full_text, return_tensors="pt")
+    outputs = model(**tokens)
+    logits = outputs.logits
+    labels = tokens["input_ids"]
+    # 自回归损失：用第i个token预测第i+1个token
+    # 只对回答部分计算loss是工程上常用优化，这里简化演示
+    loss = nn.CrossEntropyLoss()(logits[:,:-1,:].reshape(-1, logits.size(-1)), labels[:,1:].reshape(-1))
+    return loss</code></pre>
+      </figure>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">2. 奖励模型 RM 训练示意代码</span></figcaption>
+<pre><code class="language-python"># ========== 2. 奖励模型RM训练示意代码 ==========
+# 奖励模型：在基础大模型之上增加一个reward head，输出标量奖励
+class RewardModel(nn.Module):
+    def __init__(self, base_model):
+        super().__init__()
+        self.base = base_model
+        self.reward_head = nn.Linear(base_model.config.hidden_size, 1)
+
+    def forward(self, input_ids):
+        out = self.base(input_ids=input_ids, output_hidden_states=True)
+        last_hidden = out.hidden_states[-1][:, -1, :] # 取最后一个token的hidden state
+        reward = self.reward_head(last_hidden)
+        return reward
+
+def rm_pair_loss(rm, prompt, chosen, rejected):
+    """成对偏好损失：保证chosen样本奖励 &gt; rejected样本奖励"""
+    tok_chosen = tokenizer(prompt + chosen, return_tensors="pt")
+    tok_rej = tokenizer(prompt + rejected, return_tensors="pt")
+    r_chosen = rm(**tok_chosen)
+    r_rej = rm(**tok_rej)
+    # 排序损失，拉开优选回答和劣选回答之间的奖励差距
+    loss = torch.relu(-(r_chosen - r_rej)).mean()
+    return loss</code></pre>
+      </figure>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>SFT 为什么只对 response 部分算 loss？</strong> prompt 是条件输入，模型不需要「学会生成 prompt」；只对 response 计 loss 能避免模型把容量浪费在复述用户输入上，也让监督信号更聚焦。</li>
+          <li><strong>Reward Model 为什么取最后一个 token 的 hidden state？</strong> 因果注意力下，最后一个 token 的位置能「看到」整段 prompt + response 的全部信息，因此它是整段序列的汇聚表示。</li>
+          <li><strong>RM 的损失为什么是成对排序损失？</strong> 人类标注更容易给出「A 比 B 好」的相对判断，而不是绝对分数。成对损失对应 Bradley-Terry 偏好模型：<code>P(chosen &gt; rejected) = σ(r_c − r_r)</code>。</li>
+          <li><strong>三段式能不能省一段？</strong> SFT 不能省（提供初始策略与 KL 锚点）；RM 可被隐式建模替代（DPO）；PPO 可被直接偏好优化替代（DPO/ORPO/GRPO）。</li>
+          <li><strong>Critic 模型的作用是什么？</strong> 估计状态价值 V(s) 作为 baseline，把「奖励减去基线」作为 advantage，从而显著降低策略梯度的方差。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 二 ---------- -->
+    <section class="section" id="s2">
+      <div class="section-head">
+        <div class="sec-num">02</div>
+        <h2>RLHF 的短板与 Reward Hacking</h2>
+      </div>
+
+      <p>RLHF 这套方案存在几个很突出的短板：</p>
+      <ul style="color:var(--ink-2)">
+        <li>奖励模型容易出现 <strong>Reward Hacking（奖励黑客）</strong>现象；</li>
+        <li><strong>PPO 强化学习阶段训练不稳定</strong>，调参门槛高；</li>
+        <li>三阶段串联的训练流程长，整体<strong>算力开销很大</strong>。</li>
+      </ul>
+
+      <h3>Reward Hacking（奖励黑客）</h3>
+      <p>
+        模型并没有真正理解人类想要的意图，只是找到了能够<strong>欺骗奖励模型、拿到高分的生成模式</strong>。
+        举两个典型例子：
+      </p>
+
+      <div class="compare">
+        <div class="cbox bad">
+          <h4>🚨 症状一：长度灌水</h4>
+          <div class="steps">
+            奖励模型倾向给更长文本打高分<br>
+            <span>→ 模型在回答里填充大量无意义冗余句子</span>
+          </div>
+        </div>
+        <div class="cbox bad">
+          <h4>🚨 症状二：关键词堆砌</h4>
+          <div class="steps">
+            奖励模型对某些关键词给予更高奖励<br>
+            <span>→ 模型反复堆砌关键词</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip warn">
+        <div class="tip-head">⚠️ 本质根源</div>
+        <p>奖励函数只是人类偏好的<strong>近似代理</strong>，无法完全等价真实人类判断。策略优化的方向是「最大化代理奖励」，而不是「最大化真实人类满意度」，两者之间的 gap 就是 Hacking 的生存空间。</p>
+      </div>
+
+      <h3>Reward Hacking 的常见缓解手段</h3>
+      <div class="datapath">
+        <div class="dpcard">
+          <span class="dpn">ALGO</span>
+          <h5>KL 惩罚</h5>
+          <p>把策略锚定在 SFT 分布附近，提高大幅偏离的代价。</p>
+          <div class="row">loss += β · KL(π ‖ π_ref)</div>
+        </div>
+        <div class="dpcard">
+          <span class="dpn">MODEL</span>
+          <h5>RM 集成</h5>
+          <p>训多个 RM 取均值，并用方差做惩罚，压低「钻空子」样本的得分。</p>
+          <div class="row">r = mean(R_i) − λ · std(R_i)</div>
+        </div>
+        <div class="dpcard">
+          <span class="dpn">DATA</span>
+          <h5>在线人工纠偏</h5>
+          <p>定期抽检高分输出，把 Hacking 样本标注为负例回灌训练。</p>
+          <div class="row">human-in-the-loop</div>
+        </div>
+      </div>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>怎么缓解 Reward Hacking？</strong>① 加 KL 惩罚约束策略不要跑偏；② 奖励模型集成（ensemble）取均值/方差惩罚；③ 奖励归一化与裁剪；④ 混合部分人工反馈在线纠偏；⑤ 用 DPO 这类隐式奖励方法绕开显式 RM。</li>
+          <li><strong>为什么 KL 惩罚能抑制 Hacking？</strong> 它把「策略分布」锚定在 SFT 参考分布附近，Hacking 通常需要策略分布大幅偏离原分布，KL 项直接提高了这条路径的代价。</li>
+          <li><strong>「奖励归一化」为什么要做？</strong> 不同 prompt 的 reward 量纲差异大，归一化后 advantage 更稳定；常见做法是按 batch 或 running mean/std 做 z-score。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 三 ---------- -->
+    <section class="section" id="s3">
+      <div class="section-head">
+        <div class="sec-num">03</div>
+        <h2>PPO 核心原理</h2>
+      </div>
+
+      <p>
+        原始 <strong>Policy Gradient 策略梯度算法</strong>，更新时策略变化幅度完全不受约束。
+        如果一次梯度更新过大，新策略和旧策略分布差异巨大，很容易直接把模型训崩，训练非常不稳定。
+        PPO 引入 <strong>clip 截断机制</strong>，用来约束新旧策略的概率比值：
+      </p>
+
+      <div class="formula">r(θ) = π<sub>θ</sub>(a|s) / π<sub>θ_old</sub>(a|s)</div>
+
+      <p>
+        <strong>clip 的核心思想：</strong>在策略能够获得收益提升的前提下，限制新旧策略之间的分布偏移，
+        防止单次更新步子迈太大。PPO 有两个主流版本：
+      </p>
+      <ul style="color:var(--ink-2)">
+        <li><strong>PPO-Penalty</strong>：使用 KL 散度做惩罚；</li>
+        <li><strong>PPO-Clip</strong>：采用截断比值的方式，也是 RLHF 场景下最常用的版本。</li>
+      </ul>
+
+      <h3 id="s3-1">KL 惩罚项</h3>
+      <p>
+        RLHF 训练过程中会额外增加 <strong>KL 惩罚项</strong>。我们会固定 SFT 模型作为<strong>参考模型</strong>，
+        计算当前策略模型输出分布和参考模型分布之间的 KL 散度，加到总损失里。
+        KL 惩罚的作用是约束新策略不要偏离原始 SFT 模型太远。一旦策略偏离基准模型过多，损失就会变大，
+        以此避免模型生成无意义文本、模型能力退化，同时抑制 Reward Hacking。
+        <strong>KL 数值越大，代表策略偏离 SFT 基准越多。</strong>
+      </p>
+
+      <!-- PPO 循环流程图 -->
+      <div class="pipe">
+        <div class="pnode">① 采样 Prompt 批次</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">② Policy 策略模型 rollout 生成 response<small>同时保存旧策略 log_prob_old</small></div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">③ Reward Model 打分 → reward</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">④ 计算 Advantage（衡量该动作比平均水平好多少）</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode hl">⑤ PPO-Clip 更新 Policy ＋ KL 惩罚（对齐冻结的 Ref 模型）</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="loop-note">↺ 回到 ②，进入下一轮迭代</div>
+      </div>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">PPO-Clip Loss 核心实现</span></figcaption>
+<pre><code class="language-python"># ========== PPO Clip Loss 核心实现 ==========
+def ppo_clip_loss(log_prob_new, log_prob_old, advantage, eps=0.2):
+    """
+    log_prob_new: 当前策略模型动作log概率
+    log_prob_old: rollout阶段旧策略保存下来的log概率
+    advantage: 优势函数，衡量当前动作比平均水平好多少
+    eps: clip截断系数，通常取0.2
+    """
+    ratio = torch.exp(log_prob_new - log_prob_old)
+    unclipped = ratio * advantage
+    clipped = torch.clamp(ratio, 1 - eps, 1 + eps) * advantage
+    # 取最小值，负号是因为梯度下降最小化损失
+    loss = -torch.min(unclipped, clipped).mean()
+    return loss</code></pre>
+      </figure>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">KL 惩罚项实现</span></figcaption>
+<pre><code class="language-python"># ========== KL惩罚项实现 ==========
+def kl_divergence(policy_logits, ref_logits):
+    # KL(policy || ref)，计算策略分布相对参考SFT分布的散度
+    logp = torch.log_softmax(policy_logits, dim=-1)
+    logref = torch.log_softmax(ref_logits, dim=-1)
+    kl = (torch.exp(logp) * (logp - logref)).sum(dim=-1)
+    return kl
+
+def ppo_total_loss(log_prob_new, log_prob_old, adv, policy_logits, ref_logits, kl_coeff=0.05):
+    clip_loss = ppo_clip_loss(log_prob_new, log_prob_old, adv)
+    kl = kl_divergence(policy_logits, ref_logits).mean()
+    total_loss = clip_loss + kl_coeff * kl
+    return total_loss</code></pre>
+      </figure>
+
+      <h3 id="s3-2">GAE 与优势估计</h3>
+      <p>
+        Advantage（优势）衡量的是「在状态 s 下采取动作 a，比平均水平好多少」。
+        最朴素的估计是 <code>A = R − V(s)</code>，但单步回报方差大。
+        <strong>GAE（Generalized Advantage Estimation，广义优势估计）</strong>通过引入衰减因子 λ，
+        在「偏差」和「方差」之间做权衡，是 PPO 的标准配置。
+      </p>
+
+      <div class="formula">A<sub>t</sub><sup>GAE</sup> = Σ<sub>l≥0</sub> (γλ)<sup>l</sup> · δ<sub>t+l</sub> ，其中 δ<sub>t</sub> = r<sub>t</sub> + γV(s<sub>t+1</sub>) − V(s<sub>t</sub>)</div>
+
+      <div class="tip math">
+        <div class="tip-head">📐 直觉理解</div>
+        <p>λ = 0 时退化为单步 TD 误差（低方差、高偏差）；λ = 1 时退化为蒙特卡洛回报（高方差、低偏差）。
+        实践中 λ 通常取 0.95 左右，兼顾两者。</p>
+      </div>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">GAE 优势估计示意代码</span></figcaption>
+<pre><code class="language-python"># ========== GAE（广义优势估计）示意代码 ==========
+def compute_gae(rewards, values, gamma=0.99, lam=0.95):
+    """
+    rewards: 每一步的即时奖励 [T]
+    values:  价值模型对每个状态的估计 V(s_t) [T+1]，最后一位是 bootstrap
+    返回: advantages [T], returns [T]
+    """
+    T = len(rewards)
+    advantages = torch.zeros(T)
+    last_gae = 0.0
+    for t in reversed(range(T)):
+        # TD 误差 δ_t = r_t + γV(s_{t+1}) - V(s_t)
+        delta = rewards[t] + gamma * values[t + 1] - values[t]
+        # 递推累积：A_t = δ_t + γλ · A_{t+1}
+        last_gae = delta + gamma * lam * last_gae
+        advantages[t] = last_gae
+    returns = advantages + values[:-1]   # 回报 = 优势 + 价值基线
+    return advantages, returns</code></pre>
+      </figure>
+
+      <h3 id="s3-3">完整 PPO 训练步骤（教学伪代码）</h3>
+      <p>
+        把前面所有片段串起来，一个 PPO 迭代包含「采样 → 打分 → 优势估计 → 多轮 minibatch 更新」四个动作。
+        下面用一个函数骨架把链路展示完整。
+      </p>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">PPO 单轮迭代骨架（串联所有组件）</span></figcaption>
+<pre><code class="language-python"># ========== PPO 单轮迭代骨架 ==========
+def ppo_train_step(policy, ref_model, reward_model, critic,
+                   prompts, optimizer, gen_kwargs,
+                   clip_eps=0.2, kl_coeff=0.05, gamma=0.99, lam=0.95):
+    """一次完整的 PPO 迭代：采样 → 打分 → 优势 → 更新"""
+    # ---- ① Rollout：策略模型批量采样，保存 log_prob_old ----
+    with torch.no_grad():
+        responses, logp_old, values_old = [], [], []
+        for p in prompts:
+            tokens = tokenizer(p, return_tensors="pt")
+            gen = policy.generate(**tokens, **gen_kwargs)
+            resp = tokenizer.decode(gen[0], skip_special_tokens=True)
+            responses.append(resp)
+
+            full = tokenizer(p + resp, return_tensors="pt")
+            # 策略模型在采样时的 log 概率（旧策略）
+            out_old = policy(**full)
+            logp_old.append(policy_logprob(out_old.logits, full["input_ids"]))
+            # Critic 估计状态价值
+            values_old.append(critic(**full))
+
+    # ---- ② Reward Model 打分 ----
+    with torch.no_grad():
+        rewards = torch.stack([
+            reward_model(tokenizer(p + r, return_tensors="pt")["input_ids"])
+            for p, r in zip(prompts, responses)
+        ]).squeeze(-1)
+
+    # ---- ③ GAE 优势估计 ----
+    values_cat = torch.cat([v.squeeze(-1) for v in values_old] + [torch.zeros(1)])
+    advantages, returns = compute_gae(rewards, values_cat, gamma, lam)
+    # 优势标准化，稳定训练
+    advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
+
+    # ---- ④ 多轮 minibatch 更新 ----
+    total_loss_val = 0.0
+    for _ in range(4):  # 同一批数据复用 4 个 epoch
+        out_new = policy(**tokenizer(prompts[0] + responses[0], return_tensors="pt"))
+        logp_new = policy_logprob(out_new.logits, tokenizer(prompts[0] + responses[0])["input_ids"])
+
+        # PPO-Clip 损失
+        clip_loss = ppo_clip_loss(logp_new, logp_old[0], advantages[0], eps=clip_eps)
+        # KL 惩罚（对齐冻结的参考模型）
+        with torch.no_grad():
+            out_ref = ref_model(**tokenizer(prompts[0] + responses[0], return_tensors="pt"))
+        kl = kl_divergence(out_new.logits, out_ref.logits).mean()
+        # 价值模型回归损失
+        value_loss = torch.nn.functional.mse_loss(critic_out, returns[0])
+
+        loss = clip_loss + kl_coeff * kl + 0.5 * value_loss
+
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(policy.parameters(), max_norm=1.0)
+        optimizer.step()
+        total_loss_val += loss.item()
+
+    return {"loss": total_loss_val / 4, "reward_mean": rewards.mean().item()}</code></pre>
+      </figure>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>为什么是 <code>torch.min</code>？</strong> 这是 PPO 的「悲观下界」：当 advantage &gt; 0 时取 min 等价于给 ratio 设了 1+ε 的上限，防止好动作被过度放大；当 advantage &lt; 0 时取 min 等价于给 ratio 设了 1−ε 的下限，防止坏动作被过度惩罚。两种情况都只限制「朝有利方向」的步子。</li>
+          <li><strong>ratio 的物理含义？</strong> <code>π_new / π_old</code>。用 <code>exp(logp_new − logp_old)</code> 计算是为了数值稳定，避免小概率直接相除产生精度问题。</li>
+          <li><strong>ε 为什么常取 0.2？</strong> 经验值，代表单次更新允许概率最多变化约 20%，是稳定性与学习速度的折中。</li>
+          <li><strong>KL 项为什么用 <code>KL(policy ‖ ref)</code> 而不是反向？</strong> 这是「前向 KL」，会惩罚策略在参考分布概率低的区域产生输出，符合「不许跑太远」的约束目标。实现上用 <code>E_p[log p − log ref]</code> 的无偏估计（k1/k2/k3 估计器是工程变体）。</li>
+          <li><strong>参考模型为什么必须冻结？</strong> 如果参考模型跟着更新，KL 约束的「锚点」会跟着漂移，约束逐渐失效，模型会持续偏离 SFT 分布，导致能力退化与 Reward Hacking。</li>
+          <li><strong>为什么优势要做标准化？</strong> 不同 prompt 的 reward 尺度差异大，标准化（减均值除标准差）能让梯度尺度一致，训练更稳。</li>
+          <li><strong>GAE 里 γ 和 λ 的分工？</strong> γ 是折扣因子，决定「未来奖励打几折」；λ 是优势估计的偏差-方差权衡参数。两者含义不同，不能混用。</li>
+          <li><strong>为什么需要梯度裁剪？</strong> RL 的 loss 尺度不稳定，梯度爆炸常见；<code>clip_grad_norm_</code> 把梯度范数限制在阈值内，是 PPO 稳定训练的必备项。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 四 ---------- -->
+    <section class="section" id="s4">
+      <div class="section-head">
+        <div class="sec-num">04</div>
+        <h2>偏好优化 PO 系列算法（DPO / ORPO）</h2>
+      </div>
+
+      <h3 id="s4-1">DPO：Direct Preference Optimization</h3>
+      <p>
+        <strong>DPO 全称 Direct Preference Optimization，直接偏好优化</strong>，是目前 RLHF 最主流的替代方案。
+        DPO 完全不需要单独训练奖励模型，也不需要 PPO 那一套在线 rollout 采样 + 强化迭代的流程。
+        它直接把成对偏好数据转化为<strong>分类优化目标</strong>，<strong>隐式建模奖励函数</strong>。
+      </p>
+
+      <div class="compare">
+        <div class="cbox good">
+          <h4>✅ DPO 优点</h4>
+          <div class="steps">
+            省去奖励模型训练阶段，训练链路大幅缩短，代码实现简单<br>
+            <span>训练稳定性强，不存在 PPO 容易训练崩溃、调参复杂的问题</span><br>
+            <span>整体算力开销更低</span>
+          </div>
+        </div>
+        <div class="cbox bad">
+          <h4>⚠️ DPO 缺点</h4>
+          <div class="steps">
+            缺少在线探索能力，模型无法在训练过程中探索新的回答样本<br>
+            <span>对偏好数据集质量更加敏感</span><br>
+            <span>chosen / rejected 区分度不足时，效果明显下滑</span>
+          </div>
+        </div>
+      </div>
+
+      <h3>DPO 与 ORPO 的区别</h3>
+      <p>
+        <strong>DPO</strong> 只使用 chosen / rejected 成对偏好数据，优化目标是最大化优选回答相对劣选回答的优势；
+        训练流程是<strong>先完成 SFT，再单独执行 DPO 偏好对齐训练</strong>。
+      </p>
+      <p>
+        <strong>ORPO 全称 Odds Ratio Preference Optimization</strong>，它把 SFT 损失和偏好损失合并到同一个损失函数当中，
+        可以<strong>单阶段同时完成 SFT 训练和偏好对齐</strong>，不需要拆成两个阶段训练，代码更加简洁，
+        在小数据集场景下效果通常更好。
+      </p>
+
+      <!-- DPO / ORPO 流程对比 -->
+      <div class="compare">
+        <div class="cbox neutral">
+          <h4>🔁 DPO 两阶段</h4>
+          <div class="steps">
+            <span>底座模型</span> → SFT 微调 → <span>SFT 模型</span><br>
+            SFT 模型 → DPO 偏好对齐 → <span>对齐模型</span>
+          </div>
+        </div>
+        <div class="cbox good">
+          <h4>⚡ ORPO 单阶段</h4>
+          <div class="steps">
+            <span>底座模型</span><br>
+            → 一次训练（SFT loss ＋ Odds Ratio loss）<br>
+            → <span>对齐模型</span>
+          </div>
+        </div>
+      </div>
+
+      <h3>PO 家族的统一视角</h3>
+      <p>
+        <strong>PO（Preference Optimization，偏好优化）</strong>是一大类算法的统称，DPO、ORPO、KL-DPO 都属于 PO 算法。
+        传统 RLHF 的思路是先<strong>显式构建奖励函数</strong>，再用强化学习最大化奖励；
+        PO 系列算法跳过显式奖励建模这一步，<strong>直接利用偏好对优化策略</strong>，
+        数学上等价于<strong>隐式奖励建模</strong>，训练稳定性更强。
+      </p>
+
+      <h3 id="s4-2">DPO 隐式奖励推导（三步走）</h3>
+      <div class="timeline">
+        <div class="tl-item t1">
+          <h5>① 写出 KL 约束下的最优策略</h5>
+          <p>目标是 <code>max E[r(x,y)] − β·KL(π‖π_ref)</code>，其闭式最优解为 <code>π*(y|x) ∝ π_ref(y|x)·exp(r(x,y)/β)</code>。</p>
+        </div>
+        <div class="tl-item t2">
+          <h5>② 反解奖励函数</h5>
+          <p>对上面式子取对数整理，得到 <code>r(x,y) = β·log(π*(y|x)/π_ref(y|x)) + β·log Z(x)</code>，其中 Z(x) 是配分函数。</p>
+        </div>
+        <div class="tl-item t3">
+          <h5>③ 代入 Bradley-Terry 消掉 Z(x)</h5>
+          <p>偏好概率 <code>P(y_w ≻ y_l) = σ(r(x,y_w) − r(x,y_l))</code>。做差时 <code>Z(x)</code> 恰好抵消，只剩策略与参考模型的对数概率比，于是直接得到 DPO 损失。</p>
+        </div>
+      </div>
+
+      <div class="tip math">
+        <div class="tip-head">📐 一句话总结</div>
+        <p>DPO 把「训一个奖励模型 + 用 PPO 最大化它」这一整套流程，<strong>数学等价地</strong>压缩成了一个关于策略本身的二分类损失。奖励不再被显式表示，而是隐含在「策略与参考模型的对数概率差」里。</p>
+      </div>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">DPO Loss 实现</span></figcaption>
+<pre><code class="language-python"># ========== DPO Loss 实现 ==========
+def get_log_prob(model, input_ids):
+    """辅助函数：计算给定序列的对数概率之和"""
+    out = model(input_ids=input_ids)
+    logits = out.logits
+    logp_tokens = torch.log_softmax(logits, dim=-1)
+    token_logp = logp_tokens[:, :-1].gather(-1, input_ids[:,1:].unsqueeze(-1)).squeeze(-1)
+    return token_logp.sum(dim=-1)
+
+def dpo_loss(policy_model, ref_model, prompt, chosen, rejected, beta=0.1):
+    tok_chosen = tokenizer(prompt + chosen, return_tensors="pt")
+    tok_rej = tokenizer(prompt + rejected, return_tensors="pt")
+
+    logp_chosen_pol = get_log_prob(policy_model, **tok_chosen)
+    logp_rej_pol = get_log_prob(policy_model, **tok_rej)
+
+    logp_chosen_ref = get_log_prob(ref_model, **tok_chosen)
+    logp_rej_ref = get_log_prob(ref_model, **tok_rej)
+
+    log_ratio_chosen = logp_chosen_pol - logp_chosen_ref
+    log_ratio_rej = logp_rej_pol - logp_rej_ref
+
+    loss = -torch.nn.functional.logsigmoid(beta * (log_ratio_chosen - log_ratio_rej))
+    return loss.mean()</code></pre>
+      </figure>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">ORPO Loss 示意</span></figcaption>
+<pre><code class="language-python"># ========== ORPO Loss 示意 ==========
+def orpo_loss(policy_model, prompt, chosen, rejected, beta=0.1):
+    # ORPO：SFT损失 + odds ratio偏好损失合并
+    sft_loss_val = sft_loss(prompt, chosen)
+    tok_chosen = tokenizer(prompt + chosen, return_tensors="pt")
+    tok_rej = tokenizer(prompt + rejected, return_tensors="pt")
+    logp_chosen = get_log_prob(policy_model, **tok_chosen)
+    logp_rej = get_log_prob(policy_model, **tok_rej)
+    odds_ratio = torch.log(torch.sigmoid(beta * (logp_chosen - logp_rej)))
+    total_loss = sft_loss_val - odds_ratio
+    return total_loss.mean()</code></pre>
+      </figure>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>DPO 的数学本质是什么？</strong> 在 KL 约束下的奖励最大化问题存在闭式最优策略，反解出 <code>r(x,y) = β·log(π_θ/π_ref) + β·log Z(x)</code>，代回 Bradley-Terry 偏好模型后配分项 <code>Z(x)</code> 被消掉，于是直接得到关于策略本身的分类损失。也就是说，<strong>DPO 把「训 RM + 跑 PPO」等价压缩成了一个监督式损失</strong>。</li>
+          <li><strong>DPO 中的 <code>beta</code> 是什么？</strong> 与 RLHF 中 KL 惩罚系数作用对应，控制允许偏离参考模型的幅度。β 越大越保守（贴近 SFT），越小越激进（更容易过拟合偏好数据）。</li>
+          <li><strong>DPO 为什么仍然需要 ref_model？</strong> 因为它的隐式奖励是「相对参考模型的对数概率比」，没有参考模型就没有比较基准。</li>
+          <li><strong>ORPO 的 odds ratio 为什么比 DPO 的直接概率差更稳？</strong> odds = p/(1−p) 的形式对长序列的 log-prob 累积不敏感，且天然与 SFT 的 NLL 损失共享同一个 log-prob 计算，实现上零额外开销。</li>
+          <li><strong>DPO 与 RLHF 的取舍？</strong> 数据质量高、算力有限 → DPO；需要在线探索、可自动判定对错（数学/代码）→ 在线 RL（PPO/GRPO）。</li>
+          <li><strong>DPO 为什么容易对数据敏感？</strong> 它没有在线探索，完全依赖离线数据的分布覆盖；如果 chosen/rejected 差异小或存在噪声标注，梯度信号会被稀释甚至反向。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 五 ---------- -->
+    <section class="section" id="s5">
+      <div class="section-head">
+        <div class="sec-num">05</div>
+        <h2>Rollout 与工程逻辑</h2>
+      </div>
+
+      <p>
+        <strong>Rollout</strong> 是 PPO 这类在线强化学习训练中的核心环节。在每一轮 PPO 迭代的 rollout 阶段，
+        策略模型批量接收 prompt，采样生成回答，将生成的回答送入奖励模型打分得到 reward 奖励信号，
+        之后再回传信号用于 PPO 策略更新。
+      </p>
+
+      <div class="formula">prompt 送入 policy 模型 → 生成 response → RM 打分 → 计算损失更新 policy</div>
+
+      <p>
+        Rollout 阶段的性能瓶颈通常集中在 <strong>token 解码生成速度</strong>、<strong>prefill 阶段</strong>、
+        <strong>解码阶段的吞吐能力</strong>、<strong>batch 调度策略</strong>，还有 <strong>KV 缓存的内存占用</strong>。
+      </p>
+
+      <h3>在线 Rollout vs 离线偏好数据集</h3>
+
+      <div class="compare">
+        <div class="cbox bad">
+          <h4>🟠 在线 Rollout（PPO 特有）</h4>
+          <div class="steps">
+            每一轮训练迭代，策略模型<strong>实时采样生成全新回答</strong><br>
+            <span>交给 RM 或者人工打分</span><br>
+            <span>模型拥有探索新输出空间的能力</span><br>
+            <span>代价：算力成本很高</span>
+          </div>
+        </div>
+        <div class="cbox good">
+          <h4>🟢 离线偏好数据集（DPO 常用）</h4>
+          <div class="steps">
+            数据集<strong>提前收集固定</strong><br>
+            <span>整个训练过程不会再生成新样本</span><br>
+            <span>没有在线采样环节</span><br>
+            <span>代价：无探索能力，依赖数据质量</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip note">
+        <div class="tip-head">🔒 参考模型的角色</div>
+        <p>
+          PPO 训练的时候策略模型和参考模型会分开设置。参考模型固定为 SFT 模型，<strong>全程不参与梯度更新</strong>，
+          它唯一的作用就是用来计算 KL 惩罚，限制策略更新幅度。如果参考模型跟着一起更新，
+          KL 约束就会失效，模型很容易发生能力退化，出现 Reward Hacking。
+        </p>
+      </div>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">Rollout 采样示意代码</span></figcaption>
+<pre><code class="language-python"># ========== Rollout 采样示意代码 ==========
+def rollout(policy_model, rm, prompts, gen_kwargs):
+    """rollout阶段：策略模型批量生成回答，RM打分"""
+    responses = []
+    rewards = []
+    for p in prompts:
+        tokens = tokenizer(p, return_tensors="pt")
+        gen_out = policy_model.generate(**tokens, **gen_kwargs)
+        resp = tokenizer.decode(gen_out[0], skip_special_tokens=True)
+        responses.append(resp)
+        # RM打分得到reward
+        reward = rm(tokenizer(p+resp, return_tensors="pt"))
+        rewards.append(reward)
+    return responses, torch.cat(rewards)</code></pre>
+      </figure>
+
+      <h3 id="s5-1">数据工程与超参速查</h3>
+      <p>
+        对齐训练的效果，一半靠算法，一半靠数据和超参。下面把常见配置整理成速查卡片。
+      </p>
+
+      <div class="datapath">
+        <div class="dpcard">
+          <span class="dpn">DATA</span>
+          <h5>偏好数据构造</h5>
+          <p>同一 prompt 采样 4~16 条回答，人工排序或模型辅助标注，保证 chosen/rejected 差异明显。</p>
+          <div class="row">prompt → {y1..yN} → 排序</div>
+        </div>
+        <div class="dpcard">
+          <span class="dpn">LOSS</span>
+          <h5>KL 系数 β / kl_coeff</h5>
+          <p>RLHF 常用 0.01~0.1；DPO 的 beta 常用 0.1~0.5。太大保守，太小易 Hacking。</p>
+          <div class="row">0.01 ≤ kl_coeff ≤ 0.1</div>
+        </div>
+        <div class="dpcard">
+          <span class="dpn">OPT</span>
+          <h5>学习率与 batch</h5>
+          <p>PPO 策略模型学习率通常 1e-6 ~ 5e-6，远小于 SFT；batch 要足够大以降低梯度方差。</p>
+          <div class="row">lr ≈ 1e-6 ~ 5e-6</div>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>超参</th>
+              <th>典型范围</th>
+              <th>调大后果</th>
+              <th>调小后果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>clip_eps</code></td>
+              <td>0.1 ~ 0.3</td>
+              <td class="mid">允许更新步子更大，可能不稳</td>
+              <td class="mid">更新受限，收敛变慢</td>
+            </tr>
+            <tr>
+              <td><code>kl_coeff</code></td>
+              <td>0.01 ~ 0.1</td>
+              <td class="good">贴近 SFT，抑制 Hacking</td>
+              <td class="bad">约束失效，易能力退化</td>
+            </tr>
+            <tr>
+              <td><code>gamma</code></td>
+              <td>0.95 ~ 0.99</td>
+              <td class="mid">更重视长期回报</td>
+              <td class="mid">更短视，偏向即时奖励</td>
+            </tr>
+            <tr>
+              <td><code>lam</code> (GAE)</td>
+              <td>0.9 ~ 0.98</td>
+              <td class="mid">低偏差高方差</td>
+              <td class="mid">高偏差低方差</td>
+            </tr>
+            <tr>
+              <td>采样温度</td>
+              <td>0.7 ~ 1.0</td>
+              <td class="bad">样本质量差，噪声大</td>
+              <td class="bad">探索不足，分布单一</td>
+            </tr>
+            <tr>
+              <td>DPO <code>beta</code></td>
+              <td>0.1 ~ 0.5</td>
+              <td class="good">更贴近参考模型</td>
+              <td class="bad">易过拟合偏好数据</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>on-policy 与 off-policy 在这里指什么？</strong> PPO 的更新数据必须来自当前策略（或非常接近的旧策略），属于 on-policy；DPO 用的是固定离线数据集，属于 off-policy，所以它没有重要性采样修正的需求。</li>
+          <li><strong>为什么 PPO 里要保存 <code>log_prob_old</code>？</strong> 因为同一个 rollout 批次通常会被复用做多轮 minibatch 更新，ratio 必须以「采样时那一刻的策略」为基准，否则 clip 的约束对象就错了。</li>
+          <li><strong>Rollout 为什么是性能瓶颈？</strong> 它是自回归逐 token 解码，GPU 利用率远低于训练时的并行前向；prefill 是计算密集、decode 是访存密集，两者混合调度对吞吐影响极大。</li>
+          <li><strong>工程上常见的加速手段？</strong> 推理引擎与训练引擎分离（如 vLLM/SGLang 做 rollout）、连续批处理、KV 缓存复用、生成长度上限控制、异步 rollout 与训练重叠。</li>
+          <li><strong>为什么 PPO 学习率要比 SFT 小一个数量级？</strong> 策略梯度估计本身噪声大，学习率过大会导致策略剧烈震荡；小学习率配合 clip 才能稳定推进。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 六 ---------- -->
+    <section class="section" id="s6">
+      <div class="section-head">
+        <div class="sec-num">06</div>
+        <h2>GRPO 原理</h2>
+      </div>
+
+      <p>
+        <strong>GRPO 全称 Group Relative Policy Optimization</strong>，由深度求索提出，
+        多用于<strong>数学、代码</strong>这类推理任务的大模型强化学习对齐。
+      </p>
+      <p>
+        GRPO <strong>不需要奖励模型</strong>。针对同一个 prompt，模型采样 N 个不同回答，
+        然后依靠<strong>组内回答的相对好坏</strong>来计算奖励，使用<strong>组内归一化</strong>替代单独 RM 打分。
+        这个算法可以大幅削减奖励模型带来的训练成本，非常适合<strong>答案可以自动判定对错</strong>的场景，
+        比如数学题、代码执行判题。
+      </p>
+
+      <div class="pipe">
+        <div class="pnode">同一个 Prompt</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">采样 N 个回答 y₁ … y<sub>N</sub><small>（Group 采样）</small></div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">规则 / 验证器直接判对错，得到 r₁ … r<sub>N</sub><small>无需奖励模型</small></div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode hl">组内归一化：Â<sub>i</sub> = (r<sub>i</sub> − mean) / (std + ε)</div>
+        <div class="pipe-arrow">▼</div>
+        <div class="pnode">用 Â<sub>i</sub> 替代 PPO 的 Advantage，做带 KL 的 clip 更新</div>
+      </div>
+
+      <figure class="code">
+        <figcaption><span class="lang">PYTHON</span><span class="title">GRPO 组内相对奖励示意</span></figcaption>
+<pre><code class="language-python"># ========== GRPO 组内相对奖励示意 ==========
+def grpo_group_reward(rewards_group):
+    """对同一个prompt的N个回答做组内归一化"""
+    mean_r = rewards_group.mean()
+    std_r = rewards_group.std() + 1e-8
+    normalized_reward = (rewards_group - mean_r) / std_r
+    return normalized_reward</code></pre>
+      </figure>
+
+      <div class="compare">
+        <div class="cbox bad">
+          <h4>PPO 需要什么</h4>
+          <div class="steps">
+            奖励模型 RM ✓<br>
+            <span>价值模型 Critic ✓</span><br>
+            <span>参考模型 Ref ✓</span><br>
+            <span>策略模型 Policy ✓</span>
+          </div>
+        </div>
+        <div class="cbox good">
+          <h4>GRPO 只需要什么</h4>
+          <div class="steps">
+            规则验证器（替代 RM）✓<br>
+            <span>参考模型 Ref ✓</span><br>
+            <span>策略模型 Policy ✓</span><br>
+            <span class="bad">省掉 Critic，显存大幅下降</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>GRPO 和 PPO 最大的区别？</strong> 去掉了 Critic / Value Model。PPO 需要额外训一个价值网络来估计 baseline，GRPO 用「同一 prompt 下多个样本的组内均值」当 baseline，省掉了与策略模型同量级的价值网络，显存和算力大幅下降。</li>
+          <li><strong>组内归一化为什么合理？</strong> 同一 prompt 的多个回答共享同一个条件，组内相对好坏就是最自然的优势估计，且天然消掉了 prompt 难度带来的方差。</li>
+          <li><strong>GRPO 的适用边界？</strong> 必须存在可靠的自动判分信号（数学答案比对、代码单测）。开放式对话类任务没有规则验证器，仍需 RM 或人工。</li>
+          <li><strong>为什么 GRPO 特别适合推理任务？</strong> 推理任务奖励通常是稀疏的 0/1，组内归一化把稀疏奖励转成了有区分度的相对优势，梯度信号更稳定。</li>
+          <li><strong>组内方差为 0 会怎样？</strong> 如果 N 个回答全对或全错，归一化后优势全为 0，该 prompt 不产生梯度。工程上通常跳过这类样本或做过滤。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 七 ---------- -->
+    <section class="section" id="s7">
+      <div class="section-head">
+        <div class="sec-num">07</div>
+        <h2>RL 对齐评估体系</h2>
+      </div>
+
+      <p>RL 对齐的评估分为<strong>自动指标</strong>与<strong>人工指标</strong>两大类。</p>
+
+      <div class="grid2">
+        <div class="mini">
+          <h4><span class="badge auto">自动</span> 模型基础能力评测集</h4>
+          <ul>
+            <li><strong>MATH</strong> — 数学推理</li>
+            <li><strong>GSM8K</strong> — 小学数学应用题</li>
+            <li><strong>AIME</strong> — 竞赛级数学</li>
+            <li><strong>HumanEval</strong> — 代码生成</li>
+          </ul>
+          <p style="font-size:12.8px;color:var(--muted);margin:10px 0 0">
+            用来检验模型推理、代码能力有没有在对齐过程中下降。
+          </p>
+        </div>
+        <div class="mini">
+          <h4><span class="badge auto">自动</span> 自动偏好评估</h4>
+          <ul>
+            <li><strong>奖励模型打分</strong> — 用 RM 给输出打分</li>
+            <li><strong>MT-Bench</strong> — 多轮对话评测</li>
+          </ul>
+          <p style="font-size:12.8px;color:var(--muted);margin:10px 0 0">
+            快速、低成本，但容易被同一个 RM 的偏好盲区误导。
+          </p>
+        </div>
+      </div>
+
+      <div class="mini" style="margin-top:0">
+        <h4><span class="badge human">人工</span> 人工成对偏好对比</h4>
+        <ul>
+          <li>人工打分、A/B 成对比较，用来检验模型<strong>真实人类偏好对齐效果</strong></li>
+          <li>成本高、周期长，但它是唯一能真正发现 Reward Hacking 的手段</li>
+        </ul>
+      </div>
+
+      <h3>训练过程需要持续监控的辅助指标</h3>
+      <div class="card">
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>KL 散度</b></span>
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>生成长度</b></span>
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>文本重复率</b></span>
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>有害输出占比</b></span>
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>奖励均值 / 方差</b></span>
+          <span class="chip" style="background:#eef0ff;border-color:#dcdcff;color:#4338ca"><b>梯度范数</b></span>
+        </div>
+        <p style="margin:14px 0 0;font-size:14px;color:var(--muted)">
+          用来提前发现 <strong>Reward Hacking</strong> 或者 <strong>模型退化</strong>。
+          例如：长度指标突然飙升 + KL 持续走高 + 重复率上升，基本可以判定模型正在「灌水刷分」。
+        </p>
+      </div>
+
+      <h3>指标异常 → 可能病因对照</h3>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>观察到的现象</th>
+              <th>可能病因</th>
+              <th>排查方向</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>reward 上升，但人工评测变差</td>
+              <td class="bad">Reward Hacking</td>
+              <td>RM 是否过拟合；KL 系数是否太低</td>
+            </tr>
+            <tr>
+              <td>KL 持续单调走高</td>
+              <td class="mid">策略偏离参考分布</td>
+              <td>增大 kl_coeff 或降低学习率</td>
+            </tr>
+            <tr>
+              <td>生成长度异常膨胀</td>
+              <td class="bad">长度偏置型 Hacking</td>
+              <td>RM 是否对长度敏感；加长度惩罚</td>
+            </tr>
+            <tr>
+              <td>文本重复率飙升</td>
+              <td class="mid">策略坍塌 / 分布退化</td>
+              <td>采样温度是否过低；检查 KL</td>
+            </tr>
+            <tr>
+              <td>reward 方差接近 0</td>
+              <td class="bad">信号无区分度</td>
+              <td>偏好数据质量；RM 训练是否失败</td>
+            </tr>
+            <tr>
+              <td>梯度范数剧烈波动</td>
+              <td class="mid">训练不稳定</td>
+              <td>梯度裁剪；batch 是否过小</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>为什么对齐训练一定要盯基础能力评测集？</strong> 因为 RL 优化的是「偏好」，而不是「能力」。过度优化偏好很容易牺牲推理与代码能力（即 alignment tax），必须用客观评测集兜底。</li>
+          <li><strong>Reward Model 打分和人工打分冲突时怎么办？</strong> 以人工为准，说明 RM 已经出现分布外过拟合，需要补数据重训 RM，或降低 RM 在总目标中的权重。</li>
+          <li><strong>KL 散度监控的典型阈值思路？</strong> 不看绝对值看趋势：KL 持续单调上升往往意味着策略已经跑出参考分布的有效范围，此时即便 reward 还在涨，也大概率是 Hacking。</li>
+          <li><strong>alignment tax 指什么？</strong> 对齐训练后模型在通用能力（推理、知识问答）上出现的性能回退。它是偏好优化与能力保持之间的权衡结果。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 八 ---------- -->
+    <section class="section" id="s8">
+      <div class="section-head">
+        <div class="sec-num">08</div>
+        <h2>PPO 训练不收敛排查思路</h2>
+      </div>
+
+      <p>
+        当 PPO 训练不收敛时，可以按照<strong>从数据到超参，再到模型、采样、训练配置</strong>的顺序逐层排查。
+      </p>
+
+      <div class="layers">
+        <div class="layer l1">
+          <div class="lnum">1</div>
+          <div>
+            <h4>数据层面</h4>
+            <p>检查偏好样本质量，重点看 chosen 和 rejected 样本之间区分度是否充足。如果两者差别很小，奖励信号没有有效梯度，模型很难学习。</p>
+          </div>
+        </div>
+        <div class="layer l2">
+          <div class="lnum">2</div>
+          <div>
+            <h4>超参层面</h4>
+            <p>检查 clip 系数、学习率、KL 惩罚权重。KL 权重设置太高，模型会被约束住，学不到新偏好；KL 权重太低，约束失效，容易出现 Reward Hacking。</p>
+          </div>
+        </div>
+        <div class="layer l3">
+          <div class="lnum">3</div>
+          <div>
+            <h4>奖励模型层面</h4>
+            <p>检查 RM 是否过拟合，RM 打分是否具备良好区分度。如果奖励模型本身就训坏了，奖励信号是噪声，PPO 自然无法收敛。</p>
+          </div>
+        </div>
+        <div class="layer l4">
+          <div class="lnum">4</div>
+          <div>
+            <h4>采样策略</h4>
+            <p>rollout 阶段的采样温度、top-p 设置。采样探索不足，模型很难跳出原有分布；探索过度，生成样本质量差，引入大量噪声奖励。</p>
+          </div>
+        </div>
+        <div class="layer l5">
+          <div class="lnum">5</div>
+          <div>
+            <h4>训练稳定性配置</h4>
+            <p>batch 大小、梯度裁剪等设置。梯度爆炸、batch 过小都会带来训练震荡。</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="tip interview">
+        <div class="tip-head">🎯 面试考点</div>
+        <ul>
+          <li><strong>排查顺序为什么这么定？</strong> 遵循「信号源 → 约束 → 估计器 → 探索 → 优化器」的因果链：如果奖励信号本身是噪声，后面所有调参都是徒劳。</li>
+          <li><strong>reward 涨但人工评测变差，说明什么？</strong> 典型的 Reward Hacking。优先怀疑 RM 过拟合或 KL 权重过低。</li>
+          <li><strong>reward 完全不涨，先看哪两个数？</strong> ① RM 在验证集上的排序准确率；② rollout 样本的 reward 方差（方差≈0 说明信号无区分度）。</li>
+          <li><strong>loss 出现 NaN 通常是什么原因？</strong> 学习率过大、梯度爆炸、KL 项数值溢出或 log 概率计算精度不足。优先检查梯度裁剪与 log_softmax 的实现。</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ---------- 九 ---------- -->
+    <section class="section" id="s9">
+      <div class="section-head">
+        <div class="sec-num">09</div>
+        <h2>进阶算法一览</h2>
+      </div>
+
+      <p>
+        除了 RLHF / DPO / ORPO / GRPO，业界还衍生出了一系列变体。它们大多围绕「降低算力」「降低标注成本」「提升稳定性」三个目标展开。
+      </p>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>算法</th>
+              <th>核心思路</th>
+              <th>主要优势</th>
+              <th>典型场景</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Rejection Sampling</strong></td>
+              <td>采样 N 条回答，用 RM 挑最优的作为 SFT 数据，反复迭代</td>
+              <td class="good">实现极简，无 RL 不稳定性</td>
+              <td>数据增强、冷启动</td>
+            </tr>
+            <tr>
+              <td><strong>Iterative DPO</strong></td>
+              <td>用当前策略生成新回答，重新构造偏好对再做 DPO</td>
+              <td class="good">补回部分在线探索能力</td>
+              <td>提升 DPO 上限</td>
+            </tr>
+            <tr>
+              <td><strong>KTO</strong></td>
+              <td>只区分「好 / 坏」，不要求成对数据</td>
+              <td class="good">标注成本更低</td>
+              <td>单边反馈数据</td>
+            </tr>
+            <tr>
+              <td><strong>RLVR</strong></td>
+              <td>用可验证奖励（数学答案、代码单测）做 RL</td>
+              <td class="good">奖励信号客观，无 Hacking</td>
+              <td>推理能力强化</td>
+            </tr>
+            <tr>
+              <td><strong>RLAIF</strong></td>
+              <td>用强模型替代人工做偏好标注</td>
+              <td class="good">大幅降低人工成本</td>
+              <td>规模化对齐</td>
+            </tr>
+            <tr>
+              <td><strong>Self-Rewarding</strong></td>
+              <td>模型自己给自己打分，交替训 RM 与策略</td>
+              <td class="mid">减少外部依赖</td>
+              <td>研究探索</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tip note">
+        <div class="tip-head">🧩 一句话定位</div>
+        <p>
+          <strong>Rejection Sampling</strong> 是「用 RM 当过滤器」的 SFT；
+          <strong>Iterative DPO</strong> 是「离线 DPO + 在线采样」的折中；
+          <strong>RLVR</strong> 是「把 GRPO 的判分器换成程序验证器」；
+          <strong>KTO</strong> 是把成对偏好松弛成单点好坏的 DPO 变体。
+        </p>
+      </div>
+    </section>
+
+    <!-- ---------- 十 ---------- -->
+    <section class="section" id="s10">
+      <div class="section-head">
+        <div class="sec-num">10</div>
+        <h2>高频面试 FAQ</h2>
+      </div>
+
+      <p>下面用问答形式整理了对齐方向面试中最常被追问的问题，点击展开查看解答。</p>
+
+      <div class="faq">
+        <details open>
+          <summary>RLHF 和 DPO 最本质的区别是什么？</summary>
+          <div class="faq-body">
+            <p>RLHF 是「两段式」：先显式训一个奖励模型，再用 PPO 在线最大化它，奖励函数是<strong>显式存在</strong>的。</p>
+            <p>DPO 是「一段式」：直接利用成对偏好数据优化策略，奖励函数被<strong>隐式地</strong>编码在「策略与参考模型的对数概率比」中，不存在独立的 RM。</p>
+            <p>两者在数学上是等价的，只是优化路径不同：RLHF 走的是「奖励建模 → 策略优化」，DPO 走的是「一步到位的分类损失」。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>PPO 的 ratio 为什么用 exp 而不是直接相除？</summary>
+          <div class="faq-body">
+            <p>因为语言模型的动作概率常常非常小（比如 1e-8 量级），直接相除容易产生数值精度问题甚至除零。</p>
+            <p>而 log 概率是模型输出的 logits 经过 log_softmax 得到的，本身就比较稳定。<code>exp(logp_new − logp_old)</code> 把「相除」变成了「相减再取指数」，数值上安全得多。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>PPO 里 KL 惩罚和 clip 都在限制策略变化，它们有什么区别？</summary>
+          <div class="faq-body">
+            <p><strong>clip</strong> 限制的是「同一个 rollout 批次内，新旧策略在单个 token 上的概率比」，是<strong>局部、逐 token</strong> 的约束，目的是让一次梯度更新别走太远。</p>
+            <p><strong>KL 惩罚</strong> 限制的是「当前策略与冻结参考模型之间的分布距离」，是<strong>全局、跨迭代</strong> 的约束，目的是防止多轮训练累积后模型整体跑偏、能力退化。</p>
+            <p>一句话：clip 管「这一步别迈太大」，KL 管「别走错方向」。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>为什么 DPO 不需要在线采样？</summary>
+          <div class="faq-body">
+            <p>因为 DPO 的损失是直接定义在「策略与参考模型的对数概率差」上的，它只需要固定的偏好对数据就能算出梯度，不像 PPO 那样需要「当前策略实际生成样本 → RM 打分 → 估计 advantage」。</p>
+            <p>代价是失去了在线探索能力，模型无法主动发现数据分布之外的新回答，所以对离线数据的覆盖度和质量更敏感。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>GRPO 为什么能省掉 Critic？</summary>
+          <div class="faq-body">
+            <p>PPO 需要 Critic 来估计状态价值 V(s) 作为 advantage 的 baseline，这是为了降低方差。但 Critic 本身是一个与策略模型同量级的网络，训练和显存开销都不小。</p>
+            <p>GRPO 的巧思是：对同一个 prompt 采样 N 个回答，<strong>用这 N 个回答的平均奖励当作 baseline</strong>。因为条件相同，组内均值天然就是一个合理的基线估计，于是完全不需要单独的价值网络。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>Reward Hacking 和「模型能力退化」是什么关系？</summary>
+          <div class="faq-body">
+            <p>两者经常同时出现，但本质不同。</p>
+            <p><strong>Reward Hacking</strong> 是指模型找到了「刷高代理奖励但不符合真实意图」的捷径，表现为「reward 涨、人工评测差」。</p>
+            <p><strong>能力退化</strong> 是指模型在通用任务上的表现下降（alignment tax），通常是因为策略偏离 SFT 分布太远，把原有的语言能力、推理能力也一并丢掉了。</p>
+            <p>KL 惩罚同时缓解这两个问题：既提高 Hacking 的成本，又锚定模型不要丢失原有能力。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>如果只能选一个指标来判断 PPO 训练是否健康，选什么？</summary>
+          <div class="faq-body">
+            <p>选 <strong>KL 散度</strong>。</p>
+            <p>reward 高不代表好（可能是 Hacking），loss 低也不代表好（可能过拟合），但 KL 持续异常上升几乎总是一个早期预警信号——它说明策略已经跑出参考分布的有效范围，后面的 reward 增长大概率是「虚高」。</p>
+            <p>实践中通常把 KL 与「生成长度」「重复率」联合观察，三者同时异常时基本可以断定模型跑偏。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>SFT 阶段数据量不够大会有什么后果？</summary>
+          <div class="faq-body">
+            <p>首先，SFT 模型本身就不具备稳定的指令遵循能力，后面的 RM 和 PPO 阶段都会建立在薄弱的基础上。</p>
+            <p>其次，SFT 模型是 PPO 的 KL 锚点。如果 SFT 模型本身分布就「飘」，KL 约束的参考点也不稳定，策略更容易在训练中失控。</p>
+            <p>所以工业界在 SFT 上的投入通常很重，数据质量和数量都不容妥协。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>DPO 的 beta 和 RLHF 的 KL 系数是一回事吗？</summary>
+          <div class="faq-body">
+            <p>作用上类似，量纲上不同。</p>
+            <p>RLHF 的 KL 系数直接乘在 KL 散度项上，数值通常在 0.01~0.1 量级。DPO 的 beta 出现在「对数概率差」的系数位置，数值通常在 0.1~0.5 量级。</p>
+            <p>两者的共同点是：<strong>值越大，模型越保守，越贴近参考模型</strong>；值越小，越激进，越容易过拟合偏好数据。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>为什么 RLHF 的训练成本远高于 DPO？</summary>
+          <div class="faq-body">
+            <p>主要有三块开销：</p>
+            <p>① <strong>多模型并存</strong>：PPO 同时需要策略、参考、奖励、价值四个模型在显存里，而 DPO 只需要策略和参考两个。</p>
+            <p>② <strong>在线 rollout</strong>：PPO 每一轮都要重新生成回答，自回归解码非常耗时；DPO 直接读离线数据，没有生成开销。</p>
+            <p>③ <strong>训练阶段更多</strong>：RLHF 有 SFT、RM、PPO 三个阶段，DPO 只有 SFT、DPO 两个（ORPO 甚至只有一个）。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>RLVR 和 GRPO 是什么关系？</summary>
+          <div class="faq-body">
+            <p><strong>RLVR（Reinforcement Learning with Verifiable Rewards）</strong> 是一种「奖励来源」的设定：奖励由可验证的程序给出，比如数学答案比对、代码单元测试通过与否。</p>
+            <p><strong>GRPO</strong> 是一种「策略优化算法」：用组内相对奖励替代 Critic。</p>
+            <p>两者常常搭配使用：用 RLVR 提供客观奖励，用 GRPO 做高效的策略更新。但它们不是同一层次的概念。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>为什么有些场景下 ORPO 比 DPO 效果更好？</summary>
+          <div class="faq-body">
+            <p>ORPO 把 SFT 的 NLL 损失和偏好损失放在同一个目标里联合优化，模型在「学怎么回答」的同时就在「学偏好哪个回答」。</p>
+            <p>在小数据集场景下，这种联合优化能更充分地利用每一条样本，避免 DPO「先 SFT 再偏好对齐」两阶段之间的信息割裂。此外 ORPO 不需要参考模型，显存更省。</p>
+            <p>但在大数据、高质量偏好数据场景下，DPO 的两阶段解耦反而更灵活可控。</p>
+          </div>
+        </details>
+
+        <details>
+          <summary>如果面试官问「你怎么设计一个对齐训练 pipeline」，怎么答？</summary>
+          <div class="faq-body">
+            <p>可以按这个顺序回答：</p>
+            <p><strong>① 明确目标</strong>：通用对话对齐？推理能力强化？安全对齐？目标不同，算法选择不同。</p>
+            <p><strong>② 数据准备</strong>：SFT 指令数据；偏好数据（人工 / 模型辅助 / 规则生成）。</p>
+            <p><strong>③ 算法选择</strong>：算力充足且需要在线探索 → RLHF/PPO；算力有限、数据质量高 → DPO；推理任务且有验证器 → GRPO/RLVR；小数据单阶段 → ORPO。</p>
+            <p><strong>④ 训练监控</strong>：KL、reward、长度、重复率、基础能力评测集。</p>
+            <p><strong>⑤ 评估与迭代</strong>：自动指标 + 人工评测，发现 Hacking 就回补数据、调 KL 系数或重训 RM。</p>
+          </div>
+        </details>
+      </div>
+    </section>
+
+    <!-- ---------- 十一 ---------- -->
+    <section class="section" id="s11">
+      <div class="section-head">
+        <div class="sec-num">11</div>
+        <h2>术语速查表</h2>
+      </div>
+
+      <p>把全篇出现的关键术语集中列在这里，方便面试前快速扫一遍。</p>
+
+      <div class="glossary">
+        <div class="gterm">
+          <h5>RLHF</h5>
+          <p>Reinforcement Learning from Human Feedback，基于人类反馈的强化学习，三段式对齐范式的总称。</p>
+        </div>
+        <div class="gterm">
+          <h5>SFT</h5>
+          <p>Supervised Fine-Tuning，监督微调，用指令数据让底座模型学会遵循指令。</p>
+        </div>
+        <div class="gterm">
+          <h5>RM</h5>
+          <p>Reward Model，奖励模型，输入 prompt+response 输出标量分数，拟合人类偏好。</p>
+        </div>
+        <div class="gterm">
+          <h5>PPO</h5>
+          <p>Proximal Policy Optimization，近端策略优化，用 clip 限制策略更新幅度的强化学习算法。</p>
+        </div>
+        <div class="gterm">
+          <h5>KL 散度</h5>
+          <p>Kullback-Leibler Divergence，衡量两个概率分布差异的指标，用于约束策略不偏离参考模型。</p>
+        </div>
+        <div class="gterm">
+          <h5>Advantage</h5>
+          <p>优势函数 A(s,a)，衡量某动作比平均水平好多少，是策略梯度的核心信号。</p>
+        </div>
+        <div class="gterm">
+          <h5>GAE</h5>
+          <p>Generalized Advantage Estimation，广义优势估计，用衰减因子 λ 平衡偏差与方差。</p>
+        </div>
+        <div class="gterm">
+          <h5>Rollout</h5>
+          <p>在线 RL 中策略模型实时采样生成回答的过程，PPO 每一轮迭代都依赖它。</p>
+        </div>
+        <div class="gterm">
+          <h5>DPO</h5>
+          <p>Direct Preference Optimization，直接偏好优化，用隐式奖励替代显式 RM 与 PPO。</p>
+        </div>
+        <div class="gterm">
+          <h5>ORPO</h5>
+          <p>Odds Ratio Preference Optimization，把 SFT 与偏好损失合并的单阶段对齐算法。</p>
+        </div>
+        <div class="gterm">
+          <h5>GRPO</h5>
+          <p>Group Relative Policy Optimization，用组内相对奖励替代 Critic 的在线 RL 算法。</p>
+        </div>
+        <div class="gterm">
+          <h5>Reward Hacking</h5>
+          <p>奖励黑客，模型找到刷高代理奖励但不符真实意图的捷径，是对齐中的典型失败模式。</p>
+        </div>
+        <div class="gterm">
+          <h5>Alignment Tax</h5>
+          <p>对齐税，指对齐训练后模型在通用能力上出现的性能回退。</p>
+        </div>
+        <div class="gterm">
+          <h5>RLVR</h5>
+          <p>Reinforcement Learning with Verifiable Rewards，用可验证程序（数学比对、代码单测）提供奖励。</p>
+        </div>
+        <div class="gterm">
+          <h5>KTO</h5>
+          <p>Kahneman-Tversky Optimization，只需「好 / 坏」单点标注的偏好优化变体。</p>
+        </div>
+        <div class="gterm">
+          <h5>RLAIF</h5>
+          <p>Reinforcement Learning from AI Feedback，用强模型替代人工做偏好标注。</p>
+        </div>
+        <div class="gterm">
+          <h5>Bradley-Terry</h5>
+          <p>经典的成对偏好概率模型，P(A≻B)=σ(r_A−r_B)，是 RM 与 DPO 的共同数学基础。</p>
+        </div>
+        <div class="gterm">
+          <h5>On-policy / Off-policy</h5>
+          <p>训练数据是否来自当前策略。PPO 为 on-policy，DPO 为 off-policy。</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- 十二 ---------- -->
+    <section class="section" id="s12">
+      <div class="section-head">
+        <div class="sec-num">12</div>
+        <h2>附录：算法对比速查表</h2>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>维度</th>
+              <th>RLHF（PPO）</th>
+              <th>DPO</th>
+              <th>ORPO</th>
+              <th>GRPO</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>需要奖励模型</td>
+              <td class="bad">需要</td>
+              <td class="good">不需要</td>
+              <td class="good">不需要</td>
+              <td class="good">不需要（用规则验证器）</td>
+            </tr>
+            <tr>
+              <td>需要 Critic / Value</td>
+              <td class="bad">需要</td>
+              <td class="good">不需要</td>
+              <td class="good">不需要</td>
+              <td class="good">不需要（组内均值当 baseline）</td>
+            </tr>
+            <tr>
+              <td>需要参考模型</td>
+              <td class="bad">需要（冻结 SFT）</td>
+              <td class="bad">需要（冻结 SFT）</td>
+              <td class="good">不需要</td>
+              <td class="bad">需要（KL 约束）</td>
+            </tr>
+            <tr>
+              <td>在线采样</td>
+              <td class="bad">必须</td>
+              <td class="good">不需要</td>
+              <td class="good">不需要</td>
+              <td class="bad">必须</td>
+            </tr>
+            <tr>
+              <td>训练阶段数</td>
+              <td>3 段（SFT → RM → PPO）</td>
+              <td>2 段（SFT → DPO）</td>
+              <td class="good">1 段</td>
+              <td>2 段（SFT → GRPO）</td>
+            </tr>
+            <tr>
+              <td>训练稳定性</td>
+              <td class="bad">差</td>
+              <td class="good">好</td>
+              <td class="good">好</td>
+              <td class="mid">中等</td>
+            </tr>
+            <tr>
+              <td>探索能力</td>
+              <td class="good">有</td>
+              <td class="bad">无</td>
+              <td class="bad">无</td>
+              <td class="good">有</td>
+            </tr>
+            <tr>
+              <td>算力开销</td>
+              <td class="bad">高</td>
+              <td class="good">低</td>
+              <td class="good">低</td>
+              <td class="mid">中（省掉 RM 与 Critic）</td>
+            </tr>
+            <tr>
+              <td>显存峰值</td>
+              <td class="bad">4 个模型</td>
+              <td class="mid">2 个模型</td>
+              <td class="good">1 个模型</td>
+              <td class="mid">2~3 个模型</td>
+            </tr>
+            <tr>
+              <td>数据敏感度</td>
+              <td class="mid">中</td>
+              <td class="bad">高</td>
+              <td class="bad">高</td>
+              <td class="mid">中</td>
+            </tr>
+            <tr>
+              <td>典型场景</td>
+              <td>通用对话对齐</td>
+              <td>有高质量偏好数据、算力受限</td>
+              <td>小数据集单阶段对齐</td>
+              <td>数学 / 代码等可自动判分推理任务</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="tip ok">
+        <div class="tip-head">🧭 一句话记忆</div>
+        <p>
+          <strong>RLHF</strong> = 显式训奖励 + 在线 RL；
+          <strong>DPO</strong> = 把「训奖励 + 跑 RL」数学等价地压成一个监督式分类损失；
+          <strong>ORPO</strong> = 把 SFT 和偏好对齐再压成一段；
+          <strong>GRPO</strong> = 在线 RL 里把 Critic 换成组内相对基线；
+          <strong>RLVR</strong> = 把奖励来源换成程序验证器。
+        </p>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="footer">
+  <a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a>
+  &middot; 大模型 RL 对齐原理速查 · 教学示意代码，仅用于对应原理理解
+  &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a>
+</div>
+
+<button id="top" aria-label="回到顶部">↑</button>
+
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script>
+(function () {
+  // ---------- 代码高亮 ----------
+  if (window.hljs) {
+    document.querySelectorAll('pre code').forEach(function (el) {
+      window.hljs.highlightElement(el);
+    });
+  }
+
+  // ---------- 顶部进度条 ----------
+  var progress = document.getElementById('progress');
+  var topBtn = document.getElementById('top');
+
+  function onScroll() {
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    var top = h.scrollTop || document.body.scrollTop;
+    var p = max > 0 ? top / max * 100 : 0;
+    progress.style.width = p + '%';
+    if (top > 500) {
+      topBtn.classList.add('show');
+    } else {
+      topBtn.classList.remove('show');
+    }
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  topBtn.addEventListener('click', function () {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  // ---------- 目录高亮 ----------
+  var links = Array.prototype.slice.call(document.querySelectorAll('#toc a'));
+  var map = {};
+  links.forEach(function (a) {
+    var id = a.getAttribute('href').slice(1);
+    var sec = document.getElementById(id);
+    if (sec) map[id] = a;
+  });
+
+  var sections = Object.keys(map).map(function (id) {
+    return document.getElementById(id);
+  }).filter(Boolean);
+
+  var observer = new IntersectionObserver(function (entries) {
+    entries.forEach(function (entry) {
+      if (entry.isIntersecting) {
+        links.forEach(function (l) { l.classList.remove('active'); });
+        var a = map[entry.target.id];
+        if (a) a.classList.add('active');
+      }
+    });
+  }, {
+    rootMargin: '-15% 0px -70% 0px',
+    threshold: 0
+  });
+
+  sections.forEach(function (s) { observer.observe(s); });
+
+  // ---------- FAQ 手风琴：同组只展开一个（可选交互） ----------
+  var faqs = document.querySelectorAll('.faq details');
+  faqs.forEach(function (d) {
+    d.addEventListener('toggle', function () {
+      if (d.open) {
+        faqs.forEach(function (other) {
+          if (other !== d) other.removeAttribute('open');
+        });
+      }
+    });
+  });
+})();
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
