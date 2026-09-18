@@ -656,6 +656,51 @@ td.mid{color:var(--amber);font-weight:600}
         </div>
       </div>
 
+      <h3>各阶段目标与评测锚点</h3>
+      <p>
+        只写输入输出还不够。每个阶段都要有<strong>可验证的目标</strong>和<strong>对应的评测集</strong>，否则无法判断这一阶段是否达标、能不能进入下一阶段。业界通用的做法如下：
+      </p>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:13%">阶段</th>
+            <th style="width:27%">核心目标</th>
+            <th style="width:22%">数据规模参考</th>
+            <th style="width:38%">评测锚点</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>底座 Base</strong></td>
+            <td>通用语言能力基线，为后续所有阶段提供参照</td>
+            <td>预训练语料（不额外标注）</td>
+            <td>困惑度 PPL、MMLU / CEval 通用能力</td>
+          </tr>
+          <tr>
+            <td><strong>① SFT</strong></td>
+            <td>教会指令遵循与输出格式，为 PPO 提供合格起点</td>
+            <td>约 5k–50k 条高质量指令对</td>
+            <td>指令遵循率、格式合规率、验证集 loss</td>
+          </tr>
+          <tr>
+            <td><strong>② RM</strong></td>
+            <td>打分器准确拟合人类偏好，且不容易被钻空子</td>
+            <td>约 10k–100k 条成对偏好数据</td>
+            <td><strong>Reward Bench</strong> 成对准确率、held-out 偏好集准确率、奖励-长度相关性（防长度作弊）、定期对照人工偏好集防漂移</td>
+          </tr>
+          <tr>
+            <td><strong>③ PPO</strong></td>
+            <td>RM 分数最大化，同时 KL 约束不偏离 SFT 太远</td>
+            <td>10k+ prompts（无需人工标注）</td>
+            <td><strong>MT-Bench</strong>（GPT-4 打分多轮对话）、<strong>AlpacaEval 2.0</strong>（长度控制胜率）、Arena-Hard / Chatbot Arena（Elo）；安全侧 <strong>TruthfulQA</strong>、<strong>HarmBench</strong>；能力回归监控 MMLU / GSM8K / HumanEval</td>
+          </tr>
+        </tbody>
+      </table>
+      <div class="tip note">
+        <div class="tip-head">🎯 评测纪律</div>
+        <p>三条铁律：<strong>评测集固定</strong>——基准题、解码参数、种子全部冻结，否则采样噪声会污染所有对比；<strong>三层评估互相不可替代</strong>——自动 benchmark 查能力回归、偏好评估查用户体验、人工审查查奖励黑客与模板化；<strong>只看 reward 曲线等于没评估</strong>——reward 涨而 MT-Bench / AlpacaEval 跌，就是最典型的 reward hacking 信号。另外务必做 base / SFT / RLHF 三阶段横向对比，盯住「对齐税」：对齐不能以通用能力退化为代价。</p>
+      </div>
+
       <h3 id="s1-1">第一阶段：SFT 监督微调</h3>
       <p>
         使用高质量指令样本对预训练底座模型做微调，目标<strong>不是让模型学会新知识</strong>，
