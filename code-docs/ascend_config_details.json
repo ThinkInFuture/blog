@@ -1,0 +1,854 @@
+[
+ {
+  "field": "enable_npugraph_ex",
+  "class": "AscendCompilationConfig",
+  "line": 68,
+  "default": "True",
+  "full_def": "enable_npugraph_ex: bool = True enable_static_kernel: bool = False fuse_norm_quant: bool = True fuse_qknorm_rope: bool = True fuse_muls_add: bool = True ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_static_kernel",
+  "class": "AscendCompilationConfig",
+  "line": 69,
+  "default": "False",
+  "full_def": "enable_static_kernel: bool = False fuse_norm_quant: bool = True fuse_qknorm_rope: bool = True fuse_muls_add: bool = True ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "fuse_norm_quant",
+  "class": "AscendCompilationConfig",
+  "line": 70,
+  "default": "True",
+  "full_def": "fuse_norm_quant: bool = True fuse_qknorm_rope: bool = True fuse_muls_add: bool = True ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "fuse_qknorm_rope",
+  "class": "AscendCompilationConfig",
+  "line": 71,
+  "default": "True",
+  "full_def": "fuse_qknorm_rope: bool = True fuse_muls_add: bool = True ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "fuse_muls_add",
+  "class": "AscendCompilationConfig",
+  "line": 72,
+  "default": "True",
+  "full_def": "fuse_muls_add: bool = True ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "fusion_ops_gmmswigluquant",
+  "class": "AscendFusionConfig",
+  "line": 102,
+  "default": "True",
+  "full_def": "fusion_ops_gmmswigluquant: bool = True   @config class EplbConfig: \"\"\"Configuration Object for ``additional_config[\"eplb_config\"]``.  Migrated to ``@config`` (pydantic dataclass). Unknown-key detection is now handled by ``extra=\"forbid\"`` (replaces the hand-written ``unknown`` check); int/range/enum",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "dynamic_eplb",
+  "class": "EplbConfig",
+  "line": 116,
+  "default": "False",
+  "full_def": "dynamic_eplb: bool = False expert_map_path: str | None = None expert_heat_collection_interval: int = 600 algorithm_execution_interval: int = 50 expert_map_record_path: str | None = None num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "expert_map_path",
+  "class": "EplbConfig",
+  "line": 117,
+  "default": "None",
+  "full_def": "expert_map_path: str | None = None expert_heat_collection_interval: int = 600 algorithm_execution_interval: int = 50 expert_map_record_path: str | None = None num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batc",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "expert_heat_collection_interval",
+  "class": "EplbConfig",
+  "line": 118,
+  "default": "600",
+  "full_def": "expert_heat_collection_interval: int = 600 algorithm_execution_interval: int = 50 expert_map_record_path: str | None = None num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstre",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "algorithm_execution_interval",
+  "class": "EplbConfig",
+  "line": 119,
+  "default": "50",
+  "full_def": "algorithm_execution_interval: int = 50 expert_map_record_path: str | None = None num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstream EPLB expert-load window; any prefill req",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "expert_map_record_path",
+  "class": "EplbConfig",
+  "line": 120,
+  "default": "None",
+  "full_def": "expert_map_record_path: str | None = None num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstream EPLB expert-load window; any prefill request marks the batch # as prefill. load",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "num_redundant_experts",
+  "class": "EplbConfig",
+  "line": 121,
+  "default": "0",
+  "full_def": "num_redundant_experts: int = 0 eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstream EPLB expert-load window; any prefill request marks the batch # as prefill. load_collection_phase: str = \"all\" ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "eplb_policy_type",
+  "class": "EplbConfig",
+  "line": 122,
+  "default": "2",
+  "full_def": "eplb_policy_type: int = 2 eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstream EPLB expert-load window; any prefill request marks the batch # as prefill. load_collection_phase: str = \"all\" ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "eplb_heat_collection_stage",
+  "class": "EplbConfig",
+  "line": 123,
+  "default": "\"all\"",
+  "full_def": "eplb_heat_collection_stage: str = \"all\" # Model Runner V2 only. Restricts which batch phase contributes to the # upstream EPLB expert-load window; any prefill request marks the batch # as prefill. load_collection_phase: str = \"all\" ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "load_collection_phase",
+  "class": "EplbConfig",
+  "line": 127,
+  "default": "\"all\"",
+  "full_def": "load_collection_phase: str = \"all\" ",
+  "comments_above": [
+   "# Model Runner V2 only. Restricts which batch phase contributes to the",
+   "# upstream EPLB expert-load window; any prefill request marks the batch",
+   "# as prefill."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_block_verify",
+  "class": "RejectionSamplerConfig",
+  "line": 175,
+  "default": "False",
+  "full_def": "enable_block_verify: bool = False enable_entropy_verify: bool = False posterior_threshold: float = 0.95 posterior_alpha: float = 0.4 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_entropy_verify",
+  "class": "RejectionSamplerConfig",
+  "line": 176,
+  "default": "False",
+  "full_def": "enable_entropy_verify: bool = False posterior_threshold: float = 0.95 posterior_alpha: float = 0.4 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "posterior_threshold",
+  "class": "RejectionSamplerConfig",
+  "line": 177,
+  "default": "0.95",
+  "full_def": "posterior_threshold: float = 0.95 posterior_alpha: float = 0.4 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "posterior_alpha",
+  "class": "RejectionSamplerConfig",
+  "line": 178,
+  "default": "0.4",
+  "full_def": "posterior_alpha: float = 0.4 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "RlConfig",
+  "line": 199,
+  "default": "False",
+  "full_def": "enabled: bool = False sleep_mode_extra_cleanup: bool = False enable_training_consistency: bool = False enable_batch_invariant: bool = False  def apply(self, ascend_config: AscendConfig) -> None: if not self.enabled: return  if ascend_config.weight_nz_mode != 0: logger.warning(",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "sleep_mode_extra_cleanup",
+  "class": "RlConfig",
+  "line": 200,
+  "default": "False",
+  "full_def": "sleep_mode_extra_cleanup: bool = False enable_training_consistency: bool = False enable_batch_invariant: bool = False  def apply(self, ascend_config: AscendConfig) -> None: if not self.enabled: return  if ascend_config.weight_nz_mode != 0: logger.warning(",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_training_consistency",
+  "class": "RlConfig",
+  "line": 201,
+  "default": "False",
+  "full_def": "enable_training_consistency: bool = False enable_batch_invariant: bool = False  def apply(self, ascend_config: AscendConfig) -> None: if not self.enabled: return  if ascend_config.weight_nz_mode != 0: logger.warning(",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_batch_invariant",
+  "class": "RlConfig",
+  "line": 202,
+  "default": "False",
+  "full_def": "enable_batch_invariant: bool = False  def apply(self, ascend_config: AscendConfig) -> None: if not self.enabled: return  if ascend_config.weight_nz_mode != 0: logger.warning(",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_cpu_binding",
+  "class": "AscendConfig",
+  "line": 387,
+  "default": "True",
+  "full_def": "enable_cpu_binding: bool = True multistream_dsv4_dsa_overlap: bool = True enable_prefill_mc2: bool = False multistream_overlap_shared_expert: bool = False enable_kv_nz: bool = False enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sa",
+  "comments_above": [
+   "# ---- user-input switches: bool/int/list/str, auto type validation ----"
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "multistream_dsv4_dsa_overlap",
+  "class": "AscendConfig",
+  "line": 388,
+  "default": "True",
+  "full_def": "multistream_dsv4_dsa_overlap: bool = True enable_prefill_mc2: bool = False multistream_overlap_shared_expert: bool = False enable_kv_nz: bool = False enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sample: bool = False enable_dsa_cp",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_prefill_mc2",
+  "class": "AscendConfig",
+  "line": 389,
+  "default": "False",
+  "full_def": "enable_prefill_mc2: bool = False multistream_overlap_shared_expert: bool = False enable_kv_nz: bool = False enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sample: bool = False enable_dsa_cp: bool = False enable_force_eplb: bool = F",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "multistream_overlap_shared_expert",
+  "class": "AscendConfig",
+  "line": 390,
+  "default": "False",
+  "full_def": "multistream_overlap_shared_expert: bool = False enable_kv_nz: bool = False enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sample: bool = False enable_dsa_cp: bool = False enable_force_eplb: bool = False draft_window_size: int | Non",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_kv_nz",
+  "class": "AscendConfig",
+  "line": 391,
+  "default": "False",
+  "full_def": "enable_kv_nz: bool = False enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sample: bool = False enable_dsa_cp: bool = False enable_force_eplb: bool = False draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_mc2_hierarchy_comm",
+  "class": "AscendConfig",
+  "line": 392,
+  "default": "False",
+  "full_def": "enable_mc2_hierarchy_comm: bool = False  # deprecated, will be replaced by mc2_comm_alg = \"hierarchy\" enable_reduce_sample: bool = False enable_dsa_cp: bool = False enable_force_eplb: bool = False draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": "deprecated, will be replaced by mc2_comm_alg = \"hierarchy\""
+ },
+ {
+  "field": "enable_reduce_sample",
+  "class": "AscendConfig",
+  "line": 393,
+  "default": "False",
+  "full_def": "enable_reduce_sample: bool = False enable_dsa_cp: bool = False enable_force_eplb: bool = False draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_dsa_cp",
+  "class": "AscendConfig",
+  "line": 394,
+  "default": "False",
+  "full_def": "enable_dsa_cp: bool = False enable_force_eplb: bool = False draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_force_eplb",
+  "class": "AscendConfig",
+  "line": 395,
+  "default": "False",
+  "full_def": "enable_force_eplb: bool = False draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "draft_window_size",
+  "class": "AscendConfig",
+  "line": 396,
+  "default": "None",
+  "full_def": "draft_window_size: int | None = None mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "mix_placement",
+  "class": "AscendConfig",
+  "line": 397,
+  "default": "False",
+  "full_def": "mix_placement: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "mega_moe_max_tokens",
+  "class": "AscendConfig",
+  "line": 406,
+  "default": "65536",
+  "full_def": "mega_moe_max_tokens: int = 65536 ascend_log_path: str = dataclasses.field(",
+  "comments_above": [
+   "# The same value is passed as dispatch_ffn_combine's max_output_size",
+   "# and CANN MegaMoe buffer's max_recv_token_num.",
+   "# This is a reference value: if the actual per-rank received token",
+   "# count exceeds it, tokens may be truncated, causing precision",
+   "# degradation. Do not set it too large because workspace memory scales",
+   "# linearly with this value. Default 65536."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "ascend_log_path",
+  "class": "AscendConfig",
+  "line": 407,
+  "default": "dataclasses.field(",
+  "full_def": "ascend_log_path: str = dataclasses.field(",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "dump_config_path",
+  "class": "AscendConfig",
+  "line": 410,
+  "default": "None",
+  "full_def": "dump_config_path: str | None = None c8_enable_reshape_optim: bool = False mc2_comm_alg: Literal[\"\", \"fullmesh\", \"hierarchy\", \"fullmesh_v2\"] = \"\"  # ---- A-family (envs fallback): default = envs module value, before-validator injects ---- enable_fused_mc2: int = 0 enable_mlapo: bool = True # When Tru",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "c8_enable_reshape_optim",
+  "class": "AscendConfig",
+  "line": 411,
+  "default": "False",
+  "full_def": "c8_enable_reshape_optim: bool = False mc2_comm_alg: Literal[\"\", \"fullmesh\", \"hierarchy\", \"fullmesh_v2\"] = \"\"  # ---- A-family (envs fallback): default = envs module value, before-validator injects ---- enable_fused_mc2: int = 0 enable_mlapo: bool = True # When True, keep MLAPO prefill weights on NPU",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_fused_mc2",
+  "class": "AscendConfig",
+  "line": 415,
+  "default": "0",
+  "full_def": "enable_fused_mc2: int = 0 enable_mlapo: bool = True # When True, keep MLAPO prefill weights on NPU instead of freeing them # on kv_consumer D nodes. Trades NPU memory for stability — D nodes have # normal local-prefill paths (recompute / fallback / preempt) that crash # when the weights are freed (i",
+  "comments_above": [
+   "# ---- A-family (envs fallback): default = envs module value, before-validator injects ----"
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_mlapo",
+  "class": "AscendConfig",
+  "line": 416,
+  "default": "True",
+  "full_def": "enable_mlapo: bool = True # When True, keep MLAPO prefill weights on NPU instead of freeing them # on kv_consumer D nodes. Trades NPU memory for stability — D nodes have # normal local-prefill paths (recompute / fallback / preempt) that crash # when the weights are freed (issue #11882). Default Fals",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "mlapo_keep_prefill_weights",
+  "class": "AscendConfig",
+  "line": 422,
+  "default": "False",
+  "full_def": "mlapo_keep_prefill_weights: bool = False msmonitor_use_daemon: bool = False enable_transpose_kv_cache_by_block: bool = True weight_nz_mode: int = 1  # ---- sub-configs (no vllm_config dep): pydantic dict→dataclass coercion ----",
+  "comments_above": [
+   "# When True, keep MLAPO prefill weights on NPU instead of freeing them",
+   "# on kv_consumer D nodes. Trades NPU memory for stability — D nodes have",
+   "# normal local-prefill paths (recompute / fallback / preempt) that crash",
+   "# when the weights are freed (issue #11882). Default False (preserve",
+   "# existing memory-saving behavior)."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "msmonitor_use_daemon",
+  "class": "AscendConfig",
+  "line": 423,
+  "default": "False",
+  "full_def": "msmonitor_use_daemon: bool = False enable_transpose_kv_cache_by_block: bool = True weight_nz_mode: int = 1  # ---- sub-configs (no vllm_config dep): pydantic dict→dataclass coercion ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_transpose_kv_cache_by_block",
+  "class": "AscendConfig",
+  "line": 424,
+  "default": "True",
+  "full_def": "enable_transpose_kv_cache_by_block: bool = True weight_nz_mode: int = 1  # ---- sub-configs (no vllm_config dep): pydantic dict→dataclass coercion ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "weight_nz_mode",
+  "class": "AscendConfig",
+  "line": 425,
+  "default": "1",
+  "full_def": "weight_nz_mode: int = 1  # ---- sub-configs (no vllm_config dep): pydantic dict→dataclass coercion ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "sparse_kv_offload_config",
+  "class": "AscendConfig",
+  "line": 441,
+  "default": "dataclasses.field(kw_only=True)",
+  "full_def": "sparse_kv_offload_config: Any = dataclasses.field(kw_only=True)  # ---- derived fields: sentinel default, after-validator overwrites ---- enable_shared_expert_dp: bool = False enable_sp_by_pass: bool = False enable_sparse_sfa_c8: bool = False enable_sparse_li_c8: bool = False pd_tp_ratio: int = 1 pd",
+  "comments_above": [
+   "# Still factory-injected: construction depends on vllm_config."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_shared_expert_dp",
+  "class": "AscendConfig",
+  "line": 444,
+  "default": "False",
+  "full_def": "enable_shared_expert_dp: bool = False enable_sp_by_pass: bool = False enable_sparse_sfa_c8: bool = False enable_sparse_li_c8: bool = False pd_tp_ratio: int = 1 pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [
+   "# ---- derived fields: sentinel default, after-validator overwrites ----"
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_sp_by_pass",
+  "class": "AscendConfig",
+  "line": 445,
+  "default": "False",
+  "full_def": "enable_sp_by_pass: bool = False enable_sparse_sfa_c8: bool = False enable_sparse_li_c8: bool = False pd_tp_ratio: int = 1 pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_sparse_sfa_c8",
+  "class": "AscendConfig",
+  "line": 446,
+  "default": "False",
+  "full_def": "enable_sparse_sfa_c8: bool = False enable_sparse_li_c8: bool = False pd_tp_ratio: int = 1 pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_sparse_li_c8",
+  "class": "AscendConfig",
+  "line": 447,
+  "default": "False",
+  "full_def": "enable_sparse_li_c8: bool = False pd_tp_ratio: int = 1 pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "pd_tp_ratio",
+  "class": "AscendConfig",
+  "line": 448,
+  "default": "1",
+  "full_def": "pd_tp_ratio: int = 1 pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "pd_head_ratio",
+  "class": "AscendConfig",
+  "line": 449,
+  "default": "1",
+  "full_def": "pd_head_ratio: int = 1 num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "num_head_replica",
+  "class": "AscendConfig",
+  "line": 450,
+  "default": "1",
+  "full_def": "num_head_replica: int = 1  # ---- private derived state (init=False) ----",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "_sparse_li_c8_layer_filter_enabled",
+  "class": "AscendConfig",
+  "line": 455,
+  "default": "dataclasses.field(default=False, init=False, repr=False)",
+  "full_def": "_sparse_li_c8_layer_filter_enabled: bool = dataclasses.field(default=False, init=False, repr=False) ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "method",
+  "class": "DynamicSpecConfig",
+  "line": 905,
+  "default": "None",
+  "full_def": "method: str | None = None # Custom parameters of the selected dynamic method; the expected keys # depend on `method` (e.g. dspark accepts # initial_verify_budget_per_req, budget_update_interval and # budget_threshold). Empty by default, in which case each method # falls back to its own built-in defa",
+  "comments_above": [
+   "# None disables the dynamic speculative-length path."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "method_params",
+  "class": "DynamicSpecConfig",
+  "line": 911,
+  "default": "dataclasses.field(default_factory=dict)",
+  "full_def": "method_params: dict[str, Any] = dataclasses.field(default_factory=dict) ",
+  "comments_above": [
+   "# Custom parameters of the selected dynamic method; the expected keys",
+   "# depend on `method` (e.g. dspark accepts",
+   "# initial_verify_budget_per_req, budget_update_interval and",
+   "# budget_threshold). Empty by default, in which case each method",
+   "# falls back to its own built-in defaults."
+  ],
+  "inline_comment": ""
+ },
+ {
+  "field": "oproj_tensor_parallel_size",
+  "class": "FinegrainedTPConfig",
+  "line": 934,
+  "default": "0",
+  "full_def": "oproj_tensor_parallel_size: int = 0 lmhead_tensor_parallel_size: int = 0 embedding_tensor_parallel_size: int = 0 mlp_tensor_parallel_size: int = 0 olora_tensor_parallel_size: int = 0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "lmhead_tensor_parallel_size",
+  "class": "FinegrainedTPConfig",
+  "line": 935,
+  "default": "0",
+  "full_def": "lmhead_tensor_parallel_size: int = 0 embedding_tensor_parallel_size: int = 0 mlp_tensor_parallel_size: int = 0 olora_tensor_parallel_size: int = 0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "embedding_tensor_parallel_size",
+  "class": "FinegrainedTPConfig",
+  "line": 936,
+  "default": "0",
+  "full_def": "embedding_tensor_parallel_size: int = 0 mlp_tensor_parallel_size: int = 0 olora_tensor_parallel_size: int = 0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "mlp_tensor_parallel_size",
+  "class": "FinegrainedTPConfig",
+  "line": 937,
+  "default": "0",
+  "full_def": "mlp_tensor_parallel_size: int = 0 olora_tensor_parallel_size: int = 0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "olora_tensor_parallel_size",
+  "class": "FinegrainedTPConfig",
+  "line": 938,
+  "default": "0",
+  "full_def": "olora_tensor_parallel_size: int = 0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "XliteGraphConfig",
+  "line": 1030,
+  "default": "False",
+  "full_def": "enabled: bool = False full_mode: bool = False  def _validate_preconditions(self, vllm_config: Any): if self.enabled: vc = vllm_config if bool(vc.speculative_config) and vc.speculative_config.num_speculative_tokens != 1:",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "full_mode",
+  "class": "XliteGraphConfig",
+  "line": 1031,
+  "default": "False",
+  "full_def": "full_mode: bool = False  def _validate_preconditions(self, vllm_config: Any): if self.enabled: vc = vllm_config if bool(vc.speculative_config) and vc.speculative_config.num_speculative_tokens != 1:",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "ProfilingChunkConfig",
+  "line": 1062,
+  "default": "False",
+  "full_def": "enabled: bool = False smooth_factor: float = 1.0 min_chunk: int = 4096 need_timing: bool | None = None max_fit_chunk: int = 30 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "smooth_factor",
+  "class": "ProfilingChunkConfig",
+  "line": 1063,
+  "default": "1.0",
+  "full_def": "smooth_factor: float = 1.0 min_chunk: int = 4096 need_timing: bool | None = None max_fit_chunk: int = 30 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "min_chunk",
+  "class": "ProfilingChunkConfig",
+  "line": 1064,
+  "default": "4096",
+  "full_def": "min_chunk: int = 4096 need_timing: bool | None = None max_fit_chunk: int = 30 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "need_timing",
+  "class": "ProfilingChunkConfig",
+  "line": 1065,
+  "default": "None",
+  "full_def": "need_timing: bool | None = None max_fit_chunk: int = 30 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "max_fit_chunk",
+  "class": "ProfilingChunkConfig",
+  "line": 1066,
+  "default": "30",
+  "full_def": "max_fit_chunk: int = 30 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "BatchJobSchedConfig",
+  "line": 1098,
+  "default": "False",
+  "full_def": "enabled: bool = False max_jobs: int = 20 reserve_margin_blocks: int = 2 reserve_max_blocks: int = 8 low_available_tokens_threshold: int = 4096 short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "max_jobs",
+  "class": "BatchJobSchedConfig",
+  "line": 1099,
+  "default": "20",
+  "full_def": "max_jobs: int = 20 reserve_margin_blocks: int = 2 reserve_max_blocks: int = 8 low_available_tokens_threshold: int = 4096 short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "reserve_margin_blocks",
+  "class": "BatchJobSchedConfig",
+  "line": 1100,
+  "default": "2",
+  "full_def": "reserve_margin_blocks: int = 2 reserve_max_blocks: int = 8 low_available_tokens_threshold: int = 4096 short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "reserve_max_blocks",
+  "class": "BatchJobSchedConfig",
+  "line": 1101,
+  "default": "8",
+  "full_def": "reserve_max_blocks: int = 8 low_available_tokens_threshold: int = 4096 short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "low_available_tokens_threshold",
+  "class": "BatchJobSchedConfig",
+  "line": 1102,
+  "default": "4096",
+  "full_def": "low_available_tokens_threshold: int = 4096 short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "short_decode_token_threshold",
+  "class": "BatchJobSchedConfig",
+  "line": 1103,
+  "default": "32",
+  "full_def": "short_decode_token_threshold: int = 32 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "ShortRequestFirstConfig",
+  "line": 1139,
+  "default": "False",
+  "full_def": "enabled: bool = False threshold: int = 256 long_max_wait_ms: float = 0.0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "threshold",
+  "class": "ShortRequestFirstConfig",
+  "line": 1140,
+  "default": "256",
+  "full_def": "threshold: int = 256 long_max_wait_ms: float = 0.0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "long_max_wait_ms",
+  "class": "ShortRequestFirstConfig",
+  "line": 1141,
+  "default": "0.0",
+  "full_def": "long_max_wait_ms: float = 0.0 ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "DyntraLBConfig",
+  "line": 1156,
+  "default": "False",
+  "full_def": "enabled: bool = False enable_diagnostics: bool = False mode: str = \"dynamic\" start_step: int = 250 end_step: int = -1 bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_diagnostics",
+  "class": "DyntraLBConfig",
+  "line": 1157,
+  "default": "False",
+  "full_def": "enable_diagnostics: bool = False mode: str = \"dynamic\" start_step: int = 250 end_step: int = -1 bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "mode",
+  "class": "DyntraLBConfig",
+  "line": 1158,
+  "default": "\"dynamic\"",
+  "full_def": "mode: str = \"dynamic\" start_step: int = 250 end_step: int = -1 bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "start_step",
+  "class": "DyntraLBConfig",
+  "line": 1159,
+  "default": "250",
+  "full_def": "start_step: int = 250 end_step: int = -1 bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "end_step",
+  "class": "DyntraLBConfig",
+  "line": 1160,
+  "default": "-1",
+  "full_def": "end_step: int = -1 bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "bubble_threshold",
+  "class": "DyntraLBConfig",
+  "line": 1161,
+  "default": "5.0",
+  "full_def": "bubble_threshold: float = 5.0 long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "long_req_block_threshold",
+  "class": "DyntraLBConfig",
+  "line": 1162,
+  "default": "700",
+  "full_def": "long_req_block_threshold: int = 700 dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "dynamic_max_step",
+  "class": "DyntraLBConfig",
+  "line": 1163,
+  "default": "256",
+  "full_def": "dynamic_max_step: int = 256  _valid_modes: ClassVar[set[str]] = {\"static\", \"dynamic\"} ",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enable_balance_scheduling",
+  "class": "SchedulerConfig",
+  "line": 1203,
+  "default": "False",
+  "full_def": "enable_balance_scheduling: bool = False recompute_scheduler_enable: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "recompute_scheduler_enable",
+  "class": "SchedulerConfig",
+  "line": 1204,
+  "default": "False",
+  "full_def": "recompute_scheduler_enable: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "enabled",
+  "class": "SparseKVOffloadConfig",
+  "line": 1263,
+  "default": "False",
+  "full_def": "enabled: bool = False topk_buffer_size: int = 4096 dram_size_per_dp_GB: int = 128 keep_device_kv_cache: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "topk_buffer_size",
+  "class": "SparseKVOffloadConfig",
+  "line": 1264,
+  "default": "4096",
+  "full_def": "topk_buffer_size: int = 4096 dram_size_per_dp_GB: int = 128 keep_device_kv_cache: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "dram_size_per_dp_GB",
+  "class": "SparseKVOffloadConfig",
+  "line": 1265,
+  "default": "128",
+  "full_def": "dram_size_per_dp_GB: int = 128 keep_device_kv_cache: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "keep_device_kv_cache",
+  "class": "SparseKVOffloadConfig",
+  "line": 1266,
+  "default": "False",
+  "full_def": "keep_device_kv_cache: bool = False",
+  "comments_above": [],
+  "inline_comment": ""
+ },
+ {
+  "field": "topk",
+  "class": "SparseKVOffloadConfig",
+  "line": 1267,
+  "default": "dataclasses.field(default=0, init=False)",
+  "full_def": "topk: int = dataclasses.field(default=0, init=False) ",
+  "comments_above": [],
+  "inline_comment": ""
+ }
+]
