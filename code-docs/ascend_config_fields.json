@@ -1,0 +1,639 @@
+[
+ {
+  "field": "enable_npugraph_ex",
+  "type": "bool",
+  "default": "True",
+  "line": 68,
+  "class": "AscendCompilationConfig"
+ },
+ {
+  "field": "enable_static_kernel",
+  "type": "bool",
+  "default": "False",
+  "line": 69,
+  "class": "AscendCompilationConfig"
+ },
+ {
+  "field": "fuse_norm_quant",
+  "type": "bool",
+  "default": "True",
+  "line": 70,
+  "class": "AscendCompilationConfig"
+ },
+ {
+  "field": "fuse_qknorm_rope",
+  "type": "bool",
+  "default": "True",
+  "line": 71,
+  "class": "AscendCompilationConfig"
+ },
+ {
+  "field": "fuse_muls_add",
+  "type": "bool",
+  "default": "True",
+  "line": 72,
+  "class": "AscendCompilationConfig"
+ },
+ {
+  "field": "fusion_ops_gmmswigluquant",
+  "type": "bool",
+  "default": "True",
+  "line": 102,
+  "class": "AscendFusionConfig"
+ },
+ {
+  "field": "dynamic_eplb",
+  "type": "bool",
+  "default": "False",
+  "line": 116,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "expert_map_path",
+  "type": "str | None",
+  "default": "None",
+  "line": 117,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "expert_heat_collection_interval",
+  "type": "int",
+  "default": "600",
+  "line": 118,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "algorithm_execution_interval",
+  "type": "int",
+  "default": "50",
+  "line": 119,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "expert_map_record_path",
+  "type": "str | None",
+  "default": "None",
+  "line": 120,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "num_redundant_experts",
+  "type": "int",
+  "default": "0",
+  "line": 121,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "eplb_policy_type",
+  "type": "int",
+  "default": "2",
+  "line": 122,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "eplb_heat_collection_stage",
+  "type": "str",
+  "default": "\"all\"",
+  "line": 123,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "load_collection_phase",
+  "type": "str",
+  "default": "\"all\"",
+  "line": 127,
+  "class": "EplbConfig"
+ },
+ {
+  "field": "enable_block_verify",
+  "type": "bool",
+  "default": "False",
+  "line": 175,
+  "class": "RejectionSamplerConfig"
+ },
+ {
+  "field": "enable_entropy_verify",
+  "type": "bool",
+  "default": "False",
+  "line": 176,
+  "class": "RejectionSamplerConfig"
+ },
+ {
+  "field": "posterior_threshold",
+  "type": "float",
+  "default": "0.95",
+  "line": 177,
+  "class": "RejectionSamplerConfig"
+ },
+ {
+  "field": "posterior_alpha",
+  "type": "float",
+  "default": "0.4",
+  "line": 178,
+  "class": "RejectionSamplerConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 199,
+  "class": "RlConfig"
+ },
+ {
+  "field": "sleep_mode_extra_cleanup",
+  "type": "bool",
+  "default": "False",
+  "line": 200,
+  "class": "RlConfig"
+ },
+ {
+  "field": "enable_training_consistency",
+  "type": "bool",
+  "default": "False",
+  "line": 201,
+  "class": "RlConfig"
+ },
+ {
+  "field": "enable_batch_invariant",
+  "type": "bool",
+  "default": "False",
+  "line": 202,
+  "class": "RlConfig"
+ },
+ {
+  "field": "enable_cpu_binding",
+  "type": "bool",
+  "default": "True",
+  "line": 387,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "multistream_dsv4_dsa_overlap",
+  "type": "bool",
+  "default": "True",
+  "line": 388,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_prefill_mc2",
+  "type": "bool",
+  "default": "False",
+  "line": 389,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "multistream_overlap_shared_expert",
+  "type": "bool",
+  "default": "False",
+  "line": 390,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_kv_nz",
+  "type": "bool",
+  "default": "False",
+  "line": 391,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_mc2_hierarchy_comm",
+  "type": "bool",
+  "default": "False",
+  "line": 392,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_reduce_sample",
+  "type": "bool",
+  "default": "False",
+  "line": 393,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_dsa_cp",
+  "type": "bool",
+  "default": "False",
+  "line": 394,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_force_eplb",
+  "type": "bool",
+  "default": "False",
+  "line": 395,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "draft_window_size",
+  "type": "int | None",
+  "default": "None",
+  "line": 396,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "mix_placement",
+  "type": "bool",
+  "default": "False",
+  "line": 397,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "mega_moe_max_tokens",
+  "type": "int",
+  "default": "65536",
+  "line": 406,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "ascend_log_path",
+  "type": "str",
+  "default": "dataclasses.field(",
+  "line": 407,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "dump_config_path",
+  "type": "str | None",
+  "default": "None",
+  "line": 410,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "c8_enable_reshape_optim",
+  "type": "bool",
+  "default": "False",
+  "line": 411,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_fused_mc2",
+  "type": "int",
+  "default": "0",
+  "line": 415,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_mlapo",
+  "type": "bool",
+  "default": "True",
+  "line": 416,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "mlapo_keep_prefill_weights",
+  "type": "bool",
+  "default": "False",
+  "line": 422,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "msmonitor_use_daemon",
+  "type": "bool",
+  "default": "False",
+  "line": 423,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_transpose_kv_cache_by_block",
+  "type": "bool",
+  "default": "True",
+  "line": 424,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "weight_nz_mode",
+  "type": "int",
+  "default": "1",
+  "line": 425,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "sparse_kv_offload_config",
+  "type": "Any",
+  "default": "dataclasses.field(kw_only=True)",
+  "line": 441,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_shared_expert_dp",
+  "type": "bool",
+  "default": "False",
+  "line": 444,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_sp_by_pass",
+  "type": "bool",
+  "default": "False",
+  "line": 445,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_sparse_sfa_c8",
+  "type": "bool",
+  "default": "False",
+  "line": 446,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "enable_sparse_li_c8",
+  "type": "bool",
+  "default": "False",
+  "line": 447,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "pd_tp_ratio",
+  "type": "int",
+  "default": "1",
+  "line": 448,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "pd_head_ratio",
+  "type": "int",
+  "default": "1",
+  "line": 449,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "num_head_replica",
+  "type": "int",
+  "default": "1",
+  "line": 450,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "_sparse_li_c8_layer_filter_enabled",
+  "type": "bool",
+  "default": "dataclasses.field(default=False, init=False, repr=False)",
+  "line": 455,
+  "class": "AscendConfig"
+ },
+ {
+  "field": "method",
+  "type": "str | None",
+  "default": "None",
+  "line": 905,
+  "class": "DynamicSpecConfig"
+ },
+ {
+  "field": "method_params",
+  "type": "dict[str, Any]",
+  "default": "dataclasses.field(default_factory=dict)",
+  "line": 911,
+  "class": "DynamicSpecConfig"
+ },
+ {
+  "field": "oproj_tensor_parallel_size",
+  "type": "int",
+  "default": "0",
+  "line": 934,
+  "class": "FinegrainedTPConfig"
+ },
+ {
+  "field": "lmhead_tensor_parallel_size",
+  "type": "int",
+  "default": "0",
+  "line": 935,
+  "class": "FinegrainedTPConfig"
+ },
+ {
+  "field": "embedding_tensor_parallel_size",
+  "type": "int",
+  "default": "0",
+  "line": 936,
+  "class": "FinegrainedTPConfig"
+ },
+ {
+  "field": "mlp_tensor_parallel_size",
+  "type": "int",
+  "default": "0",
+  "line": 937,
+  "class": "FinegrainedTPConfig"
+ },
+ {
+  "field": "olora_tensor_parallel_size",
+  "type": "int",
+  "default": "0",
+  "line": 938,
+  "class": "FinegrainedTPConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1030,
+  "class": "XliteGraphConfig"
+ },
+ {
+  "field": "full_mode",
+  "type": "bool",
+  "default": "False",
+  "line": 1031,
+  "class": "XliteGraphConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1062,
+  "class": "ProfilingChunkConfig"
+ },
+ {
+  "field": "smooth_factor",
+  "type": "float",
+  "default": "1.0",
+  "line": 1063,
+  "class": "ProfilingChunkConfig"
+ },
+ {
+  "field": "min_chunk",
+  "type": "int",
+  "default": "4096",
+  "line": 1064,
+  "class": "ProfilingChunkConfig"
+ },
+ {
+  "field": "need_timing",
+  "type": "bool | None",
+  "default": "None",
+  "line": 1065,
+  "class": "ProfilingChunkConfig"
+ },
+ {
+  "field": "max_fit_chunk",
+  "type": "int",
+  "default": "30",
+  "line": 1066,
+  "class": "ProfilingChunkConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1098,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "max_jobs",
+  "type": "int",
+  "default": "20",
+  "line": 1099,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "reserve_margin_blocks",
+  "type": "int",
+  "default": "2",
+  "line": 1100,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "reserve_max_blocks",
+  "type": "int",
+  "default": "8",
+  "line": 1101,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "low_available_tokens_threshold",
+  "type": "int",
+  "default": "4096",
+  "line": 1102,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "short_decode_token_threshold",
+  "type": "int",
+  "default": "32",
+  "line": 1103,
+  "class": "BatchJobSchedConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1139,
+  "class": "ShortRequestFirstConfig"
+ },
+ {
+  "field": "threshold",
+  "type": "int",
+  "default": "256",
+  "line": 1140,
+  "class": "ShortRequestFirstConfig"
+ },
+ {
+  "field": "long_max_wait_ms",
+  "type": "float",
+  "default": "0.0",
+  "line": 1141,
+  "class": "ShortRequestFirstConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1156,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "enable_diagnostics",
+  "type": "bool",
+  "default": "False",
+  "line": 1157,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "mode",
+  "type": "str",
+  "default": "\"dynamic\"",
+  "line": 1158,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "start_step",
+  "type": "int",
+  "default": "250",
+  "line": 1159,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "end_step",
+  "type": "int",
+  "default": "-1",
+  "line": 1160,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "bubble_threshold",
+  "type": "float",
+  "default": "5.0",
+  "line": 1161,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "long_req_block_threshold",
+  "type": "int",
+  "default": "700",
+  "line": 1162,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "dynamic_max_step",
+  "type": "int",
+  "default": "256",
+  "line": 1163,
+  "class": "DyntraLBConfig"
+ },
+ {
+  "field": "enable_balance_scheduling",
+  "type": "bool",
+  "default": "False",
+  "line": 1203,
+  "class": "SchedulerConfig"
+ },
+ {
+  "field": "recompute_scheduler_enable",
+  "type": "bool",
+  "default": "False",
+  "line": 1204,
+  "class": "SchedulerConfig"
+ },
+ {
+  "field": "enabled",
+  "type": "bool",
+  "default": "False",
+  "line": 1263,
+  "class": "SparseKVOffloadConfig"
+ },
+ {
+  "field": "topk_buffer_size",
+  "type": "int",
+  "default": "4096",
+  "line": 1264,
+  "class": "SparseKVOffloadConfig"
+ },
+ {
+  "field": "dram_size_per_dp_GB",
+  "type": "int",
+  "default": "128",
+  "line": 1265,
+  "class": "SparseKVOffloadConfig"
+ },
+ {
+  "field": "keep_device_kv_cache",
+  "type": "bool",
+  "default": "False",
+  "line": 1266,
+  "class": "SparseKVOffloadConfig"
+ },
+ {
+  "field": "topk",
+  "type": "int",
+  "default": "dataclasses.field(default=0, init=False)",
+  "line": 1267,
+  "class": "SparseKVOffloadConfig"
+ }
+]
