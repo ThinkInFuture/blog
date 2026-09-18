@@ -46,18 +46,19 @@ body{
 /* ---------- Hero ---------- */
 .hero{
   position:relative;
-  padding:70px 32px 78px;
-  color:#fff;
+  padding:56px 32px 60px;
+  color:var(--ink);
   overflow:hidden;
+  border-bottom:1px solid var(--line);
   background:
-    radial-gradient(1100px 480px at 12% -20%, #4338ca 0%, transparent 62%),
-    radial-gradient(900px 420px at 88% -5%, #0e7490 0%, transparent 58%),
-    linear-gradient(160deg,#151b30 0%,#0c111d 100%);
+    radial-gradient(900px 420px at 10% -30%, rgba(79,70,229,.10) 0%, transparent 60%),
+    radial-gradient(800px 380px at 90% -15%, rgba(8,145,178,.08) 0%, transparent 55%),
+    linear-gradient(180deg,#ffffff 0%,#f6f7fb 100%);
 }
 .hero::after{
   content:"";position:absolute;inset:0;
-  background-image:linear-gradient(rgba(255,255,255,.045) 1px,transparent 1px),
-                   linear-gradient(90deg,rgba(255,255,255,.045) 1px,transparent 1px);
+  background-image:linear-gradient(rgba(79,70,229,.05) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(79,70,229,.05) 1px,transparent 1px);
   background-size:52px 52px;
   mask-image:radial-gradient(800px 400px at 50% 0%,#000 0%,transparent 78%);
   pointer-events:none;
@@ -67,22 +68,22 @@ body{
   display:inline-flex;align-items:center;gap:8px;
   font-size:12.5px;letter-spacing:.14em;font-weight:600;
   padding:6px 14px;border-radius:999px;
-  background:rgba(255,255,255,.09);
-  border:1px solid rgba(255,255,255,.18);
-  color:#c7d2fe;
+  background:#eef0ff;
+  border:1px solid #dfe3ff;
+  color:var(--brand);
   margin-bottom:22px;
 }
-.hero-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#34d399;box-shadow:0 0 0 4px rgba(52,211,153,.18)}
+.hero-tag::before{content:"";width:6px;height:6px;border-radius:50%;background:#4f46e5;box-shadow:0 0 0 4px rgba(79,70,229,.12)}
 .hero h1{
   font-size:clamp(28px,4.4vw,46px);
   line-height:1.24;margin:0 0 18px;letter-spacing:-.02em;font-weight:800;
 }
 .hero h1 .grad{
-  background:linear-gradient(100deg,#a5b4fc,#67e8f9 45%,#c4b5fd);
+  background:linear-gradient(100deg,#4f46e5,#0891b2 45%,#7c3aed);
   -webkit-background-clip:text;background-clip:text;color:transparent;
 }
 .hero-sub{
-  max-width:760px;color:#a9b4cc;font-size:15.5px;margin:0 0 26px;
+  max-width:760px;color:var(--muted);font-size:15.5px;margin:0 0 26px;
 }
 .hero-chips{display:flex;flex-wrap:wrap;gap:10px}
 .chip{
@@ -235,6 +236,15 @@ figure.code figcaption .lang{
   padding:2px 8px;border-radius:5px;
   background:#eef0ff;color:#4f46e5;border:1px solid #dfe3ff;
 }
+figure.code figcaption .copy-btn{
+  margin-left:auto;display:inline-flex;align-items:center;gap:5px;
+  padding:3px 11px;border-radius:6px;cursor:pointer;
+  font-size:11.5px;font-family:inherit;
+  background:#fff;border:1px solid var(--line);color:var(--muted);
+  transition:all .15s;
+}
+figure.code figcaption .copy-btn:hover{border-color:var(--brand);color:var(--brand)}
+figure.code figcaption .copy-btn.done{background:#ecfdf5;border-color:#a7f3d0;color:#059669}
 figure.code figcaption .title{color:#c3cbdd;font-weight:600}
 figure.code pre{margin:0;padding:18px 20px;overflow-x:auto;font-size:13.2px;line-height:1.72}
 figure.code code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:none;padding:0}
@@ -551,7 +561,7 @@ td.mid{color:var(--amber);font-weight:600}
 <!-- ================= HERO ================= -->
 <header class="hero">
   <div class="hero-inner">
-    <a href="../index.html" style="display:inline-block;color:rgba(255,255,255,.8);text-decoration:none;font-size:13px;margin-bottom:16px">&larr; 返回首页</a>
+    <a href="../index.html" style="display:inline-block;color:var(--muted);text-decoration:none;font-size:13px;margin-bottom:16px">&larr; 返回首页</a>
     <div class="hero-tag">基础理论 · 2026-09-18 发布</div>
     <h1>大模型 RL 对齐（RLHF / DPO）<br><span class="grad">原理与配套极简源码片段</span></h1>
     <p class="hero-sub">
@@ -2017,6 +2027,41 @@ def grpo_group_reward(rewards_group):
 <script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
 <script>
 (function () {
+  // ---------- 源码框拷贝按钮 ----------
+  document.querySelectorAll('figure.code').forEach(function (fig) {
+    var cap = fig.querySelector('figcaption');
+    var code = fig.querySelector('pre code');
+    if (!cap || !code) return;
+    var btn = document.createElement('button');
+    btn.className = 'copy-btn';
+    btn.type = 'button';
+    btn.textContent = '复制';
+    btn.addEventListener('click', function () {
+      var text = code.innerText;
+      function done() {
+        btn.textContent = '已复制 ✓';
+        btn.classList.add('done');
+        setTimeout(function () { btn.textContent = '复制'; btn.classList.remove('done'); }, 1500);
+      }
+      function fallback() {
+        var t = document.createElement('textarea');
+        t.value = text;
+        t.style.position = 'fixed';
+        t.style.opacity = '0';
+        document.body.appendChild(t);
+        t.select();
+        try { document.execCommand('copy'); done(); } catch (e) {}
+        document.body.removeChild(t);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done).catch(fallback);
+      } else {
+        fallback();
+      }
+    });
+    cap.appendChild(btn);
+  });
+
   // ---------- 代码高亮 ----------
   if (window.hljs) {
     document.querySelectorAll('pre code').forEach(function (el) {
