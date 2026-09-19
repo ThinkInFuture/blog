@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RSI/RL 关键问题 Q&A</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:860px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:16px;letter-spacing:-0.5px}
+p{font-size:15px;color:#444;margin-bottom:12px}
+.lead{font-size:15px;color:#444;margin-bottom:20px}
+.qa{margin:28px 0;padding-top:22px;border-top:1px solid #eee}
+.q{font-size:16.5px;font-weight:700;color:#111;margin-bottom:10px}
+.q .qno{display:inline-block;background:#eef4ff;color:#3b82f6;border-radius:6px;padding:1px 10px;margin-right:10px;font-size:14px}
+.a{font-size:15px;color:#444;margin-bottom:12px}
+.practice,.gap{border-radius:0 8px 8px 0;padding:12px 16px;font-size:14px;margin:10px 0;line-height:1.75}
+.practice{background:#eef4ff;border-left:3px solid #3b82f6;color:#1e3a5f}
+.gap{background:#fff7ed;border-left:3px solid #f59e0b;color:#7c2d12}
+.practice b,.gap b{font-weight:700}
+.practice b{color:#1d4ed8}
+.gap b{color:#b45309}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+.note{background:#f9f9f9;border-left:3px solid #999;padding:14px 18px;font-size:14px;color:#555;margin:24px 0;border-radius:0 6px 6px 0}
+.footnote{display:block;margin-top:32px;font-size:13px;color:#999}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">灵魂拷问</span>2026-09-19 发布</div>
+<h1>RSI/RL 关键问题 Q&amp;A</h1>
+
+<p class="lead">这是 RSI/RL 项目的拷问式自查：12 个关键问题，每个都给出通行答案、当前项目做法、以及诚实标注的差距。<strong>「项目做法」是已经落地的，「差距」是还没做到的</strong>——两块都摆出来，防止自我感觉良好。</p>
+
+<div class="qa">
+<div class="q"><span class="qno">Q1</span>GRPO 组内奖励方差为零时怎么办？</div>
+<div class="a">组内方差为零意味着 advantage=0，梯度消失。解决方案是保证每组内同时包含成功和失败的样本。</div>
+<div class="practice"><b>项目做法：</b>实现了 <code>edge_tasks()</code>，只捞 pass_rate ∈ [0.05, 0.6] 的边缘任务进 trajgen 训练，全对/全挂的题直接跳过。难度反馈闭环把 pass_rate 回写 metadata，按桶统计后注入下一轮出题 prompt。复杂题特训实测组内方差 0.486、通过率 0.219，正中 20% 锚点。</div>
+<div class="gap"><b>差距：</b>基础层 50 题 Pass@1=0.92，组内方差≈0，已降级为哨兵；评测集 30 题样本太小，Wilson CI 宽度 0.17。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q2</span>GRPO 中 G 取多少合适？</div>
+<div class="a">G=8–64，G=16 是常见甜点。更大的 G 给出更稳定的优势估计，但计算成本线性增长。</div>
+<div class="practice"><b>项目做法：</b>消融矩阵统一 G=8。</div>
+<div class="gap"><b>差距：</b>没有做过 G 的消融实验。边缘任务只有 12–14 个时，G=8 可能导致大量组内方差为零的样本被浪费，建议在边缘任务训练时提到 G=16。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q3</span>为什么选 GRPO 而不是 PPO / DPO？</div>
+<div class="a">GRPO 适合可验证奖励任务（代码/数学），省去 Critic 模型，显存占用降低 25–30%。DPO 适合偏好对齐，不适合需要探索的任务。</div>
+<div class="practice"><b>项目做法：</b>选型 GRPO，Proposer/Solver 分离架构，taskgen / trajgen / scaffoldgen 三阶段独立 LoRA 共享基座。</div>
+<div class="gap"><b>差距：</b>没有做 GRPO vs PPO 的对照实验。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q4</span>如何设计抗刷分的奖励函数？</div>
+<div class="a">Reward Hacking 的常见模式是冗长、谄媚、格式游戏、拒绝回答。<strong>乘积结构比加权和更抗刷分</strong>。</div>
+<div class="practice"><b>项目做法：</b>任务奖励用 validity × difficulty × novelty 乘积结构，任一趋零归零；难度核非对称——太易快衰减、太难慢衰减+下限；LP 奖励 |p̂ − p_actual|，能力提升后旧题自动失去奖励；geo_feedback 用 eps=0.05 防冷启动归零；基础设施故障返回中性值 0.5，不伪装成模型答错；沙箱结果按 completion hash 缓存。</div>
+<div class="gap"><b>差距：</b>缺少对抗性测试，V1 的截断副作用就是奖励-输出错位；LP 奖励信号弱，mean=0.0616；没有多目标辅助奖励。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q5</span>过程奖励 vs 结果奖励怎么选？</div>
+<div class="a">PRM 在长推理链任务中优于 ORM，因为信用分配更精确，但训练成本高。</div>
+<div class="practice"><b>项目做法：</b>实现了 <code>prefix_monte_carlo_values()</code>，用前缀频率统计给每步打分（ReST-MCTS* 思想）。</div>
+<div class="gap"><b>差距：</b>这是简化版，没有完整 MCTS 搜索树。需要验证它是否真的提供了比最终通过率更细粒度的信用分配——如果没有，可能只是增加计算成本而没有实际收益。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q6</span>KL 惩罚系数怎么设？如何监控？</div>
+<div class="a">KL beta 是防遗忘的核心旋钮：太小策略偏离太远，太大学习停滞。需要监控 KL 曲线趋势。</div>
+<div class="practice"><b>项目做法：</b>KL beta=0.04 显式配置，每阶段 save_model 落盘，三阶段串行用完即毁防 OOM。</div>
+<div class="gap"><b>差距：</b>没有 KL 曲线的监控机制，KL 持续上升或一直很低都没有告警。显存碎片化风险在多轮长跑后累积。V1 训练时间从 3h 延长到 5h，是训练不稳定的信号。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q7</span>训练不稳定的常见症状有哪些？</div>
+<div class="a">奖励方差坍塌、输出长度爆炸、KL 爆炸、grad_norm 异常。</div>
+<div class="practice"><b>项目做法：</b>监控 grad_norm、奖励方差、输出长度分布。V1 截断副作用已定位：难度指令+单步生成冲突，unparseable 75%。分步生成改造后 unparseable 25→2，有效率 0.22→0.69。</div>
+<div class="gap"><b>差距：</b>输出长度分布监控未系统化；沙箱吞吐是瓶颈，单轮 226 秒，长跑时并发压力指数上升。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q8</span>如何检测和防止能力退化？</div>
+<div class="a">数据混合、KL 惩罚、LoRA 隔离、多维哨兵任务集。</div>
+<div class="practice"><b>项目做法：</b>双层评测——基础层 50 题哨兵 + HumanEval 层 30 题主指标；<code>assert_isolation()</code> 硬断言防评测泄露；estimator 契约 assert not adapter_active，pass_rate 必须来自冻结基座；Wilson CI 做小样本评估。</div>
+<div class="gap"><b>差距：</b>缺少多维哨兵任务集——只有代码评估，通用推理、指令遵循、安全对齐全部缺失；没有数据混合机制，训练 prompt 池全部是自产代码任务；没有多目标奖励；LoRA 未隔离。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q9</span>如何防止「按葫芦起瓢」？</div>
+<div class="a">数据层混入基础能力数据，训练层 KL+LoRA，评估层多维哨兵，奖励层多目标。</div>
+<div class="practice"><b>项目做法：</b>LoRA 天然比全参更抗遗忘；基础层 50 题作哨兵，HumanEval 30 题作主指标。</div>
+<div class="gap"><b>差距：</b>仅靠「LoRA 天然抗遗忘」远远不够。数据混合、多目标奖励、多维评估三者缺一不可，当前三者都没有。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q10</span>长视界任务的信用分配怎么做？</div>
+<div class="a">Agentic RL 在长时序任务中训练特别容易失稳，因为信用分配困难，需要 PRM 或 MCTS 回传。</div>
+<div class="practice"><b>项目做法：</b>当前处于函数级代码任务阶段，轨迹较短，信用分配问题不突出；<code>prefix_monte_carlo_values()</code> 是为长轨迹做的准备。</div>
+<div class="gap"><b>差距：</b>还没有真正面对长时序任务。在扩展任务类型时，需要先确保过程奖励模型能有效工作，再进入长视界任务。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q11</span>如何区分「有界自我精炼」与「开放式 RSI」？</div>
+<div class="a">有界精炼是在固定任务集上迭代，能力提升有上界；开放式 RSI 是自主生成新任务、新环境、新验证器，能力提升没有预设上界。</div>
+<div class="practice"><b>项目做法：</b>六判据口径诚实标注——自我应用性部分、闭环自动化部分、递归增益未证、跨代继承无、自主纠错无。对外统一口径为「自训练闭环」，不声称 RSI 已实现。</div>
+<div class="gap"><b>差距：</b>这个定位正确且诚实。下一步跨到真正 RSI 的关键是跨代继承和自主纠错，当前未实现。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q12</span>如何保证自我修改的安全？</div>
+<div class="a">回滚机制、审计追踪、Revertible Effects、断点暂停、权限分级。</div>
+<div class="practice"><b>项目做法：</b>电子狗每 5 分钟巡检，检测到管道挂 2 次，自动重启 2 次；每阶段 save_model 落盘；重启上限 5 次，完成 flag 后自动退出。</div>
+<div class="gap"><b>差距：</b>没有回滚机制——模型修改验证器或奖励函数后如果效果变差，无法回滚；没有审计追踪——自我修改的每一步不可追溯。当前还没到自我修改阶段，这些是阶段 C/D 的问题。</div>
+</div>
+
+<div class="note">这 12 问会随项目推进持续更新：「差距」清零一条就划掉一条，新增的拷问也会追加进来。</div>
+
+<footnote class="footnote">配套阅读：<a href="如何用RSI做模型自我演进.html" style="color:#3b82f6">如何用 RSI 做模型自我演进</a> · <a href="RSI的五个关键点.html" style="color:#3b82f6">RSI 的五个关键点</a></footnote>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
