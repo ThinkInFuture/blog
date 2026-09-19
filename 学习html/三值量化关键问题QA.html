@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>三值量化关键问题 Q&amp;A</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:860px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:16px;letter-spacing:-0.5px}
+p{font-size:15px;color:#444;margin-bottom:12px}
+.lead{font-size:15px;color:#444;margin-bottom:20px}
+.group{margin:40px 0 4px;display:flex;align-items:center;gap:10px}
+.gtag{font-size:12px;font-weight:700;padding:2px 10px;border-radius:10px}
+.g-p0{background:#fee2e2;color:#991b1b}
+.g-p1{background:#fef3c7;color:#92400e}
+.g-p2{background:#dbeafe;color:#1e40af}
+.g-p3{background:#f1f5f9;color:#475569}
+.group h2{font-size:18px;font-weight:700}
+.gdesc{font-size:13px;color:#999;margin:0 0 14px}
+.qa{margin:22px 0;padding-top:20px;border-top:1px solid #eee}
+.q{font-size:16.5px;font-weight:700;color:#111;margin-bottom:10px}
+.q .qno{display:inline-block;background:#eef4ff;color:#3b82f6;border-radius:6px;padding:1px 10px;margin-right:10px;font-size:14px}
+.a{font-size:15px;color:#444;margin-bottom:12px}
+.proj{background:#eef4ff;border-left:3px solid #3b82f6;border-radius:0 8px 8px 0;padding:12px 16px;font-size:14px;margin:10px 0;line-height:1.75;color:#1e3a5f}
+.proj b{color:#1d4ed8}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+.note{background:#f9f9f9;border-left:3px solid #999;padding:14px 18px;font-size:14px;color:#555;margin:24px 0;border-radius:0 6px 6px 0}
+.footnote{display:block;margin-top:32px;font-size:13px;color:#999}
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">灵魂拷问</span>2026-09-19 发布</div>
+<h1>三值量化关键问题 Q&amp;A</h1>
+
+<p class="lead">三值量化项目（Tequila / UltraQuantV2）的 20 个面试考点，按 Q / A / 项目 三行格式整理：Q 是面试问题，A 是标准回答（理论上该怎么答），项目是当前项目的实际做法。只列核心考点，直接背。</p>
+
+<div class="group"><span class="gtag g-p0">P0</span><h2>必须张口就讲清</h2></div>
+<div class="gdesc">这 6 问答不上，后面的都不用谈。</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q1</span>三值量化怎么做的？</div>
+<div class="a">每通道算 scale=mean(|x|)，delta=scale/2，权重落 {-1,0,+1} 再乘 scale。活权重三值化，死区权重置 0 会丢容量，所以需要专门处理死区。</div>
+<div class="proj"><b>项目：</b>UltraQuantV2，scale=mean(|x|)，delta=scale/2，A=符号·scale，B=eps·x 做动态偏置，前向 out=F.linear(input, A)+B.sum(-1)，部署存 int8 编码 + 每行 fp16 scale + bf16 bias。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q2</span>STE 直通估计器是什么？</div>
+<div class="a">前向量化不可导，反向把梯度直接传给原权重，相当于恒等映射。STE 有梯度偏差，死区权重拿到的是噪声，容易困死。</div>
+<div class="proj"><b>项目：</b>活权重走 STE，死权重不走 STE，直接 grad_output[mask_B] += eps_t * grad_B[mask_B]，混合梯度。已做数值梯度检查，B 路径有限差分最大相对误差 1e-4 量级。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q3</span>Tequila 死区复活为什么有效？</div>
+<div class="a">死区权重不丢，改成 eps*W 动态偏置，前向贡献连续信号，反向拿直接梯度，绕开 STE 噪声，推理时偏置可离线融合。</div>
+<div class="proj"><b>项目：</b>B = eps * x[mask_B]，前向 B.sum(dim=-1) 等价 ones@B.T，免一次 matmul；部署时 B.sum 离线算好 fuse 进 bias，附加开销 &lt;0.1%。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q4</span>训练配置怎么定的？</div>
+<div class="a">三值 QAT 解冻层数、序列长度、LR 调度是关键。调度器要按优化器步数配，不是按训练步数。</div>
+<div class="proj"><b>项目：</b>只解冻 4 层→12 层→24 层，参数量 2.83 亿→8.5 亿→17 亿；seq64 碎片拼成 seq512，样本间插 eos；LR 调度器 bug 修复为 opt_steps = max_steps // grad_accum，cosine 才正常衰减。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q5</span>怎么证明量化模型真的提升？</div>
+<div class="a">小样本噪声大，必须全量评测 + 置信区间 + 配对检验。30 样本单项标准误 ±8.4%，AVG ±3.7%，95% CI ±7.4%，差 2 分不显著。</div>
+<div class="proj"><b>项目：</b>lm-eval-harness 每项 1000–1400 题，seed 42，Wilson 95% CI，McNemar 配对检验。结果 BF16 四项均分 66.8%，PTQ 24.5%，12L 26.8%，24L 31.5%；24L vs 12L 三项 p&lt;0.01 显著，BF16 vs 24L 全项 p&lt;1e-14。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q6</span>部署导出怎么做？</div>
+<div class="a">量化层存三值编码 + 每行 scale + bias，重建要 bit 级一致，舍入顺序要和评估完全一致。</div>
+<div class="proj"><b>项目：</b>codes = A.to(torch.int8) 取乘 scale 前符号，值域严格 {-1,0,+1}；scale 存 fp16，bias 统一 bf16 舍入顺序；128/128 层重建权重与内存版逐元素相等。曾发现 bias 走 fp16 中转掉 2 分，修复后差异通道 46996→0。</div>
+</div>
+
+<div class="group"><span class="gtag g-p1">P1</span><h2>大概率追问</h2></div>
+<div class="gdesc">讲清 P0 之后，面试官大概率往这里追。</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q7</span>双卡怎么切？为什么不用 DDP / FSDP？</div>
+<div class="a">device_map=auto 是模型并行，跨卡传激活，通信开销大；DDP 是数据并行，需要每卡完整模型，显存不够。2080 Ti 无 NVLink，通信瓶颈明显。</div>
+<div class="proj"><b>项目：</b>device_map="auto"，max_memory={0:"17GiB",1:"17GiB"}，实测 cuda:0=2.09B、cuda:1=2.12B 均衡；checkpoint 只存可训练参数，冻结参数恢复时从原始模型重载。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q8</span>数据管线怎么做？</div>
+<div class="a">长序列打包要拼接、插 eos 作文档边界、截掉 padding；去重防评测集污染；数据阶梯逐级验证。</div>
+<div class="proj"><b>项目：</b>build_corpus_64m.py 把 64-token 碎片拼成 512-token，样本间插 eos，attention_mask 截 padding；数据从 64 万→1077 万→6820 万 token；去重和防污染列为必做。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q9</span>梯度检查怎么做？</div>
+<div class="a">数值梯度 vs 有限差分，逐元素比较，相对误差 1e-6 量级算通过。自定义 backward 要单独验证 B.sum 路径。</div>
+<div class="proj"><b>项目：</b>B 路径有限差分最大相对误差 1.63e-06，零失败；已确认 B.sum 反向等价 ones@B.T 传播正确。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q10</span>量化误差怎么度量？</div>
+<div class="a">不能只看 benchmark，还要看困惑度、逐层 MSE、激活离群值；4B 模型冗余低，比 27B 更难三值化。</div>
+<div class="proj"><b>项目：</b>当前主要看 lm-eval 四项，逐层 MSE 和激活离群值尚未系统做；已明确 Bonsai 2 27B 的 98.2% 是 14 项平均，常识/视觉掉到 93%，知识类衰减是三值固有规律。</div>
+</div>
+
+<div class="group"><span class="gtag g-p2">P2</span><h2>加分项</h2></div>
+<div class="gdesc">能聊到这里，说明跟过前沿。</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q11</span>哈达玛旋转是什么？为什么能提升三值量化？</div>
+<div class="a">分块哈达玛变换把权重和激活的离群值打散，降低量化误差，QuaRot 系经典技术。</div>
+<div class="proj"><b>项目：</b>尚未接入，列为最高优先级优化点，计划先做单 block PoC，对比加哈达玛前后 MSE。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q12</span>KL 蒸馏怎么用？</div>
+<div class="a">用原模型 top-k logits 做软标签，比纯 CE 或堆数据更高效，温度、loss 权重可调。</div>
+<div class="proj"><b>项目：</b>35GB teacher logits 已在磁盘保留，尚未启用，计划在 6820 万 token 结果出来后决定是否加入。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q13</span>V3 可学习 λ 是什么？</div>
+<div class="a">每权重独立 λ + 独立 AdamW 自动拟合，取代固定 eps，让网络自己决定死区权重复活多少。</div>
+<div class="proj"><b>项目：</b>官方 UltraQuantV3 代码已在本地，列为后续消融实验。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q14</span>端到端全量化风险在哪？</div>
+<div class="a">embedding、lm_head、linear_attn 对三值化敏感，4B 模型冗余低，全量化容易掉点。</div>
+<div class="proj"><b>项目：</b>当前只量化 128 个 nn.Linear，2.56B 参数真三值；1.65B 参数（embedding、linear_attn、lm_head、norm）保留 bf16，占部署文件 3300MB。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q15</span>三值推理怎么真正加速？</div>
+<div class="a">需要 bitpacking + 专用 kernel，F.linear 浮点不算加速；2-bit 打包理论 640MB，1.58-bit 理论 507MB。</div>
+<div class="proj"><b>项目：</b>当前仍是 F.linear(input, A) 浮点矩阵乘；2-bit 打包和延迟/显存基准列为部署阶段任务。</div>
+</div>
+
+<div class="group"><span class="gtag g-p3">P3</span><h2>容易翻车的点</h2></div>
+<div class="gdesc">细节坑，答错直接暴露没上手。</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q16</span>STE scale 修正差 26 倍，为什么官方注释掉？</div>
+<div class="a">官方源码把 scale 修正注释掉，可能是经验性妥协；修正后梯度尺度变化大，可能需配合梯度裁剪。</div>
+<div class="proj"><b>项目：</b>默认关，与官方逐字节一致；已实现 --ste_scale_corr 开关，作为消融实验对照。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q17</span>自定义 backward 里 scale 要不要 detach？</div>
+<div class="a">scale 是前向统计量，反向当常数处理，不参与梯度，和 BitNet absmean 同款。</div>
+<div class="proj"><b>项目：</b>scale/delta 前向重算，反向常数，未参与梯度计算。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q18</span>12L vs 24L McNemar 结果说明什么？</div>
+<div class="a">PTQ vs 12L 平手，说明容量不够时训练收益接近零；24L 显著提升，说明容量翻倍后训练才开始兑现。</div>
+<div class="proj"><b>项目：</b>PTQ vs 12L arc/mmlu/ceval p=0.06~0.66 平手；24L vs 12L hellaswag p=2.0e-3、arc p=8.3e-11、mmlu p=8.1e-3 显著。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q19</span>部署文件 5856MB 里为什么还有 3300MB bf16？</div>
+<div class="a">量化层 2.56B 参数存 int8 编码 2560MB，2-bit 理论 640MB；非量化部分 1.65B 参数保留 bf16 占 3300MB。</div>
+<div class="proj"><b>项目：</b>量化部分真三值，非量化部分 embedding、linear_attn、lm_head、norm 暂留 bf16，目标全量化后整体 ~1.1GB。</div>
+</div>
+
+<div class="qa">
+<div class="q"><span class="qno">Q20</span>模型并行实际吞吐怎么样？</div>
+<div class="a">2080 Ti 无 NVLink，跨卡通信慢，模型并行吞吐受限；数据量上来后应评估 DDP + 梯度检查点。</div>
+<div class="proj"><b>项目：</b>当前 device_map=auto，吞吐未系统测；已确认模型并行受限，数据量提升后再评估 DDP/FSDP。</div>
+</div>
+
+<div class="note">背的时候按 <strong>Q → A → 项目</strong> 三段走：A 讲通用原理，项目讲具体做法和数据。面试官追问哪一层，就往下展开哪一层。</div>
+
+<footnote class="footnote">配套阅读：<a href="RSI-RL关键问题QA.html" style="color:#3b82f6">RSI/RL 关键问题 Q&amp;A</a> · <a href="三值化量化训练原理.html" style="color:#3b82f6">三值化量化训练原理</a></footnote>
+</div>
+</body>
+</html>
