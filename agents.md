@@ -6,13 +6,14 @@
 2. **首页轮播（carousel）固定 5 张**：取发布时间最新的 5 篇文章，最新的一篇放第一位；新文章发布后必须同步更新轮播，不能只加专区列表。
 3. **新文章发布流程**：文章 HTML 放对应专区目录（学习html/实验html/模型html）→ 首页专区列表加条目（带日期）→ 更新轮播（如进入最新5篇）→ 同步更新 metrics 数字 → 推 Gitee master 触发部署。
 4. **提交规则**：统一推 Gitee（conanfans/blog）的 master 分支触发 ESA 部署，GitHub（ThinkInFuture/blog）main 同步备份。
-5. **代码块和图**：页面里放 shell/代码要用 HTML 转义；mermaid 节点文本必须用双引号包裹，特殊字符才不会被解析截断。
+6. **灵魂拷问（学习专区内子版块，不是独立专区）**：放项目相关的**拷问式问题**，立意是拓展思维（被人挑战、避免思维局限）。子版块标题「**灵魂拷问**」，位于学习专区列表下方。**该子版块的文章一律不上轮播 banner**。发布流程：加条目到灵魂拷问子版块（带日期）→ 推送；跳过轮播步骤。
+7. **代码块和图**：页面里放 shell/代码要用 HTML 转义；mermaid 节点文本必须用双引号包裹，特殊字符才不会被解析截断。
 
 ## 部署通道技巧（重要）
 
 - **ESA 只监听 Gitee 的 master 分支**（conanfans/blog，默认分支必须是 master）：推送命令 `git push gitee main:master`。推 main 分支不会触发部署，这是踩过的坑。
-- **GitHub 443 经常被墙，api.github.com 基本一直通**：git push 失败时改用 GitHub Contents API 补推——`PUT /repos/{owner}/{repo}/contents/{path}`，body 传 base64 内容 + 原文件 sha（GET 先查），二进制文件同样适用。API 上传会自动在默认分支生成 commit，与 git push 等效。
-- GitHub API 上传与本地 git 历史会分叉（文件内容一致），后续 git push 前先 `git fetch` 对齐，必要时本地 reset。
+- **GitHub 固定走 API 补文件（用户拍板的固定策略）**：GitHub main 的 git 历史已与本地分叉，**不要再尝试 `git push origin main`**。凡 GitHub 需要同步的文件，一律用仓库根目录的 `sync_gh.py`：`python sync_gh.py <相对路径1> [路径2...] [-m "说明"]`（Contents API PUT，base64 + sha，二进制通用，自动重试）。Gitee master 仍正常 git push 触发部署。
+- GitHub API 上传与本地 git 历史各自独立（文件内容保持一致即可，不追求 commit 历史对齐）。
 
 ## mermaid 实战技巧
 
