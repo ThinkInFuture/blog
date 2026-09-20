@@ -1,0 +1,2775 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CED + CSA2 复现 · 代码检视 2026-09-20（第 1 轮）</title>
+
+<!-- 语法高亮 -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/atom-one-light.min.css">
+<!-- Mermaid 固定版本 -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+
+<style>
+  :root{
+    --bg:#f7f9fc;
+    --panel:#ffffff;
+    --panel-2:#f2f5fa;
+    --border:#dfe6ef;
+    --border-soft:#e8eef6;
+    --text:#1c2733;
+    --muted:#5b6b7c;
+    --accent:#2f6feb;
+    --accent-soft:#e8f0fe;
+    --green:#1a7f4b;
+    --green-soft:#e6f5ed;
+    --orange:#b45309;
+    --orange-soft:#fff4e5;
+    --purple:#6b46c1;
+    --purple-soft:#f0ebff;
+    --red:#b91c1c;
+    --red-soft:#fdecec;
+    --code-bg:#fbfcfe;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    font-size:15px;
+    line-height:1.7;
+  }
+  .wrap{max-width:1180px;margin:0 auto;padding:32px 24px 80px;}
+
+  header.top{
+    background:linear-gradient(135deg,#eef4ff 0%,#f7f9fc 60%);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:28px 32px;
+    margin-bottom:28px;
+    box-shadow:0 1px 3px rgba(20,40,80,.04);
+  }
+  header.top h1{
+    margin:0 0 10px;
+    font-size:26px;
+    letter-spacing:.2px;
+    color:#15315c;
+  }
+  header.top .sub{
+    color:var(--muted);
+    font-size:14px;
+  }
+  header.top .meta{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;
+  }
+  header.top .meta span{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:20px;
+    padding:3px 12px;
+    font-size:12.5px;
+    color:var(--muted);
+  }
+
+  h2{
+    font-size:21px;
+    margin:44px 0 16px;
+    padding:0 0 10px 12px;
+    border-left:5px solid var(--accent);
+    color:#15315c;
+    letter-spacing:.2px;
+  }
+  h3{
+    font-size:17px;
+    margin:26px 0 12px;
+    color:#1c3a68;
+  }
+  h4{
+    font-size:15px;
+    margin:18px 0 10px;
+    color:#2b4a7a;
+  }
+  p{margin:10px 0;color:#26384d;}
+
+  /* ---------- 卡片面板 ---------- */
+  .card{
+    background:var(--panel);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:20px 24px;
+    margin-bottom:18px;
+    box-shadow:0 1px 2px rgba(20,40,80,.03);
+  }
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:820px){.grid-2{grid-template-columns:1fr;}}
+
+  /* ---------- tag 标签 ---------- */
+  .tag{
+    display:inline-block;
+    padding:2px 10px;
+    border-radius:20px;
+    font-size:12px;
+    font-weight:600;
+    letter-spacing:.3px;
+    margin-right:6px;
+    margin-bottom:4px;
+    vertical-align:middle;
+  }
+  .tag.py{background:var(--accent-soft);color:#1a4ea8;}
+  .tag.sh{background:#e8f7ee;color:#196a3e;}
+  .tag.cfg{background:#fdf3e6;color:#a1570b;}
+  .tag.ds{background:#f0ebff;color:#5b3fb0;}
+  .tag.mod{background:#fff;color:#15315c;border:1px solid var(--border);}
+  .tag.new{background:#fdecec;color:#b02a2a;}
+
+  /* ---------- 【用途】/【入参说明】提示块 ---------- */
+  .hint{
+    border-radius:8px;
+    padding:10px 14px 10px 14px;
+    margin:10px 0;
+    font-size:13.5px;
+    line-height:1.7;
+    border-left:4px solid;
+  }
+  .hint-use{background:var(--green-soft);border-color:var(--green);color:#155c38;}
+  .hint-param{background:var(--orange-soft);border-color:var(--orange);color:#7c3e08;}
+  .hint-note{background:var(--purple-soft);border-color:var(--purple);color:#4a2f9c;}
+  .hint-warn{background:var(--red-soft);border-color:var(--red);color:#8a1616;}
+  .hint .lbl{font-weight:700;margin-right:6px;}
+
+  /* ---------- 代码块 ---------- */
+  .codeblock{
+    background:var(--code-bg);
+    border:1px solid var(--border);
+    border-radius:10px;
+    overflow:hidden;
+    margin:14px 0 22px;
+  }
+  .codeblock .filebar{
+    display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+    padding:9px 14px;
+    background:var(--panel-2);
+    border-bottom:1px solid var(--border-soft);
+    font-size:13px;
+    font-family:"SF Mono",Consolas,"Courier New",monospace;
+    color:#2a4364;
+  }
+  .codeblock .filebar .path{font-weight:700;color:#15315c;}
+  .codeblock pre{
+    margin:0;
+    padding:16px 18px;
+    overflow-x:auto;
+    font-size:13px;
+    line-height:1.62;
+    background:transparent;
+  }
+  .codeblock code{
+    font-family:"SF Mono",Consolas,"Courier New",monospace;
+    background:transparent !important;
+    padding:0 !important;
+  }
+  pre code.hljs{background:transparent !important;padding:0 !important;}
+
+  /* ---------- 表格 ---------- */
+  table{
+    width:100%;
+    border-collapse:collapse;
+    margin:12px 0 20px;
+    font-size:13.5px;
+    background:#fff;
+    border-radius:10px;
+    overflow:hidden;
+    box-shadow:0 1px 2px rgba(20,40,80,.04);
+  }
+  th{
+    background:#eef3fb;
+    text-align:left;
+    padding:10px 12px;
+    color:#15315c;
+    font-weight:700;
+    border-bottom:1px solid var(--border);
+    white-space:nowrap;
+  }
+  td{
+    padding:9px 12px;
+    border-bottom:1px solid var(--border-soft);
+    vertical-align:top;
+    color:#26384d;
+  }
+  tr:last-child td{border-bottom:none;}
+  td.mono,th.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;}
+
+  /* ---------- Mermaid ---------- */
+  .mermaid-wrap{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:56px 18px 24px;
+    overflow:visible;
+    margin-bottom:22px;
+  }
+  .mermaid{
+    display:flex;
+    justify-content:center;
+    overflow:visible;
+  }
+  .mermaid svg{overflow:visible !important;max-width:100%;height:auto;}
+  .mermaid svg text{font-size:20px !important;}
+  .mermaid .cluster-label foreignObject{overflow:visible !important;white-space:nowrap;}
+  .mermaid .cluster-label{transform:translateY(-30px);}
+
+  /* ---------- 列表 ---------- */
+  ul.clean{padding-left:20px;margin:10px 0;}
+  ul.clean li{margin:6px 0;color:#26384d;}
+  ol.steps{padding-left:22px;margin:10px 0;}
+  ol.steps li{margin:8px 0;color:#26384d;}
+
+  .pill{
+    display:inline-block;
+    padding:1px 9px;
+    border-radius:6px;
+    font-size:12px;
+    font-weight:600;
+    background:#eef3fb;
+    color:#1a4ea8;
+    margin-right:4px;
+  }
+  .pill.warn{background:var(--orange-soft);color:#8a4a06;}
+  .pill.ok{background:var(--green-soft);color:#155c38;}
+  .pill.no{background:var(--red-soft);color:#8a1616;}
+
+  footer.end{
+    margin-top:60px;
+    padding-top:20px;
+    border-top:1px dashed var(--border);
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+  <a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin-bottom:14px">&larr; 返回首页</a>
+
+
+<!-- ============================ 顶部 ============================ -->
+<header class="top">
+  <div style="font-size:12px;color:#6b7280;margin-bottom:8px"><span style="color:#2563eb;font-weight:700">代码检视</span> · 2026-09-20 发布 · 第 1 轮</div>
+<h1>CED + CSA2 复现（Qwen3.5-4B）· 代码检视 2026-09-20（第 1 轮）</h1>
+  <div class="sub">DeepSeek V4.1 三大核心设计在混合架构模型上的完整复现：CED 层切分 + CSA2 跨层 KV 共享 + TurboQuant k8v4 量化</div>
+  <div class="meta">
+    <span>基座模型 Qwen/Qwen3.5-4B</span>
+    <span>硬件 RTX 4070 Ti SUPER 16GB</span>
+    <span>阶段 step1 ~ step6 全部完成</span>
+    <span>代码 30+ 文件 / 核心 10 模块</span>
+    <span>数据 1200 条 / 31.5 万 token 对</span>
+  </div>
+</header>
+
+<!-- ============================ ① 项目目标与预期 ============================ -->
+<h2>① 项目目标与预期</h2>
+
+<div class="card">
+  <h3>训练目的</h3>
+  <p>在 <strong>Qwen3.5-4B</strong>（32 层混合架构，仅第 4/8/12/16/20/24/28/32 共 8 层为全注意力，其余 24 层为 GatedDeltaNet 线性注意力）上，验证 <strong>DeepSeek V4.1</strong> 报告中提出的三个核心设计是否能在混合架构模型上落地：</p>
+  <ol class="steps">
+    <li><strong>CED（因果编码器-解码器）</strong>：在第 16 层切分，解码段全注意力层的 KV 由第 16 层隐藏态 <code>H_16</code> 经线性投影生成，验证"以隐状态重建 KV"这一替代路径的可训练性与质量代价。</li>
+    <li><strong>CSA2（压缩稀疏注意力简化版）</strong>：解码段 4 个全注意力层共享 1 份 KV，每层仅挂一个小适配器做跨层映射，验证"1 份 KV + 跨层小适配器"能否在保持质量的同时获得 4x 存储压缩。</li>
+    <li><strong>TurboQuant KV 量化</strong>：k8v4（K 8bit / V 4bit 分组 scale），在缓存后量化路径上验证质量扰动与压缩比。</li>
+  </ol>
+
+  <h3>要解决的问题</h3>
+  <ul class="clean">
+    <li>长上下文推理时 KV Cache 显存爆炸：全注意力层数越多越显著。</li>
+    <li>Prefill 阶段解码段全注意力层的计算冗余：能否以编码器隐藏态直接生成 KV，跳过重复计算。</li>
+    <li>跨层 KV 相似度实测接近 0（pre-norm 空间），直接复用不可行，需要可训练的跨层映射桥接。</li>
+  </ul>
+
+  <h3>短期落地目标</h3>
+  <ul class="clean">
+    <li>完成数据捕获 → 投影器训练 → 适配器训练 → 多模式评测 → 延迟/存储基准的完整链路。</li>
+    <li>给出 CED 投影器、CSA2 适配器、TurboQuant 三项设计的量化指标与是否达标的明确判定。</li>
+    <li>沉淀可复现的工程资产（断点续跑、电子狗看护、诊断工具链）。</li>
+  </ul>
+
+  <h3>实验预期效果与验收阈值</h3>
+  <table>
+    <thead><tr><th>指标</th><th>阈值</th><th>预期依据</th></tr></thead>
+    <tbody>
+      <tr><td>PPL 劣化（adapter 模式）</td><td>&lt; 5%</td><td>适配器 R² 需 ≥ 0.75 才能压住劣化</td></tr>
+      <tr><td>GSM8K 降幅</td><td>&lt; 2pp</td><td>生成质量需接近无损</td></tr>
+      <tr><td>NIAH 降幅</td><td>&lt; 5%</td><td>长上下文检索能力不崩</td></tr>
+      <tr><td>Prefill 加速</td><td>≥ 1.3x</td><td>mode_b 跳过解码段 FFN/DeltaNet</td></tr>
+      <tr><td>KV 解码段压缩</td><td>~4x</td><td>4 层共享 1 份 KV</td></tr>
+      <tr><td>k8v4 量化压缩</td><td>~2.5x</td><td>K 8bit + V 4bit 分组 scale</td></tr>
+    </tbody>
+  </table>
+
+  <h3>已实现能力（v6 最终版）</h3>
+  <div class="grid-2">
+    <div>
+      <h4>✅ 已验证成立</h4>
+      <ul class="clean">
+        <li><span class="pill ok">TurboQuant</span>压缩 2.46x（理论 2.53x），top5 重合 100%，top1 一致 88.9%</li>
+        <li><span class="pill ok">CSA2 适配器</span>GSM8K -1pp、NIAH -2pp，生成质量达标</li>
+        <li><span class="pill ok">CED 长序列加速</span>mode_b @2048 达 1.56x（延迟口径）</li>
+        <li><span class="pill ok">KV 全模型持久压缩</span>1.60x（= 理论 8/5 上限）</li>
+        <li><span class="pill ok">手动逐层调用</span>与官方 forward bit 级一致（max|Δlogit|=0.0000）</li>
+        <li><span class="pill ok">因果性验证</span>固定位置 H_16 与总长无关，DeltaNet 分块数值差异已定性</li>
+      </ul>
+    </div>
+    <div>
+      <h4>⚠️ 待验证 / 未达标</h4>
+      <ul class="clean">
+        <li><span class="pill warn">PPL +5.20%</span>结构代价，主要来自 layer32 V 映射（R²=0.673 最低）</li>
+        <li><span class="pill no">运行时 HBM 压缩 1.00x</span>views 占满，需 attention 内惰性物化</li>
+        <li><span class="pill no">mode_b 连续生成</span>负结果：DeltaNet 零状态导致失忆；attn_only 修复方案 1.10x 仍乱码</li>
+        <li><span class="pill warn">迁移到纯全注意力模型</span>待后续验证，当前混合架构限制 CED/CSA2 空间</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================ ② 项目简介 ============================ -->
+<h2>② 项目简介</h2>
+
+<div class="card">
+  <h3>基础信息</h3>
+  <table>
+    <tbody>
+      <tr><th style="width:180px;">项目名</th><td>CED + CSA2 复现（DeepSeek V4.1 设计验证）</td></tr>
+      <tr><th>基座模型</th><td class="mono">Qwen/Qwen3.5-4B（32 层混合架构，8 层全注意力 + 24 层 GatedDeltaNet）</td></tr>
+      <tr><th>硬件环境</th><td>RTX 4070 Ti SUPER 16GB（推理/训练）；CPU 用于数据采集与部分训练原型</td></tr>
+      <tr><th>软件栈</th><td class="mono">Python 3.10 / PyTorch 2.6+cu124 / transformers 5.9.0 / datasets / tqdm</td></tr>
+      <tr><th>训练方案</th><td>两阶段：① CED 主投影器 Linear(2560→2048) ② CSA2 跨层适配器（闭式解 + SGD 残差微调）</td></tr>
+      <tr><th>评测方案</th><td>PPL（WikiText-2 test）/ GSM8K（100 题）/ NIAH（50 条）/ Prefill 延迟 / KV 存储实测</td></tr>
+    </tbody>
+  </table>
+
+  <h3>关键约束</h3>
+  <ul class="clean">
+    <li><strong>显存 16GB</strong>：主模型 bf16 约 8.7GB，训练/评测必须分阶段，避免同时驻留投影器与适配器训练图。</li>
+    <li><strong>DeltaNet 分块数值路径</strong>：GatedDeltaNet 对"末尾不完整 chunk"存在确定性数值差异（fp32 下 ~2^-5），已用 diag_causality2/3 与真实因果泄漏区分开。</li>
+    <li><strong>pre-norm / pre-RoPE 注入空间</strong>：KV 注入必须在层内 k_norm + RoPE 之前，各层自己的 norm 和位置编码才能正常作用。</li>
+    <li><strong>跨层 KV 余弦相似度 ≈ 0</strong>：零训练直接复用实测 PPL +120%，不可行，必须走适配器方案。</li>
+    <li><strong>Mode B 与 CSA2 强耦合</strong>：mode_b 必须搭配共享缓存，且 DeltaNet 零状态近似会破坏连续生成。</li>
+  </ul>
+
+  <h3>样本规模与配比</h3>
+  <table>
+    <thead>
+      <tr><th>用途</th><th>数据源</th><th>规模</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>CED 主投影器训练</td>
+        <td>WikiText-2 raw train</td>
+        <td>31.5 万 token 对（1200 条）</td>
+        <td>学习曲线显示 600 条收敛，1200 条为 2 层 MLP 升级预留</td>
+      </tr>
+      <tr>
+        <td>CSA2 适配器训练</td>
+        <td>同上，每条截取前 128/256 token</td>
+        <td>27.3 万 token 对</td>
+        <td>95% 训练 / 5% 验证，闭式解 7 秒完成</td>
+      </tr>
+      <tr>
+        <td>PPL 评测</td>
+        <td>WikiText-2 test（&gt;1200 字符长行）</td>
+        <td>30 条</td>
+        <td>与训练集零重叠</td>
+      </tr>
+      <tr>
+        <td>GSM8K 评测</td>
+        <td>openai/gsm8k test</td>
+        <td>100 题</td>
+        <td>few-shot CoT，8-shot prompt</td>
+      </tr>
+      <tr>
+        <td>NIAH 评测</td>
+        <td>本地合成噪声海 + 插针</td>
+        <td>50 条</td>
+        <td>8K token 海，随机位置插 magic number</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hint hint-note">
+    <span class="lbl">数据用途配比小结：</span>
+    数据采集阶段一次 forward 同时捕获 <code>H_16</code> 与第 20/24/28/32 层的真实 K/V（pre-norm, pre-RoPE 空间），后续投影器训练与适配器训练共享同一份 12.2GB 落盘数据，无需重复采集。
+  </div>
+</div>
+
+<!-- ============================ ③ Mermaid 训练流程图 ============================ -->
+<h2>③ Mermaid 训练流程图</h2>
+
+<div class="mermaid-wrap">
+<div class="mermaid">
+flowchart TD
+    A["【M0】config.py<br/>全局配置<br/>层索引/维度/路径/量化"] --> B["【M1】model_utils.py<br/>模型加载 + 架构校验<br/>+ RoPE 工具"]
+    B --> C["【M2】capture.py<br/>step1 捕获<br/>H_16 + 4层真实 KV"]
+    C --> D[("data/captured_k20v20.pt<br/>1200 条 / 31.5 万 token 对<br/>12.2 GB")]
+    D --> E["【M4】train_projector.py<br/>step2 训练 CED 投影器<br/>Linear 2560→2048"]
+    E --> F[("outputs/projector_k20v20.pt<br/>约 10 MB")]
+    D --> G["【M6】train_adapters.py<br/>step2b 训练 CSA2 适配器<br/>闭式解 + SGD 残差"]
+    G --> H[("outputs/adapters.pt<br/>约 25 MB")]
+    F --> I["【M7】ced_runtime.py<br/>Mode A 注入 + Mode B 旁路<br/>+ CSA2SharedCache"]
+    H --> I
+    I --> J["【M9】evaluate.py<br/>step3 PPL / step4 量化<br/>step5 基准 / step6 扩样本"]
+    K["【M8】quant.py<br/>TurboQuant k8v4<br/>分组 scale + 4bit 打包"] --> J
+    J --> L[("tests/result/*.json<br/>全部评测结果归档")]
+</div>
+</div>
+
+<div class="card">
+  <h4>模块编号与代码文件映射</h4>
+  <table>
+    <thead><tr><th>模块编号</th><th>文件名</th><th>职责</th><th>类型</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">M0</td><td class="mono">ced_csa2/config.py</td><td>全局配置：层索引、维度、路径、量化分组、日志</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M1</td><td class="mono">ced_csa2/model_utils.py</td><td>模型加载、架构校验、RoPE 工具、position_ids 构造</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M2</td><td class="mono">ced_csa2/capture.py</td><td>step1 数据采集：H_16 + 各层真实 K/V（断点续跑）</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M3</td><td class="mono">ced_csa2/projector.py</td><td>CED 投影器定义（Linear 2560→2048）与加载</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M4</td><td class="mono">ced_csa2/train_projector.py</td><td>step2 投影器训练（MSE + AdamW + cosine）</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M5</td><td class="mono">ced_csa2/csa2.py</td><td>CSA2Adapter / ResidualMLPAdapter / 零训练复用留档</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M6</td><td class="mono">ced_csa2/train_adapters.py</td><td>step2b 适配器训练（闭式解 + 可选 SGD 残差）</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M7</td><td class="mono">ced_csa2/ced_runtime.py</td><td>Mode A hook 注入 / Mode B 旁路 + CSA2SharedCache</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M8</td><td class="mono">ced_csa2/quant.py</td><td>TurboQuant k8v4 量化 + 反量化 + 压缩统计</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M9</td><td class="mono">ced_csa2/evaluate.py</td><td>PPL / GSM8K / NIAH / Prefill 延迟 / KV 存储实测</td><td><span class="tag py">Python</span></td></tr>
+      <tr><td class="mono">M10</td><td class="mono">scripts/step*.py</td><td>step1~step6 入口 + bat 启动器</td><td><span class="tag py">Python</span> <span class="tag sh">Shell</span></td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ ④ 各模块代码 ============================ -->
+<h2>④ 各模块代码</h2>
+
+<!-- ---------------- M0 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M0</span> 全局配置</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    集中定义 Qwen3.5-4B 的架构常量（层数、隐藏维、头数、头维度）、层索引约定（全注意力层列表、CED 切分点、CSA2 复用层）、训练超参、路径与量化参数，并提供统一日志函数。所有其他模块都依赖它，保证"层索引 0-based 约定"在整个项目中一致。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    无函数入参；通过环境变量 <code>CED_CSA2_DEVICE</code>（默认 cuda）与 <code>CED_CSA2_DTYPE</code>（默认 bfloat16）控制运行设备与精度。<code>setup_logging(name)</code> 接收日志名，返回 logger 对象。
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/config.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag cfg">Config</span>
+      <span>72 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""全局配置：层索引、维度、路径（0-based 层索引，与设计文档一致）"""
+import os
+
+# ---------- 模型 ----------
+MODEL_ID = "Qwen/Qwen3.5-4B"
+DEVICE = os.environ.get("CED_CSA2_DEVICE", "cuda")   # GPU 忙时可设 cpu（内存推理）
+DTYPE = os.environ.get("CED_CSA2_DTYPE", "bfloat16")  # CPU 建议 float32
+
+# ---------- Qwen3.5-4B 架构 ----------
+NUM_LAYERS = 32
+HIDDEN_SIZE = 2560
+NUM_Q_HEADS = 16
+NUM_KV_HEADS = 4
+HEAD_DIM = 256
+KV_DIM = NUM_KV_HEADS * HEAD_DIM  # 1024
+
+# 全注意力层（0-based）：第 4/8/12/16/20/24/28/32 层
+FULL_ATTN_LAYERS = [3, 7, 11, 15, 19, 23, 27, 31]
+
+# ---------- CED ----------
+SPLIT_LAYER = 15                # 编码器 = layers[0..15]（第 1~16 层），解码器 = layers[16..31]
+DECODER_FULL_ATTN_LAYERS = [19, 23, 27, 31]  # 解码段全注意力层（第 20/24/28/32 层）
+PROJ_INPUT_DIM = HIDDEN_SIZE    # 2560
+PROJ_OUTPUT_DIM = 2 * KV_DIM    # 2048（K 1024 + V 1024）
+
+# ---------- CSA2 ----------
+CSA2_FULL_LAYER = 19            # 第 20 层：Full 模式
+CSA2_REUSE_LAYERS = [23, 27, 31]  # 第 24/28/32 层：Reuse 模式
+
+# ---------- 训练 ----------
+TRAIN_LR = 2e-3
+TRAIN_EPOCHS = 12
+TRAIN_BATCH_TOKENS = 8192       # 每次迭代的 token 数
+TRAIN_VAL_RATIO = 0.02
+
+# ---------- 数据 ----------
+SEQ_LEN_MIN = 512
+SEQ_LEN_MAX = 1024
+CAPTURE_NUM_SAMPLES = 2000      # step1 捕获样本数
+
+# ---------- 路径 ----------
+PROJ_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATA_DIR = os.path.join(PROJ_ROOT, "data")
+OUTPUT_DIR = os.path.join(PROJ_ROOT, "outputs")
+LOG_DIR = os.path.join(PROJ_ROOT, "logs")
+TESTS_DOC_DIR = os.path.join(PROJ_ROOT, "tests", "doc")
+TESTS_RESULT_DIR = os.path.join(PROJ_ROOT, "tests", "result")
+
+for _d in (DATA_DIR, OUTPUT_DIR, LOG_DIR):
+    os.makedirs(_d, exist_ok=True)
+
+# ---------- 量化 ----------
+QUANT_K_BITS = 8
+QUANT_V_BITS = 4
+QUANT_K_GROUP = 256   # K 8bit：每向量一个 scale（256 维）
+QUANT_V_GROUP = 64    # V 4bit：每 64 维一个 scale（细粒度降误差）
+
+
+def setup_logging(name: str):
+    """统一日志：时间/级别/文件:行号，写入 logs/ 并输出控制台"""
+    import logging
+    from datetime import datetime
+
+    log_file = os.path.join(LOG_DIR, f"{name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s",
+        handlers=[logging.FileHandler(log_file, encoding="utf-8"), logging.StreamHandler()],
+        force=True,
+    )
+    return logging.getLogger(name)
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M1 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M1</span> 模型加载与结构工具</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    加载 Qwen3.5-4B 与其 tokenizer；从 <code>config.layer_types</code> 反查全注意力层索引，与 <code>config.py</code> 中硬编码的假设交叉校验；提供 <code>rope_cos_sin</code> 与 <code>make_position_ids</code> 工具，供 Mode B 手动逐层调用时构造正确的 position_embeddings。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>load_model_and_tokenizer(device, dtype, local_files_only)</code>：device 默认取 config.DEVICE；dtype 字符串（"bfloat16"/"float32"）；local_files_only 默认 True 避免联网。</li>
+      <li><code>verify_arch(model)</code>：入参为已加载模型，返回 <code>(ok, info)</code> 元组。</li>
+      <li><code>rope_cos_sin(tm, position_ids, device, dtype)</code>：position_ids 必须是 <code>(3|4, B, L)</code>，内部断言形状。</li>
+      <li><code>make_position_ids(batch_size, seq_len, offset, device)</code>：构造 <code>(4, B, L)</code> 四路 position_ids（text/时间/高/宽）。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/model_utils.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag cfg">Model Utils</span>
+      <span>81 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""模型加载与结构工具"""
+import torch
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
+
+from . import config
+
+
+def load_model_and_tokenizer(device=config.DEVICE, dtype=config.DTYPE, local_files_only=True):
+    """加载 Qwen3.5-4B（eval 模式、冻结）。权重已在本地缓存，默认 local_files_only 避免联网检查超时；
+    数据集下载走 HF_ENDPOINT 镜像（bat 里设置），与本参数无关。"""
+    torch_dtype = getattr(torch, dtype)
+    tokenizer = AutoTokenizer.from_pretrained(config.MODEL_ID, local_files_only=local_files_only)
+    model = AutoModelForCausalLM.from_pretrained(
+        config.MODEL_ID, dtype=torch_dtype, device_map=device,
+        local_files_only=local_files_only,
+    )
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad_(False)
+    return model, tokenizer
+
+
+def get_text_model(model):
+    """兼容 ForCausalLM / ForConditionalGeneration 两种包装，取文本主干"""
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return model.model
+    if hasattr(model, "language_model"):
+        return model.language_model
+    raise RuntimeError(f"无法定位文本主干: {type(model)}")
+
+
+def full_attn_layer_indices(cfg):
+    """从 config.layer_types 取全注意力层索引（0-based）"""
+    layer_types = cfg.layer_types
+    return [i for i, t in enumerate(layer_types) if t == "full_attention"]
+
+
+def verify_arch(model):
+    """校验架构与 config.py 假设一致，返回 (ok, info)"""
+    cfg = model.config
+    text_cfg = getattr(cfg, "text_config", cfg)
+    tm = get_text_model(model)
+    idx = full_attn_layer_indices(text_cfg)
+    info = {
+        "num_layers": text_cfg.num_hidden_layers,
+        "hidden_size": text_cfg.hidden_size,
+        "layer_types": text_cfg.layer_types,
+        "full_attn_layers": idx,
+        "num_kv_heads": text_cfg.num_key_value_heads,
+        "head_dim": text_cfg.head_dim,
+    }
+    ok = (
+        info["num_layers"] == config.NUM_LAYERS
+        and info["hidden_size"] == config.HIDDEN_SIZE
+        and info["num_kv_heads"] == config.NUM_KV_HEADS
+        and info["head_dim"] == config.HEAD_DIM
+        and idx == config.FULL_ATTN_LAYERS
+    )
+    assert hasattr(tm.layers[config.CSA2_FULL_LAYER].self_attn, "k_proj"), "第20层应为全注意力层"
+    return ok, info
+
+
+def rope_cos_sin(tm, position_ids, device, dtype):
+    """计算 position_embeddings=(cos,sin)。
+    position_ids: (4,B,L)（text/时间/高/宽，来自 make_position_ids）或 (3,B,L) mrope 直传；
+    rotary_emb 内部吃 mrope 的 (3,B,L)（官方 TextModel.forward：text 路取 [0]，
+    其余 3 路给 rotary_emb）。显式约定形状，避免 (B,L) 被误判。"""
+    assert position_ids.dim() == 3 and position_ids.shape[0] in (3, 4), \
+        f"position_ids 应为 (3|4,B,L)，收到 {tuple(position_ids.shape)}"
+    dummy = torch.zeros(1, dtype=dtype, device=device)
+    if position_ids.shape[0] == 4:
+        position_ids = position_ids[1:]
+    cos, sin = tm.rotary_emb(dummy, position_ids)
+    return cos, sin
+
+
+def make_position_ids(batch_size, seq_len, offset=0, device="cuda"):
+    """构造 (4, B, L) 的 position_ids（text/时间/高/宽 四路，text 取第一路）"""
+    pos = torch.arange(seq_len, device=device).view(1, 1, -1) + offset
+    return pos.expand(4, batch_size, -1).contiguous()
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M2 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M2</span> 数据捕获（step1）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    一次 forward 中同时捕获：① 第 16 层 DecoderLayer 的输出 <code>H_16 (L, 2560)</code>；② 解码段 4 个全注意力层（20/24/28/32）的 <code>k_proj / v_proj</code> 输出 <code>(L, 1024)</code>（pre-norm / pre-RoPE 空间）。支持断点续跑（用 <code>next_text_index</code> 而非样本数作为语料游标，避免短文本跳过时重复处理）。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>capture_dataset(model, tokenizer, texts, out_path, max_samples, seq_max, save_every)</code>：texts 为字符串列表；seq_max 单条最大 token 数；save_every 每隔多少条落盘一次。</li>
+      <li><code>KVCaptureHooks.attach(model)</code>：注册 forward hook，返回 self 便于链式调用。</li>
+      <li><code>kv_cosine_similarity(kv_dict, base_layer)</code>：计算各 reuse 层与 base 层的 K/V 平均余弦相似度。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/capture.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag ds">Data Capture</span>
+      <span>146 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""数据收集：捕获 H_16 与解码段全注意力层真实 K/V（pre-norm、pre-RoPE 空间）"""
+import os
+
+import torch
+from tqdm import tqdm
+
+from . import config
+from .model_utils import get_text_model
+
+
+class KVCaptureHooks:
+    """在一次 forward 中捕获 layers[SPLIT_LAYER] 输出（H_16）与
+    DECODER_FULL_ATTN_LAYERS 各层 k_proj/v_proj 输出（真实 K/V）"""
+
+    def __init__(self):
+        self.h16 = None          # (L, hidden)
+        self.kv = {}             # layer_idx -> {"k": (L,1024), "v": (L,1024)}
+        self._handles = []
+
+    def attach(self, model):
+        tm = get_text_model(model)
+
+        def h16_hook(_module, _inp, output):
+            # DecoderLayer 返回 tensor (B, L, H)，取 batch=1 -> (L, H)
+            self.h16 = output.detach().float().cpu()[0]
+
+        self._handles.append(tm.layers[config.SPLIT_LAYER].register_forward_hook(h16_hook))
+
+        for li in config.DECODER_FULL_ATTN_LAYERS:
+            attn = tm.layers[li].self_attn
+
+            def make_k_hook(layer_idx):
+                def hook(_m, _inp, output):
+                    # Linear 输出 (B, L, 1024)，取 batch=1 -> (L, 1024)
+                    self.kv.setdefault(layer_idx, {})["k"] = output.detach().float().cpu()[0]
+                return hook
+
+            def make_v_hook(layer_idx):
+                def hook(_m, _inp, output):
+                    self.kv.setdefault(layer_idx, {})["v"] = output.detach().float().cpu()[0]
+                return hook
+
+            self._handles.append(attn.k_proj.register_forward_hook(make_k_hook(li)))
+            self._handles.append(attn.v_proj.register_forward_hook(make_v_hook(li)))
+        return self
+
+    def pop_sample(self):
+        """取出当前样本数据并重置，返回 dict 或 None"""
+        if self.h16 is None:
+            return None
+        sample = {"h16": self.h16, "kv": {li: d.copy() for li, d in self.kv.items()}}
+        self.h16, self.kv = None, {}
+        return sample
+
+    def remove(self):
+        for h in self._handles:
+            h.remove()
+        self._handles.clear()
+
+
+def kv_cosine_similarity(kv_dict, base_layer=config.CSA2_FULL_LAYER):
+    """计算 base 层与其它层 K/V 的平均余弦相似度（CSA2 可行性先验）"""
+    base = kv_dict[base_layer]
+    out = {}
+    for li, d in kv_dict.items():
+        if li == base_layer:
+            continue
+        sims = []
+        for key in ("k", "v"):
+            a = base[key].flatten(0, 1)  # (L*D)
+            b = d[key].flatten(0, 1)
+            sims.append(torch.nn.functional.cosine_similarity(a, b, dim=0).item())
+        out[li] = {"k": sims[0], "v": sims[1]}
+    return out
+
+
+def capture_dataset(model, tokenizer, texts, out_path, max_samples=config.CAPTURE_NUM_SAMPLES,
+                    seq_max=None, save_every=10):
+    """跑数据集，逐样本保存 H_16 + K/V + 跨层相似度统计。
+    支持断点续跑：partial 文件已有条数从语料头部跳过；每 save_every 条落盘一次。"""
+    logger = config.setup_logging("capture")
+    device = next(model.parameters()).device
+    seq_max = seq_max or config.SEQ_LEN_MAX
+    hooks = KVCaptureHooks().attach(model)
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    partial_path = out_path.replace(".pt", "_partial.pt")
+    samples, sim_records = [], []
+    start_idx = 0
+    if os.path.exists(partial_path):
+        try:
+            blob = torch.load(partial_path, map_location="cpu", weights_only=False)
+            samples = blob["samples"]
+            sim_records = blob.get("cosine_sim", [])
+            # 断点必须用"已处理语料游标"而非样本数：短文本被跳过时两者不等
+            start_idx = blob.get("next_text_index", len(samples))
+            logger.info("断点续跑：已有 %d 条，从语料第 %d 条继续", len(samples), start_idx)
+        except Exception:
+            logger.warning("partial 文件损坏，重新捕获", exc_info=True)
+            start_idx = 0
+
+    import time
+    t0 = time.time()
+    for i, text in enumerate(texts[start_idx:], start=start_idx):
+        if len(samples) >= max_samples:
+            break
+        ids = tokenizer(text, return_tensors="pt", truncation=True,
+                        max_length=seq_max).input_ids.to(device)
+        if ids.shape[1] < 64:
+            # 短文本跳过也要推进游标并保存，否则续跑会重复处理
+            if (i + 1 - start_idx) % save_every == 0:
+                torch.save({"samples": samples, "cosine_sim": sim_records,
+                            "next_text_index": i + 1, "partial": True}, partial_path)
+            continue
+        with torch.no_grad():
+            model(input_ids=ids)
+        sample = hooks.pop_sample()
+        if sample is None:
+            continue
+        sim_records.append(kv_cosine_similarity(sample["kv"]))
+        samples.append(sample)
+        if len(samples) % save_every == 0:
+            torch.save({"samples": samples, "cosine_sim": sim_records,
+                        "next_text_index": i + 1, "partial": True}, partial_path)
+            speed = len(samples) / max(time.time() - t0, 1e-6)
+            logger.info("进度 %d/%d（%.1f 条/分钟），已保存", len(samples), max_samples,
+                        speed * 60)
+
+    torch.save({"samples": samples, "cosine_sim": sim_records, "config": {
+        "split_layer": config.SPLIT_LAYER,
+        "target_layers": config.DECODER_FULL_ATTN_LAYERS,
+    }}, out_path)
+    hooks.remove()
+    if os.path.exists(partial_path):
+        os.remove(partial_path)
+
+    # 跨层相似度汇总（CSA2 依据）
+    agg = {}
+    for li in config.CSA2_REUSE_LAYERS:
+        ks = [r[li]["k"] for r in sim_records]
+        vs = [r[li]["v"] for r in sim_records]
+        agg[f"layer{li}"] = {"k_mean": sum(ks) / len(ks), "v_mean": sum(vs) / len(vs)}
+    logger.info("捕获样本 %d 条，已保存 %s", len(samples), out_path)
+    logger.info("跨层 KV 余弦相似度（layer19 基准）：%s", agg)
+    return out_path, agg
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M3 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M3</span> CED 投影器定义</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    定义 CED 主投影器：单个 <code>nn.Linear(2560, 2048)</code>，输入第 16 层隐藏态 <code>H_16</code>，输出前 1024 维为 K、后 1024 维为 V（pre-norm / pre-RoPE 空间）。提供带 meta 信息的加载函数。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>CEDProjector(input_dim, output_dim)</code>：默认 2560 → 2048。</li>
+      <li><code>forward(h16)</code>：h16 形状 <code>(..., 2560)</code>，返回 <code>(K, V)</code> 各 <code>(..., 1024)</code>。</li>
+      <li><code>load_projector(path, device)</code>：从 <code>{"state_dict","meta"}</code> 加载，返回 <code>(proj, meta)</code>。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/projector.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag cfg">Module</span>
+      <span>29 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""CED 投影器：H_16 -> (K, V)，pre-norm / pre-RoPE 空间，目标层默认第 20 层"""
+import torch
+import torch.nn as nn
+
+from . import config
+
+
+class CEDProjector(nn.Module):
+    """Linear(hidden -> 2*KV_DIM)，输出前 1024 为 K、后 1024 为 V"""
+
+    def __init__(self, input_dim=config.PROJ_INPUT_DIM, output_dim=config.PROJ_OUTPUT_DIM):
+        super().__init__()
+        self.proj = nn.Linear(input_dim, output_dim, bias=True)
+
+    def forward(self, h16: torch.Tensor):
+        out = self.proj(h16)
+        return out[..., : out.shape[-1] // 2], out[..., out.shape[-1] // 2 :]
+
+    def num_params(self) -> int:
+        return sum(p.numel() for p in self.parameters())
+
+
+def load_projector(path, device=config.DEVICE):
+    ckpt = torch.load(path, map_location=device, weights_only=False)
+    proj = CEDProjector().to(device=device, dtype=torch.float32)
+    proj.load_state_dict(ckpt["state_dict"])
+    proj.eval()
+    return proj, ckpt.get("meta", {})
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M4 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M4</span> 投影器训练（step2）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    以 MSE 为损失训练 CED 主投影器，目标 <code>[K_20, V_20]</code>（捕获数据中第 20 层的真实 KV）。用 mmap 加载 12.2GB 数据，按 token 数切批（batch_tokens=8192），AdamW + cosine 退火，cosine 的 <code>T_max</code> 按实际步数计算（v5 修复的 P0 之一）。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>train_projector(data_path, out_path, epochs, lr, batch_tokens, per_layer)</code>：data_path 为捕获的 .pt 文件；batch_tokens 是每次迭代的 token 数，而非样本数。</li>
+      <li><code>CapturedTokenDataset.__getitem__(idx)</code>：返回单条样本的 <code>(h16, k, v)</code>，三个张量形状分别为 <code>(L,2560),(L,1024),(L,1024)</code>。</li>
+      <li><code>_collate(batch)</code>：把多个样本沿 token 维拼接，得到 <code>(ΣL, ·)</code>。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/train_projector.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Training</span>
+      <span>103 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""CED 投影器训练：MSE(P(H_16), [K20, V20])，主模型不参与（数据已捕获落盘）"""
+import os
+
+import torch
+import torch.nn.functional as F
+from torch.utils.data import DataLoader, Dataset
+
+from . import config
+from .projector import CEDProjector
+
+
+class CapturedTokenDataset(Dataset):
+    """把捕获样本展平成 (token, h16, k, v) 训练对"""
+
+    def __init__(self, data_path, full_layer=config.CSA2_FULL_LAYER):
+        # mmap 懒加载：12.2GB 数据不全量进内存
+        self.blob = torch.load(data_path, map_location="cpu", weights_only=False, mmap=True)
+        self.samples = self.blob["samples"]
+        self.full_layer = full_layer
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        s = self.samples[idx]
+        return s["h16"], s["kv"][self.full_layer]["k"], s["kv"][self.full_layer]["v"]
+
+
+def _collate(batch):
+    hs, ks, vs = zip(*batch)
+    return torch.cat(hs), torch.cat(ks), torch.cat(vs)  # (L,2560),(L,1024),(L,1024)
+
+
+def train_projector(data_path, out_path=None, epochs=config.TRAIN_EPOCHS,
+                    lr=config.TRAIN_LR, batch_tokens=config.TRAIN_BATCH_TOKENS,
+                    per_layer=False):
+    logger = config.setup_logging("train_projector")
+    device = config.DEVICE
+    out_path = out_path or os.path.join(config.OUTPUT_DIR, "projector_k20v20.pt")
+
+    dataset = CapturedTokenDataset(data_path)
+    n_val = max(1, int(len(dataset) * config.TRAIN_VAL_RATIO))
+    n_train = len(dataset) - n_val
+    train_set, val_set = torch.utils.data.random_split(
+        dataset, [n_train, n_val], generator=torch.Generator().manual_seed(42))
+
+    # 样本级取 1、按 token 切批： collate 后再切成 batch_tokens 大小
+    loader = DataLoader(train_set, batch_size=1, shuffle=True, collate_fn=_collate)
+
+    if per_layer:
+        raise NotImplementedError("per-layer 模式留待 step2 后按需开启")
+
+    proj = CEDProjector().to(device=device, dtype=torch.float32)
+    logger.info("投影器参数量 %d（约 %.1f MB FP16）",
+                proj.num_params(), proj.num_params() * 2 / 1024 / 1024)
+    opt = torch.optim.AdamW(proj.parameters(), lr=lr, weight_decay=0.01)
+    # cosine 周期必须按"实际步数"：每 epoch 步数 = sum(ceil(每条 token 数 / batch_tokens))
+    steps_per_epoch = sum(max(1, -(-s["h16"].shape[0] // batch_tokens)) for s in dataset.samples)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, epochs * steps_per_epoch))
+    logger.info("steps_per_epoch=%d, T_max=%d", steps_per_epoch, epochs * steps_per_epoch)
+
+    def eval_val():
+        proj.eval()
+        tot, cnt = 0.0, 0
+        with torch.no_grad():
+            for h, k, v in DataLoader(val_set, batch_size=1, collate_fn=_collate):
+                h, k, v = h.to(device), k.to(device), v.to(device)
+                for i in range(0, h.shape[0], batch_tokens):
+                    pk, pv = proj(h[i : i + batch_tokens])
+                    tot += F.mse_loss(pk, k[i : i + batch_tokens]).item()
+                    tot += F.mse_loss(pv, v[i : i + batch_tokens]).item()
+                    cnt += 2
+        proj.train()
+        return tot / max(cnt, 1)
+
+    best = float("inf")
+    step = 0
+    for epoch in range(epochs):
+        for h, k, v in loader:
+            h, k, v = h.to(device), k.to(device), v.to(device)
+            for i in range(0, h.shape[0], batch_tokens):
+                hk, kk, vk = h[i : i + batch_tokens], k[i : i + batch_tokens], v[i : i + batch_tokens]
+                pk, pv = proj(hk)
+                loss = F.mse_loss(pk, kk) + F.mse_loss(pv, vk)
+                opt.zero_grad(set_to_none=True)
+                loss.backward()
+                opt.step()
+                sched.step()
+                step += 1
+                if step % 200 == 0:
+                    logger.info("epoch %d step %d mse %.6f lr %.2e",
+                                epoch, step, loss.item(), sched.get_last_lr()[0])
+        val = eval_val()
+        logger.info("epoch %d 完成，验证 MSE %.6f", epoch, val)
+        if val < best:
+            best = val
+            torch.save({"state_dict": proj.state_dict(),
+                        "meta": {"data_path": data_path, "val_mse": best,
+                                 "target_layer": config.CSA2_FULL_LAYER}}, out_path)
+            logger.info("保存最优投影器 -> %s", out_path)
+    logger.info("训练结束，最优验证 MSE %.6f", best)
+    return out_path
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M5 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M5</span> CSA2 适配器定义</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    定义跨层适配器：每个 reuse 层一组 K/V 映射，K 可选 <code>Linear</code> 或 <code>ResidualMLPAdapter</code>；V 同样可选。残差分支只零初始化末层（v5 修复的"初始化死区"P0：W1/W2 双零会让梯度恒零，残差学不动）。提供从闭式解（岭回归）初始化的方法，供 <code>train_adapters</code> 与 <code>cross_layer_mapping_test</code> 共用。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>CSA2Adapter(kv_dim, v_kind, k_kind)</code>：v_kind/k_kind ∈ {"linear","mlp"}。</li>
+      <li><code>init_from_closed_form(x_k, y_k, x_v, y_v, lam)</code>：x/y 形状 <code>(N, 1024)</code>，lam 为岭回归正则项。</li>
+      <li><code>forward_k(k) / forward_v(v)</code>：入参形状 <code>(..., 1024)</code>，返回同形状。</li>
+      <li><code>load_adapters(path, device, dtype)</code>：返回 <code>{layer_idx: CSA2Adapter}</code>。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/csa2.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Module</span>
+      <span>123 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""CSA2 模块：
+1) CSA2Adapter：跨层适配器（v2 方案核心）。K_20 -> K_li / V_20 -> V_li 的映射，
+   作用在 pre-norm / pre-RoPE 空间，适配后各层自己的 k_norm+RoPE 照常生效。
+   K 用 Linear（闭式解初始化），V 可选 MLP（R² 偏低，用更强映射补偿）。
+2) CSA2ReuseRuntime：零训练直接复用（实测 PPL +155%，仅留档对照，评测不再使用）。
+"""
+import torch
+import torch.nn as nn
+
+from . import config
+from .model_utils import get_text_model
+
+
+class ResidualMLPAdapter(nn.Module):
+    """闭式解线性基座 + 残差修正：y = base(x) + refine(x)。
+    refine 末层零初始化（起点等价闭式解）；前层保持默认随机初始化——
+    若两层全零，W1/W2 梯度恒为零，残差分支成死区（已踩坑，勿改回）。"""
+
+    def __init__(self, dim, hidden=None):
+        super().__init__()
+        hidden = hidden or dim * 2
+        self.base = nn.Linear(dim, dim)
+        self.refine = nn.Sequential(
+            nn.Linear(dim, hidden), nn.GELU(), nn.Linear(hidden, dim)
+        )
+        nn.init.zeros_(self.refine[2].weight)
+        nn.init.zeros_(self.refine[2].bias)
+
+    def forward(self, x):
+        return self.base(x) + self.refine(x)
+
+
+class CSA2Adapter(nn.Module):
+    """单层适配器：k_map / v_map（Linear 或 ResidualMLP）"""
+
+    def __init__(self, kv_dim=config.KV_DIM, v_kind="mlp", k_kind="linear"):
+        super().__init__()
+        self.k_kind = k_kind
+        self.k_map = ResidualMLPAdapter(kv_dim) if k_kind == "mlp" else nn.Linear(kv_dim, kv_dim)
+        self.v_map = ResidualMLPAdapter(kv_dim) if v_kind == "mlp" else nn.Linear(kv_dim, kv_dim)
+        self.v_kind = v_kind
+
+    @torch.no_grad()
+    def init_from_closed_form(self, x_k, y_k, x_v, y_v, lam=1.0):
+        """闭式解（岭回归）初始化：x (N,dim) -> y (N,dim)。
+        Linear：直接求解；ResidualMLP：初始化 base 分支（refine 保持零）。"""
+        for map_module, x, y in ((self.k_map, x_k, y_k), (self.v_map, x_v, y_v)):
+            target = map_module if isinstance(map_module, nn.Linear) else map_module.base
+            xa = torch.cat([x, torch.ones(x.shape[0], 1, device=x.device)], dim=1)
+            w = torch.linalg.solve(xa.T @ xa + lam * torch.eye(xa.shape[1], device=x.device), xa.T @ y)
+            target.weight.copy_(w[:-1].T)
+            target.bias.copy_(w[-1])
+
+    def forward_k(self, k):
+        return self.k_map(k)
+
+    def forward_v(self, v):
+        return self.v_map(v)
+
+
+def load_adapters(path, device="cuda", dtype=torch.float32):
+    """加载适配器集合 -> {layer_idx: CSA2Adapter}"""
+    blob = torch.load(path, map_location="cpu", weights_only=False)
+    adapters = {}
+    for li, item in blob["adapters"].items():
+        ad = CSA2Adapter(v_kind=item.get("v_kind", "mlp"), k_kind=item.get("k_kind", "linear"))
+        ad.load_state_dict(item["state_dict"])
+        adapters[int(li)] = ad.to(device=device, dtype=dtype).eval()
+    return adapters
+
+
+class CSA2ReuseRuntime:
+    """零训练直接复用（PPL +154.9%，已废弃；留档用于论文对照实验）"""
+
+    def __init__(self, model):
+        self.model = model
+        self.tm = get_text_model(model)
+        self.enabled = True
+        self.full_kv = None
+        self._handles = []
+
+    def attach(self):
+        def full_k_hook(_m, _i, output):
+            self.full_kv = {"k": output}
+            return output
+
+        def full_v_hook(_m, _i, output):
+            if self.full_kv is not None:
+                self.full_kv["v"] = output
+            return output
+
+        def reuse_k_hook(_m, _i, output):
+            if not self.enabled or self.full_kv is None or self.full_kv["k"].shape != output.shape:
+                return output
+            return self.full_kv["k"]
+
+        def reuse_v_hook(_m, _i, output):
+            if not self.enabled or self.full_kv is None or self.full_kv["v"].shape != output.shape:
+                return output
+            return self.full_kv["v"]
+
+        full = self.tm.layers[config.CSA2_FULL_LAYER].self_attn
+        self._handles = [
+            full.k_proj.register_forward_hook(full_k_hook),
+            full.v_proj.register_forward_hook(full_v_hook),
+        ]
+        for li in config.CSA2_REUSE_LAYERS:
+            attn = self.tm.layers[li].self_attn
+            self._handles.append(attn.k_proj.register_forward_hook(reuse_k_hook))
+            self._handles.append(attn.v_proj.register_forward_hook(reuse_v_hook))
+        return self
+
+    def set_enabled(self, flag: bool):
+        self.enabled = flag
+
+    def reset(self):
+        self.full_kv = None
+
+    def remove(self):
+        for h in self._handles:
+            h.remove()
+        self._handles.clear()
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M6 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M6</span> CSA2 适配器训练（step2b）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    用闭式解（岭回归）初始化适配器，可选 SGD 残差微调：<code>base</code> 用 1/10 学习率保护，<code>refine</code> 全速学。同时输出各层 K/V 的验证集 R² 与 MSE，作为判断"适配器方案是否可行"的量化依据。v5 修复初始化死区后，V R² 从 0.57~0.69 提升到 0.67~0.83。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>train_adapters(data_path, out_path, v_kind, k_kind, lam, sgd_epochs, sgd_lr, batch, val_ratio, n_per_sample, report)</code>。</li>
+      <li><code>_collect_pairs(blob, n_per_sample)</code>：每条样本截取前 n_per_sample 个 token，避免 4 层 Y 矩阵占满内存。</li>
+      <li><code>_closed_form(x, y, lam)</code>：<code>W = (XᵀX + λI)⁻¹XᵀY</code>，返回权重与偏置。</li>
+      <li><code>_r2(pred, y)</code>：返回 <code>(R², MSE)</code>。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/train_adapters.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Training</span>
+      <span>127 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""CSA2 跨层适配器训练：
+闭式解（岭回归）初始化 K/V 映射，可选 SGD 微调 V 的残差修正（ResidualMLP）。
+数据：step1 捕获的各层真实 K/V（K_20 -> K_23/27/31，V_20 -> V_23/27/31）。
+输出：outputs/adapters.pt
+"""
+import math
+import os
+
+import torch
+import torch.nn.functional as F
+
+from . import config
+from .csa2 import CSA2Adapter
+
+
+def _collect_pairs(blob, n_per_sample=128):
+    """构造 (X=layer19 K/V, Y=各 reuse 层 K/V) 对，fp32。
+    每条截取前 n_per_sample 个 token：1200 条 x 128 = 15.4 万对，避免 4 层 Y 矩阵占满内存"""
+    xs_k, xs_v = [], []
+    ys = {li: {"k": [], "v": []} for li in config.CSA2_REUSE_LAYERS}
+    for s in blob["samples"]:
+        n = min(n_per_sample, s["h16"].shape[0])
+        base = s["kv"][config.CSA2_FULL_LAYER]
+        xs_k.append(base["k"][:n])
+        xs_v.append(base["v"][:n])
+        for li in config.CSA2_REUSE_LAYERS:
+            ys[li]["k"].append(s["kv"][li]["k"][:n])
+            ys[li]["v"].append(s["kv"][li]["v"][:n])
+    x_k = torch.cat(xs_k).float()
+    x_v = torch.cat(xs_v).float()
+    y = {li: {"k": torch.cat(d["k"]).float(), "v": torch.cat(d["v"]).float()}
+         for li, d in ys.items()}
+    return x_k, x_v, y
+
+
+def _closed_form(x, y, lam=1.0):
+    xa = torch.cat([x, torch.ones(x.shape[0], 1)], dim=1)
+    w = torch.linalg.solve(xa.T @ xa + lam * torch.eye(xa.shape[1]), xa.T @ y)
+    return w[:-1].T.contiguous(), w[-1].contiguous()  # (out,in), (out,)
+
+
+def _r2(pred, y):
+    mse = ((pred - y) ** 2).mean().item()
+    var = ((y - y.mean(0)) ** 2).mean().item()
+    return 1 - mse / max(var, 1e-12), mse
+
+
+def train_adapters(data_path, out_path=None, v_kind="mlp", k_kind="linear", lam=1.0,
+                   sgd_epochs=0, sgd_lr=1e-3, batch=16384, val_ratio=0.05,
+                   n_per_sample=128, report=True):
+    logger = config.setup_logging("train_adapters")
+    out_path = out_path or os.path.join(config.OUTPUT_DIR, "adapters.pt")
+    device = config.DEVICE if torch.cuda.is_available() else "cpu"
+
+    logger.info("加载数据（mmap）：%s", data_path)
+    blob = torch.load(data_path, map_location="cpu", weights_only=False, mmap=True)
+    x_k, x_v, y = _collect_pairs(blob, n_per_sample=n_per_sample)
+    n = x_k.shape[0]
+    logger.info("token 对 %d（每条截取前 256）", n)
+
+    n_val = max(1, int(n * val_ratio))
+    g = torch.Generator().manual_seed(0)
+    perm = torch.randperm(n, generator=g)
+    va = perm[:n_val]
+    tr = perm[n_val:]
+
+    adapters = {}
+    metrics = {}
+    for li in config.CSA2_REUSE_LAYERS:
+        ad = CSA2Adapter(v_kind=v_kind, k_kind=k_kind)
+        for p in ad.parameters():
+            p.requires_grad_(False)  # 闭式解直接写入参数，SGD 阶段再按需解冻
+        ad.init_from_closed_form(x_k[tr], y[li]["k"][tr], x_v[tr], y[li]["v"][tr], lam)
+
+        if report:
+            with torch.no_grad():
+                r2k, mk = _r2(ad.forward_k(x_k[va]), y[li]["k"][va])
+                r2v, mv = _r2(ad.forward_v(x_v[va]), y[li]["v"][va])
+            logger.info("layer%d 闭式解初始化完成：K R²=%.4f MSE=%.5f | V(%s) R²=%.4f MSE=%.5f",
+                        li, r2k, mk, v_kind, r2v, mv)
+            metrics[li] = {"k_r2": r2k, "v_r2": r2v}
+
+        if sgd_epochs > 0:
+            ad = ad.to(device=device, dtype=torch.float32)
+            # 分组学习率：refine（残差修正）全速学；base/线性闭式解分支用 1/10 lr 保护
+            base_params, refine_params = [], []
+            for name, p in ad.named_parameters():
+                (refine_params if "refine" in name else base_params).append(p)
+                p.requires_grad_(True)
+            opt = torch.optim.AdamW([
+                {"params": base_params, "lr": sgd_lr * 0.1},
+                {"params": refine_params, "lr": sgd_lr},
+            ], weight_decay=0.0)
+            sched = torch.optim.lr_scheduler.CosineAnnealingLR(
+                opt, T_max=max(1, sgd_epochs * math.ceil(len(tr) / batch)))
+            steps_total = sgd_epochs * math.ceil(len(tr) / batch)
+            step = 0
+            for ep in range(sgd_epochs):
+                idx = tr[torch.randperm(len(tr), generator=g)]
+                for i in range(0, len(idx), batch):
+                    b = idx[i:i + batch]
+                    pk = ad.forward_k(x_k[b].to(device))
+                    pv = ad.forward_v(x_v[b].to(device))
+                    loss = (F.mse_loss(pk, y[li]["k"][b].to(device))
+                            + F.mse_loss(pv, y[li]["v"][b].to(device)))
+                    opt.zero_grad(set_to_none=True)
+                    loss.backward()
+                    opt.step()
+                    sched.step()
+                    step += 1
+                    if step % 20 == 0:
+                        logger.info("layer%d sgd %d/%d mse %.6f", li, step, steps_total,
+                                    loss.item())
+            with torch.no_grad():
+                r2k, _ = _r2(ad.forward_k(x_k[va].to(device)), y[li]["k"][va].to(device))
+                r2v, _ = _r2(ad.forward_v(x_v[va].to(device)), y[li]["v"][va].to(device))
+            logger.info("layer%d SGD 微调完成：K R²=%.4f | V R²=%.4f", li, r2k, r2v)
+            metrics[li].update({"k_r2_sgd": r2k, "v_r2_sgd": r2v})
+            ad = ad.cpu()
+
+        adapters[li] = {"state_dict": ad.state_dict(), "v_kind": v_kind, "k_kind": k_kind}
+
+    torch.save({"adapters": adapters, "metrics": metrics,
+                "meta": {"data_path": data_path, "v_kind": v_kind, "k_kind": k_kind, "lam": lam}}, out_path)
+    logger.info("适配器已保存 -> %s", out_path)
+    return out_path, metrics
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M7 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M7</span> CED 运行时（Mode A / Mode B / 共享缓存）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    核心运行时：<strong>Mode A</strong> 通过 forward hook 把 layer19 的 k_proj/v_proj 输出替换为 <code>P(H_16)</code>，并把适配器输出挂到 reuse 层；<strong>Mode B</strong> 用官方 forward 做 prefill（causal mask / DeltaNet 状态正确），旁路 layers[16..31]（真编码器语义），把投影 KV 注入 <code>CSA2SharedCache</code>，末位 L-1 由解码段真实计算。<code>CSA2SharedCache</code> 让 reuse 层只存增量，注意力时返回 <code>[物化视图 + 增量]</code>，并提供 <code>persistent_bytes</code>（落盘口径）与 <code>resident_bytes</code>（运行时驻留口径）双统计。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>CEDModeARuntime(model, projector, adapters, use_csa2)</code>：<code>attach()</code> 注册 hook，<code>set_enabled(False)</code> 在 prefill 后关闭。</li>
+      <li><code>CEDModeBRuntime(model, projector, adapters, use_csa2, bypass)</code>：bypass ∈ {"decoder","attn_only"}；<code>prefill(input_ids)</code> 返回 <code>(cache, next_token_logits)</code>。</li>
+      <li><code>CSA2SharedCache.inject_shared(tm, k20_raw, v20_raw, adapters, pos_ids, keep_raw)</code>：k20_raw/v20_raw 为 pre-norm/pre-RoPE 空间 <code>(B,L,1024)</code>。</li>
+      <li><code>update(key_states, value_states, layer_idx)</code>：复用层只存增量并返回拼接后的 K/V。</li>
+      <li><code>persistent_bytes() / resident_bytes()</code>：分别返回落盘口径与含视图的运行时驻留字节数。</li>
+    </ul>
+  </div>
+
+  <div class="hint hint-note">
+    <span class="lbl">【关键设计】</span>
+    Mode B 只注入位置 <code>0..L-2</code>，位置 <code>L-1</code> 由解码段真实计算，保证缓存长度恰为 L 无重复（v4 评审 P0）。旁路采用实例级 <code>layer.forward = lambda h, *a, **k: h</code>（post-hook 无法阻止层内计算与 cache.update，v3 评审 P0）。<code>bypass="attn_only"</code> 是 v6 新增的对照实验开关，用于量化"DeltaNet 真实 prefill"的加速回吐代价。
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/ced_runtime.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Runtime</span>
+      <span>324 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""CED 运行时 v3：
+Mode A：hook 将 layers[19] 的 k_proj/v_proj 输出替换为 P(H_16)；CSA2 适配器模式下
+        reuse 层取 adapter_li(K_20_raw)（pre-norm 空间，各层 k_norm+RoPE 照常生效）。
+Mode B（真编码器）：官方 forward 中 layers[16..31] 恒等旁路（DeltaNet 零状态近似），
+        投影 KV 只注入位置 0..L-2，末位 L-1 由解码段真实计算，缓存总长恰为 L 无重复。
+        质量损失来源明确：①投影 KV ②DeltaNet 零状态——需单独量化，不与 baseline PPL 直接归因。
+        共享缓存：layer19 存 1 份全长 KV，reuse 层只存末位起的 decode 增量；
+        persistent_bytes=落盘口径（不含视图）；resident_bytes=运行时驻留（含视图，压缩≈1x，
+        真实 HBM 压缩需 attention 内惰性物化，列入后续工作）。
+"""
+import torch
+import torch.nn.functional as F
+from transformers import DynamicCache
+
+from . import config
+from .model_utils import get_text_model, make_position_ids, rope_cos_sin
+
+_ROPE = None
+
+
+def apply_rope(k, cos, sin):
+    """k: (B, H, L, D)，cos/sin: (B, L, D)"""
+    global _ROPE
+    if _ROPE is None:
+        from transformers.models.qwen3_5.modeling_qwen3_5 import apply_rotary_pos_emb
+        _ROPE = apply_rotary_pos_emb
+    out, _ = _ROPE(k, k, cos, sin)
+    return out
+
+
+def prepare_layer_kv(attn, k_pre, v_pre, cos, sin):
+    """把某层 pre-norm/pre-RoPE 的 K/V 处理成可入缓存的 post-norm/post-RoPE 形式。
+    k_pre/v_pre: (B, L, 1024)；返回 (B, 4, L, 256) x2"""
+    B, L, _ = k_pre.shape
+    k = attn.k_norm(k_pre.view(B, L, -1, attn.head_dim))
+    k4 = k.transpose(1, 2)
+    v4 = v_pre.view(B, L, -1, attn.head_dim).transpose(1, 2)
+    k4 = apply_rope(k4, cos, sin)
+    return k4, v4
+
+
+class CSA2SharedCache(DynamicCache):
+    """共享 KV 缓存：全局 KV 只存 1 份（layer19 的 post-rope 版本 + raw 备份），
+    reuse 层只存 decode 增量，注意力时返回 [物化视图 + 增量]。
+    persistent_bytes 给出真实"持久化"字节数（不含惰性视图，视图不落存储）。"""
+
+    def __init__(self, *args, full_layer=None, reuse_layers=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.full_layer = full_layer if full_layer is not None else config.CSA2_FULL_LAYER
+        self.reuse_layers = list(reuse_layers) if reuse_layers is not None else list(config.CSA2_REUSE_LAYERS)
+        self.shared_len = 0          # prefill 注入的输入段长度
+        self.views = {}              # li -> (k4, v4) 物化视图（运行时对象，非持久存储）
+
+    def inject_shared(self, tm, k20_raw, v20_raw, adapters=None, pos_ids=None, keep_raw=False):
+        """prefill 后注入：layer19 写入 post-norm/RoPE 版本；物化 reuse 层视图。
+        k20_raw/v20_raw: (B, L, 1024) pre-norm/pre-RoPE（投影器原始输出）。
+        keep_raw=False（默认）：物化完成后释放 raw（layer19 缓存已有 post-rope 版本，无需双份）；
+        keep_raw=True：保留 raw 字节计入持久化（量化场景：raw 换成量化存储后计入压缩后字节）。"""
+        B, L, _ = k20_raw.shape
+        device, dtype = k20_raw.device, k20_raw.dtype
+        cos, sin = rope_cos_sin(tm, pos_ids, device, dtype)
+        full_attn = tm.layers[self.full_layer].self_attn
+        k19, v19 = prepare_layer_kv(full_attn, k20_raw, v20_raw, cos, sin)
+        self.update(k19, v19, layer_idx=self.full_layer)
+
+        for li in self.reuse_layers:
+            attn = tm.layers[li].self_attn
+            if adapters is not None and li in adapters:
+                ad = adapters[li]
+                ad_dtype = next(ad.parameters()).dtype
+                k_in = ad.forward_k(k20_raw.to(ad_dtype)).to(dtype)
+                v_in = ad.forward_v(v20_raw.to(ad_dtype)).to(dtype)
+            else:
+                k_in, v_in = k20_raw, v20_raw
+            self.views[li] = prepare_layer_kv(attn, k_in, v_in, cos, sin)
+        self.shared_len = L
+        self._raw_bytes = (k20_raw.numel() + v20_raw.numel()) * 2 if keep_raw else 0
+
+    def update(self, key_states, value_states, layer_idx, *args, **kwargs):
+        if layer_idx in self.reuse_layers:
+            # 只存增量；返回 [共享视图 + 自身增量]（与 layer19 的缓存长度一致）
+            layer = self.layers[layer_idx]
+            layer.update(key_states, value_states)
+            vk, vv = self.views[layer_idx]
+            if layer.keys is not None and layer.keys.shape[2] > 0:
+                k_out = torch.cat([vk, layer.keys], dim=2)
+                v_out = torch.cat([vv, layer.values], dim=2)
+            else:
+                k_out, v_out = vk, vv
+            return k_out, v_out
+        return super().update(key_states, value_states, layer_idx, *args, **kwargs)
+
+    def persistent_bytes(self, dtype_bytes=2):
+        """【持久化存储口径】：全注意力层实际存储的 KV + reuse 层增量（不含惰性视图）。
+        这是"若把缓存落盘/只保留最小集合"所需的字节；views 可按需重建，不计入。
+        运行时真实驻留（含 views）见 resident_bytes()。
+        DeltaNet 层状态固定大小（不随长度增长），单独统计在 linear_state_bytes。"""
+        total, linear_state = 0, 0
+        for li in range(len(self.layers)):
+            layer = self.layers[li]
+            keys = getattr(layer, "keys", None)
+            if keys is not None:
+                total += keys.numel() * dtype_bytes + layer.values.numel() * dtype_bytes
+            else:
+                for st in (getattr(layer, "conv_states", None), getattr(layer, "recurrent_states", None)):
+                    if isinstance(st, torch.Tensor):
+                        linear_state += st.numel() * st.element_size()
+                    elif st is not None:
+                        try:
+                            linear_state += sum(t.numel() * t.element_size() for t in st if isinstance(t, torch.Tensor))
+                        except TypeError:
+                            pass
+        total += getattr(self, "_raw_bytes", 0)
+        self.linear_state_bytes = linear_state
+        return total
+
+    def resident_bytes(self, dtype_bytes=2):
+        """【运行时驻留口径】：persistent_bytes + 3 个 reuse 层物化视图（真实占用的 HBM）。
+        views 是全长的（L 个位置），计入后与 baseline 解码段相比压缩比≈1x——
+        即当前实现是"存储/落盘压缩 + 计算复用"，真实 HBM 压缩需 attention 内惰性物化
+        （列入后续工作，见设计文档）。"""
+        total = self.persistent_bytes(dtype_bytes)
+        for vk, vv in self.views.values():
+            total += vk.numel() * dtype_bytes + vv.numel() * dtype_bytes
+        return total
+
+    def set_raw_store(self, k20_raw, v20_raw):
+        """记录 raw KV 的持久化字节数（1 份，pre-norm 空间）"""
+        self._raw_bytes = (k20_raw.numel() + v20_raw.numel()) * 2
+
+
+class CEDModeARuntime:
+    """Mode A：hook 注入 KV 替换（质量验证）。生成时 prefill 后 set_enabled(False)。
+    adapters=None 时 reuse 层退化为直接复用（仅留档对照，正式评测请传适配器）。"""
+
+    def __init__(self, model, projector, adapters=None, use_csa2=True):
+        self.model = model
+        self.tm = get_text_model(model)
+        device = next(model.parameters()).device
+        dtype = next(model.parameters()).dtype
+        self.proj = projector.to(device=device, dtype=dtype).eval()
+        self.adapters = adapters or {}
+        self.use_csa2 = use_csa2
+        self.enabled = True
+        self.h16 = None        # (B, L, hidden)
+        self.injected = None   # (k20_raw, v20_raw) pre-norm 空间
+        self._handles = []
+
+    def attach(self):
+        def h16_hook(_m, _i, output):
+            # DecoderLayer 返回 tensor (B, L, H)；保留 batch 维与 k_proj 输出对齐
+            self.h16 = output
+
+        def k_hook(_m, _i, output):
+            if not self.enabled or self.h16 is None or self.h16.shape[1] != output.shape[1]:
+                return output
+            k, v = self.proj(self.h16.to(output.dtype))
+            self.injected = (k, v)
+            return k
+
+        def v_hook(_m, _i, output):
+            if not self.enabled or self.injected is None:
+                return output
+            return self.injected[1]
+
+        def make_reuse_hook(idx, is_k):
+            ad = self.adapters.get(idx) if self.adapters else None
+
+            def hook(_m, _i, output):
+                if not self.enabled or self.injected is None:
+                    return output
+                src = self.injected[0] if is_k else self.injected[1]
+                if ad is not None:
+                    fn = ad.forward_k if is_k else ad.forward_v
+                    src = fn(src.to(next(ad.parameters()).dtype)).to(output.dtype)
+                if src.shape != output.shape:
+                    return output
+                return src
+            return hook
+
+        h = self.tm.layers[config.SPLIT_LAYER].register_forward_hook(h16_hook)
+        full = self.tm.layers[config.CSA2_FULL_LAYER].self_attn
+        self._handles = [
+            h,
+            full.k_proj.register_forward_hook(k_hook),
+            full.v_proj.register_forward_hook(v_hook),
+        ]
+        if self.use_csa2:
+            for li in config.CSA2_REUSE_LAYERS:
+                attn = self.tm.layers[li].self_attn
+                self._handles.append(attn.k_proj.register_forward_hook(make_reuse_hook(li, True)))
+                self._handles.append(attn.v_proj.register_forward_hook(make_reuse_hook(li, False)))
+        return self
+
+    def set_enabled(self, flag: bool):
+        self.enabled = flag
+
+    def reset(self):
+        self.h16, self.injected = None, None
+
+    def remove(self):
+        for hd in self._handles:
+            hd.remove()
+        self._handles.clear()
+
+
+class CEDModeBRuntime:
+    """Mode B v2：官方 prefill（DeltaNet 状态正确）+ 解码段全注意力层旁路 + 投影 KV 注入。
+    必须搭配 use_csa2=True（单投影器 + 适配器共享 1 份 KV）。"""
+
+    def __init__(self, model, projector, adapters=None, use_csa2=True,
+                 bypass="decoder"):
+        """bypass='decoder'：layers[16..31] 全旁路（最大加速，DeltaNet 零状态，生成不可用）；
+        bypass='attn_only'：只旁路 4 个全注意力层（DeltaNet 真实 prefill，状态正确，
+        生成可用；加速回吐多少由 step5 实测，评审要求的数字化决策依据）"""
+        if not use_csa2:
+            raise ValueError("Mode B 需搭配 CSA2（单投影器 + 1 份共享 KV）；无 CSA2 的 Mode B 未定义")
+        self.model = model
+        self.tm = get_text_model(model)
+        self.lm_head = getattr(model, "lm_head", None)
+        device = next(model.parameters()).device
+        dtype = next(model.parameters()).dtype
+        self.proj = projector.to(device=device, dtype=dtype).eval()
+        self.adapters = adapters or {}
+        self.device = device
+        if bypass == "decoder":
+            self._bypass_idx = list(range(config.SPLIT_LAYER + 1, config.NUM_LAYERS))
+        elif bypass == "attn_only":
+            self._bypass_idx = [config.CSA2_FULL_LAYER] + list(config.CSA2_REUSE_LAYERS)
+        else:
+            raise ValueError(bypass)
+        self.bypass = bypass
+
+    def _bypass_layers_on(self):
+        """按 self._bypass_idx 旁路（实例级 forward patch，post-hook 无法阻止层内计算）。
+        返回可恢复的句柄。"""
+        saved = {}
+        for li in self._bypass_idx:
+            layer = self.tm.layers[li]
+            saved[li] = layer.forward
+            layer.forward = lambda hidden_states, *a, **k: hidden_states
+        return saved
+
+    @staticmethod
+    def _bypass_layers_off(saved):
+        """恢复：删除实例属性 forward，回到类方法"""
+        for fn in saved.values():
+            try:
+                del fn.__self__.forward
+            except AttributeError:
+                pass
+
+    def prefill(self, input_ids):
+        """真编码器 prefill + 投影 KV 注入 + 末位真实计算。返回 (cache, next_token_logits)
+        缓存语义（无重复）：layer19 = [注入 0..L-2（投影 KV）] + [位置 L-1 真实 K/V]，
+        总长恰为 L；reuse 层只存末位起的 decode 增量。"""
+        tm = self.tm
+        B, L = input_ids.shape
+        h16_box = {}
+
+        def h16_hook(_m, _i, output):
+            h16_box["h"] = output
+
+        bypass_saved = self._bypass_layers_on()
+        h16_handle = tm.layers[config.SPLIT_LAYER].register_forward_hook(h16_hook)
+        cache = CSA2SharedCache(config=tm.config)
+        try:
+            with torch.no_grad():
+                # 官方 forward：layers[0..15] 真实计算（causal mask 正确）；
+                # layers[16..31] 恒等直通（DeltaNet 零状态近似，质量损失单独量化）
+                self.model(input_ids=input_ids, past_key_values=cache, use_cache=True,
+                           logits_to_keep=1)
+        finally:
+            self._bypass_layers_off(bypass_saved)
+            h16_handle.remove()
+
+        h16 = h16_box["h"]                                  # (B, L, hidden) 未过 final norm
+        with torch.no_grad():
+            k20_raw, v20_raw = self.proj(h16.to(self.proj.proj.weight.dtype))
+            k20_raw = k20_raw.to(h16.dtype)
+            v20_raw = v20_raw.to(h16.dtype)
+            # 只注入 0..L-2（末位 L-1 由解码段真实计算，避免同位置 KV 重复）
+            pos_ids = make_position_ids(B, L - 1, 0, self.device)
+            cache.inject_shared(tm, k20_raw[:, :-1], v20_raw[:, :-1],
+                                adapters=self.adapters, pos_ids=pos_ids)
+
+            # 解码段 layers[16..31] 真实处理最后一个位置（DeltaNet 从零状态起步）
+            h_last = h16[:, -1:, :]
+            cos, sin = rope_cos_sin(tm, make_position_ids(B, 1, L - 1, self.device),
+                                    self.device, h_last.dtype)
+            h = h_last
+            for i in range(config.SPLIT_LAYER + 1, config.NUM_LAYERS):
+                h = tm.layers[i](h, position_embeddings=(cos, sin), attention_mask=None,
+                                 position_ids=make_position_ids(B, 1, L - 1, self.device)[0],
+                                 past_key_values=cache, use_cache=True,
+                                 cache_position=torch.tensor([L - 1], device=self.device))
+            logits = self.lm_head(tm.norm(h))[:, -1:, :]
+        assert cache.layers[config.CSA2_FULL_LAYER].keys.shape[2] == L, \
+            f"缓存长度语义错误: {cache.layers[config.CSA2_FULL_LAYER].keys.shape[2]} != L"
+        return cache, logits
+
+    def decode_step(self, cache, last_token_emb, cur_pos):
+        """单步解码。last_token_emb: (B, 1, hidden)；cur_pos: int"""
+        tm = self.tm
+        B = last_token_emb.shape[0]
+        pos_ids = make_position_ids(B, 1, cur_pos, self.device)
+        cos, sin = rope_cos_sin(tm, pos_ids, self.device, last_token_emb.dtype)
+        h = last_token_emb
+        with torch.no_grad():
+            for i in range(config.SPLIT_LAYER + 1, config.NUM_LAYERS):
+                h = tm.layers[i](h, position_embeddings=(cos, sin), attention_mask=None,
+                                 position_ids=pos_ids[0], past_key_values=cache, use_cache=True,
+                                 cache_position=torch.tensor([cur_pos], device=self.device))
+            h = tm.norm(h)
+        return h
+
+    def next_token_nll(self, input_ids):
+        """Mode B 的 PPL 语义：encode input_ids[:, :-1]，对最后一个 token 的 next-token NLL（单点）"""
+        tm = self.tm
+        with torch.no_grad():
+            cache, logits = self.prefill(input_ids[:, :-1])
+            tgt = input_ids[:, -1]
+            return F.cross_entropy(logits[:, -1, :].float(), tgt, reduction="none")
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M8 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M8</span> TurboQuant k8v4 量化</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    K 8bit（每向量 1 个 scale）、V 4bit（每 64 维 1 个 scale），4bit 两两打包为 uint8。提供 <code>quantize / dequantize / quantized_bytes / quantize_cache_kv / compression_report</code>。原型为"缓存后量化"：量化存储用于统计压缩比与质量损失，attention 前反量化，不追求 kernel 加速。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>quantize(t, bits, group)</code>：t 形状 <code>(B,H,L,D)</code>；group=None 表示每向量一个 scale，否则每 g 维一个。</li>
+      <li><code>dequantize(packed, scale, bits, d_orig, group)</code>：还原为 <code>(..., d_orig)</code>。</li>
+      <li><code>quantize_cache_kv(cache, layer_indices, k_bits, v_bits, write_back)</code>：write_back=True 时把反量化结果写回缓存；返回 <code>(handles, stats)</code>。</li>
+      <li><code>compression_report(stats)</code>：把多层 stats 聚合为总 FP16 / 量化 / 压缩比。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/quant.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Quant</span>
+      <span>90 行</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""TurboQuant k8v4：K 8bit / V 4bit，per-(batch,head) 对称量化，4bit 两两打包 uint8。
+原型实现为「缓存后量化」：量化存储测压缩比与质量（注意力前反量化），不追求真实 kernel 加速。"""
+import torch
+
+from . import config
+
+DEFAULT_GROUP = 64  # 沿 head_dim 分组的 scale 粒度（细粒度 scale，降低 4bit 误差）
+
+
+def _qmax(bits: int) -> int:
+    return 2 ** (bits - 1) - 1
+
+
+def quantize(t: torch.Tensor, bits: int, group: int = DEFAULT_GROUP):
+    """t: (B, H, L, D) float -> (packed_q, scale, d_orig)
+    group=None 时每个 (B,H,L) 向量一个 scale；group=g 时沿最后一维每 g 个元素一个 scale。
+    返回的 packed/scale 保持分组视图 (..., G, g)，dequantize 负责还原。"""
+    qmax = _qmax(bits)
+    d_orig = t.shape[-1]
+    if not group:
+        group = d_orig
+    tv = t.reshape(*t.shape[:-1], t.shape[-1] // group, group)  # (..., G, g)
+    scale = tv.abs().amax(dim=-1, keepdim=True).clamp(min=1e-8) / qmax
+    q = (tv / scale).round().clamp(-qmax - (1 if bits == 4 else 0), qmax)
+    if bits == 8:
+        return q.to(torch.int8), scale, d_orig
+    qn = (q + 8).to(torch.uint8)                       # (..., G, g)
+    even = qn[..., 0::2]
+    odd = qn[..., 1::2]
+    if odd.shape[-1] < even.shape[-1]:
+        odd = torch.nn.functional.pad(odd, (0, 1))
+    return even | (odd << 4), scale, d_orig
+
+
+def dequantize(packed, scale, bits: int, d_orig: int, group=None) -> torch.Tensor:
+    """quantize 的逆操作，返回 (..., d_orig)"""
+    if bits == 8:
+        q = packed.float() * scale                     # (..., G, g)
+    else:
+        even = (packed & 0x0F).float()
+        odd = (packed >> 4).float()
+        q = torch.stack([even, odd], dim=-1).reshape(*packed.shape[:-1], -1)
+        q = (q - 8) * scale
+    return q.reshape(*q.shape[:-2], -1)[..., :d_orig]
+
+
+def quantized_bytes(t: torch.Tensor, bits: int, group: int = DEFAULT_GROUP) -> int:
+    """量化后存储字节数（含 scale，FP32）"""
+    B, H, L, D = t.shape
+    q_bytes = B * H * L * D * (bits / 8)
+    n_scales = B * H * L * (D // group if group else 1)
+    scale_bytes = n_scales * 4
+    return int(q_bytes + scale_bytes)
+
+
+def quantize_cache_kv(cache, layer_indices, k_bits=config.QUANT_K_BITS, v_bits=config.QUANT_V_BITS,
+                      write_back=True):
+    """对指定层的缓存 KV 做 k8v4 量化：返回 (句柄, 字节统计)。
+    write_back=True 时把反量化 KV 写回缓存（质量评测路径）；False 则仅统计。"""
+    handles, stats = {}, {}
+    for li in layer_indices:
+        layer = cache.layers[li]
+        keys, values = layer.keys, layer.values
+        if keys is None:
+            continue
+        d_k = keys.shape[-1]
+        d_v = values.shape[-1]
+        qk, sk, _ = quantize(keys.float(), k_bits, group=config.QUANT_K_GROUP)
+        qv, sv, _ = quantize(values.float(), v_bits, group=config.QUANT_V_GROUP)
+        handles[li] = {"qk": qk, "sk": sk, "qv": qv, "sv": sv, "d_k": d_k, "d_v": d_v,
+                       "k_bits": k_bits, "v_bits": v_bits}
+        if write_back:
+            layer.keys = dequantize(qk, sk, k_bits, d_k).to(keys.dtype)
+            layer.values = dequantize(qv, sv, v_bits, d_v).to(values.dtype)
+        stats[li] = {
+            "fp16_bytes": keys.numel() * keys.element_size() + values.numel() * values.element_size(),
+            "quant_bytes": quantized_bytes(keys, k_bits) + quantized_bytes(values, v_bits),
+        }
+    return handles, stats
+
+
+def compression_report(stats: dict) -> dict:
+    total_fp16 = sum(s["fp16_bytes"] for s in stats.values())
+    total_quant = sum(s["quant_bytes"] for s in stats.values())
+    return {
+        "fp16_bytes": total_fp16,
+        "quant_bytes": total_quant,
+        "ratio": total_fp16 / max(total_quant, 1),
+    }
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M9 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M9</span> 评测模块（PPL / GSM8K / NIAH / 延迟 / 存储）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    统一评测入口：5 种模式（baseline / csa2_only / mode_a / mode_csa2_adapter / mode_b）的 PPL；GSM8K few-shot CoT 与数字 exact match（含 #### 命中率，支持题级断点续跑）；NIAH 合成噪声海插针；Prefill 延迟（CUDA event）；KV 存储实测（persistent / resident 双口径）。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>ppl_eval(model, tokenizer, texts, mode, projector, use_csa2, adapters, max_tokens, mode_b_samples)</code>：mode_b 返回 next-token 单点困惑度，不可与全序列 PPL 直接比较。</li>
+      <li><code>gsm8k_eval(..., n, max_new_tokens, return_detail, progress, on_progress)</code>：progress 为 <code>{"done","correct","hash"}</code>，就地更新以支持断点。</li>
+      <li><code>niah_eval(..., n, haystack_tokens, seed)</code>：按 1.3 token/词换算，保证截断后 haystack 真实达到目标长度。</li>
+      <li><code>prefill_bench(..., seq_lens, warmup, iters)</code>：CUDA event 计时。</li>
+      <li><code>measure_kv_storage(..., seq_len, gen_steps)</code>：真跑 gen_steps 步 decode，返回 persistent/resident 双口径。</li>
+      <li><code>kv_cache_stats(model, seq_len)</code>：理论 per-token 字节数与压缩比。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/evaluate.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Eval</span>
+      <span>327 行（核心）</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""评测：greedy 生成 / PPL / GSM8K / NIAH / Prefill 延迟 / KV 缓存统计
+mode ∈ {baseline, csa2_only(废弃留档), mode_a(无适配器对照), mode_csa2_adapter(正式),
+        mode_b(官方prefill+旁路+共享KV, PPL 语义为 next-token 单点)}"""
+import time
+
+import torch
+
+from . import config
+from .ced_runtime import CEDModeARuntime, CEDModeBRuntime
+from .csa2 import CSA2ReuseRuntime
+from .model_utils import get_text_model
+
+Modes = ("baseline", "csa2_only", "mode_a", "mode_csa2_adapter", "mode_b")
+
+
+class _Runner:
+    """统一运行器：按 mode 挂 hook / 构建 runtime，提供 prefill 与 decode 原语"""
+
+    def __init__(self, model, mode, projector=None, use_csa2=True, adapters=None):
+        assert mode in Modes, mode
+        self.model = model
+        self.mode = mode
+        self.tm = get_text_model(model)
+        self.device = next(model.parameters()).device
+        self.use_csa2 = use_csa2
+        self.runtime = None
+        if mode == "csa2_only":
+            self.runtime = CSA2ReuseRuntime(model).attach()
+        elif mode == "mode_a":
+            assert projector is not None
+            # 无适配器对照：reuse 层直接复用 K20 raw（预期劣化大，仅对照）
+            self.runtime = CEDModeARuntime(model, projector, adapters=None,
+                                           use_csa2=use_csa2).attach()
+        elif mode == "mode_csa2_adapter":
+            assert projector is not None and adapters, "适配器模式需要 adapters"
+            self.runtime = CEDModeARuntime(model, projector, adapters=adapters,
+                                           use_csa2=True).attach()
+        elif mode == "mode_b":
+            assert projector is not None
+            self.runtime = CEDModeBRuntime(model, projector, adapters=adapters,
+                                           use_csa2=True)
+
+    def prefill(self, input_ids, use_cache=True):
+        """返回 (cache, logits_last)；mode_b 走官方 prefill + 旁路 + 注入"""
+        with torch.no_grad():
+            if self.mode == "mode_b":
+                return self.runtime.prefill(input_ids)
+            if self.mode in ("csa2_only", "mode_a", "mode_csa2_adapter"):
+                out = self.model(input_ids=input_ids, use_cache=use_cache)
+                # 全部 hook 注入模式 prefill 后统一关闭（decode 阶段不注入）
+                self.runtime.set_enabled(False)
+                return out.past_key_values, out.logits[:, -1:, :]
+            out = self.model(input_ids=input_ids, use_cache=use_cache)
+            return out.past_key_values, out.logits[:, -1:, :]
+
+    def decode_step(self, cache, last_token, cur_pos):
+        """单步解码，返回 logits。cur_pos: int（token 位置）"""
+        with torch.no_grad():
+            if self.mode == "mode_b":
+                h = self.tm.embed_tokens(last_token.view(1, 1).to(self.device))
+                h = self.runtime.decode_step(cache, h, int(cur_pos))
+                return self.model.lm_head(h)[:, -1:, :]
+            out = self.model(input_ids=last_token.view(1, 1), past_key_values=cache,
+                             use_cache=True)
+            return out.logits[:, -1:, :]
+
+    def generate_greedy(self, input_ids, max_new_tokens, eos_id=None):
+        cache, logits = self.prefill(input_ids)
+        generated = []
+        cur_pos = input_ids.shape[1] - 1
+        device = input_ids.device
+        for _ in range(max_new_tokens):
+            nxt = int(logits[:, -1, :].argmax(dim=-1).item())
+            if eos_id is not None and nxt == eos_id:
+                break
+            generated.append(nxt)
+            cur_pos += 1
+            logits = self.decode_step(cache, torch.tensor(nxt, device=device), cur_pos)
+        return generated
+
+    def remove(self):
+        if self.runtime is not None and hasattr(self.runtime, "remove"):
+            self.runtime.remove()
+
+
+def seq_nll(model, input_ids):
+    """baseline 式全序列逐位置 NLL (B, L-1)"""
+    with torch.no_grad():
+        logits = model(input_ids=input_ids).logits[:, :-1].float()
+        tgt = input_ids[:, 1:]
+        return torch.nn.functional.cross_entropy(
+            logits.reshape(-1, logits.shape[-1]), tgt.reshape(-1), reduction="none"
+        ).view(tgt.shape)
+
+
+def ppl_eval(model, tokenizer, texts, mode, projector=None, use_csa2=True, adapters=None,
+             max_tokens=config.SEQ_LEN_MAX, mode_b_samples=None):
+    """WikiText 风格文本 -> PPL。
+    baseline/csa2/mode_a/adapter：全序列逐位置 NLL（标准 PPL）；
+    mode_b：语义为 next-token 单点 NLL（每条文本 1 个点），返回值是这批单点的困惑度，
+    与全序列 PPL 不可直接比较（详见评审修订）。"""
+    runner = _Runner(model, mode, projector, use_csa2, adapters)
+    nlls, count = [], 0
+    try:
+        for text in texts:
+            ids = tokenizer(text, return_tensors="pt", truncation=True,
+                            max_length=max_tokens).input_ids.to(next(model.parameters()).device)
+            if ids.shape[1] < 64:
+                continue
+            with torch.no_grad():
+                if mode == "mode_b":
+                    nll = runner.runtime.next_token_nll(ids)
+                    nlls.append(nll.mean().item())
+                    count += 1
+                    continue
+                # baseline 与 hook 注入模式（csa2_only/mode_a/adapter）同为全序列 forward
+                logits = model(input_ids=ids).logits[:, :-1].float()
+                tgt = ids[:, 1:]
+                nll = torch.nn.functional.cross_entropy(
+                    logits.reshape(-1, logits.shape[-1]), tgt.reshape(-1), reduction="none"
+                ).view(tgt.shape)
+            nlls.append(nll.mean().item())
+            count += 1
+    finally:
+        runner.remove()
+    import math
+    return math.exp(sum(nlls) / max(len(nlls), 1))
+
+
+def gsm8k_eval(model, tokenizer, mode, projector=None, use_csa2=True, adapters=None, n=100,
+               max_new_tokens=512, return_detail=False, progress=None, on_progress=None):
+    """GSM8K test 前 n 题，few-shot CoT + 数字 exact match。
+    return_detail=True 时返回 (acc, detail)，detail 含 #### 命中率（区分抽取误差与模型误差）。
+    progress: dict {"done","correct","hash"} 就地更新（题级断点，进程被杀可续跑）。"""
+    from datasets import load_dataset
+
+    ds = load_dataset("openai/gsm8k", "main", split="test")
+    shots = [
+        ("Natalia sold 48/2 = <<48/2=24>>24 clips in May.\nNatalia sold 48+24 = <<48+24=72>>72 clips altogether in April and May.\n#### 72",
+         "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. How many clips did Natalia sell altogether in April and May?"),
+        ("Weng earns 12/60 = $0.2 per minute. Working 50 minutes, she earned 0.2 x 50 = $10.\n#### 10",
+         "Weng earns $12 an hour for babysitting. Yesterday, she just did 50 minutes of babysitting. How much did she earn?"),
+        ("A man buys 5 tacos and eats 2 of them. He then buys 8 more tacos and gives 2 to his friend. How many tacos does he have now?\nAnswer: He has 5 - 2 = 3 tacos after eating. Then 3 + 8 = 11 tacos after buying more. Then 11 - 2 = 9 tacos after giving 2 away.\n#### 9",
+         "A man buys 5 tacos and eats 2 of them. He then buys 8 more tacos and gives 2 to his friend. How many tacos does he have now?"),
+    ]
+    prompt_head = "".join(f"Q: {q}\nA: {a}\n\n" for q, a in shots)
+    device = next(model.parameters()).device
+    runner = _Runner(model, mode, projector, use_csa2, adapters)
+    progress = progress if progress is not None else {"done": 0, "correct": 0, "hash": 0}
+    correct, hash_hits = progress["correct"], progress["hash"]
+    logger = config.setup_logging("gsm8k_eval")
+    try:
+        for i in range(progress["done"], n):
+            q = ds[i]["question"]
+            gold = ds[i]["answer"].split("####")[-1].strip().replace(",", "")
+            prompt = f"{prompt_head}Q: {q}\nA:"
+            ids = tokenizer(prompt, return_tensors="pt", truncation=True,
+                            max_length=2048).input_ids.to(device)
+            gen = runner.generate_greedy(ids, max_new_tokens, eos_id=tokenizer.eos_token_id)
+            text = tokenizer.decode(gen, skip_special_tokens=True)
+            if "####" in text:
+                hash_hits += 1
+            pred = extract_answer_number(text)
+            if pred == gold or (pred.isdigit() and float(pred) == float(gold)):
+                correct += 1
+            progress.update(done=i + 1, correct=correct, hash=hash_hits)
+            if (i + 1) % 10 == 0:
+                logger.info("GSM8K[%s] 心跳 %d/%d，当前正确 %d", mode, i + 1, n, correct)
+                if on_progress:
+                    on_progress()
+    finally:
+        runner.remove()
+    acc = correct / n
+    if return_detail:
+        return acc, {"n": n, "correct": correct, "hash_hit_rate": hash_hits / n}
+    return acc
+
+
+def extract_answer_number(text):
+    """GSM8K 答案抽取：优先 '#### N'；否则取最后一个非空行；再退回最后一个独立数字。
+    支持负数前缀（-42）；不覆盖科学计数法（GSM8K 答案均为常规数字，评审 P2）。"""
+    import re
+    m = re.search(r"####\s*\$?([\d,]+(?:\.\d+)?)", text)
+    if m:
+        return m.group(1).replace(",", "").rstrip(".")
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+    if lines:
+        m2 = re.search(r"([\d,]+(?:\.\d+)?)\s*(?:\.|$)", lines[-1])
+        if m2:
+            return m2.group(1).replace(",", "").rstrip(".")
+    nums = re.findall(r"(?<![\w.])(-?[\d,]+(?:\.\d+)?)(?![\w])", text)
+    return nums[-1].replace(",", "").rstrip(".") if nums else ""
+
+
+def niah_eval(model, tokenizer, mode, projector=None, use_csa2=True, adapters=None, n=10,
+              haystack_tokens=8192, seed=1234):
+    """本地合成 NIAH：噪声海 + magic number 插针"""
+    import random
+
+    rng = random.Random(seed)
+    words = ["grass", "river", "stone", "cloud", "field", "wind", "tree", "bridge",
+             "light", "shore", "glass", "paper", "metal", "forest", "signal", "garden"]
+    device = next(model.parameters()).device
+    runner = _Runner(model, mode, projector, use_csa2, adapters)
+    hits = 0
+    try:
+        for i in range(n):
+            secret = rng.randint(10000, 99999)
+            parts = []
+            # 英文词 ≈ 1.3 token：按 token 目标换算词数，保证截断后 haystack 真实达到目标 token 数
+            target_words = int(haystack_tokens / 1.3)
+            while sum(len(p.split()) for p in parts) < target_words:
+                parts.append(" ".join(rng.choice(words) for _ in range(64)))
+            hay = "\n".join(parts)
+            pos = rng.randint(0, len(hay) - 200)
+            hay = hay[:pos] + f"\nOne of the special magic numbers is: {secret}.\n" + hay[pos:]
+            q = f"\n\nWhat is the special magic number mentioned in the text? Answer with the number only.\nAnswer:"
+            ids = tokenizer(hay + q, return_tensors="pt", truncation=True,
+                            max_length=haystack_tokens + 128).input_ids.to(device)
+            gen = runner.generate_greedy(ids, 16)
+            pred = tokenizer.decode(gen, skip_special_tokens=True).strip()
+            if str(secret) in pred:
+                hits += 1
+    finally:
+        runner.remove()
+    return hits / n
+
+
+def prefill_bench(model, tokenizer, mode, projector=None, use_csa2=True, adapters=None,
+                  seq_lens=(512, 1024, 2048), warmup=3, iters=10):
+    """CUDA event 计时 prefill（mode_b = 官方 prefill + 旁路 + 注入 + 1 步 decode）"""
+    device = next(model.parameters()).device
+    runner = _Runner(model, mode, projector, use_csa2, adapters)
+    results = {}
+    try:
+        for L in seq_lens:
+            ids = torch.randint(1000, 50000, (1, L), device=device)
+            for _ in range(warmup):
+                runner.prefill(ids)
+            torch.cuda.synchronize()
+            times = []
+            for _ in range(iters):
+                s, e = torch.cuda.Event(True), torch.cuda.Event(True)
+                s.record()
+                runner.prefill(ids)
+                e.record()
+                torch.cuda.synchronize()
+                times.append(s.elapsed_time(e))
+            results[L] = {"mean_ms": sum(times) / len(times),
+                          "min_ms": min(times), "max_ms": max(times)}
+    finally:
+        runner.remove()
+    return results
+
+
+def measure_kv_storage(model, tokenizer, mode="mode_b", projector=None, adapters=None,
+                       seq_len=2048, gen_steps=0):
+    """实测 KV 持久化/驻留存储：baseline（8 层全长 DynamicCache）vs mode_b（CSA2SharedCache）。
+    gen_steps>0 时真跑 gen_steps 步 decode，体现"1 份共享 + 各层增量"的真实占比。"""
+    device = next(model.parameters()).device
+    ids = torch.randint(1000, 50000, (1, seq_len), device=device)
+
+    runner_b = _Runner(model, "baseline")
+    cache_b, _ = runner_b.prefill(ids)
+    baseline_persistent = sum(l.keys.numel() * 2 + l.values.numel() * 2
+                              for l in cache_b.layers if getattr(l, "keys", None) is not None)
+    if gen_steps > 0:
+        # 每 token 每层 K+V = KV_HEADS*HEAD_DIM*2张量*2字节 = 4096B；8 个全注意力层 decode 全增长
+        per_tok_bytes = 1 * config.NUM_KV_HEADS * config.HEAD_DIM * 2 * 2 \
+            * len(config.FULL_ATTN_LAYERS)
+        tok_id = ids[:, -1]
+        for _ in range(gen_steps):
+            out = model(input_ids=tok_id.view(1, 1), past_key_values=cache_b, use_cache=True)
+            baseline_persistent += per_tok_bytes
+            tok_id = out.logits[:, -1].argmax(-1)
+    del cache_b
+
+    runner_m = _Runner(model, mode, projector, adapters=adapters)
+    cache_m, _ = runner_m.prefill(ids)
+    if gen_steps > 0:
+        cur = seq_len
+        emb = get_text_model(model).embed_tokens
+        tok = torch.full((1, 1), 100, dtype=torch.long, device=device)
+        for _ in range(gen_steps):
+            h = emb(tok)
+            runner_m.runtime.decode_step(cache_m, h, cur)
+            cur += 1
+    p_bytes = cache_m.persistent_bytes(dtype_bytes=2)
+    r_bytes = cache_m.resident_bytes(dtype_bytes=2)
+    del cache_m
+    return {
+        "seq_len": seq_len, "gen_steps": gen_steps,
+        "baseline_bytes": baseline_persistent,
+        "mode_persistent_bytes": p_bytes,
+        "mode_resident_bytes": r_bytes,
+        "persistent_ratio": baseline_persistent / max(p_bytes, 1),
+        "resident_ratio": baseline_persistent / max(r_bytes, 1),
+    }
+
+
+def kv_cache_stats(model, seq_len=2048):
+    """理论 KV 缓存字节数（FP16 基线 / CSA2 复用 / k8v4 量化）。
+    scale 开销按 config 分组粒度：K 每向量 1 个 FP32 scale；V 每 QUANT_V_GROUP 维 1 个。"""
+    n_full = len(config.FULL_ATTN_LAYERS)
+    per_tok_layer = config.NUM_KV_HEADS * config.HEAD_DIM * 2 * 2  # K+V, FP16
+    fp16_total = per_tok_layer * n_full
+    # 解码段 4 层 -> 1 份存储（CSA2），编码段 4 层不变
+    csa2_total = per_tok_layer * (n_full - len(config.CSA2_REUSE_LAYERS))
+    k_scales = config.HEAD_DIM // config.QUANT_K_GROUP          # 256/256 = 1
+    v_scales = config.HEAD_DIM // config.QUANT_V_GROUP          # 256/64 = 4
+    quant_per_head_k = config.HEAD_DIM * 1 + k_scales * 4       # 256 + 4 = 260 B
+    quant_per_head_v = config.HEAD_DIM // 2 + v_scales * 4      # 128 + 16 = 144 B
+    quant_bytes = config.NUM_KV_HEADS * (quant_per_head_k + quant_per_head_v)  # 1616 B
+    quant_total = quant_bytes * n_full
+    combined = quant_bytes * (n_full - len(config.CSA2_REUSE_LAYERS))
+    return {
+        "seq_len": seq_len,
+        "full_attn_layers": n_full,
+        "fp16_bytes_per_token": fp16_total,
+        "csa2_bytes_per_token": csa2_total,
+        "csa2_ratio": fp16_total / csa2_total,
+        "quant_bytes_per_token": quant_total,
+        "quant_ratio": fp16_total / quant_total,
+        "csa2_plus_quant_bytes_per_token": combined,
+        "total_ratio": fp16_total / combined,
+    }
+</code></pre>
+  </div>
+</div>
+
+<!-- ---------------- M10 ---------------- -->
+<div class="card">
+  <h3><span class="tag mod">M10</span> 脚本入口（step1 ~ step6）</h3>
+
+  <div class="hint hint-use">
+    <span class="lbl">【用途】</span>
+    六个步骤的可执行入口：step1 数据采集、step2 投影器训练、step2b 适配器训练、step3 五模式 PPL、step4 量化评测、step5 综合基准、step6 扩样本评测。全部支持 argparse 参数覆盖默认值、日志落盘、完成/失败自动邮件。
+  </div>
+
+  <div class="hint hint-param">
+    <span class="lbl">【入参说明】</span>
+    <ul style="margin:4px 0 0 18px;">
+      <li><code>step1 --num --device --dtype --seq-max --save-every</code></li>
+      <li><code>step2 --data --out --epochs --lr --batch-tokens</code></li>
+      <li><code>step2b --data --out --v-kind --k-kind --sgd-epochs --sgd-lr --batch --tokens-per-sample</code></li>
+      <li><code>step3 --samples --mode-b-samples --adapters --skip-csa2-only --out</code></li>
+      <li><code>step4 --samples --seq-len --out</code></li>
+      <li><code>step5 --gsm8k-n --niah-n --seq-lens --skip-gsm8k --skip-niah --adapters --out</code></li>
+      <li><code>step6</code>：无参数，自动读取已有 JSON 做断点续跑。</li>
+    </ul>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">scripts/step1_capture_data.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Entry</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""step1 数据收集：捕获 H_16 与解码段全注意力层真实 K/V（支持断点续跑 + 完成自动邮件）"""
+import argparse
+import sys
+import os
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ced_csa2 import config
+from ced_csa2.capture import capture_dataset
+from ced_csa2.model_utils import load_model_and_tokenizer, verify_arch
+
+
+def load_texts(num):
+    """WikiText-2 train：优先取长行（>800 字符），不足时补 >400 字符的行"""
+    from datasets import load_dataset
+
+    ds = load_dataset("Salesforce/wikitext", "wikitext-2-raw-v1")
+    all_rows = [t for t in ds["train"]["text"] if len(t) > 400]
+    long_rows = [t for t in all_rows if len(t) > 800]
+    short_rows = [t for t in all_rows if 400 < len(t) <= 800]
+    texts = long_rows[:num]
+    if len(texts) < num:
+        texts += short_rows[: num - len(texts)]
+    return texts
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--num", type=int, default=config.CAPTURE_NUM_SAMPLES)
+    ap.add_argument("--device", default=os.environ.get("CED_CSA2_DEVICE", config.DEVICE))
+    ap.add_argument("--dtype", default=os.environ.get("CED_CSA2_DTYPE", config.DTYPE))
+    ap.add_argument("--seq-max", type=int, default=None)
+    ap.add_argument("--save-every", type=int, default=10)
+    args = ap.parse_args()
+
+    logger = config.setup_logging("step1_capture")
+    logger.info("开始 step1 数据收集，目标样本 %d，device=%s dtype=%s",
+                args.num, args.device, args.dtype)
+    t0 = time.time()
+    model, tokenizer = load_model_and_tokenizer(device=args.device, dtype=args.dtype)
+    ok, info = verify_arch(model)
+    logger.info("架构校验 %s：%s", "通过" if ok else "失败", info)
+
+    texts = load_texts(args.num)
+    logger.info("语料条数 %d", len(texts))
+    out_path = os.path.join(config.DATA_DIR, "captured_k20v20.pt")
+    _, agg = capture_dataset(model, tokenizer, texts, out_path,
+                             max_samples=args.num, seq_max=args.seq_max,
+                             save_every=args.save_every)
+    mins = (time.time() - t0) / 60
+    logger.info("step1 完成，耗时 %.1f 分钟，跨层相似度汇总：%s", mins, agg)
+
+    # 完成自动邮件
+    try:
+        from tools.notify import notify_step
+        agg_lines = [f"第 {k} 层 vs 第 20 层：K 相似度 {v['k_mean']:.3f}，V 相似度 {v['v_mean']:.3f}"
+                     for k, v in agg.items()]
+        notify_step(
+            "step1 数据收集", "success",
+            [f"目标 {args.num} 条已全部捕获，耗时 {mins:.0f} 分钟（device={args.device}）",
+             f"产物：{out_path}",
+             "跨层 KV 余弦相似度（越接近 1 越支持 CSA2 复用）："] + agg_lines,
+            log_path=logger.handlers[0].baseFilename if logger.handlers else None,
+            result_files=[out_path],
+        )
+    except Exception:
+        logger.error("发送完成邮件失败", exc_info=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        # 脚本级失败也自动告警
+        try:
+            from tools.notify import notify_step
+            notify_step("step1 数据收集", "fail",
+                        [f"异常：{e}", "请查看日志定位（含完整异常栈）"])
+        except Exception:
+            pass
+        raise
+</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">scripts/step2b_train_adapters.py</span>
+      <span class="tag py">Python</span>
+      <span class="tag mod">Entry</span>
+    </div>
+<pre><code class="language-python"># -*- coding: utf-8 -*-
+"""step2b CSA2 跨层适配器训练：闭式解初始化 + 可选 SGD 残差微调（CPU 可跑）"""
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from ced_csa2 import config
+from ced_csa2.train_adapters import train_adapters
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--data", default=os.path.join(config.DATA_DIR, "captured_k20v20.pt"))
+    ap.add_argument("--out", default=os.path.join(config.OUTPUT_DIR, "adapters.pt"))
+    ap.add_argument("--v-kind", default="mlp", choices=["linear", "mlp"])
+    ap.add_argument("--k-kind", default="mlp", choices=["linear", "mlp"])
+    ap.add_argument("--sgd-epochs", type=int, default=0, help=">0 时对 V 残差做 SGD 微调")
+    ap.add_argument("--sgd-lr", type=float, default=1e-3)
+    ap.add_argument("--batch", type=int, default=65536)
+    ap.add_argument("--tokens-per-sample", type=int, default=256,
+                    help="适配器训练每条截取 token 数（越大数据越多、显存占用越高）")
+    args = ap.parse_args()
+
+    logger = config.setup_logging("step2b_adapters")
+    logger.info("step2b 适配器训练：%s -> %s（v_kind=%s sgd=%d）",
+                args.data, args.out, args.v_kind, args.sgd_epochs)
+    out, metrics = train_adapters(args.data, args.out, v_kind=args.v_kind,
+                                  sgd_epochs=args.sgd_epochs, sgd_lr=args.sgd_lr, k_kind=args.k_kind,
+                                  batch=args.batch, n_per_sample=args.tokens_per_sample)
+    logger.info("step2b 完成：%s 指标=%s", out, metrics)
+
+    try:
+        from tools.notify import notify_step
+        lines = [f"layer{li}: K R²={m['k_r2']:.4f}, V({args.v_kind}) R²={m['v_r2']:.4f}"
+                 for li, m in metrics.items()]
+        notify_step("step2b 适配器训练", "success",
+                    [f"产物：{out}", "闭式解验证集指标："] + lines)
+    except Exception:
+        logger.error("发送完成邮件失败", exc_info=True)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as e:
+        try:
+            from tools.notify import notify_step
+            notify_step("step2b 适配器训练", "fail", [f"异常：{e}"])
+        except Exception:
+            pass
+        raise
+</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">scripts/step1_cpu.bat</span>
+      <span class="tag sh">Shell</span>
+      <span class="tag mod">Launcher</span>
+    </div>
+<pre><code class="language-bash">@echo off
+rem step1 数据收集 CPU 版：断点续跑 + 完成/失败自动邮件
+rem 用常规 Win32 Python 3.10（Windows Store 版 MSIX Python 后台进程会被系统静默回收）
+rem 隔离依赖 .deps310（transformers 5.9 + datasets，--target 安装，不污染共享环境）
+chcp 65001
+cd /d D:\project\2026\202610\ced_csa2
+
+set HF_ENDPOINT=https://hf-mirror.com
+set CED_CSA2_DEVICE=cpu
+set CED_CSA2_DTYPE=bfloat16
+set PYTHON=D:\python\python310\python.exe
+set PYTHONPATH=D:\project\2026\202610\ced_csa2\.deps310
+set SCRIPT=D:\project\2026\202610\ced_csa2\scripts\step1_capture_data.py
+
+%PYTHON% %SCRIPT% --num 400 --seq-max 512
+if not %errorlevel%==0 (
+  %PYTHON% D:\project\2026\202610\ced_csa2\tools\notify.py --step step1数据收集 --status fail --summary "进程级失败（见bat日志），errorlevel %errorlevel%" --log D:\project\2026\202610\ced_csa2\logs
+)
+</code></pre>
+  </div>
+
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">scripts/step6_eval.bat</span>
+      <span class="tag sh">Shell</span>
+      <span class="tag mod">Launcher</span>
+    </div>
+<pre><code class="language-bash">@echo off
+rem step6 扩样本评测启动（schtasks 触发 + 电子狗看护自动重启）
+chcp 65001
+cd /d D:\project\2026\202610\ced_csa2
+
+set HF_ENDPOINT=https://hf-mirror.com
+set CED_CSA2_DEVICE=cuda
+set CED_CSA2_DTYPE=bfloat16
+set PYTHON=D:\python\python310\python.exe
+set PYTHONPATH=D:\project\2026\202610\ced_csa2\.deps310
+
+%PYTHON% -u D:\project\2026\202610\ced_csa2\scripts\step6_expand_eval.py
+</code></pre>
+  </div>
+</div>
+
+<!-- ============================ ⑤ 训练数据样例 ============================ -->
+<h2>⑤ 训练数据样例、规模与配比</h2>
+
+<div class="card">
+  <h3>数据文件说明</h3>
+  <table>
+    <tbody>
+      <tr><th style="width:200px;">文件路径</th><td class="mono">data/captured_k20v20.pt</td></tr>
+      <tr><th>文件大小</th><td>12.2 GB（torch.save）</td></tr>
+      <tr><th>数据来源</th><td>WikiText-2 raw train（&gt;800 字符长行 1200 条），每条截断至 ≤512 token</td></tr>
+      <tr><th>捕获方式</th><td>一次 forward，forward hook 捕获（均为 float32, CPU）</td></tr>
+      <tr><th>规模</th><td>1200 条 / 31.5 万 token 对 / 平均每条 262 token</td></tr>
+    </tbody>
+  </table>
+
+  <h3>样本字段</h3>
+  <table>
+    <thead><tr><th>字段</th><th>形状</th><th>含义</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">samples[i]['h16']</td><td class="mono">(L, 2560)</td><td>第 16 层隐藏态（编码器输出）</td></tr>
+      <tr><td class="mono">samples[i]['kv'][19]['k'/'v']</td><td class="mono">(L, 1024)</td><td>第 20 层真实 K/V（pre-norm, pre-RoPE）</td></tr>
+      <tr><td class="mono">samples[i]['kv'][23/27/31]</td><td class="mono">(L, 1024)</td><td>第 24/28/32 层真实 K/V（CSA2 适配器训练目标）</td></tr>
+      <tr><td class="mono">cosine_sim</td><td class="mono">list of dict</td><td>跨层 KV 余弦相似度记录</td></tr>
+    </tbody>
+  </table>
+
+  <h3>样例数值（第 1 条样本，前 4 个 token，各取前 6 维）</h3>
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">data/captured_k20v20.pt · 样本 1</span>
+      <span class="tag ds">Sample</span>
+    </div>
+<pre><code class="language-python">样本 1 序列长度 L = 230
+
+h16[:4, :6] = [
+  [-1.1562, +0.3184, -0.0299, +0.1318, -0.6289, -0.2227],
+  [+4.5938, +0.0271, +0.4980, -0.2422, -0.9648, -0.4531],
+  [+4.4688, +0.0894, +0.4902, -0.2158, -0.5938, -0.0200],
+  [+3.5000, +0.2051, +0.9297, -0.2930, +0.4023, -0.1226],
+]
+
+kv[19].k[:4, :6] = [
+  [+0.1807, -0.0669, -0.0172, -0.8438, +0.0239, +0.0011],
+  [+2.8750, -0.5508, +0.0208, -1.9453, +0.4297, +0.1689],
+  [+2.3906, -0.5781, +0.4805, -1.6797, +0.4531, -0.0977],
+  [+1.5078, -0.2119, +0.2598, -2.1094, +0.0820, -0.2432],
+]
+
+kv[19].v[:4, :6] = [
+  [+0.2656, +0.3457, +0.1934, +0.0854, -0.5938, +0.8438],
+  [+0.0574, +0.7344, -0.1572, -0.6758, -0.0309, -0.0859],
+  [+0.0564, +0.7930, -0.7266, -0.3164, +0.4277, -0.8711],
+  [+0.2930, +0.8594, +0.3184, -0.1299, -0.0732, -0.1001],
+]
+</code></pre>
+  </div>
+
+  <h3>各层统计量（1200 条汇总）</h3>
+  <table>
+    <thead>
+      <tr><th>层</th><th>K mean</th><th>K std</th><th>V mean</th><th>V std</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>第 20 层</td><td class="mono">+0.0114</td><td class="mono">0.8908</td><td class="mono">-0.0136</td><td class="mono">0.9256</td></tr>
+      <tr><td>第 24 层</td><td class="mono">+0.0164</td><td class="mono">0.9389</td><td class="mono">-0.0323</td><td class="mono">1.0275</td></tr>
+      <tr><td>第 28 层</td><td class="mono">+0.0034</td><td class="mono">0.9438</td><td class="mono">+0.0143</td><td class="mono">1.7561</td></tr>
+      <tr><td>第 32 层</td><td class="mono">+0.0102</td><td class="mono">0.9533</td><td class="mono">+0.2272</td><td class="mono">3.1137</td></tr>
+    </tbody>
+  </table>
+
+  <h3>跨层 KV 余弦相似度（layer19 基准）</h3>
+  <table>
+    <thead>
+      <tr><th>目标层</th><th>K 相似度</th><th>V 相似度</th><th>结论</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>layer24(23)</td><td class="mono">-0.013</td><td class="mono">+0.001</td><td rowspan="3">均 ≈ 0 → 直接复用不可行</td></tr>
+      <tr><td>layer28(27)</td><td class="mono">+0.021</td><td class="mono">-0.010</td></tr>
+      <tr><td>layer32(31)</td><td class="mono">+0.007</td><td class="mono">-0.002</td></tr>
+    </tbody>
+  </table>
+
+  <div class="hint hint-warn">
+    <span class="lbl">【关键事实】</span>
+    跨层 KV 余弦相似度 ≈ 0 是"零训练直接复用"方案失败的根因：预训练时各层从未协同学习复用，Q/K 空间不匹配。这直接推动了「1 份 KV + 跨层小适配器」方案的引入。
+  </div>
+
+  <h3>语料样例（第 1 条前 220 字符）</h3>
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">WikiText-2 raw train · 文本样例</span>
+      <span class="tag ds">Corpus</span>
+    </div>
+<pre><code class="language-python">As with previous Valkyira Chronicles games , Valkyria Chronicles III is a
+tactical role @-@ playing game where players take control of a military unit
+and take part in missions against enemy forces . Stories are told th...
+</code></pre>
+  </div>
+
+  <h3>数据用途配比</h3>
+  <table>
+    <thead>
+      <tr><th>用途</th><th>规模</th><th>来源</th><th>说明</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>CED 主投影器训练</td>
+        <td>31.5 万 token 对</td>
+        <td>全量 1200 条</td>
+        <td>学习曲线显示 600 条即收敛，1200 条为升级预留</td>
+      </tr>
+      <tr>
+        <td>CSA2 适配器训练</td>
+        <td>27.3 万 token 对</td>
+        <td>每条截取 256 token</td>
+        <td>95% 训练 / 5% 验证</td>
+      </tr>
+      <tr>
+        <td>PPL 评测</td>
+        <td>30 条</td>
+        <td>WikiText-2 test</td>
+        <td>与训练集零重叠</td>
+      </tr>
+      <tr>
+        <td>GSM8K 评测</td>
+        <td>100 题</td>
+        <td>openai/gsm8k test</td>
+        <td>few-shot CoT</td>
+      </tr>
+      <tr>
+        <td>NIAH 评测</td>
+        <td>50 条</td>
+        <td>本地合成</td>
+        <td>8K token 海，随机插针</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ ⑥ 核心超参配置表 ============================ -->
+<h2>⑥ 核心超参配置表</h2>
+
+<div class="card">
+  <h3>模型与架构</h3>
+  <table>
+    <thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">MODEL_ID</td><td class="mono">Qwen/Qwen3.5-4B</td><td>基座模型</td></tr>
+      <tr><td class="mono">NUM_LAYERS</td><td class="mono">32</td><td>总层数</td></tr>
+      <tr><td class="mono">HIDDEN_SIZE</td><td class="mono">2560</td><td>隐藏维</td></tr>
+      <tr><td class="mono">NUM_Q_HEADS</td><td class="mono">16</td><td>Query 头数</td></tr>
+      <tr><td class="mono">NUM_KV_HEADS</td><td class="mono">4</td><td>KV 头数（GQA）</td></tr>
+      <tr><td class="mono">HEAD_DIM</td><td class="mono">256</td><td>头维度</td></tr>
+      <tr><td class="mono">KV_DIM</td><td class="mono">1024</td><td>4 × 256</td></tr>
+      <tr><td class="mono">FULL_ATTN_LAYERS</td><td class="mono">[3,7,11,15,19,23,27,31]</td><td>8 层全注意力（0-based）</td></tr>
+      <tr><td class="mono">SPLIT_LAYER</td><td class="mono">15</td><td>CED 编码器 / 解码器切分点</td></tr>
+      <tr><td class="mono">CSA2_FULL_LAYER</td><td class="mono">19</td><td>Full 层（KV 源）</td></tr>
+      <tr><td class="mono">CSA2_REUSE_LAYERS</td><td class="mono">[23,27,31]</td><td>3 个复用层</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CED 主投影器训练（step2）</h3>
+  <table>
+    <thead><tr><th>超参</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">PROJ_INPUT_DIM</td><td class="mono">2560</td><td>H_16 隐藏维</td></tr>
+      <tr><td class="mono">PROJ_OUTPUT_DIM</td><td class="mono">2048</td><td>K 1024 + V 1024</td></tr>
+      <tr><td class="mono">TRAIN_LR</td><td class="mono">2e-3</td><td>AdamW 学习率</td></tr>
+      <tr><td class="mono">TRAIN_EPOCHS</td><td class="mono">12</td><td>训练轮数</td></tr>
+      <tr><td class="mono">TRAIN_BATCH_TOKENS</td><td class="mono">8192</td><td>每次迭代的 token 数</td></tr>
+      <tr><td class="mono">TRAIN_VAL_RATIO</td><td class="mono">0.02</td><td>验证集比例</td></tr>
+      <tr><td class="mono">loss</td><td class="mono">MSE(K) + MSE(V)</td><td>对称加权</td></tr>
+      <tr><td class="mono">scheduler</td><td class="mono">CosineAnnealingLR</td><td>T_max = epochs × steps_per_epoch</td></tr>
+      <tr><td class="mono">weight_decay</td><td class="mono">0.01</td><td>AdamW</td></tr>
+      <tr><td class="mono">参数量</td><td class="mono">5.24 M</td><td>约 10 MB FP16</td></tr>
+    </tbody>
+  </table>
+
+  <h3>CSA2 适配器训练（step2b）</h3>
+  <table>
+    <thead><tr><th>超参</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">k_kind</td><td class="mono">mlp</td><td>K 映射用 ResidualMLP</td></tr>
+      <tr><td class="mono">v_kind</td><td class="mono">mlp</td><td>V 映射用 ResidualMLP</td></tr>
+      <tr><td class="mono">hidden</td><td class="mono">2 × dim</td><td>MLP 隐层宽度</td></tr>
+      <tr><td class="mono">lam</td><td class="mono">1.0</td><td>闭式解岭回归正则</td></tr>
+      <tr><td class="mono">sgd_epochs</td><td class="mono">可选 &gt;0</td><td>默认 0（闭式解即可）</td></tr>
+      <tr><td class="mono">sgd_lr</td><td class="mono">1e-3</td><td>refine 全速；base 用 1/10</td></tr>
+      <tr><td class="mono">batch</td><td class="mono">65536</td><td>SGD 批大小</td></tr>
+      <tr><td class="mono">val_ratio</td><td class="mono">0.05</td><td>验证集比例</td></tr>
+      <tr><td class="mono">n_per_sample</td><td class="mono">128 / 256</td><td>每条截取 token 数</td></tr>
+      <tr><td class="mono">产物</td><td class="mono">~25 MB</td><td>4 层 × K/V 双 MLP</td></tr>
+    </tbody>
+  </table>
+
+  <h3>TurboQuant 量化</h3>
+  <table>
+    <thead><tr><th>参数</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">QUANT_K_BITS</td><td class="mono">8</td><td>K 8bit</td></tr>
+      <tr><td class="mono">QUANT_V_BITS</td><td class="mono">4</td><td>V 4bit</td></tr>
+      <tr><td class="mono">QUANT_K_GROUP</td><td class="mono">256</td><td>每向量 1 个 scale</td></tr>
+      <tr><td class="mono">QUANT_V_GROUP</td><td class="mono">64</td><td>每 64 维 1 个 scale</td></tr>
+      <tr><td class="mono">量化方式</td><td class="mono">对称 + 分组 scale</td><td>absmax / qmax</td></tr>
+      <tr><td class="mono">4bit 打包</td><td class="mono">两两 → uint8</td><td>even | (odd &lt;&lt; 4)</td></tr>
+      <tr><td class="mono">理论压缩比</td><td class="mono">2.53x</td><td>实测 2.46x</td></tr>
+    </tbody>
+  </table>
+
+  <h3>评测配置</h3>
+  <table>
+    <thead><tr><th>项</th><th>值</th><th>说明</th></tr></thead>
+    <tbody>
+      <tr><td>PPL 样本</td><td class="mono">30 条</td><td>WikiText-2 test（&gt;1200 字符）</td></tr>
+      <tr><td>GSM8K 题数</td><td class="mono">100</td><td>few-shot 3-shot CoT</td></tr>
+      <tr><td>GSM8K max_new_tokens</td><td class="mono">512</td><td>贪心解码</td></tr>
+      <tr><td>NIAH 条数</td><td class="mono">50</td><td>8K token 海</td></tr>
+      <tr><td>Prefill seq_lens</td><td class="mono">(512, 1024, 2048)</td><td>CUDA event，warmup=3，iters=10</td></tr>
+      <tr><td>KV 存储实测</td><td class="mono">seq_len=1024, gen_steps=8</td><td>persistent / resident 双口径</td></tr>
+    </tbody>
+  </table>
+
+  <h3>运行环境</h3>
+  <table>
+    <thead><tr><th>项</th><th>值</th></tr></thead>
+    <tbody>
+      <tr><td>DEVICE</td><td class="mono">cuda（默认） / cpu（GPU 忙时）</td></tr>
+      <tr><td>DTYPE</td><td class="mono">bfloat16（默认） / float32</td></tr>
+      <tr><td>硬件</td><td>RTX 4070 Ti SUPER 16GB</td></tr>
+      <tr><td>Python</td><td class="mono">3.10（Win32，隔离依赖 .deps310）</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ============================ ⑦ 项目依赖清单 ============================ -->
+<h2>⑦ 项目依赖清单</h2>
+
+<div class="card">
+  <h3>Python 依赖</h3>
+  <table>
+    <thead><tr><th>包名</th><th>版本要求</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">torch</td><td class="mono">≥ 2.6.0+cu124</td><td>张量计算 / GPU 加速 / 模型推理</td></tr>
+      <tr><td class="mono">transformers</td><td class="mono">≥ 5.9.0</td><td>Qwen3.5-4B 加载 / DynamicCache / apply_rotary_pos_emb</td></tr>
+      <tr><td class="mono">datasets</td><td class="mono">≥ 2.18</td><td>WikiText-2 / GSM8K 加载</td></tr>
+      <tr><td class="mono">tqdm</td><td class="mono">≥ 4.66</td><td>进度条</td></tr>
+      <tr><td class="mono">numpy</td><td class="mono">≥ 1.26</td><td>数值辅助（transformers 依赖）</td></tr>
+      <tr><td class="mono">hf_transfer</td><td class="mono">可选</td><td>模型权重加速下载</td></tr>
+    </tbody>
+  </table>
+
+  <h3>系统级依赖与工具</h3>
+  <table>
+    <thead><tr><th>工具 / 组件</th><th>用途</th></tr></thead>
+    <tbody>
+      <tr><td class="mono">schtasks</td><td>Windows 任务计划程序，电子狗定时巡检 step6 评测</td></tr>
+      <tr><td class="mono">tasklist</td><td>检测 python.exe 是否存活</td></tr>
+      <tr><td class="mono">CUDA 12.4 驱动</td><td>GPU 推理与训练</td></tr>
+      <tr><td class="mono">HF_ENDPOINT=hf-mirror.com</td><td>镜像下载模型与数据集</td></tr>
+    </tbody>
+  </table>
+
+  <h3>关键目录结构</h3>
+  <div class="codeblock">
+    <div class="filebar">
+      <span class="path">ced_csa2/ · 目录结构</span>
+      <span class="tag sh">Tree</span>
+    </div>
+<pre><code class="language-bash">ced_csa2/                     核心库
+├── config.py                 全局配置（层索引/维度/路径/量化分组）
+├── model_utils.py            模型加载 / 架构校验 / RoPE 工具
+├── capture.py                H_16 + 各层真实 K/V 捕获（断点续跑）
+├── projector.py              CED 投影器（Linear 2560→2048）
+├── train_projector.py        投影器训练（MSE + AdamW + cosine）
+├── csa2.py                   CSA2Adapter / ResidualMLPAdapter / 零训练复用留档
+├── train_adapters.py         CSA2 适配器训练（闭式解 + SGD 残差）
+├── ced_runtime.py            Mode A hook 注入 / Mode B 旁路 + CSA2SharedCache
+├── quant.py                  TurboQuant k8v4（分组 scale + 4bit 打包）
+└── evaluate.py               PPL / GSM8K / NIAH / 延迟 / KV 存储实测
+
+scripts/                      入口脚本
+├── step1_capture_data.py     step1 数据采集
+├── step2_train_projector.py  step2 投影器训练
+├── step2b_train_adapters.py  step2b 适配器训练
+├── step3_validate_csa2.py    step3 五模式 PPL
+├── step4_quant_eval.py       step4 量化评测
+├── step5_benchmark.py        step5 综合基准
+├── step5_patch_bench.py      step5 补测
+├── step6_expand_eval.py      step6 扩样本评测
+├── step1_cpu.bat             step1 CPU 启动器
+└── step6_eval.bat            step6 schtasks 触发器
+
+tools/                        评估 / 验证 / 通知工具
+├── notify.py                 完成 / 失败自动邮件
+├── watchdog_eval.py          电子狗：评测巡检 / 自动重启
+├── assess_data_need.py       数据量评估（谱分析 + 学习曲线）
+├── cross_layer_mapping_test.py  跨层 KV 可映射性测试
+├── diag_v_adaptability.py    V 适配器可学性诊断
+├── diag_causality2.py        因果性诊断实验
+├── diag_causality3.py        chunk 完整性定位
+├── smoke_test_modes.py       真实 forward 烟测（全模式）
+└── smoke_test_cpu.py         CPU 烟测（无模型权重）
+
+data/                         数据
+├── captured_k20v20.pt        12.2 GB，1200 条 / 31.5 万 token 对
+
+outputs/                      产物
+├── projector_k20v20.pt       约 10 MB
+└── adapters.pt               约 25 MB
+
+tests/result/                 评测结果 JSON 归档
+docs/ tests/doc/ logs/ mail/  文档 / 日志 / 邮件
+</code></pre>
+  </div>
+</div>
+
+<footer class="end">
+  CED + CSA2 复现项目 · v6 最终版 · 代码学习与评审包 · 2026-09-20
+</footer>
+
+</div>
+
+<!-- ============================ 脚本 ============================ -->
+<script>
+  // 初始化语法高亮（轮询等待 hljs 加载）
+  (function waitHljs(n) {
+    if (window.hljs) {
+      document.querySelectorAll('pre code').forEach((el) => {
+        try { hljs.highlightElement(el); } catch (e) {}
+      });
+    } else if (n < 240) {
+      setTimeout(() => waitHljs(n + 1), 500);
+    }
+  })(0);
+
+  // 初始化 Mermaid（neutral 浅色主题，曲线 basis）
+  if (window.mermaid) {
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: 'neutral',
+      securityLevel: 'loose',
+      flowchart: {
+        curve: 'basis',
+        useMaxWidth: true,
+        htmlLabels: true,
+        nodeSpacing: 40,
+        rankSpacing: 55,
+        padding: 14
+      },
+      themeVariables: {
+        fontFamily: '-apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif',
+        fontSize: '22px',
+        nodePadding: '14px',
+        primaryColor: '#e8f0fe',
+        primaryTextColor: '#15315c',
+        primaryBorderColor: '#7aa4f0',
+        lineColor: '#7a8aa0',
+        secondaryColor: '#f0ebff',
+        tertiaryColor: '#e6f5ed'
+      }
+    });
+
+    // 渲染完成后微调 cluster 标题位置（v11.4.1 已知问题）
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        document.querySelectorAll('.mermaid .cluster-label').forEach((el) => {
+          el.style.transform = 'translateY(-30px)';
+        });
+      }, 600);
+    });
+  }
+</script>
+<div style="max-width:1180px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
