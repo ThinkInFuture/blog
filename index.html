@@ -116,6 +116,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
+<div class="cc-title">Tequila 三值量化训练 · 代码检视（第 1 轮）</div>
+<div class="cc-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</div>
+<a class="cc-link" href="实验html/Tequila代码检视-20260919-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-09-18</span></div>
 <div class="cc-title">大模型 RL 对齐：RLHF / DPO 原理与极简源码</div>
 <div class="cc-desc">RLHF 三段式、PPO-Clip 与 KL、DPO 隐式奖励推导、GRPO 与不收敛排查</div>
@@ -139,12 +145,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">Qwen3.8-Max 5万条推理轨迹全参 SFT 蒸馏：GSM8K 49.28%→56.56%（+7.28pp），MMLU 基本持平</div>
 <a class="cc-link" href="模型html/Qwen3.5-0.8B推理蒸馏.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-09-09</span></div>
-<div class="cc-title">vLLM-Ascend 源码解读</div>
-<div class="cc-desc">vLLM 昇腾插件的整体架构：平台注册、Worker、Triton 算子、量化与投机解码</div>
-<a class="cc-link" href="学习html/vLLM-Ascend 源码解读.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
@@ -152,7 +152,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="wrap">
 <div class="metrics">
 <div class="metric"><div class="mv">27</div><div class="ml">学习专区</div></div>
-<div class="metric"><div class="mv">1</div><div class="ml">实验专区</div></div>
+<div class="metric"><div class="mv">2</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
 
@@ -207,12 +207,20 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="experiments">
 <div class="sec-head">
 <div class="sec-title">实验专区</div>
-<div class="sec-badge">1 个实验 · 持续更新</div>
+<div class="sec-badge">2 个实验 · 持续更新</div>
 </div>
 <div class="sec-desc">复现前沿论文效果，探索更优的推理优化方案，实验数据与结论完整公开</div>
 <ul class="list">
 <li class="li"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
 </ul>
+
+<div style="margin-top:44px;padding-top:28px;border-top:1px dashed #ddd">
+<div style="font-size:17px;font-weight:700">代码检视</div>
+<p style="font-size:13px;color:#888;margin:6px 0 6px">同一实验反复迭代会触发多次检视——每次检视都是一份带时间戳的源码快照，标题带时间与轮次</p>
+<ul class="list">
+<li class="li"><a href="实验html/Tequila代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">Tequila 三值量化训练 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</span></span></a></li>
+</ul>
+</div>
 <div class="cols2" style="margin-top:24px">
 <div class="pcard">
 <div class="pcard-tag"><span>论文复现</span><span class="todo-tag">待完善</span></div>
