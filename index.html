@@ -34,7 +34,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .carousel-dot{width:8px;height:8px;border-radius:50%;background:#ddd;cursor:pointer;border:none}
 .carousel-dot.active{background:#3b82f6}
 
-.metrics{display:grid;grid-template-columns:repeat(4,1fr);border-bottom:1px solid #eee}
+.metrics{display:grid;grid-template-columns:repeat(3,1fr);border-bottom:1px solid #eee}
 .metric{padding:28px 0;text-align:center;border-right:1px solid #eee}
 .metric:last-child{border-right:none}
 .mv{font-size:28px;font-weight:700}
@@ -210,17 +210,16 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec-badge">2 个实验 · 持续更新</div>
 </div>
 <div class="sec-desc">复现前沿论文效果，探索更优的推理优化方案，实验数据与结论完整公开</div>
-<ul class="list">
-<li class="li"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
+<div class="zone-chips" id="expChips">
+<button class="chip active" data-topic="all">全部<span class="count">2</span></button>
+<button class="chip" data-topic="quantexp">量化实验<span class="count">1</span></button>
+<button class="chip" data-topic="review">代码检视<span class="count">1</span></button>
+</div>
+<ul class="list" id="expList">
+<li class="li" data-topic="quantexp" data-ts="20260909"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
+<li class="li" data-topic="review" data-ts="20260919"><a href="实验html/Tequila代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">Tequila 三值量化训练 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</span></span></a></li>
 </ul>
 
-<div style="margin-top:44px;padding-top:28px;border-top:1px dashed #ddd">
-<div style="font-size:17px;font-weight:700">代码检视</div>
-<p style="font-size:13px;color:#888;margin:6px 0 6px">同一实验反复迭代会触发多次检视——每次检视都是一份带时间戳的源码快照，标题带时间与轮次</p>
-<ul class="list">
-<li class="li"><a href="实验html/Tequila代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">Tequila 三值量化训练 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</span></span></a></li>
-</ul>
-</div>
 <div class="cols2" style="margin-top:24px">
 <div class="pcard">
 <div class="pcard-tag"><span>论文复现</span><span class="todo-tag">待完善</span></div>
@@ -323,6 +322,17 @@ applyFilter();
 });
 moreBtn.onclick=function(){expanded=!expanded;applyFilter()};
 applyFilter();
+
+var expLis=document.querySelectorAll('#expList .li');
+document.getElementById('expChips').addEventListener('click',function(e){
+var chip=e.target.closest('.chip');
+if(!chip)return;
+var chips=this.children;
+for(var i=0;i<chips.length;i++)chips[i].className='chip';
+chip.className='chip active';
+var topic=chip.getAttribute('data-topic');
+for(var j=0;j<expLis.length;j++){expLis[j].style.display=(topic==='all'||expLis[j].getAttribute('data-topic')===topic)?'':'none'}
+});
 </script>
 </body>
 </html>
