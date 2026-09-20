@@ -116,6 +116,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-20</span></div>
+<div class="cc-title">CED + CSA2 复现 · 代码检视（第 1 轮）</div>
+<div class="cc-desc">KV 缓存压缩双路方案：CED 投影器 + CSA2 适配器 + TurboQuant 量化，M0–M10 全模块源码</div>
+<a class="cc-link" href="实验html/CED-CSA2代码检视-20260920-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
 <div class="cc-title">PyroDash 训练项目 · 代码检视（第 1 轮）</div>
 <div class="cc-desc">成本感知 GRPO + 小模型 offload 协同引擎：三阶段训练管线、GSM8K 评估与 7×24 巡检</div>
@@ -139,12 +145,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">RLHF 三段式、PPO-Clip 与 KL、DPO 隐式奖励推导、GRPO 与不收敛排查</div>
 <a class="cc-link" href="学习html/大模型RL对齐原理与极简源码.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">模型演进</span><span class="cc-date">2026-09-16</span></div>
-<div class="cc-title">RSI 的五个关键点：从核心逻辑到防退化</div>
-<div class="cc-desc">递归自我改进能 work 的条件、机制与边界：三个 P0 环节与六层防退化体系</div>
-<a class="cc-link" href="学习html/RSI的五个关键点.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
@@ -152,7 +152,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="wrap">
 <div class="metrics">
 <div class="metric"><div class="mv">27</div><div class="ml">学习专区</div></div>
-<div class="metric"><div class="mv">4</div><div class="ml">实验专区</div></div>
+<div class="metric"><div class="mv">5</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
 
@@ -207,15 +207,16 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="experiments">
 <div class="sec-head">
 <div class="sec-title">实验专区</div>
-<div class="sec-badge">4 个实验 · 持续更新</div>
+<div class="sec-badge">5 个实验 · 持续更新</div>
 </div>
 <div class="sec-desc">复现前沿论文效果，探索更优的推理优化方案，实验数据与结论完整公开</div>
 <div class="zone-chips" id="expChips">
-<button class="chip active" data-topic="all">全部<span class="count">4</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">5</span></button>
 <button class="chip" data-topic="quantexp">量化实验<span class="count">1</span></button>
-<button class="chip" data-topic="review">代码检视<span class="count">3</span></button>
+<button class="chip" data-topic="review">代码检视<span class="count">4</span></button>
 </div>
 <ul class="list" id="expList">
+<li class="li" data-topic="review" data-ts="20260920"><a href="实验html/CED-CSA2代码检视-20260920-R1.html"><span class="li-date">2026-09-20</span><span class="li-main"><span class="li-title">CED + CSA2 复现（Qwen3.5-4B）· 代码检视<span class="li-tag">2026-09-20 · 第 1 轮</span></span><span class="li-desc">KV 缓存压缩双路方案：CED 投影器 + CSA2 适配器 + TurboQuant 量化，M0–M10 全模块源码</span></span></a></li>
 <li class="li" data-topic="review" data-ts="20260919"><a href="实验html/PyroDash代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">PyroDash 训练项目 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">成本感知 GRPO + 小模型 offload 协同引擎：三阶段训练管线、GSM8K 评估与 7×24 巡检</span></span></a></li>
 <li class="li" data-topic="review" data-ts="20260919"><a href="实验html/mlx-lora代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">mlx-lora-finetune · 训练项目代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">Apple M4 端侧训练：TinyStories 预训练跑通、Mamba 混合架构、MLX→HF 转换与 7×24 看门狗</span></span></a></li>
 <li class="li" data-topic="review" data-ts="20260919"><a href="实验html/Tequila代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">Tequila 三值量化训练 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</span></span></a></li>
