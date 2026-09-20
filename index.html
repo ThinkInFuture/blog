@@ -117,6 +117,18 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
+<div class="cc-title">PyroDash 训练项目 · 代码检视（第 1 轮）</div>
+<div class="cc-desc">成本感知 GRPO + 小模型 offload 协同引擎：三阶段训练管线、GSM8K 评估与 7×24 巡检</div>
+<a class="cc-link" href="实验html/PyroDash代码检视-20260919-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
+<div class="cc-title">mlx-lora-finetune · 训练项目代码检视（第 1 轮）</div>
+<div class="cc-desc">Apple M4 端侧训练：TinyStories 预训练跑通、Mamba 混合架构、MLX→HF 转换与 7×24 看门狗</div>
+<a class="cc-link" href="实验html/mlx-lora代码检视-20260919-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
 <div class="cc-title">Tequila 三值量化训练 · 代码检视（第 1 轮）</div>
 <div class="cc-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</div>
 <a class="cc-link" href="实验html/Tequila代码检视-20260919-R1.html">阅读 &rarr;</a>
@@ -133,18 +145,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">递归自我改进能 work 的条件、机制与边界：三个 P0 环节与六层防退化体系</div>
 <a class="cc-link" href="学习html/RSI的五个关键点.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">模型演进</span><span class="cc-date">2026-09-15</span></div>
-<div class="cc-title">如何用 RSI 做模型自我演进</div>
-<div class="cc-desc">递归自我改进的工程化落地：自训练闭环、三层奖励、五层验证与阶段 A–F 路线</div>
-<a class="cc-link" href="学习html/如何用RSI做模型自我演进.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">自研模型</span><span class="cc-date">2026-09-11</span></div>
-<div class="cc-title">把大模型的推理轨迹炼进小模型：Qwen3.5-0.8B 推理蒸馏</div>
-<div class="cc-desc">Qwen3.8-Max 5万条推理轨迹全参 SFT 蒸馏：GSM8K 49.28%→56.56%（+7.28pp），MMLU 基本持平</div>
-<a class="cc-link" href="模型html/Qwen3.5-0.8B推理蒸馏.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
@@ -152,7 +152,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="wrap">
 <div class="metrics">
 <div class="metric"><div class="mv">27</div><div class="ml">学习专区</div></div>
-<div class="metric"><div class="mv">2</div><div class="ml">实验专区</div></div>
+<div class="metric"><div class="mv">4</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
 
@@ -207,17 +207,19 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="experiments">
 <div class="sec-head">
 <div class="sec-title">实验专区</div>
-<div class="sec-badge">2 个实验 · 持续更新</div>
+<div class="sec-badge">4 个实验 · 持续更新</div>
 </div>
 <div class="sec-desc">复现前沿论文效果，探索更优的推理优化方案，实验数据与结论完整公开</div>
 <div class="zone-chips" id="expChips">
-<button class="chip active" data-topic="all">全部<span class="count">2</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">4</span></button>
 <button class="chip" data-topic="quantexp">量化实验<span class="count">1</span></button>
-<button class="chip" data-topic="review">代码检视<span class="count">1</span></button>
+<button class="chip" data-topic="review">代码检视<span class="count">3</span></button>
 </div>
 <ul class="list" id="expList">
-<li class="li" data-topic="quantexp" data-ts="20260909"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
+<li class="li" data-topic="review" data-ts="20260919"><a href="实验html/PyroDash代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">PyroDash 训练项目 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">成本感知 GRPO + 小模型 offload 协同引擎：三阶段训练管线、GSM8K 评估与 7×24 巡检</span></span></a></li>
+<li class="li" data-topic="review" data-ts="20260919"><a href="实验html/mlx-lora代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">mlx-lora-finetune · 训练项目代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">Apple M4 端侧训练：TinyStories 预训练跑通、Mamba 混合架构、MLX→HF 转换与 7×24 看门狗</span></span></a></li>
 <li class="li" data-topic="review" data-ts="20260919"><a href="实验html/Tequila代码检视-20260919-R1.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">Tequila 三值量化训练 · 代码检视<span class="li-tag">2026-09-19 · 第 1 轮</span></span><span class="li-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</span></span></a></li>
+<li class="li" data-topic="quantexp" data-ts="20260909"><a href="实验html/混合精度量化实验.html"><span class="li-date">2026-09-09</span><span class="li-main"><span class="li-title">Qwen3.5-4B 逐层混合动态量化实验<span class="li-tag">量化实验</span></span><span class="li-desc">自研 exp2 逐层混合 K-quant 方案：2.21GB 体积下 PPL 8.5227，性价比超越社区标杆 Q4_K_M</span></span></a></li>
 </ul>
 
 <div class="cols2" style="margin-top:24px">
