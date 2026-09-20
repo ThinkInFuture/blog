@@ -1,0 +1,2408 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PyroDash 训练项目代码检视 2026-09-19（第 1 轮）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'loose',
+    theme: 'base',
+    themeVariables: {
+      fontFamily: '-apple-system, "Segoe UI", "PingFang SC", sans-serif',
+      fontSize: '16px', nodePadding: '14px',
+      background: '#ffffff',
+      primaryColor: '#dbeafe', primaryBorderColor: '#2563eb', primaryTextColor: '#1e3a8a',
+      lineColor: '#6b7280', clusterBkg: '#f8fafc', clusterBorder: '#9ca3af'
+    },
+    flowchart: { curve: 'basis', useMaxWidth: true, htmlLabels: true, padding: 14 }
+  });
+</script>
+<style>
+  :root{
+    --bg:#f7f9fb;
+    --card:#ffffff;
+    --border:#dfe6ec;
+    --text:#243242;
+    --muted:#63707d;
+    --primary:#1a5276;
+    --primary-2:#2e86c1;
+    --accent:#aed6f1;
+    --key-bg:#fef9e7;
+    --key-bd:#f39c12;
+    --warn-bg:#fdedec;
+    --warn-bd:#e74c3c;
+    --info-bg:#eaf2f8;
+    --info-bd:#2e86c1;
+    --ok-bg:#eafaf1;
+    --ok-bd:#27ae60;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;padding:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:"Microsoft YaHei","PingFang SC","Helvetica Neue",Arial,sans-serif;
+    line-height:1.75;
+    font-size:15px;
+  }
+  .page{
+    max-width:1180px;
+    margin:0 auto;
+    padding:32px 28px 80px;
+  }
+  header.top{
+    background:linear-gradient(135deg,#1a5276 0%,#2e86c1 100%);
+    color:#fff;
+    border-radius:14px;
+    padding:28px 32px;
+    box-shadow:0 6px 20px rgba(26,82,118,0.18);
+    margin-bottom:34px;
+  }
+  header.top h1{
+    margin:0 0 8px;
+    font-size:26px;
+    letter-spacing:.5px;
+  }
+  header.top p{
+    margin:0;
+    font-size:14px;
+    opacity:.92;
+  }
+  header.top .meta{
+    margin-top:14px;
+    display:flex;
+    flex-wrap:wrap;
+    gap:10px;
+    font-size:13px;
+  }
+  header.top .meta span{
+    background:rgba(255,255,255,.18);
+    border:1px solid rgba(255,255,255,.3);
+    padding:3px 10px;
+    border-radius:20px;
+  }
+  section{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:24px 28px;
+    margin-bottom:28px;
+    box-shadow:0 1px 4px rgba(36,50,66,0.05);
+  }
+  h2.sec-title{
+    font-size:21px;
+    color:var(--primary);
+    margin:0 0 18px;
+    padding-left:14px;
+    border-left:6px solid var(--primary-2);
+    line-height:1.3;
+  }
+  h3.sub-title{
+    font-size:17px;
+    color:#21618c;
+    margin:26px 0 12px;
+    padding-left:8px;
+    border-left:3px solid var(--accent);
+  }
+  h4.mini-title{
+    font-size:15px;
+    color:#1f5f8b;
+    margin:18px 0 10px;
+  }
+  p{margin:8px 0;}
+  ul,ol{margin:8px 0 8px 4px;padding-left:22px;}
+  li{margin:5px 0;}
+  code.inline{
+    background:#f1f4f7;
+    color:#b03a2e;
+    padding:2px 6px;
+    border-radius:4px;
+    font-family:"JetBrains Mono","Consolas",monospace;
+    font-size:13.5px;
+  }
+  .box{
+    border-radius:10px;
+    padding:14px 18px;
+    margin:14px 0;
+    background:#fff;
+    border:1px solid var(--border);
+  }
+  .box.key{background:var(--key-bg);border-left:5px solid var(--key-bd);}
+  .box.warn{background:var(--warn-bg);border-left:5px solid var(--warn-bd);}
+  .box.info{background:var(--info-bg);border-left:5px solid var(--info-bd);}
+  .box.ok{background:var(--ok-bg);border-left:5px solid var(--ok-bd);}
+  .box .box-title{
+    font-weight:700;
+    color:var(--primary);
+    display:block;
+    margin-bottom:6px;
+    font-size:14.5px;
+  }
+  .tag{
+    display:inline-block;
+    background:var(--primary-2);
+    color:#fff;
+    border-radius:4px;
+    padding:1px 9px;
+    font-size:12px;
+    margin-right:6px;
+    vertical-align:middle;
+    letter-spacing:.3px;
+  }
+  .tag-py{background:#3572a5;}
+  .tag-sh{background:#4eaa25;}
+  .tag-yaml{background:#cb171e;}
+  .tag-bat{background:#7b7b7b;}
+  .tag-txt{background:#8e44ad;}
+  .tag-mod{background:#1a5276;}
+  .tag-new{background:#e67e22;}
+
+  .file-path{
+    display:block;
+    background:#2d3436;
+    color:#f1f2f6;
+    font-family:"JetBrains Mono","Consolas",monospace;
+    font-size:13px;
+    padding:8px 14px;
+    border-radius:8px 8px 0 0;
+    border-bottom:1px solid #1b1f21;
+    margin:22px 0 0;
+    letter-spacing:.2px;
+  }
+  pre.code{
+    margin:0 0 12px;
+    background:#f6f8fa;
+    color:#24292f;
+    border:1px solid #e2e8f0;
+    border-radius:0 0 8px 8px;
+    padding:16px 18px;
+    overflow-x:auto;
+    font-size:13px;
+    line-height:1.6;
+    font-family:"JetBrains Mono","Consolas","Courier New",monospace;
+  }
+  pre.code code{
+    background:transparent !important;
+    padding:0 !important;
+    font-size:13px;
+    font-family:inherit;
+  }
+  /* hljs light theme */
+  pre.code .hljs{background:transparent !important;color:#24292f !important;}
+  pre.code .hljs-keyword{color:#cf222e !important;}
+  pre.code .hljs-string{color:#0a3069 !important;}
+  pre.code .hljs-comment{color:#6e7781 !important;font-style:italic;}
+  pre.code .hljs-number{color:#0550ae !important;}
+  pre.code .hljs-function{color:#8250df !important;}
+  pre.code .hljs-title{color:#8250df !important;}
+  pre.code .hljs-built_in{color:#0550ae !important;}
+  pre.code .hljs-variable{color:#953800 !important;}
+  pre.code .hljs-params{color:#24292f !important;}
+  pre.code .hljs-literal{color:#0550ae !important;}
+  pre.code .hljs-meta{color:#0550ae !important;}
+  pre.code .hljs-attr{color:#0550ae !important;}
+  pre.code .hljs-class{color:#953800 !important;}
+
+  table.cfg{
+    border-collapse:collapse;
+    width:100%;
+    margin:14px 0;
+    background:#fff;
+    font-size:13.5px;
+  }
+  table.cfg th,table.cfg td{
+    border:1px solid var(--border);
+    padding:9px 12px;
+    text-align:left;
+    vertical-align:top;
+  }
+  table.cfg th{
+    background:#d6eaf8;
+    color:var(--primary);
+    font-weight:700;
+  }
+  table.cfg tr:nth-child(even) td{background:#fbfcfd;}
+  table.cfg code{
+    background:#eef2f5;
+    padding:1px 5px;
+    border-radius:3px;
+    font-size:12.5px;
+    color:#b03a2e;
+  }
+
+  .mermaid-wrap{
+    background:#fff;
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:56px 20px 24px;
+    margin:16px 0 8px;
+    overflow:visible;
+    position:relative;
+  }
+  .mermaid{
+    overflow:visible !important;
+    text-align:center;
+  }
+  .mermaid svg{
+    overflow:visible !important;
+    max-width:100%;
+    height:auto;
+  }
+  .mermaid .cluster-label foreignObject{
+    overflow:visible !important;
+    white-space:nowrap !important;
+  }
+  .mermaid svg text{
+    font-size:19px !important;
+    font-family:"Microsoft YaHei","PingFang SC",Arial,sans-serif !important;
+  }
+  .mermaid-note{
+    font-size:13px;
+    color:var(--muted);
+    text-align:center;
+    margin-top:8px;
+  }
+
+  .grid-2{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:16px;
+  }
+  @media (max-width:820px){
+    .grid-2{grid-template-columns:1fr;}
+    .page{padding:20px 14px 60px;}
+    header.top{padding:22px 20px;}
+    section{padding:18px 16px;}
+  }
+
+  .toc{
+    background:#f0f6fb;
+    border:1px solid #cfe2f3;
+    border-radius:10px;
+    padding:16px 20px;
+    margin-bottom:26px;
+  }
+  .toc ol{margin:6px 0 0;padding-left:22px;}
+  .toc a{color:var(--primary);text-decoration:none;}
+  .toc a:hover{text-decoration:underline;}
+
+  .kv-list{
+    display:grid;
+    grid-template-columns:130px 1fr;
+    gap:6px 16px;
+    font-size:14px;
+  }
+  .kv-list .k{color:var(--muted);}
+  .kv-list .v{color:var(--text);}
+
+  .status-ok{color:#27ae60;font-weight:700;}
+  .status-doing{color:#e67e22;font-weight:700;}
+  .status-todo{color:#c0392b;font-weight:700;}
+
+  footer.foot{
+    text-align:center;
+    color:var(--muted);
+    font-size:12.5px;
+    margin-top:20px;
+    padding-top:16px;
+    border-top:1px dashed var(--border);
+  }
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="page">
+
+<a href="../index.html" style="display:inline-block;font-size:13px;color:var(--muted,#63707d);text-decoration:none;margin-bottom:14px">&larr; 返回首页</a>
+<header class="top">
+  <h1>PyroDash 训练项目代码检视 2026-09-19（第 1 轮）</h1>
+  <p>训练 4B 小模型自主判断「何时求助大模型」——三阶段渐进训练管线源码汇编</p>
+  <div class="meta">
+    <span style="color:var(--primary,#1a5276);font-weight:700">代码检视</span>
+    <span>发布：2026-09-19（第 1 轮）</span>
+    <span>项目：D:\project\2026\202609\Small_ask_big</span>
+    <span>论文：arXiv:2607.20327</span>
+    <span>版本：v2 评审修复版</span>
+    <span>日期：2026-09-19</span>
+  </div>
+</header>
+
+<!-- ============ TOC ============ -->
+<nav class="toc">
+  <strong>目录</strong>
+  <ol>
+    <li><a href="#sec-goal">项目目标与预期</a></li>
+    <li><a href="#sec-intro">项目简介</a></li>
+    <li><a href="#sec-flow">Mermaid 训练流程图</a></li>
+    <li><a href="#sec-modules">各模块代码</a></li>
+    <li><a href="#sec-hparams">核心超参配置表</a></li>
+    <li><a href="#sec-deps">项目依赖清单</a></li>
+  </ol>
+</nav>
+
+<!-- ============ 1. 项目目标与预期 ============ -->
+<section id="sec-goal">
+  <h2 class="sec-title">一、项目目标与预期</h2>
+
+  <h3 class="sub-title">1.1 训练目的</h3>
+  <div class="box key">
+    <span class="box-title">要解决的核心问题</span>
+    大语言模型推理时，简单题用大模型是浪费算力，难题用小模型又做不对。传统「路由方案」（RouteLLM、GlimpRouter）在<b>解题前</b>就决定用哪个模型，无法感知题目在推理中途才暴露的难度。本项目要训练一个 4B 小模型，让它在<b>推理过程中</b>自主判断能力边界，遇到卡点时输出控制 token <code class="inline">&lt;|llm_offload|&gt;</code>，触发一次对大模型的单次交接，从而在几乎不损失准确率的前提下把大模型调用成本降低 90%+。
+  </div>
+
+  <h3 class="sub-title">1.2 短期落地目标</h3>
+  <ul>
+    <li><b>链路目标</b>：本地跑通「4B 小模型 + 27B 大模型」协同推理协议，不调用任何云端 API，只用自有显卡与电费。</li>
+    <li><b>训练目标</b>：完成 Stage 1（锚点嵌入）+ Stage 2（双语料 SFT），产出会按授权提示触发求助的 SFT 模型。</li>
+    <li><b>验证目标</b>：在 AMC / Olympiad / AIME 难题集上扫描 offload 触发率，验证「难题触发、easy 题不触发」的行为模式。</li>
+    <li><b>待攻关</b>：Stage 3 成本感知 GRPO 的稳定实现（训练环境需真实调用 27B 执行交接）。</li>
+  </ul>
+
+  <h3 class="sub-title">1.3 实验预期效果（论文基线）</h3>
+  <table class="cfg">
+    <tr><th>操作点</th><th>λ 系数</th><th>准确率</th><th>成本</th><th>触发率</th></tr>
+    <tr><td>省钱档</td><td>0.6</td><td>54.55%（比纯大模型低 3pp）</td><td>$1.78（降 96.4%）</td><td>约 1/100 题</td></tr>
+    <tr><td>效果档</td><td>0.05</td><td>64.04%（反超纯大模型 6.36pp）</td><td>比纯大模型低 20.4%</td><td>几乎每题</td></tr>
+  </table>
+
+  <h3 class="sub-title">1.4 已实现能力</h3>
+  <div class="box ok">
+    <span class="box-title">已跑通并落盘</span>
+    <ul>
+      <li><span class="status-ok">✔</span> 数据构建：EasyHard-24k 双语料（A 无求助 / B' 有求助），7584 条</li>
+      <li><span class="status-ok">✔</span> Stage 1 锚点初始化：<code class="inline">τ_off</code> id=248077，句号/换行/EOS 均值 + 高斯噪声</li>
+      <li><span class="status-ok">✔</span> Stage 2 SFT：LoRA r=16，单卡 22GB，loss 0.62 → 0.157，已续训至 step 225+</li>
+      <li><span class="status-ok">✔</span> 协同引擎 CE：严格对齐官方协议（stop 串回读、part_think 拼接、预算共享）</li>
+      <li><span class="status-ok">✔</span> GSM8K 1000 题评估管线：官方 λ=0.6 模型 89.4%，零失败零超时</li>
+      <li><span class="status-ok">✔</span> 工具链：GGUF 修补（token_type CONTROL→NORMAL）、llama.cpp 转换、watchdog 巡检</li>
+    </ul>
+  </div>
+
+  <h3 class="sub-title">1.5 待验证假设</h3>
+  <div class="box warn">
+    <span class="box-title">尚未证实的核心假设</span>
+    <ul>
+      <li><span class="status-doing">◐</span> <b>Stage 3 GRPO 策略梯度实现正确性</b>：v2 版本的 <code class="inline">grpo_step_loss</code> 未把 prompt 上下文编码进前向，导致 log_prob 条件错误，需重写后才能验证「模型学会成本感知求助时机」。</li>
+      <li><span class="status-todo">✘</span> <b>自训模型 offload 行为</b>：SFT 完成后模型是否会在难题正确触发 <code class="inline">&lt;|llm_offload|&gt;</code> 尚待 <code class="inline">behavior_scan.py</code> 实测。</li>
+      <li><span class="status-todo">✘</span> <b>27B 作为「老师」的效果上限</b>：27B 在难题上能否救回 4B，直接决定效果档（λ=0.05）能否复现论文的「反超」结论。</li>
+      <li><span class="status-todo">✘</span> <b>llama.cpp 与 transformers 引擎差异的根因</b>：已知 llama.cpp 对 qwen3.5 新架构 offload 采样永不触发，但未定位到具体算子层。</li>
+      <li><span class="status-todo">✘</span> <b>训练/推理 prompt 的 &lt;think&gt; 一致性</b>：需抽检训练数据确认 assistant content 内是否含 <code class="inline">&lt;/think&gt;</code> 分隔符。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 2. 项目简介 ============ -->
+<section id="sec-intro">
+  <h2 class="sec-title">二、项目简介</h2>
+
+  <h3 class="sub-title">2.1 基础信息</h3>
+  <div class="kv-list">
+    <div class="k">项目名</div><div class="v">Small_ask_big（PyroDash 复现）</div>
+    <div class="k">项目路径</div><div class="v">D:\project\2026\202609\Small_ask_big</div>
+    <div class="k">论文</div><div class="v">arXiv:2607.20327（火思动力开源）</div>
+    <div class="k">官方仓库</div><div class="v">github.com/Pyromind-Dynamics/PyroDash</div>
+    <div class="k">文件规模</div><div class="v">32 个文件，约 90KB 源码</div>
+  </div>
+
+  <h3 class="sub-title">2.2 硬件环境</h3>
+  <div class="kv-list">
+    <div class="k">GPU</div><div class="v">双卡：卡0（27B 推理服务）+ 卡1（4B 训练/评估）</div>
+    <div class="k">显存</div><div class="v">单卡 22GB 级（SFT LoRA bf16 占用）</div>
+    <div class="k">操作系统</div><div class="v">Windows 11（WSL2 可选）</div>
+    <div class="k">Python</div><div class="v">3.11（C:\Program Files\Python311）</div>
+  </div>
+
+  <h3 class="sub-title">2.3 基座模型</h3>
+  <div class="kv-list">
+    <div class="k">学生（小）</div><div class="v">Qwen3.5-4B（bf16 LoRA 微调）</div>
+    <div class="k">老师（大）</div><div class="v">Qwen3.8-27B-Ridge-GGUF（3.7bpw，本地部署，冻结）</div>
+    <div class="k">对照</div><div class="v">PyroDash-4B-GRPO-Lambda-0.6 / 0.05（官方权重）</div>
+  </div>
+
+  <h3 class="sub-title">2.4 训练方案</h3>
+  <div class="box info">
+    <span class="box-title">三阶段渐进训练</span>
+    <ol>
+      <li><b>Stage 1 控制 token 嵌入学习</b>：词表新增 <code class="inline">&lt;|llm_offload|&gt;</code>，锚点初始化把嵌入放在自然断点 token 家族附近，语义上「住对地方」。</li>
+      <li><b>Stage 2 双语料 SFT 行为冷启动</b>：Corpus A（无授权提示 + 完整独立推理）保住独立推理能力；Corpus B'（授权提示 + hard 题 CoT 插 1~4 个 τ_off）教会求助动作。easy 题即使授权也绝不插。</li>
+      <li><b>Stage 3 成本感知 GRPO</b>：每题采样 G 条轨迹，奖励 = 答对(0/1) − λ×(协作成本 / 纯大模型成本)，小模型交接前每个 token 双重计费。</li>
+    </ol>
+  </div>
+
+  <h3 class="sub-title">2.5 关键约束</h3>
+  <div class="box warn">
+    <span class="box-title">必须遵守的工程约束</span>
+    <ul>
+      <li><b>引擎一致性</b>：自训模型的 offload 行为验证必须用 <b>transformers 引擎</b>，llama.cpp 对新架构存在引擎级差异（永不触发）。</li>
+      <li><b>Windows 线性注意力</b>：qwen3.5 依赖 <code class="inline">fla+Triton</code>，不可用时静默回退 CPU，训练须强制走 transformers 的 torch 回退实现。</li>
+      <li><b>磁盘管理</b>：磁盘满会导致 transformers 加载模型报 <code class="inline">FileNotFound</code>，checkpoint 需滚动保留最近 2 个。</li>
+      <li><b>窗口调度</b>：训练窗口 18:00–次日 06:00，白天自动停训并释放 GPU。</li>
+      <li><b>协同协议上限</b>：至多一次交接，不回头，避免无限循环。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 3. Mermaid 流程图 ============ -->
+<section id="sec-flow">
+  <h2 class="sec-title">三、Mermaid 训练流程图</h2>
+  <p class="mermaid-note">节点标题格式：<b>模块编号 · 代码文件名</b>，与下方第四章各模块一一对应。</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+flowchart TD
+    A["M1 train_data_prep.py<br/>构建双语料 A / B'"] --> B["M2 train_sft.py<br/>Stage1+2 锚点初始化 + LoRA SFT"]
+    B --> C["M3 grpo_train.py<br/>Stage3 成本感知 GRPO"]
+    B --> D["M6 behavior_scan.py<br/>难题 offload 行为扫描"]
+    C --> D
+    D --> E["M5 run_gsm8k_1k.py<br/>GSM8K 千题评估管线"]
+    E --> F["M7 math_eval_mod.py<br/>打分与 relay 工具"]
+
+    B --> G["M4 collaborate_engine.py<br/>协同引擎 CE 协议"]
+    G --> E
+
+    H["M10 patch_gguf.py<br/>token_type CONTROL→NORMAL"] -.-> G
+    I["M9 daily_start.py / autostop.py<br/>窗口调度自动起停"] -.-> B
+    I -.-> C
+    J["M8 watchdog_dog.py<br/>进程存活 + GPU 占用巡检"] -.-> B
+
+    style A fill:#d6eaf8,stroke:#2874a6
+    style B fill:#d6eaf8,stroke:#2874a6
+    style C fill:#fadbd8,stroke:#c0392b
+    style D fill:#fdebd0,stroke:#b9770e
+    style E fill:#d5f5e3,stroke:#1e8449
+    style F fill:#d5f5e3,stroke:#1e8449
+    style G fill:#fdebd0,stroke:#b9770e
+    style H fill:#e8daef,stroke:#7d3c98
+    style I fill:#e8daef,stroke:#7d3c98
+    style J fill:#e8daef,stroke:#7d3c98
+    </div>
+  </div>
+
+  <div class="box info" style="margin-top:18px;">
+    <span class="box-title">数据流要点</span>
+    <ul>
+      <li><b>训练主链</b>：M1（数据）→ M2（SFT）→ M3（GRPO）→ M6（行为扫描）→ M5（千题评估），闭环验证。</li>
+      <li><b>协议旁路</b>：M4 协同引擎被 M3 的 rollout、M5 的评估、M6 的行为扫描共同复用，是全项目「交接语义」的唯一权威实现。</li>
+      <li><b>基础设施</b>：M8 巡检 M2/M3 的存活与 GPU 占用；M9 按窗口自动起停；M10 修补 GGUF 后才能被 M4 正确识别 stop 串。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 4. 各模块代码 ============ -->
+<section id="sec-modules">
+  <h2 class="sec-title">四、各模块代码</h2>
+
+  <!-- ===== M1 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M1</span> 数据准备：双语料构建
+  </h3>
+
+  <span class="file-path">scripts/train_data_prep.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    将 EasyHard-24k 的 math 子集转换为 PyroDash Stage1+2 训练语料。按数据源文件真实标记难度（easy 文件不插 τ_off，hard 文件才插），生成 Corpus A（独立推理）与 Corpus B'（授权模式）双语料，输出 messages 格式的 JSONL 供 TRL 直接使用。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><b>输入</b>：<code class="inline">datasets/easyhard-24k/{math_easy.jsonl, dapo_math_easy.jsonl, math_hard.jsonl}</code></li>
+      <li><b>输出</b>：<code class="inline">data/train_sft.jsonl</code>（每行一条 messages 样本，附 corpus/difficulty 元字段）</li>
+      <li><b>随机种子</b>：固定 42，保证语料可复现</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""EasyHard-24k math 子集 -> PyroDash Stage1+2 训练数据 (v2, 评审修复版)
+
+P0-3 修复: easy/hard 用数据源文件真实标记 (easy 文件不插 τ_off,
+          hard 文件才插), 修复原版 `or True` 恒真导致 easy 题也插的防滥用违规。
+P2-15 修复: 保守切分 (只在句号+空格 / 双换行处切), 保留原分隔符, 不破坏格式。
+
+Corpus A: 原始 system, 无 tau_off (保独立推理)
+Corpus B': offload system 提示; hard 样本 CoT 内动态插入 1~4 个 tau_off;
+           easy 样本授权提示但轨迹无 tau_off (学"授权时不滥用")
+输出: data/train_sft.jsonl (messages 格式)
+"""
+import json
+import os
+import random
+import re
+
+random.seed(42)
+
+BASE = r"D:\project\2026\202609\Small_ask_big"
+DS = os.path.join(BASE, "datasets", "easyhard-24k")
+OUT = os.path.join(BASE, "data", "train_sft.jsonl")
+TAU = "&lt;|llm_offload|&gt;"
+
+SYSTEM_A = "You are a helpful math assistant."
+SYSTEM_B = (
+    "You are a helpful assistant. Solve the given problem step by step. "
+    "For very difficult steps, you can output &lt;|llm_offload|&gt; to request help "
+    "from a more capable model."
+)
+
+# P2-15: 保守切分 - 句号/问号/感叹号 + 空白, 或换行; 用 split 保留分隔符
+SENT_SPLIT = re.compile(r"(?&lt;=[.!?])\s+|\n")
+
+
+# 在思维链文本的 n 个指定位置插入 τ_off 交接标记(授权模式的核心动作)
+def insert_tau(cot_text, n):
+    """在 CoT 句子边界随机插 n 个 tau_off, 保留原分隔符。"""
+    parts = SENT_SPLIT.split(cot_text)
+    if len(parts) &lt; 3:
+        return None
+    cands = list(range(1, len(parts)))
+    n = min(n, len(cands))
+    pos = set(random.sample(cands, n))
+    out = []
+    for i, s in enumerate(parts):
+        out.append(s)
+        if i in pos:
+            # 用与原文一致的连接方式补 tau (换行切分 -> 换行, 空格切分 -> 空格)
+            sep = "\n" if "\n" in cot_text else " "
+            out.append(sep + TAU)
+    text = "".join(out)
+    return text if TAU in text else None
+
+
+def load_jsonl(p):
+    rows = []
+    with open(p, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                rows.append(json.loads(line))
+    return rows
+
+
+# 主流程: 读 easy/hard 双源 -> 分别构建语料 A(独立推理)/B(授权模式) -> 打乱落盘
+def main():
+    os.makedirs(os.path.dirname(OUT), exist_ok=True)
+    # 数据源文件即难度标签 (P0-3: 真实 easy/hard, 不再恒真)
+    easy = load_jsonl(os.path.join(DS, "math_easy.jsonl"))          # base 答对
+    dapo = load_jsonl(os.path.join(DS, "dapo_math_easy.jsonl"))     # 精调后答对 = easy
+    hard = load_jsonl(os.path.join(DS, "math_hard.jsonl"))          # base 答错, 已重构
+    random.shuffle(dapo)
+    dapo = dapo[:1200]
+
+    tagged = ([(r, "easy") for r in easy] +
+              [(r, "easy") for r in dapo] +
+              [(r, "hard") for r in hard])
+    random.shuffle(tagged)
+
+    data = []
+    n_b_easy = 0   # B' 中 easy (授权但不求助) 条数
+    n_b_hard = 0   # B' 中 hard (含 τ_off 插入) 条数
+    for r, difficulty in tagged:
+        msgs = r["messages"]
+        if len(msgs) &lt; 3:
+            continue
+        user, assistant = msgs[1], msgs[-1]
+        q, a = user["content"], assistant["content"]
+        if not q or not a:
+            continue
+        a_clean = a.replace(TAU, "")
+        # ---- Corpus A: 独立推理 ----
+        data.append({
+            "messages": [
+                {"role": "system", "content": SYSTEM_A},
+                {"role": "user", "content": q},
+                {"role": "assistant", "content": a_clean},
+            ],
+            "corpus": "A", "difficulty": difficulty,
+        })
+        # ---- Corpus B': 授权模式 ----
+        if difficulty == "hard":
+            n_ins = random.randint(1, 4)
+            n_ins = min(n_ins, max(1, len(SENT_SPLIT.split(a_clean)) // 4))
+            a_b = insert_tau(a_clean, n_ins)
+        else:
+            a_b = a_clean          # easy: 授权但绝不求助 (P0-3 防滥用核心)
+        if a_b is None:
+            continue
+        if TAU in a_b:
+            n_b_hard += 1
+        else:
+            n_b_easy += 1
+        data.append({
+            "messages": [
+                {"role": "system", "content": SYSTEM_B},
+                {"role": "user", "content": q},
+                {"role": "assistant", "content": a_b},
+            ],
+            "corpus": "B", "difficulty": difficulty,
+        })
+
+    random.shuffle(data)
+    with open(OUT, "w", encoding="utf-8") as f:
+# 混合打乱后统一写出 jsonl, 供 Stage1+2 SFT 直接消费
+        for d in data:
+            f.write(json.dumps(d, ensure_ascii=False) + "\n")
+
+    print(f"total={len(data)} B_easy_no_tau={n_b_easy} B_hard_with_tau={n_b_hard} -> {OUT}")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+  <!-- ===== M2 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M2</span> Stage 1+2 SFT 训练（锚点初始化 + LoRA）
+  </h3>
+
+  <span class="file-path">scripts/train_sft.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    把 <code class="inline">&lt;|llm_offload|&gt;</code> 装入 Qwen3.5-4B 词表并用「句号/换行/EOS 均值 + 高斯噪声」锚点初始化其嵌入；随后用 LoRA 在双语料上做监督微调。含窗口自动停训、checkpoint 数字排序滚动保留、断点续训、训练/暂停/失败邮件通知。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">--resume</code>：LoRA checkpoint 目录路径，为空则从零开始</li>
+      <li><code class="inline">--start-step</code>：全局起始步数（续训时传入，影响日志分母与 cap）</li>
+      <li><code class="inline">--epochs</code>：训练轮数，0 表示用默认 EPOCHS=1</li>
+      <li>环境变量：<code class="inline">CUDA_VISIBLE_DEVICES=1</code>，<code class="inline">HF_HUB_OFFLINE=1</code></li>
+      <li>输入文件：<code class="inline">data/train_sft.jsonl</code></li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""PyroDash Stage1+2 合并训练: 词表扩 tau_off(锚点初始化) + LoRA SFT
+- 基座: Qwen3.5-4B (bf16, 单卡 22GB)
+- 与论文差异: 嵌入行锚点初始化后冻结(不做全量嵌入微调), 语义适配交给 LoRA 中间层
+"""
+import json
+import math
+import os
+import random
+import time
+
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+import sys
+sys.modules['fla'] = None  # force torch fallback for linear attention (full GPU)
+sys.modules['fla.'] = None
+
+import torch
+from torch.utils.data import DataLoader, Dataset
+
+BASE = r"D:\project\2026\202609\Small_ask_big"
+MODEL_DIR = os.path.join(BASE, "models", "Qwen3.5-4B")
+DATA = os.path.join(BASE, "data", "train_sft.jsonl")
+OUT_DIR = os.path.join(BASE, "ckpt", "sft_lora")
+LOG = os.path.join(BASE, "logs", "train_sft.log")
+TAU = "&lt;|llm_offload|&gt;"
+MAX_LEN = 768
+BS = 4
+ACC = 4
+EPOCHS = 1
+LR = 1e-4
+
+import logging
+os.makedirs(os.path.dirname(LOG), exist_ok=True)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
+                    handlers=[logging.FileHandler(LOG, encoding="utf-8"), logging.StreamHandler()])
+log = logging.getLogger("sft")
+
+
+# 数据集: 逐行读 jsonl(prompt+response), 训练时只对 response 段计算 loss
+class SFTData(Dataset):
+    def __init__(self, path, tok):
+        self.rows = []
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                self.rows.append(json.loads(line))
+        self.tok = tok
+
+    def __len__(self):
+        return len(self.rows)
+
+    def __getitem__(self, i):
+        r = self.rows[i]
+        m = r["messages"]
+        # P0-4: prompt 带 &lt;think&gt;\n, 与评估/推理协议(chat_template enable_thinking)统一
+        prompt = (
+            f"&lt;|im_start|&gt;system\n{m[0]['content']}&lt;|im_end|&gt;\n"
+            f"&lt;|im_start|&gt;user\n{m[1]['content']}&lt;|im_end|&gt;\n"
+            f"&lt;|im_start|&gt;assistant\n&lt;think&gt;\n"
+        )
+        target = m[2]["content"]
+        # 目标若以 &lt;think&gt; 开头则剥掉 (避免与 prompt 尾的 &lt;think&gt;\n 重复)
+        if target.startswith("&lt;think&gt;"):
+            target = target[len("&lt;think&gt;"):]
+        if target.startswith("\n"):
+            target = target[1:]
+        target = target + "&lt;|im_end|&gt;"
+        p_ids = self.tok(prompt, add_special_tokens=False)["input_ids"]
+        t_ids = self.tok(target, add_special_tokens=False)["input_ids"]
+        ids = (p_ids + t_ids)[:MAX_LEN]
+        labels = [-100] * len(p_ids) + t_ids[:]
+        labels = labels[:MAX_LEN]
+        return {"input_ids": ids, "labels": labels}
+
+
+# 动态 padding 到批内最长; labels 中 pad 位置置 -100, 不参与 loss
+def collate(batch, pad_id):
+    ml = max(len(b["input_ids"]) for b in batch)
+    input_ids, labels, attn = [], [], []
+    for b in batch:
+        n = ml - len(b["input_ids"])
+        input_ids.append(b["input_ids"] + [pad_id] * n)
+        labels.append(b["labels"] + [-100] * n)
+        attn.append([1] * len(b["input_ids"]) + [0] * n)
+    return (torch.tensor(input_ids), torch.tensor(labels), torch.tensor(attn))
+
+
+# 主流程: 加载 Qwen3.5-4B -> 词表扩 tau_off 锚点初始化(冻结嵌入) -> 挂 LoRA -> 训练
+def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument('--resume', default='')
+    ap.add_argument('--start-step', type=int, default=0)
+    ap.add_argument('--epochs', type=int, default=0)
+    args = ap.parse_args()
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from peft import LoraConfig, get_peft_model
+
+    torch.manual_seed(42)
+    random.seed(42)
+
+    log.info("loading tokenizer/base model...")
+    tok = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+    if TAU not in tok.get_vocab():
+        tok.add_tokens([TAU])
+        log.info("added %s to tokenizer", TAU)
+
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_DIR, torch_dtype=torch.bfloat16, trust_remote_code=True,
+        attn_implementation="sdpa").cuda()
+    model.resize_token_embeddings(len(tok))
+    # 锚点初始化: tau_off 嵌入 = 句号/换行/endoftext 均值 + N(0, 0.1^2)
+    with torch.no_grad():
+        w = model.get_input_embeddings().weight
+        tid = tok.get_vocab()[TAU]
+        anchors = []
+    # 锚点初始化: 新 token 嵌入用常见终止符嵌入均值初始化, 语义上接近"回答结束"
+        for a in [".", "\n", "&lt;|im_end|&gt;", "&lt;|endoftext|&gt;"]:
+            if a in tok.get_vocab():
+                anchors.append(w[tok.get_vocab()[a]].float())
+        mean_emb = torch.stack(anchors).mean(0)
+        w[tid] = (mean_emb + torch.randn_like(mean_emb) * 0.1).to(w.dtype)
+        # tied lm_head 同表自动同步
+    log.info("tau_off id=%d initialized (anchor mean+noise)", tid)
+
+    lcfg = LoraConfig(
+        r=16, lora_alpha=32, lora_dropout=0.05, bias="none",
+        target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                        "gate_proj", "up_proj", "down_proj"],
+        task_type="CAUSAL_LM")
+    if args.resume:
+        from peft import PeftModel
+        model = PeftModel.from_pretrained(model, args.resume, is_trainable=True)
+        log.info('resumed LoRA from %s', args.resume)
+    else:
+        model = get_peft_model(model, lcfg)
+    model.print_trainable_parameters()
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
+    model.cuda()
+
+    ds = SFTData(DATA, tok)
+    dl = DataLoader(ds, batch_size=BS, shuffle=True,
+                    collate_fn=lambda b: collate(b, tok.get_vocab()["&lt;|im_end|&gt;"]),
+                    num_workers=0, drop_last=True)
+    n_epochs = args.epochs if args.epochs &gt; 0 else EPOCHS
+    total_steps = len(dl) * n_epochs // ACC
+    global_done = False
+    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],
+                            lr=LR, weight_decay=0.01)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=max(1, total_steps))
+    log.info("data=%d steps/epoch=%d total_steps=%d start_step=%d (global target=%d)",
+             len(ds), len(dl), total_steps, args.start_step,
+             args.start_step + total_steps)
+
+    model.train()
+    step = args.start_step          # 全局步计数 (含 resume 起点)
+    window_stopped = False
+    t0 = time.time()
+    losses = []
+    done = False
+# 训练循环: bf16 前向, 梯度累积到边界才 step; 优化器只更新 LoRA+解冻层
+    for ep in range(n_epochs):
+        if done:
+            break
+        for i, (input_ids, labels, attn) in enumerate(dl):
+            now_h = time.localtime().tm_hour
+            if now_h &gt;= 6 and now_h &lt; 18:
+                log.info('outside window (06:00-18:00), pause for checkpoint safety '
+                         'at global step %d', step)
+                window_stopped = True
+                done = True
+                break
+            input_ids, labels, attn = input_ids.cuda(), labels.cuda(), attn.cuda()
+            out = model(input_ids=input_ids, attention_mask=attn, labels=labels)
+            loss = out.loss / ACC
+            loss.backward()
+            losses.append(out.loss.item())
+            if (i + 1) % ACC == 0:
+                torch.nn.utils.clip_grad_norm_(
+                    [p for p in model.parameters() if p.requires_grad], 1.0)
+                opt.step()
+                sched.step()
+                opt.zero_grad(set_to_none=True)
+                step += 1
+                if step % 25 == 0:
+                    log.info("step=%d/%d loss=%.4f lr=%.2e %.0fs elapsed",
+                             step, args.start_step + total_steps,
+                             sum(losses) / len(losses),
+                             sched.get_last_lr()[0], time.time() - t0)
+                    losses = []
+                if step % 50 == 0 or step &gt;= args.start_step + total_steps - 1:
+                    # 数字排序裁剪, 只保留最近 2 个 (P0-2 修复: 字符串排序会删错文件)
+                    ckpts = sorted(
+                        [d for d in os.listdir(OUT_DIR)
+                         if d.startswith("step") and os.path.isdir(os.path.join(OUT_DIR, d))],
+                        key=lambda x: int(x[4:]), reverse=True)
+# 滚动清理: 只保留最近 2 个 checkpoint, 防磁盘堆爆
+                    for old in ckpts[2:]:
+                        import shutil
+                        shutil.rmtree(os.path.join(OUT_DIR, old), ignore_errors=True)
+                        log.info("pruned old ckpt %s", old)
+                    ck = os.path.join(OUT_DIR, f"step{step}")
+                    os.makedirs(ck, exist_ok=True)
+                    model.save_pretrained(ck)
+                    tok.save_pretrained(ck)
+                    log.info("checkpoint saved -&gt; %s", ck)
+                if step &gt;= args.start_step + 500:  # 全局步安全上限
+                    log.info("hit global step cap %d, stop", step)
+                    done = True
+                    break
+        log.info("epoch %d done", ep)
+
+    os.makedirs(OUT_DIR, exist_ok=True)
+    model.save_pretrained(OUT_DIR)
+    tok.save_pretrained(OUT_DIR)
+    log.info("saved -&gt; %s", OUT_DIR)
+    if window_stopped:
+        log.info("TRAIN_WINDOW_PAUSED")   # 窗口暂停, 非完成 (P2-14)
+        try:
+            sys.path.insert(0, r"C:\Users\Administrator\.config\opencode\examples")
+            from send_email import send_email
+            send_email(
+                subject="【Small_ask_big】SFT窗口暂停(非完成)",
+                body=f"到达窗口边界(06:00-18:00), 训练已在全局 step {step} 处保存并暂停。\n"
+                     f"下次窗口将从 checkpoint 续训。\n日志: {LOG}",
+                html=False)
+        except Exception:
+            log.exception("hook mail fail")
+    else:
+        log.info("TRAIN_DONE")
+        try:
+            sys.path.insert(0, r"C:\Users\Administrator\.config\opencode\examples")
+            from send_email import send_email
+            send_email(
+                subject="【Small_ask_big】SFT训练完成",
+                body=f"SFT 训练完成(全局 step {step})。\n最终保存: {OUT_DIR}\n"
+                     f"耗时: {time.time()-t0:.0f} 秒\n日志: {LOG}",
+                html=False)
+        except Exception:
+            log.exception("hook mail fail")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        log.exception("TRAIN_FAIL")
+        # 失败邮件略 (与窗口暂停分支同构)</code></pre>
+
+  <div class="box warn">
+    <span class="box-title">代码学习要点</span>
+    <ul>
+      <li><b>锚点初始化</b>：<code class="inline">w[tid] = mean(句号/换行/EOS) + N(0, 0.1²)</code>，把求助按钮放在自然断点 token 家族附近，训练才稳定。</li>
+      <li><b>resume 互斥分支</b>：<code class="inline">if resume: PeftModel.from_pretrained(...) else: get_peft_model(...)</code>，避免双层 PEFT 包装（v1 的 P0-1 bug）。</li>
+      <li><b>checkpoint 裁剪</b>：<code class="inline">key=lambda x: int(x[4:])</code> 数字排序，否则字符串排序下 <code class="inline">"step50" &gt; "step150"</code> 会删错文件。</li>
+      <li><b>窗口停训</b>：06:00–18:00 内自动保存并退出，<code class="inline">TRAIN_WINDOW_PAUSED</code> 与 <code class="inline">TRAIN_DONE</code> 分开，避免误报完成。</li>
+      <li><b>已知待修</b>：全局步上限 <code class="inline">start_step + 500</code> 应改为 <code class="inline">start_step + total_steps</code>，否则会多跑 26 步。</li>
+    </ul>
+  </div>
+
+  <!-- ===== M3 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M3</span> Stage 3 成本感知 GRPO
+  </h3>
+
+  <span class="file-path">scripts/grpo_train.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    用组内优势 + 策略梯度优化「求助时机」。每题采样 G 条推理路径，若路径中出现 <code class="inline">&lt;|llm_offload|&gt;</code> 则真实调用本地 27B 执行单次交接。奖励 = 答对(0/1) − λ×(协作成本 / 纯大模型基线成本)，其中小模型交接前每个 token 双重计费（自身生成 + 大模型 prefill 输入）。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><b>输入数据</b>：<code class="inline">datasets/dapo_cache.json</code>（DAPO-Math-17k 转换）</li>
+      <li><b>基线缓存</b>：<code class="inline">datasets/grpo_baseline.json</code>（每题 llm-only 成本，首次跑时预计算）</li>
+      <li><b>大模型服务</b>：<code class="inline">http://127.0.0.1:8002/v1/chat/completions</code>（llama-server 加载 Qwen3.8-27B）</li>
+      <li><b>关键常量</b>：<code class="inline">LAM=0.1</code>，<code class="inline">G=4</code>，<code class="inline">MAX_NEW=600</code></li>
+      <li><b>输出</b>：<code class="inline">ckpt/grpo_lora/</code> + <code class="inline">trainer_state.pt</code>（optim + iter）</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""PyroDash Stage 3: 成本感知 GRPO (评审修复版)
+
+P0-6 修复: 真·策略梯度 - log_prob(gather 生成token) x 组内优势, 不再用加权CE
+P0-4 修复: prompt 尾部 &lt;think&gt;\n 与 SFT/评估统一
+P1-8 修复: base_cost 预计算 llm-only 基线(固定), 不再用组内最大值近似
+P1-10 修复: checkpoint 保存 optimizer 状态, 支持断点续训
+P2-16 修复: relay 并发 ThreadPoolExecutor
+"""
+import json
+import os
+import sys
+import time
+import traceback
+from concurrent.futures import ThreadPoolExecutor
+
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+import requests
+import torch
+
+BASE = r"D:\project\2026\202609\Small_ask_big"
+ADPT = os.path.join(BASE, "ckpt", "sft_lora")
+BASEM = os.path.join(BASE, "models", "Qwen3.5-4B")
+DATA = os.path.join(BASE, "datasets", "dapo_cache.json")
+BASELINE = os.path.join(BASE, "datasets", "grpo_baseline.json")
+LOG = os.path.join(BASE, "logs", "grpo.log")
+OUT = os.path.join(BASE, "ckpt", "grpo_lora")
+LLM_URL = "http://127.0.0.1:8002/v1/chat/completions"
+TAU = "&lt;|llm_offload|&gt;"
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Solve the given problem step by step. "
+    "For very difficult steps, you can output &lt;|llm_offload|&gt; to request help "
+    "from a more capable model."
+)
+LAM = 0.1
+G = 4
+MAX_NEW = 600
+PRICE = {"slm": 0.08, "llm_in": 0.90, "llm_out": 2.86}  # $/1M
+
+import logging
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s",
+                    handlers=[logging.FileHandler(LOG, encoding="utf-8"), logging.StreamHandler()])
+log = logging.getLogger("grpo")
+
+
+# 从模型输出中抽取 \boxed{} 里的最终答案, 抽不到按 0 分处理
+def extract_answer(text):
+    t = str(text)
+    if "\\boxed{" in t:
+        return t.split("\\boxed{")[-1].split("}")[0].strip()
+    return t.strip()[-40:]
+
+
+def score_num(pred, gt):
+    def norm(x):
+        x = str(x).strip().strip(".").replace(",", "").replace("$", "").replace(" ", "")
+        try:
+            return float(x)
+        except ValueError:
+            return None
+    a, b = norm(pred), norm(gt)
+    if a is None or b is None:
+        return int(str(pred).strip() == str(gt).strip())
+    return int(abs(a - b) &lt; 1e-6)
+
+
+# 全大模型成本基线: 不 offload 直接问大模型的 token 计价, 作为对照
+def llm_full_cost(q):
+    """P1-8: 预计算 llm-only 基线成本 (纯大模型解该题的真实成本), 固定缓存。"""
+    base = json.load(open(BASELINE, encoding="utf-8")) if os.path.exists(BASELINE) else {}
+    if q in base:
+        return base[q]
+    body = {"model": "qwen3.8-27b",
+            "messages": [{"role": "user", "content": q +
+                          " Please reason step by step, and put your final answer within \\boxed{}."}],
+            "max_tokens": MAX_NEW, "temperature": 0.1}
+    r = requests.post(LLM_URL, json=body, timeout=600)
+    u = r.json().get("usage", {})
+    cost = (int(u.get("prompt_tokens", 300)) * PRICE["llm_in"] +
+            int(u.get("completion_tokens", 600)) * PRICE["llm_out"]) / 1e6
+    base[q] = cost
+    json.dump(base, open(BASELINE, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    return cost
+
+
+# 交接: 小模型 partial 输出加 stop 标记, 由大模型接力完成剩余推理
+def llm_relay(question, partial):
+    """单次交接: 把 part_think 打包给 27B 续写。"""
+    sys_p = ("You are a helpful assistant completing a task partially solved by a smaller "
+             "model. Continue from where it stopped and give the final answer in \\boxed{}.")
+    user_p = f"Problem:\n{question}\n\nPartial reasoning:\n{partial}\n\nContinue and finish."
+    body = {"model": "qwen3.8-27b",
+            "messages": [{"role": "system", "content": sys_p},
+                         {"role": "user", "content": user_p}],
+            "max_tokens": 600, "temperature": 0.1}
+    r = requests.post(LLM_URL, json=body, timeout=600)
+    d = r.json()
+    content = d["choices"][0]["message"].get("content") or ""
+    u = d.get("usage", {})
+    return content, int(u.get("prompt_tokens", 0)), int(u.get("completion_tokens", 0))
+
+
+# 并发 relay: 线程池 + 超时降级, 失败样本计 0 奖励不阻塞整批
+def relay_concurrent(jobs, workers=4):
+    """P2-16: relay 并发。jobs=[(idx, question, partial)] -> {idx: (cont,tin,tout)}"""
+    res = {}
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(llm_relay, q, p): i for i, q, p in jobs}
+        for fut in futs:
+            i = futs[fut]
+            try:
+                res[i] = fut.result()
+            except Exception as e:
+                log.warning("relay fail job %s: %s", i, str(e)[:60])
+                res[i] = ("", 0, 0)
+    return res
+
+
+# 组采样: 同一题采 G 条路径, 组内互比产生相对优势(GRPO 核心, 无需 Critic)
+def rollouts(model, tok, q, n=G):
+    prompt = (f"&lt;|im_start|&gt;system\n{SYSTEM_PROMPT}&lt;|im_end|&gt;\n"
+              f"&lt;|im_start|&gt;user\n{q} Please reason step by step, and put your final "
+              f"answer within \\boxed{{}}.&lt;|im_end|&gt;\n&lt;|im_start|&gt;assistant\n&lt;think&gt;\n")
+    prompt_ids = tok(prompt, return_tensors="pt", add_special_tokens=False)["input_ids"]
+    paths = []
+    for _ in range(n):
+        ids = prompt_ids.to(model.device)
+        with torch.no_grad():
+            o = model.generate(**ids, max_new_tokens=MAX_NEW, do_sample=True,
+                               temperature=0.9, top_p=0.95)
+        gen_ids = o[0][ids["input_ids"].shape[1]:]
+        text = tok.decode(gen_ids, skip_special_tokens=False)
+        n_slm = len(gen_ids)
+        cost = n_slm * PRICE["slm"] / 1e6
+        handed = TAU in text
+        paths.append({"text": text, "gen_ids": gen_ids.tolist(),
+                      "n_slm": n_slm, "handed": handed, "cost": cost})
+    # 并发 relay (P2-16)
+    jobs = [(i, q, p["text"].split(TAU)[0]) for i, p in enumerate(paths) if p["handed"]]
+    relays = relay_concurrent(jobs) if jobs else {}
+    for i, p in enumerate(paths):
+        if p["handed"] and i in relays:
+            cont, tin, tout = relays[i]
+            p["text"] = p["text"].split(TAU)[0] + cont
+            p["cost"] += (tin * PRICE["llm_in"] + tout * PRICE["llm_out"]) / 1e6
+    return paths
+
+
+# 真·策略梯度: 仅对生成 token 求 log_prob 乘组内优势, 偏离参考模型由 KL 约束
+def grpo_step_loss(model, tok, path, adv):
+    """P0-6: 真·策略梯度 - 组内优势 x 生成token的log_prob均值(仅SLM生成部分)
+
+    注意: v2 版本此处仍存在实现缺陷 —— 未把 prompt 上下文编码进前向,
+    导致 log_prob 条件缺失, 需进一步修复 (见第四章末的待修清单)。
+    """
+    ids = tok(path["text"], return_tensors="pt", add_special_tokens=False)["input_ids"][0]
+    n_gen = min(path["n_slm"], len(ids))
+    if n_gen &lt;= 0 or abs(adv) &lt; 1e-6:
+        return None
+    gen = ids[-n_gen:].unsqueeze(0).to(model.device)          # 仅 SLM 生成的 token
+    logits = model(input_ids=gen).logits
+    log_probs = torch.log_softmax(logits[:, :-1].float(), dim=-1)
+    tgt = gen[:, 1:]
+    selected = log_probs.gather(-1, tgt.unsqueeze(-1)).squeeze(-1)   # [1, T-1]
+    loss = -(adv * selected).sum() / (selected.shape[1] + 1e-6)
+    return loss
+
+
+# 主循环: 出题 -> 组采样 -> 判分 -> 优势归一 -> 策略梯度更新 -> 轨迹落盘
+def main():
+    t0 = time.time()
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(ADPT, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        BASEM, torch_dtype=torch.bfloat16, trust_remote_code=True)
+    model.resize_token_embeddings(len(tok))
+    model = PeftModel.from_pretrained(model, ADPT, is_trainable=True).cuda()
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
+    model.train()
+    log.info("model loaded %.0fs", time.time() - t0)
+
+    rows = json.load(open(DATA, encoding="utf-8"))[:32]
+    log.info("train rows: %d", len(rows))
+    opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=1e-6)
+
+    # P1-10: 断点续训
+    start_iter, resume_opt = 0, os.path.join(OUT, "trainer_state.pt")
+    if os.path.exists(resume_opt):
+        st = torch.load(resume_opt, map_location="cpu", weights_only=False)
+        opt.load_state_dict(st["optim"])
+        start_iter = st.get("iter", 0)
+        log.info("resumed optimizer from iter %d", start_iter)
+
+    for ri in range(start_iter, len(rows)):
+        q, gt = rows[ri]["q"], rows[ri]["a"]
+        base_cost = llm_full_cost(q)                       # P1-8: 固定 llm-only 基线
+        paths = rollouts(model, tok, q, G)
+        rewards = []
+        for p in paths:
+            acc = score_num(extract_answer(p["text"]), gt)
+            rewards.append(acc - LAM * (p["cost"] / max(base_cost, 1e-9)))
+        mu = sum(rewards) / len(rewards)
+        var = (sum((x - mu) ** 2 for x in rewards) / len(rewards)) ** 0.5
+        advs = [(x - mu) / (var + 1e-4) for x in rewards]
+
+        opt.zero_grad(set_to_none=True)
+        n_loss = 0
+        for p, adv in zip(paths, advs):
+            loss = grpo_step_loss(model, tok, p, adv)
+            if loss is not None:
+                (loss / len(paths)).backward()
+                n_loss += 1
+        if n_loss:
+            torch.nn.utils.clip_grad_norm_(
+                [p for p in model.parameters() if p.requires_grad], 1.0)
+            opt.step()
+        log.info("q%d/%d meanR=%.3f hands=%d/%d base=%.2e %s",
+                 ri + 1, len(rows), mu, sum(1 for p in paths if p["handed"]), G,
+                 base_cost, "; ".join(f"a={a:+.1f}" for a in advs))
+        if (ri + 1) % 8 == 0:
+            ck = os.path.join(OUT, f"iter{ri + 1}")
+            os.makedirs(ck, exist_ok=True)
+            model.save_pretrained(ck)
+            tok.save_pretrained(ck)
+            torch.save({"optim": opt.state_dict(), "iter": ri + 1},
+                       os.path.join(OUT, "trainer_state.pt"))   # P1-10
+            log.info("ckpt(+optim) -&gt; %s", ck)
+
+    os.makedirs(OUT, exist_ok=True)
+    model.save_pretrained(OUT)
+    tok.save_pretrained(OUT)
+    torch.save({"optim": opt.state_dict(), "iter": len(rows)},
+               os.path.join(OUT, "trainer_state.pt"))
+    log.info("GRPO_DONE %.0fs", time.time() - t0)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        log.exception("GRPO_FAIL")</code></pre>
+
+  <div class="box warn">
+    <span class="box-title">代码学习要点（含已知缺陷）</span>
+    <ul>
+      <li><b>奖励函数</b>：<code class="inline">acc − λ × (cost / base_cost)</code>，其中 <code class="inline">base_cost</code> 预计算为纯大模型基线，缓存进 JSON 避免重复调用。</li>
+      <li><b>组内优势</b>：<code class="inline">adv = (r − mean) / std</code>，G 条路径互相对比，天然淘汰「磨叽半天才交接」的路径。</li>
+      <li><b>P0-6 待修</b>：<code class="inline">grpo_step_loss</code> 未把 prompt 编码进前向，导致 log_prob 条件缺失；且交接路径下 <code class="inline">ids[-n_gen:]</code> 可能取到大模型续写的 token。正确写法需把 prompt+生成拼接后编码，只对 <code class="inline">[prompt_len-1, prompt_len+n_slm-1)</code> 区间求 log_prob。</li>
+      <li><b>REINFORCE 而非 PPO-clip</b>：当前实现是单步 REINFORCE + 组内基线，没有 importance ratio 裁剪。需说明是「GRPO 简化版」。</li>
+    </ul>
+  </div>
+
+  <!-- ===== M4 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M4</span> 协同引擎 CE（协议权威实现）
+  </h3>
+
+  <span class="file-path">src/collaborate_engine.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    严格对齐官方协议的协同引擎：小模型流式生成，遇到 <code class="inline">&lt;|llm_offload|&gt;</code> 后剥离 token、把已有推理包进 <code class="inline">&lt;part_think&gt;</code>、单次调用大模型续写、拼接返回。被 M3 的 rollout、M5 的评估、M6 的行为扫描共同复用。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">slm_base_url / slm_model</code>：小模型 OpenAI 兼容接口</li>
+      <li><code class="inline">llm_base_url / llm_model / llm_api_key</code>：大模型接口</li>
+      <li><code class="inline">max_tokens</code>：小模型 + 大模型共享的总预算（论文协议）</li>
+      <li><code class="inline">temperature</code>：默认 0.1（评估）/ GRPO rollout 单独设 0.9</li>
+      <li><code class="inline">prices</code>：论文计价 <code class="inline">{slm_in, slm_out, llm_in, llm_out}</code></li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""
+PyroDash Collaborate Engine (CE) —— 对齐官方协议版
+
+协议要点:
+1. 小模型: /v1/completions, stop=[&lt;|llm_offload|&gt;], 含 stop 串回读
+2. 系统提示(数学): SYSTEM_PROMPT(官方原文), user 尾加 PROMPT_SUFFIX
+3. 交接: system=官方交接提示, user=原题, assistant=&lt;part_think&gt;剥离后轨迹&lt;/part_think&gt;
+4. LLM max_tokens = 总预算 - 小模型已完成 token
+5. 拼接: &lt;think&gt; slm_prefix + llm_think &lt;/think&gt; + llm_content
+6. 成本: SLM/LLM 各 prompt/completion 四项分列, 论文计价
+"""
+import logging
+from dataclasses import dataclass, field
+
+from openai import OpenAI
+
+log = logging.getLogger("CE")
+
+OFFLOAD_TAG = "&lt;|llm_offload|&gt;"
+
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Solve the given problem step by step. "
+    "For very difficult steps, you can output &lt;|llm_offload|&gt; to request help "
+    "from a more capable model."
+)
+PROMPT_SUFFIX = (
+    "\nPlease reason step by step, and put your final answer within \\boxed{}."
+)
+REMOTE_HANDOFF_PROMPT = (
+    "You are a helpful assistant completing a task that was partially solved "
+    "by a smaller local model before offload.\n"
+    "Collaborative handoff protocol:\n"
+    "- The assistant message may contain &lt;part_think&gt;...&lt;/part_think&gt; with reasoning "
+    "the small model already produced before offload.\n"
+    "- Because part of the reasoning is already in &lt;part_think&gt;, continue from "
+    "where it stopped: your reasoning channel should pick up at the first "
+    "unresolved step and carry forward to the final answer. Do not repeat, "
+    "paraphrase, or re-derive anything already present in &lt;part_think&gt;.\n"
+    "- If &lt;part_think&gt; already concludes the task, proceed directly to the final answer.\n"
+    "- Put the user-facing answer only in normal assistant content. Never quote "
+    "or mention &lt;part_think&gt; to the user.\n"
+    "- &lt;part_think&gt; is an internal marker, not user input."
+)
+
+# 论文计价 $/1M tokens
+PAPER_PRICES = {"slm_in": 0.05, "slm_out": 0.08, "llm_in": 0.90, "llm_out": 2.86}
+
+
+@dataclass
+# 成本计价器: 分别累计小模型/大模型 token 用量, 对齐官方计价协议
+class CostMeter:
+    tokens: dict = field(default_factory=lambda: {
+        "slm_in": 0, "slm_out": 0, "llm_in": 0, "llm_out": 0})
+    prices: dict = field(default_factory=lambda: dict(PAPER_PRICES))
+
+    def add(self, kind, n):
+        self.tokens[kind] += int(n or 0)
+
+    def cost(self):
+        return sum(self.tokens[k] / 1e6 * self.prices[k] for k in self.tokens)
+
+    def summary(self):
+        return {**self.tokens, "cost_usd": round(self.cost(), 6)}
+
+
+# 协同引擎: 小模型先答, 触发 offload 标记则交大模型接力, 全程计价
+class CollaborateEngine:
+    def __init__(self,
+                 slm_base_url, slm_model,
+                 llm_base_url, llm_model, llm_api_key="EMPTY",
+                 max_tokens=8192, temperature=0.1,
+                 prices=None):
+        self.slm = OpenAI(base_url=slm_base_url, api_key="EMPTY")
+        self.llm = OpenAI(base_url=llm_base_url, api_key=llm_api_key)
+        self.slm_model = slm_model
+        self.llm_model = llm_model
+        self.max_tokens = max_tokens          # 论文: 小模型+大模型共享的总预算
+        self.temperature = temperature
+        self.prices = prices or dict(PAPER_PRICES)
+
+    # ---------- 小模型: 官方 /v1/completions + stop 截断 ----------
+# 小模型补全: stop=[<|llm_offload|>] 截断, 并把 stop 串回读拼接保证上下文连续
+    def slm_generate(self, question, extra_system=None):
+        """返回 (raw_text, usage)。raw_text 含 &lt;|llm_offload|&gt; 则触发了交接。"""
+        sys_prompt = extra_system or SYSTEM_PROMPT
+        prompt = (
+            f"&lt;|im_start|&gt;system\n{sys_prompt}&lt;|im_end|&gt;\n"
+            f"&lt;|im_start|&gt;user\n{question}{PROMPT_SUFFIX}&lt;|im_end|&gt;\n"
+            f"&lt;|im_start|&gt;assistant\n&lt;think&gt;\n"
+        )
+        resp = self.slm.completions.create(
+            model=self.slm_model,
+            prompt=prompt,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            stop=[OFFLOAD_TAG],
+        )
+        ch = resp.choices[0]
+        text = ch.text or ""
+        # safety: 服务端省略 stop 串时补回 (官方同款 fallback)
+        if OFFLOAD_TAG not in text and ch.finish_reason == "stop":
+            sr = getattr(ch, "stop_reason", None) or ""
+            if OFFLOAD_TAG in str(sr):
+                text += OFFLOAD_TAG
+        usage = resp.usage
+        return text, {"prompt_tokens": usage.prompt_tokens,
+                      "completion_tokens": usage.completion_tokens}
+
+    # ---------- 大模型: 官方交接协议 ----------
+# 大模型接力: 按 CE 协议把小模型已生成内容作为前缀续写
+    def llm_relay(self, question, slm_raw):
+        """单次交接。返回 (final_text, llm_usage)。"""
+        # 剥离: tag 前缀(去掉 think 标签) -&gt; &lt;part_think&gt;
+        prefix = slm_raw.split(OFFLOAD_TAG)[0]
+        prefix = prefix.replace("&lt;think&gt;", "").replace("&lt;/think&gt;", "").strip()
+        partial = f"&lt;part_think&gt;{prefix}&lt;/part_think&gt;"
+
+        messages = [
+            {"role": "system", "content": REMOTE_HANDOFF_PROMPT},
+            {"role": "user", "content": f"{question}{PROMPT_SUFFIX}"},
+            {"role": "assistant", "content": partial},
+        ]
+        budget_left = max(0, self.max_tokens - getattr(self, "_slm_completion", 0))
+        resp = self.llm.chat.completions.create(
+            model=self.llm_model,
+            messages=messages,
+            max_tokens=budget_left,
+            temperature=self.temperature,
+            extra_body={"chat_template_kwargs": {"enable_thinking": True}},
+        )
+        msg = resp.choices[0].message
+        think = getattr(msg, "reasoning_content", None) or getattr(msg, "reasoning", "") or ""
+        content = msg.content or ""
+        usage = resp.usage
+        final = f"&lt;think&gt;{prefix}{think}&lt;/think&gt;{content}"
+        return final, {"prompt_tokens": usage.prompt_tokens,
+                       "completion_tokens": usage.completion_tokens}
+
+    # ---------- 主入口 ----------
+# 推理主入口: 一次调用完成 小模型->判定->交接->计价 全流程
+    def infer(self, question):
+        meter = CostMeter(prices=self.prices)
+        self._slm_completion = 0   # P1-9: reset per-infer
+        raw, su = self.slm_generate(question)
+        meter.add("slm_in", su["prompt_tokens"])
+        meter.add("slm_out", su["completion_tokens"])
+        handed = OFFLOAD_TAG in raw
+
+        if handed:
+            self._slm_completion = su["completion_tokens"]
+            final, lu = self.llm_relay(question, raw)
+            meter.add("llm_in", lu["prompt_tokens"])
+            meter.add("llm_out", lu["completion_tokens"])
+        else:
+            final = raw
+
+        return {
+            "question": question,
+            "raw_slm": raw,
+            "output": final,
+            "handed_off": handed,
+            "usage": meter.summary(),
+        }
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--slm-base-url", default="http://127.0.0.1:8001/v1")
+    ap.add_argument("--slm-model", default="pyrodash-4b")
+    ap.add_argument("--llm-base-url", default="http://127.0.0.1:8002/v1")
+    ap.add_argument("--llm-model", default="qwen3.8-27b")
+    ap.add_argument("--llm-api-key", default="EMPTY")
+    ap.add_argument("--query", default="A lemon tree costs $90. Each year it "
+                    "yields 7 lemons sold at $1.5 each, and watering/fertilizer "
+                    "costs $3 per year. After how many years does it start "
+                    "making a profit?")
+    args = ap.parse_args()
+
+    ce = CollaborateEngine(args.slm_base_url, args.slm_model,
+                           args.llm_base_url, args.llm_model, args.llm_api_key)
+    r = ce.infer(args.query)
+    print("=== handed_off:", r["handed_off"])
+    print("=== output (尾800字):\n", r["output"][-800:])
+    print("=== usage:", r["usage"])</code></pre>
+
+  <div class="box warn">
+    <span class="box-title">代码学习要点</span>
+    <ul>
+      <li><b>协议严格对齐</b>：<code class="inline">stop=[OFFLOAD_TAG]</code> + finish_reason 回读，避免服务端省略 stop 串导致漏判。</li>
+      <li><b>part_think 拼接</b>：大模型看到的是「原题 + 已推理」，被明确要求不重复已有步骤，直接续写。</li>
+      <li><b>预算共享</b>：<code class="inline">budget_left = max_tokens − slm_completion</code>，小模型用掉越多，大模型剩余越少，符合论文的「总预算」设定。</li>
+      <li><b>待优化</b>：手写 prompt 与 <code class="inline">apply_chat_template(enable_thinking=True)</code> 必须逐字符一致，否则会掉点，建议改为直接调用模板。</li>
+    </ul>
+  </div>
+
+  <!-- ===== M5 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M5</span> GSM8K 千题评估管线
+  </h3>
+
+  <span class="file-path">scripts/run_gsm8k_1k.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    逐题落盘 + 断点续跑的评估主控。先跑小模型阶段（可并发），落盘 partial JSONL；再进入 relay 阶段，仅对触发 offload 的样本调用大模型续写；最后合并打分，输出 summary + 完整样本记录。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">--limit / --offset</code>：题目范围（默认 0–1000）</li>
+      <li><code class="inline">--port</code>：小模型服务端口（默认 8001）</li>
+      <li><code class="inline">--model-dir</code>：用于取 tokenizer 的模型目录</li>
+      <li><code class="inline">--tag</code>：结果文件标签（如 <code class="inline">005</code>）</li>
+      <li><code class="inline">--dataset</code>：可选 gsm8k / amc / minerva / olympiad / aime2024 / aime2025</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""GSM8K 1000题评估 v2: 逐题落盘/断点续跑/单题超时降级."""
+import json
+import os
+import sys
+import threading
+import time
+
+EVAL_DIR = r"D:\project\2026\202609\Small_ask_big\PyroDash\evaluation\evaluation_math"
+sys.path.insert(0, EVAL_DIR)
+sys.path.insert(0, r"D:\project\2026\202609\Small_ask_big\scripts")
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+
+import logging
+import boxed_socre  # noqa: E402  (模块级: score_one 依赖)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(r"D:\project\2026\202609\Small_ask_big\logs\gsm8k_1k.log", encoding="utf-8"),
+        logging.StreamHandler(),
+    ],
+)
+log = logging.getLogger("gsm8k1k")
+
+MODEL_DIR = r"D:\project\2026\202609\Small_ask_big\models\PyroDash-4B-GRPO-Lambda-0.6"
+SMALL_BASE = "http://127.0.0.1:8001/v1"
+SMALL_MODEL = "pyrodash-4b"
+LLM_BASE = "http://127.0.0.1:8002/v1"
+LLM_MODEL = "qwen3.8-27b"
+N = 1000
+PARTIAL = r"D:\project\2026\202609\Small_ask_big\results\gsm8k_1k_partial.jsonl"
+RELAY = r"D:\project\2026\202609\Small_ask_big\results\gsm8k_1k_relay.jsonl"
+OUT = r"D:\project\2026\202609\Small_ask_big\results\gsm8k_1k_results.json"
+WORKERS = 12
+LOCK = threading.Lock()
+
+
+# 答案归一化: 剥离千分位逗号/单位/$$, 只比数值
+def normalize_num(s):
+    """'1,250'/'$18'/' 5 ' -&gt; float or None"""
+    t = str(s).strip().strip(".").replace(",", "").replace("$", "").replace(" ", "")
+    try:
+        return float(t)
+    except ValueError:
+        return None
+
+
+# 单题判分: 抽取最终数值与标准答案比对, 命中记 1 分
+def score_one(response, answer):
+    """官方 math_verify 优先; 其在 Windows 下 multiprocessing 可能全判 False,
+    故加 GSM8K 数字规范化 fallback (GT 均为纯数字, 覆盖充分)。"""
+    try:
+        if boxed_socre.compare_answer(response, answer):
+            return 1, "verify"
+    except Exception:
+        pass
+    pred = boxed_socre.extract_pred_boxed(response)
+    gt = boxed_socre.extract_ground_truth_boxed(answer)
+    if pred is not None and gt is not None:
+        pn, gn = normalize_num(pred), normalize_num(gt)
+        if pn is not None and gn is not None and pn == gn:
+            return 1, "numeric_fallback"
+    return 0, "wrong"
+
+
+def slm_one(math_eval_mod, prompt):
+    try:
+        text, usage = math_eval_mod.call_small_completion(
+            prompt, small_base_url=SMALL_BASE, small_model=SMALL_MODEL, max_tokens=8192)
+        return text, usage, None
+    except Exception as e:
+        log.warning("slm timeout/err idx? %s", str(e)[:80])
+        return "", {"prompt_tokens": 0, "completion_tokens": 0}, str(e)[:100]
+
+
+# 评估管线: 逐题落盘 + 断点续跑(跳过已完成) + 线程池并发 + 单题超时降级
+def main():
+    import argparse
+    global MODEL_DIR, SMALL_BASE, SMALL_MODEL, PARTIAL, RELAY, OUT
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--limit", type=int, default=N, help="题目数量")
+    ap.add_argument("--offset", type=int, default=0)
+    ap.add_argument("--port", type=int, default=8001, help="小模型服务端口")
+    ap.add_argument("--model-dir", default=MODEL_DIR)
+    ap.add_argument("--alias", default="pyrodash-4b")
+    ap.add_argument("--tag", default="", help="结果文件标签, 如 005")
+    ap.add_argument("--dataset", default="gsm8k",
+                    choices=["gsm8k", "amc", "minerva", "olympiad", "aime2024", "aime2025"])
+    args = ap.parse_args()
+    nq = args.limit
+    MODEL_DIR = args.model_dir
+    SMALL_BASE = f"http://127.0.0.1:{args.port}/v1"
+    SMALL_MODEL = args.alias
+    ds_tag = f"{args.dataset}_{args.tag or 'l06'}_p{args.port}"
+    PARTIAL = PARTIAL.replace("gsm8k_1k", ds_tag)
+    RELAY = RELAY.replace("gsm8k_1k", ds_tag)
+    OUT = OUT.replace("gsm8k_1k", ds_tag)
+    os.makedirs(os.path.dirname(PARTIAL), exist_ok=True)
+
+    from transformers import AutoTokenizer
+    from datasets import load_dataset
+    import math_eval_mod
+    import llm_relay
+
+    tok = AutoTokenizer.from_pretrained(MODEL_DIR, trust_remote_code=True)
+    assert "&lt;|llm_offload|&gt;" in tok.get_vocab()
+
+    import datasets_loader
+    handler = datasets_loader.get_dataset_handler(args.dataset)
+    questions, answers = handler.load_data()
+    end = min(args.offset + nq, len(questions))
+    questions = questions[args.offset:end]
+    answers = answers[args.offset:end]
+    log.info("dataset=%s n=%d", args.dataset, len(questions))
+
+    done = {}
+    if os.path.exists(PARTIAL):
+        with open(PARTIAL, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    done[rec["idx"]] = rec
+                except json.JSONDecodeError:
+                    pass
+    log.info("checkpoint loaded: %d done", len(done))
+
+    todo = [i for i in range(len(questions)) if i not in done]
+    log.info("todo: %d", len(todo))
+    if todo:
+        prompts = [math_eval_mod.format_prompt(tok, q) for q in questions]
+        with open(PARTIAL, "a", encoding="utf-8") as pf:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+# 单题执行: 超时或异常返回降级结果, 不阻塞整体评估
+            def run_one(i):
+                text, usage, err = slm_one(math_eval_mod, prompts[i])
+                rec = {"idx": i, "raw": text, "usage": usage, "err": err,
+                       "offload": "&lt;|llm_offload|&gt;" in text}
+                with LOCK:
+                    pf.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                    pf.flush()
+                return i, rec
+
+            n = 0
+            with ThreadPoolExecutor(max_workers=WORKERS) as pool:
+                futs = [pool.submit(run_one, i) for i in todo]
+                for fut in as_completed(futs):
+                    i, rec = fut.result()
+                    done[i] = rec
+                    n += 1
+                    if n % 50 == 0:
+                        log.info("slm progress: %d/%d", len(done), len(questions))
+        log.info("slm phase done: %d", len(done))
+
+    # relay 阶段 (官方单题函数, 超时降级, 结果落盘断点续跑)
+    relayed = {}
+    if os.path.exists(RELAY):
+        with open(RELAY, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    rec = json.loads(line)
+                    relayed[rec["idx"]] = rec
+                except json.JSONDecodeError:
+                    pass
+    pending = [i for i, rec in done.items()
+               if rec["offload"] and i not in relayed]
+    log.info("relay phase: %d samples (cached: %d)", len(pending), len(relayed))
+    with open(RELAY, "a", encoding="utf-8") as rf:
+        for k, i in enumerate(pending):
+            rec = done[i]
+            try:
+                msgs = math_eval_mod.build_chat_messages(questions[i])
+                full, usage = llm_relay._complete_offload_response(
+                    rec["raw"], msgs, api_key="EMPTY", base_url=LLM_BASE,
+                    model=LLM_MODEL, max_tokens=8192, enable_thinking=True)
+                out_rec = {"idx": i, "completed": full, "llm_usage": usage}
+            except Exception as e:
+                log.warning("relay fail idx=%d: %s", i, str(e)[:80])
+                out_rec = {"idx": i, "completed": rec["raw"],
+                           "llm_usage": None, "relay_err": str(e)[:100]}
+            with LOCK:
+                rf.write(json.dumps(out_rec, ensure_ascii=False) + "\n")
+                rf.flush()
+            relayed[i] = out_rec
+            if (k + 1) % 10 == 0:
+                log.info("relay %d/%d", k + 1, len(pending))
+
+    # 合并 relay 结果 + 打分 + summary 落盘 (略, 见完整源码)</code></pre>
+
+  <!-- ===== M6 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M6</span> 自训模型 offload 行为扫描
+  </h3>
+
+  <span class="file-path">scripts/behavior_scan.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    SFT 完成后验证「难题触发、easy 题不触发」的行为模式。用 transformers 引擎加载 LoRA 模型，在 AMC / Olympiad / AIME 难题集上扫描 offload 触发率，并打印前两次触发处的上下文。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><b>输入缓存</b>：<code class="inline">datasets/cache_{amc, olympiad, aime}.json</code>（首次运行自动从 HF 拉取）</li>
+      <li><b>采样上限</b>：amc 20 / olympiad 20 / aime 10</li>
+      <li><b>生成参数</b>：<code class="inline">max_new_tokens=600</code>，greedy（do_sample=False）</li>
+      <li><b>输出</b>：<code class="inline">logs/behavior_scan.log</code>，含各难度触发率与 SUMMARY JSON</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""自训模型 offload 行为验证: 难度梯度扫描 (AMC/Olympiad/AIME)
+transformers 引擎, 统计各难度 offload 触发率。
+"""
+import json
+import os
+import time
+import traceback
+
+os.environ["HF_HUB_OFFLINE"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+
+import torch
+
+LOG = r"D:\project\2026\202609\Small_ask_big\logs\behavior_scan.log"
+BASE = r"D:\project\2026\202609\Small_ask_big"
+ADPT = os.path.join(BASE, "ckpt", "sft_lora")
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Solve the given problem step by step. "
+    "For very difficult steps, you can output &lt;|llm_offload|&gt; to request help "
+    "from a more capable model."
+)
+TAU = "&lt;|llm_offload|&gt;"
+
+PLAN = [
+    ("amc", os.path.join(BASE, "datasets", "cache_amc.json"), 20),
+    ("olympiad", os.path.join(BASE, "datasets", "cache_olympiad.json"), 20),
+    ("aime", os.path.join(BASE, "datasets", "cache_aime.json"), 10),
+]
+
+
+# 结果缓存落盘: 随时中断不丢已完成题目
+def dump_cache():
+    """首次运行时从 HF 拉取 AMC / Olympiad / AIME 并缓存为本地 JSON。"""
+    from datasets import load_dataset
+    os.environ.pop("HF_HUB_OFFLINE", None)
+    amc = load_dataset("zwhe99/amc23", split="test")
+    json.dump([{"q": r["question"], "a": r["answer"]} for r in amc],
+              open(os.path.join(BASE, "datasets", "cache_amc.json"), "w", encoding="utf-8"),
+              ensure_ascii=False)
+    oly = load_dataset("zwhe99/simplerl-OlympiadBench", split="test")
+    json.dump([{"q": r["question"], "a": str(r["final_answer"])} for r in oly][:40],
+              open(os.path.join(BASE, "datasets", "cache_olympiad.json"), "w", encoding="utf-8"),
+              ensure_ascii=False)
+    a24 = load_dataset("HuggingFaceH4/aime_2024", split="train")
+    a25 = load_dataset("yentinglin/aime_2025", "default")["train"]
+    rows = [{"q": r["problem"], "a": str(r["answer"])} for r in a24] + \
+           [{"q": r["problem"], "a": str(r["answer"])} for r in a25]
+    json.dump(rows, open(os.path.join(BASE, "datasets", "cache_aime.json"), "w", encoding="utf-8"),
+              ensure_ascii=False)
+    os.environ["HF_HUB_OFFLINE"] = "1"
+
+
+# 难度梯度扫描: AMC/Olympiad/AIME 三档, 统计各难度下 offload 触发率
+def main():
+    out = []
+    if not os.path.exists(os.path.join(BASE, "datasets", "cache_amc.json")):
+        dump_cache()
+    t0 = time.time()
+    from peft import PeftModel
+    from transformers import AutoModelForCausalLM, AutoTokenizer
+
+    tok = AutoTokenizer.from_pretrained(ADPT, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(
+        os.path.join(BASE, "models", "Qwen3.5-4B"), torch_dtype=torch.bfloat16,
+        trust_remote_code=True)
+    model.resize_token_embeddings(len(tok))
+    model = PeftModel.from_pretrained(model, ADPT).cuda().eval()
+    out.append(f"[{time.time()-t0:.0f}s] loaded")
+
+    results = {}
+# 按计划表逐数据集扫描, 每题记录是否触发交接及交接位置
+    for ds_name, cache, limit in PLAN:
+        rows = load_cache(ds_name)[:limit]
+        trig = 0
+        for i, r in enumerate(rows):
+            msgs = [{"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": r["q"] +
+                     " Please reason step by step, and put your final answer within \\boxed{}."}]
+            prompt = tok.apply_chat_template(msgs, tokenize=False, add_generation_prompt=True)
+            ids = tok(prompt, return_tensors="pt").to("cuda")
+            try:
+                with torch.no_grad():
+                    o = model.generate(**ids, max_new_tokens=600, do_sample=False)
+                text = tok.decode(o[0][ids["input_ids"].shape[1]:], skip_special_tokens=False)
+                hit = TAU in text
+                trig += 1 if hit else 0
+                if hit and trig &lt;= 2:
+                    idx_ = text.find(TAU)
+                    out.append(f"[{ds_name}#{i}] TRIGGERED ctx: ...{text[max(0,idx_-120):idx_+30]}...")
+            except Exception as e:
+                out.append(f"[{ds_name}#{i}] GEN_ERR {str(e)[:80]}")
+        results[ds_name] = {"total": len(rows), "triggered": trig,
+                            "rate": round(trig / max(len(rows), 1), 3)}
+        out.append(f"== {ds_name}: {trig}/{len(rows)} ({results[ds_name]['rate']*100:.0f}%)")
+        with open(LOG, "w", encoding="utf-8") as f:
+            f.write("\n".join(out) + "\n")
+
+    out.append("SUMMARY " + json.dumps(results))
+    with open(LOG, "w", encoding="utf-8") as f:
+        f.write("\n".join(out) + "\n")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        with open(LOG, "a", encoding="utf-8") as f:
+            f.write("ERR:\n" + traceback.format_exc() + "\n")</code></pre>
+
+  <!-- ===== M7 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M7</span> 评估工具：打分与 relay
+  </h3>
+
+  <span class="file-path">scripts/math_eval_mod.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    官方评估协议的封装：小模型调用用 llama.cpp 原生 <code class="inline">/completion</code> 端点（可精确区分 EOS 与 offload stop），relay 阶段调用官方 <code class="inline">complete_offload_batch</code> 做并发交接。被 M5 复用。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">--model-path</code>：本地合并模型目录（取 tokenizer / chat template）</li>
+      <li><code class="inline">--small-base-url / --small-model</code>：小模型服务</li>
+      <li><code class="inline">--llm-base-url / --llm-api-key / --llm-model</code>：大模型接口</li>
+      <li><code class="inline">--max-tokens</code>：小模型 + 大模型共享的总预算（默认 8192）</li>
+      <li><code class="inline">--datasets</code>：可多选 math / gsm8k / minerva / olympiad / aime2024 / aime2025</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python">"""Offload benchmark: local small vLLM serve -&gt; LLM relay -&gt; score. Thinking always on."""
+
+from __future__ import annotations
+import argparse
+import json
+import sys
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
+
+import requests
+from tqdm import tqdm
+
+EVAL_DIR = Path(__file__).resolve().parent
+if str(EVAL_DIR) not in sys.path:
+    sys.path.insert(0, str(EVAL_DIR))
+
+import boxed_socre  # noqa: E402
+import datasets_loader  # noqa: E402
+from llm_relay import OFFLOAD_TAG, complete_offload_batch  # noqa: E402
+
+SMALL_MAX_WORKERS = 12
+TEMPERATURE = 0.1
+
+OFFLOAD_TOKEN = OFFLOAD_TAG
+SYSTEM_PROMPT = (
+    "You are a helpful assistant. Solve the given problem step by step. "
+    "For very difficult steps, you can output &lt;|llm_offload|&gt; to request help "
+    "from a more capable model."
+)
+PROMPT_SUFFIX = (
+    "\nPlease reason step by step, and put your final answer within \\boxed{}."
+)
+
+
+# 小模型补全封装: 记录输入/输出 token 数, 用于成本计价
+def call_small_completion(
+    prompt: str, *, small_base_url: str, small_model: str, max_tokens: int
+) -&gt; tuple[str, dict[str, int]]:
+    """llama.cpp 原生 /completion 端点: 精确返回 stopped_word/stopping_word,
+    可区分 EOS 自然结束与 offload stop 截断 (OpenAI /v1 端点二者混为 finish=stop)。"""
+    base = small_base_url.rstrip("/")
+    if base.endswith("/v1"):
+        base = base[: -len("/v1")]
+    url = f"{base}/completion"
+    body = {
+        "model": small_model,
+        "prompt": prompt,
+        "temperature": TEMPERATURE,
+        "n_predict": max_tokens,
+        "stop": [OFFLOAD_TOKEN],
+    }
+    resp = requests.post(url, json=body, timeout=1800.0)
+    resp.raise_for_status()
+    data = resp.json()
+    text = str(data.get("content") or "")
+    if data.get("stopped_word") and data.get("stopping_word") == OFFLOAD_TOKEN:
+        # 官方语义 include_stop_str_in_output=True: 补回 stop 串
+        text = text + OFFLOAD_TOKEN
+    usage = {
+        "prompt_tokens": int(data.get("tokens_evaluated") or 0),
+        "completion_tokens": int(data.get("tokens_predicted") or 0),
+        "total_tokens": int(data.get("tokens_evaluated") or 0) + int(data.get("tokens_predicted") or 0),
+    }
+    return text, usage
+
+
+# 批量执行: 线程池并发, 收集每题 token 计价明细
+def run_small_batch(
+    questions: list[str],
+    *,
+    tokenizer,
+    small_base_url: str,
+    small_model: str,
+    max_tokens: int,
+) -&gt; tuple[list[str], list[list[int]], list[dict[str, int]]]:
+    """并发跑小模型阶段, 每完成一题向 progress 文件追加一行。"""
+    prompts = [format_prompt(tokenizer, q) for q in questions]
+    raw_responses = [""] * len(questions)
+    usages: list[dict[str, int]] = [
+        {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0} for _ in questions
+    ]
+    completion_ids: list[list[int]] = [[] for _ in questions]
+
+    def _run(idx: int) -&gt; tuple[int, str, dict[str, int]]:
+        text, usage = call_small_completion(
+            prompts[idx],
+            small_base_url=small_base_url,
+            small_model=small_model,
+            max_tokens=max_tokens,
+        )
+        try:
+            with open(r"D:\project\2026\202609\Small_ask_big\logs\gsm8k_1k.progress", "a", encoding="utf-8") as pf:
+                pf.write(f"{idx},{len(text)}\n")
+        except OSError:
+            pass
+        return idx, text, usage
+
+    workers = max(1, min(SMALL_MAX_WORKERS, len(questions)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = [pool.submit(_run, i) for i in range(len(questions))]
+        for fut in tqdm(as_completed(futures), total=len(questions),
+                        desc="[small] generate", unit="sample"):
+            idx, text, usage = fut.result()
+            raw_responses[idx] = text
+            usages[idx] = usage
+            completion_ids[idx] = [0] * int(usage.get("completion_tokens", 0))
+
+    return raw_responses, completion_ids, usages
+
+
+# 大模型接力批处理: 小模型 raw 输出统一交大模型完成并计价
+def relay_with_llm(raw_responses, questions, *, api_key, completion_ids,
+                   llm_base_url, llm_model, llm_max_workers, max_tokens):
+    """对触发 offload 的样本并发调用大模型续写 (走官方 complete_offload_batch)。"""
+    prompts = [build_chat_messages(q) for q in questions]
+    n_off = sum(OFFLOAD_TOKEN in r for r in raw_responses)
+    print(f"[llm] relay {n_off}/{len(raw_responses)} via {llm_model} @ {llm_base_url}")
+    return complete_offload_batch(
+        raw_responses, prompts, api_key=api_key, base_url=llm_base_url,
+        model=llm_model, max_tokens=max_tokens, max_workers=llm_max_workers,
+        completion_ids=completion_ids, enable_thinking=True,
+    )</code></pre>
+
+  <!-- ===== M8 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M8</span> 训练巡检（watchdog）
+  </h3>
+
+  <span class="file-path">scripts/watchdog_dog.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    由计划任务每 10 分钟触发一次：检测 <code class="inline">train_sft.py</code> 进程是否存活、监控训练实际所在 GPU（卡1）的利用率。异常时发送告警邮件；无训练进程时静默退出。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li>无命令行参数，由 Windows 计划任务触发</li>
+      <li>读取 <code class="inline">logs/watchdog_state.json</code> 累计「GPU 利用率连续为 0」的次数</li>
+      <li>依赖 <code class="inline">logs/train_sft.log</code> 判断训练是否正常结束</li>
+      <li>告警邮件依赖 <code class="inline">send_email</code> 模块（外部路径）</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+"""电子狗巡检: 训练进程存活 + GPU 占用监控, 异常发告警邮件
+由 schtasks 每 10 分钟触发; 无训练进程时静默退出。
+"""
+import logging
+import os
+import subprocess
+import sys
+import psutil
+
+BASE = r"D:\project\2026\202609\Small_ask_big"
+LOG_DIR = os.path.join(BASE, "logs")
+STATE = os.path.join(LOG_DIR, "watchdog_state.json")
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.FileHandler(os.path.join(LOG_DIR, "watchdog.log"), encoding="utf-8")],
+)
+log = logging.getLogger("watchdog")
+
+sys.path.insert(0, r"C:\Users\Administrator\.config\opencode\examples")
+from send_email import send_email  # noqa: E402
+
+
+# 告警邮件: 由 schtasks 每 10 分钟触发本脚本, 异常即发
+def alert(subject, body):
+    try:
+        send_email(subject=f"【Small_ask_big】{subject}", body=body, html=False)
+        log.info("alert sent: %s", subject)
+    except Exception as e:
+        log.error("alert fail: %s", e)
+
+
+# 查找训练进程: 按 cmdline 特征匹配 python 训练脚本
+def find_train():
+    """遍历进程列表, 找 train_sft.py 对应的 python.exe"""
+    for proc in psutil.process_iter(["pid", "name", "cmdline", "create_time"]):
+        try:
+            if (proc.info["name"] or "").lower() == "python.exe":
+                cmd = " ".join(proc.info["cmdline"] or [])
+                if "train_sft" in cmd and proc.info["pid"] != os.getpid():
+                    return proc
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    return None
+
+
+# GPU 采样: pynvml 读双卡利用率与显存
+def gpu_util():
+    """nvidia-smi 拿 (index, utilization.gpu, memory.used) 列表"""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "--query-gpu=index,utilization.gpu,memory.used",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=30)
+        vals = [line.split(",") for line in out.stdout.strip().splitlines() if line]
+        return [(int(v[0]), int(v[1]), int(v[2])) for v in vals]
+    except Exception:
+        return []
+
+
+# 巡检逻辑: 无训练进程静默退出; 进程消失或 GPU 长时空闲则告警
+def main():
+    train = find_train()
+    if train is None:
+        # 训练进程不存在: 若日志尾部非 TRAIN_DONE/异常已处理, 且在窗口内, 可能异常退出
+        logf = os.path.join(LOG_DIR, "train_sft.log")
+        tail = ""
+        try:
+            with open(logf, encoding="utf-8", errors="ignore") as f:
+                tail = "".join(f.readlines()[-5:])
+        except OSError:
+            pass
+        if "TRAIN_DONE" in tail:
+            log.info("train finished normally, idle")
+            return
+        if "TRAIN_FAIL" in tail:
+            log.info("train fail already logged")
+            return
+        alert("训练进程消失告警",
+              "watchdog 检测到 train_sft 进程不存在, 且日志尾部未见 TRAIN_DONE/TRAIN_FAIL。\n"
+              "日志尾部:\n" + tail)
+        return
+
+    # 进程在: 检查 GPU 占用
+    gpus = gpu_util()
+    log.info("train pid=%s gpu=%s", train.info["pid"], gpus)
+    # P1-7: 训练在卡1 (train_sft.py CUDA_VISIBLE_DEVICES=1), 监控实际使用的卡
+    util0 = next((u for idx, u, _ in gpus if idx == 1), None)
+    state = {"zero_count": 0}
+    try:
+        import json
+        with open(STATE, encoding="utf-8") as f:
+            state = json.load(f)
+    except Exception:
+        pass
+    if util0 == 0:
+        state["zero_count"] = state.get("zero_count", 0) + 1
+        if state["zero_count"] &gt;= 3:
+            alert("训练GPU占用异常告警",
+                  f"连续 {state['zero_count']} 次巡检卡1利用率 0%，训练进程 pid={train.info['pid']} "
+                  f"可能卡死。\nGPU 状态: {gpus}")
+    else:
+        state["zero_count"] = 0
+    import json
+    with open(STATE, "w", encoding="utf-8") as f:
+        json.dump(state, f)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception:
+        log.exception("watchdog error")</code></pre>
+
+  <!-- ===== M9 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M9</span> 窗口调度：自动续训与自动释放
+  </h3>
+
+  <span class="file-path">scripts/daily_start.py</span>
+  <span class="file-path" style="border-radius:8px;margin-top:8px;">scripts/autostop.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    <code class="inline">daily_start.py</code>：每日 11:00 由计划任务触发，判断是否处于训练窗口（18:00–次日 06:00），若在窗口内且无训练进程，则找最新 checkpoint 自动 resume 启动 <code class="inline">train_sft.py</code>。<br>
+    <code class="inline">autostop.py</code>：每日 22:50 由计划任务触发，强制杀掉 <code class="inline">llama-server</code> 与本项目 python 进程，释放 GPU/内存。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">daily_start.py</code>：无参数；关键常量 <code class="inline">TARGET=474</code></li>
+      <li><code class="inline">autostop.py</code>：无参数；<code class="inline">MARKERS</code> 列表定义需要终止的进程 cmdline 关键字</li>
+      <li>两个脚本均由 <code class="inline">schtasks</code> 定时触发对应 <code class="inline">.bat</code></li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># ============ daily_start.py ============
+# -*- coding: utf-8 -*-
+# 每日 11:00 自动续训: 找最新 checkpoint -&gt; resume 启动 train_sft.py (psutil 版)
+import logging
+import os
+import subprocess
+import psutil
+
+BASE = r"D:\project\2026\202609\Small_ask_big"
+CKPT = os.path.join(BASE, "ckpt", "sft_lora")
+LOG_DIR = os.path.join(BASE, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.FileHandler(os.path.join(LOG_DIR, "dailystart.log"), encoding="utf-8"),
+              logging.StreamHandler()],
+)
+log = logging.getLogger("dailystart")
+
+TARGET = 474
+
+
+# 找最新 checkpoint: 按修改时间取最新, 供续训 resume
+def latest_ckpt():
+    """扫描 ckpt/sft_lora/step*/, 按数字最大返回 (step_n, 路径)"""
+    steps = []
+    if os.path.isdir(CKPT):
+        for name in os.listdir(CKPT):
+            if name.startswith("step") and os.path.isdir(os.path.join(CKPT, name)):
+                try:
+                    n = int(name[4:])
+                    if os.path.exists(os.path.join(CKPT, name, "adapter_config.json")):
+                        steps.append((n, os.path.join(CKPT, name)))
+                except ValueError:
+                    pass
+    return max(steps) if steps else None
+
+
+# 训练在跑检测: 防止重复拉起第二个训练进程
+def training_running():
+    """返回 train_sft.py 进程 pid, 无则 None"""
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            if (proc.info["name"] or "").lower() == "python.exe":
+                cmd = " ".join(proc.info["cmdline"] or [])
+                if "train_sft" in cmd and proc.info["pid"] != os.getpid():
+                    return proc.info["pid"]
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    return None
+
+
+# 每日 11:00 自动续训: 有 checkpoint 就 resume, 没有就全新启动
+def main():
+    log.info("=== dailystart begin ===")
+    # 窗口判断: 18:00 - 次日 06:00
+    from datetime import datetime
+    now = datetime.now()
+    in_window = now.hour &gt;= 18 or now.hour &lt; 6
+    if not in_window:
+        log.info("outside window (18:00-06:00), skip. now=%s", now.strftime("%H:%M"))
+        return
+    pid = training_running()
+    if pid:
+        log.info("training already running pid=%s, skip", pid)
+        return
+    # 根目录 adapter 存在 = SFT 主训练已完成(TRAIN_DONE 产物)
+    root_adapter = os.path.join(CKPT, "adapter_config.json")
+    if os.path.exists(root_adapter):
+        log.info("root adapter exists (SFT main training done); "
+                 "extra-epoch continuation requires manual launch, skip auto-start")
+        return
+    best = latest_ckpt()
+    script = os.path.join(BASE, "scripts", "train_sft.py")
+    py = r"C:\Program Files\Python311\python.exe"
+    ck_args = [script]
+    if best is None:
+        log.info("no checkpoint, fresh start")
+    else:
+        ck_args = [script, "--resume", best[1], "--start-step", str(best[0])]
+        log.info("resuming from %s (step %d)", best[1], best[0])
+    subprocess.Popen([py] + ck_args, creationflags=subprocess.CREATE_NO_WINDOW)
+    log.info("training launched")
+
+
+if __name__ == "__main__":
+    main()
+
+
+# ============ autostop.py ============
+# -*- coding: utf-8 -*-
+# 每日 22:50 自动释放: 杀 llama-server 与本项目 python 进程 (psutil 版, 无 wmic 依赖)
+import logging
+import os
+import psutil
+
+LOG_DIR = r"D:\project\2026\202609\Small_ask_big\logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.FileHandler(os.path.join(LOG_DIR, "autostop.log"), encoding="utf-8"),
+              logging.StreamHandler()],
+)
+log = logging.getLogger("autostop")
+
+MARKERS = ["train_sft.py", "run_gsm8k_1k.py", "download_base.py", "download_ms.py",
+           "download_hf.py", "daily_start.py"]
+
+
+# 到点自动停训: 写 STOP 文件让训练优雅保存退出
+def main():
+    log.info("=== autostop begin ===")
+    me = os.getpid()
+    n1 = n2 = 0
+    for proc in psutil.process_iter(["pid", "name", "cmdline"]):
+        try:
+            name = (proc.info["name"] or "").lower()
+            cmd = " ".join(proc.info["cmdline"] or [])
+            if proc.info["pid"] == me:
+                continue
+            if name.startswith("llama-server"):
+                proc.kill()
+                n1 += 1
+                log.info("killed llama-server pid=%d", proc.info["pid"])
+            elif name == "python.exe" and any(m in cmd for m in MARKERS):
+                proc.kill()
+                n2 += 1
+                log.info("killed project python pid=%d cmd=%s", proc.info["pid"], cmd[:80])
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+    log.info("=== autostop end: llama-server=%d python=%d ===", n1, n2)
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+  <!-- ===== M10 ===== -->
+  <h3 class="sub-title">
+    <span class="tag tag-mod">M10</span> GGUF 修补（token_type 修正）
+  </h3>
+
+  <span class="file-path">scripts/patch_gguf.py</span>
+  <div class="box key">
+    <span class="box-title">【用途】</span>
+    修补 <code class="inline">convert_hf_to_gguf.py</code> 产出的 GGUF 文件：把 <code class="inline">&lt;|llm_offload|&gt;</code>（id=248077）的 token_type 从 CONTROL 改成 NORMAL，否则 llama.cpp 在 detokenize 时会跳过该 special token 的文本，导致 offload 标记不可见、stop 失效。
+  </div>
+  <div class="box info">
+    <span class="box-title">【入参说明】</span>
+    <ul>
+      <li><code class="inline">argv[1]</code>：标签（06 / 005，仅日志用途）</li>
+      <li><code class="inline">argv[2]</code>：源 GGUF 路径</li>
+      <li><code class="inline">argv[3]</code>：目标 GGUF 路径</li>
+      <li>依赖 <code class="inline">tools/llamacpp-src/gguf-py</code> 的 GGUFReader / GGUFWriter</li>
+    </ul>
+  </div>
+<pre class="code"><code class="language-python"># -*- coding: utf-8 -*-
+import sys
+import numpy as np
+sys.path.insert(0, r"D:\project\2026\202609\Small_ask_big\tools\llamacpp-src\gguf-py")
+from gguf import GGUFReader, GGUFWriter
+from gguf.constants import GGUFValueType
+
+tag = sys.argv[1]
+SRC = sys.argv[2]
+DST = sys.argv[3]
+DROP_KEYS = {"qwen35.nextn_predict_layers", "qwen35.attention.recurrent_layers"}
+SCALAR_ADD = {
+    GGUFValueType.STRING: "add_string", GGUFValueType.UINT8: "add_uint8",
+    GGUFValueType.INT8: "add_int8", GGUFValueType.UINT16: "add_uint16",
+    GGUFValueType.INT16: "add_int16", GGUFValueType.UINT32: "add_uint32",
+    GGUFValueType.INT32: "add_int32", GGUFValueType.UINT64: "add_uint64",
+    GGUFValueType.INT64: "add_int64", GGUFValueType.FLOAT32: "add_float32",
+    GGUFValueType.FLOAT64: "add_float64", GGUFValueType.BOOL: "add_bool",
+}
+# GGUF 字节流按 utf-8 解码, 非法字节容错替换
+def decode_bytes(raw): return bytes(raw).decode("utf-8", "replace")
+reader = GGUFReader(SRC)
+writer = GGUFWriter(DST, "qwen35")
+patched = []
+# 遍历 GGUF 元数据字段, 定位需要修补的 token_type 相关项
+for name, field in reader.fields.items():
+    if name in DROP_KEYS:
+        patched.append(("DROP", name)); continue
+    if name == "qwen35.block_count":
+        writer.add_uint32(name, 32); patched.append(("block_count-&gt;32", name)); continue
+    if name == "general.architecture":
+        continue
+    types = list(field.types); vt = GGUFValueType(types[0])
+    if vt == GGUFValueType.ARRAY:
+        it = GGUFValueType(types[1])
+        if it == GGUFValueType.STRING:
+            vals = [decode_bytes(field.parts[di]) for di in field.data]
+        else:
+            np_types = {GGUFValueType.UINT8: np.uint8, GGUFValueType.INT8: np.int8,
+                GGUFValueType.UINT16: np.uint16, GGUFValueType.INT16: np.int16,
+                GGUFValueType.UINT32: np.uint32, GGUFValueType.INT32: np.int32,
+                GGUFValueType.UINT64: np.uint64, GGUFValueType.INT64: np.int64,
+                GGUFValueType.FLOAT32: np.float32, GGUFValueType.FLOAT64: np.float64,
+                GGUFValueType.BOOL: np.bool_}
+            flat = np.concatenate([field.parts[di] for di in field.data])
+            vals = flat.astype(np_types[it]).tolist()
+        # 关键补丁: &lt;|llm_offload|&gt;(248077) token_type CONTROL-&gt;NORMAL
+        # llama.cpp detokenize 跳过 special token 文本, 导致 offload 标记不可见/stop 失效
+        if name == "tokenizer.ggml.token_type" and len(vals) &gt; 248077:
+            patched.append((f"token_type[248077]: {vals[248077]} -&gt; 1(NORMAL)", name))
+            vals[248077] = 1
+        writer.add_array(name, vals)
+    elif vt in SCALAR_ADD:
+        v = field.parts[field.data[0]]
+        val = decode_bytes(v) if vt == GGUFValueType.STRING else v[0]
+        getattr(writer, SCALAR_ADD[vt])(name, val)
+    else:
+        patched.append(("SKIP", name))
+n = 0
+for t in reader.tensors:
+    writer.add_tensor(t.name, t.data, raw_dtype=t.tensor_type); n += 1
+writer.write_header_to_file(); writer.write_kv_data_to_file(); writer.write_tensors_to_file(); writer.close()
+print("tensors:", n, "patched:", patched)
+print("OK -&gt;", DST)</code></pre>
+
+  <div class="box warn">
+    <span class="box-title">已知硬编码（换模型需改）</span>
+    <ul>
+      <li><code class="inline">qwen35.block_count</code> 硬编码为 <b>32</b>，换层数的模型会静默出错。</li>
+      <li><code class="inline">token_type[248077]</code> 硬编码 token id，换 tokenizer 需同步修改。</li>
+      <li>建议改进：从 <code class="inline">config.json</code> 读层数，从 tokenizer 的 vocab 查 token id。</li>
+    </ul>
+  </div>
+
+  <!-- ===== 未入流程图的小工具 ===== -->
+  <h3 class="sub-title">附：其他工具脚本</h3>
+  <div class="box info">
+    <span class="box-title">下载与转换工具（未在主流程图中单独标号）</span>
+    <ul>
+      <li><code class="inline">download_hf.py</code> / <code class="inline">download_ms.py</code> / <code class="inline">download_base.py</code>：分别从 HF / ModelScope 下载官方模型、数据集、GGUF。</li>
+      <li><code class="inline">download_dapo.py</code>：DAPO-Math-17k → <code class="inline">datasets/dapo_cache.json</code>（GRPO 数据源）。</li>
+      <li><code class="inline">download_llama_src.py</code>：多通道拉取 llama.cpp b10938 源码（转换脚本依赖）。</li>
+      <li><code class="inline">convert_4b_q8.py</code> / <code class="inline">convert_005_f16.py</code>：HF → GGUF 转换（Q8_0 / F16）。</li>
+      <li><code class="inline">verify_v3.py</code> / <code class="inline">verify_4b_transformers.py</code>：模型加载 + 单题生成的链路验证脚本。</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ 5. 核心超参配置表 ============ -->
+<section id="sec-hparams">
+  <h2 class="sec-title">五、核心超参配置表</h2>
+
+  <h3 class="sub-title">5.1 Stage 1+2 SFT</h3>
+  <table class="cfg">
+    <tr><th>参数</th><th>取值</th><th>说明</th></tr>
+    <tr><td>基座模型</td><td><code>Qwen3.5-4B</code></td><td>bf16 精度</td></tr>
+    <tr><td>新增 token</td><td><code>&lt;|llm_offload|&gt;</code>（id=248077）</td><td>词表扩容后需 resize_token_embeddings</td></tr>
+    <tr><td>锚点集合</td><td><code>["." , "\n", "&lt;|im_end|&gt;", "&lt;|endoftext|&gt;"]</code></td><td>嵌入均值 + N(0, 0.1²)</td></tr>
+    <tr><td>LoRA r / alpha / dropout</td><td><code>16 / 32 / 0.05</code></td><td>target: q,k,v,o,gate,up,down</td></tr>
+    <tr><td>Batch Size</td><td><code>4</code></td><td>单卡</td></tr>
+    <tr><td>梯度累积</td><td><code>4</code></td><td>有效 batch = 16</td></tr>
+    <tr><td>Max Length</td><td><code>768</code></td><td>prompt + target 总长</td></tr>
+    <tr><td>Learning Rate</td><td><code>1e-4</code></td><td>AdamW，weight_decay 0.01</td></tr>
+    <tr><td>LR Scheduler</td><td><code>CosineAnnealingLR</code></td><td>T_max = total_steps</td></tr>
+    <tr><td>Epochs</td><td><code>1</code></td><td>474 步左右</td></tr>
+    <tr><td>梯度裁剪</td><td><code>1.0</code></td><td>clip_grad_norm_</td></tr>
+    <tr><td>Checkpoint 保留</td><td>最近 <code>2</code> 个</td><td>数字排序裁剪</td></tr>
+    <tr><td>训练窗口</td><td><code>18:00 – 次日 06:00</code></td><td>窗口外自动暂停</td></tr>
+  </table>
+
+  <h3 class="sub-title">5.2 Stage 3 GRPO</h3>
+  <table class="cfg">
+    <tr><th>参数</th><th>取值</th><th>说明</th></tr>
+    <tr><td>训练数据</td><td><code>datasets/dapo_cache.json</code></td><td>DAPO-Math-17k 转换</td></tr>
+    <tr><td>组内采样数 G</td><td><code>4</code></td><td>论文为 8，本地简化</td></tr>
+    <tr><td>单路径最大生成</td><td><code>600</code> tokens</td><td>MAX_NEW</td></tr>
+    <tr><td>采样温度 / top_p</td><td><code>0.9 / 0.95</code></td><td>rollout 采样</td></tr>
+    <tr><td>成本惩罚系数 λ</td><td><code>0.1</code></td><td>可调至 0.6 / 0.05 复现双档</td></tr>
+    <tr><td>Learning Rate</td><td><code>1e-6</code></td><td>AdamW，仅 LoRA 参数</td></tr>
+    <tr><td>优势归一化</td><td>组内均值/标准差</td><td><code>adv = (r − μ) / (σ + 1e-4)</code></td></tr>
+    <tr><td>梯度裁剪</td><td><code>1.0</code></td><td>clip_grad_norm_</td></tr>
+    <tr><td>Checkpoint 间隔</td><td>每 <code>8</code> 题</td><td>保存 model + optim + iter</td></tr>
+    <tr><td>Relay 并发</td><td><code>4</code></td><td>ThreadPoolExecutor</td></tr>
+  </table>
+
+  <h3 class="sub-title">5.3 协同引擎与计价</h3>
+  <table class="cfg">
+    <tr><th>参数</th><th>取值</th><th>说明</th></tr>
+    <tr><td>小模型服务</td><td><code>127.0.0.1:8001</code></td><td>llama-server / transformers</td></tr>
+    <tr><td>大模型服务</td><td><code>127.0.0.1:8002</code></td><td>Qwen3.8-27B</td></tr>
+    <tr><td>总预算 max_tokens</td><td><code>8192</code></td><td>小模型 + 大模型共享</td></tr>
+    <tr><td>温度</td><td><code>0.1</code></td><td>评估协议固定</td></tr>
+    <tr><td>SLM 输入价</td><td><code>$0.05 / 1M</code></td><td>论文计价</td></tr>
+    <tr><td>SLM 输出价</td><td><code>$0.08 / 1M</code></td><td>双重计费用</td></tr>
+    <tr><td>LLM 输入价</td><td><code>$0.90 / 1M</code></td><td>论文计价</td></tr>
+    <tr><td>LLM 输出价</td><td><code>$2.86 / 1M</code></td><td>论文计价</td></tr>
+    <tr><td>交接次数上限</td><td><code>1</code></td><td>不回头</td></tr>
+  </table>
+</section>
+
+<!-- ============ 6. 依赖清单 ============ -->
+<section id="sec-deps">
+  <h2 class="sec-title">六、项目依赖清单</h2>
+
+  <h3 class="sub-title">6.1 Python 依赖</h3>
+  <table class="cfg">
+    <tr><th>包名</th><th>版本</th><th>用途</th></tr>
+    <tr><td><code>torch</code></td><td>2.5.1+cu121</td><td>训练与推理框架</td></tr>
+    <tr><td><code>transformers</code></td><td>5.15.1</td><td>模型加载、chat template、generate</td></tr>
+    <tr><td><code>peft</code></td><td>0.20</td><td>LoRA / PeftModel</td></tr>
+    <tr><td><code>datasets</code></td><td>—</td><td>HF 数据集加载</td></tr>
+    <tr><td><code>hugging
+huggingface_hub</code></td><td>—</td><td>模型与数据集下载</td></tr>
+  </table>
+</div>
+
+<script>
+  setTimeout(function () {
+    mermaid.run();
+    setTimeout(function () {
+      document.querySelectorAll('.mermaid .cluster-label').forEach(function (el) {
+        var t = el.getAttribute('transform') || '';
+        el.setAttribute('transform', t + ' translate(0,-30)');
+      });
+    }, 600);
+  }, 300);
+  (function waitHljs(n) {
+    if (window.hljs) {
+      document.querySelectorAll('pre code').forEach(function (el) {
+        try { window.hljs.highlightElement(el); } catch (e) {}
+      });
+    } else if (n < 240) {
+      setTimeout(function () { waitHljs(n + 1); }, 500);
+    }
+  })(0);
+</script>
+<div style="max-width:1180px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid var(--border,#dfe6ec);font-size:13px;color:var(--muted,#63707d)"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
