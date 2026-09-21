@@ -116,6 +116,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-21</span></div>
+<div class="cc-title">DeepSeek-V4.1-Flash 推理加速解读</div>
+<div class="cc-desc">CED 层切分 + CSA2 跨层 KV 共享：总体路径、Prefill 路径、Decode 路径与四种配置走查</div>
+<a class="cc-link" href="学习html/DeepSeek-V4.1-Flash推理加速解读.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-20</span></div>
 <div class="cc-title">CED + CSA2 复现 · 代码检视（第 1 轮）</div>
 <div class="cc-desc">KV 缓存压缩双路方案：CED 投影器 + CSA2 适配器 + TurboQuant 量化，M0–M10 全模块源码</div>
@@ -139,19 +145,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</div>
 <a class="cc-link" href="实验html/Tequila代码检视-20260919-R1.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-09-18</span></div>
-<div class="cc-title">大模型 RL 对齐：RLHF / DPO 原理与极简源码</div>
-<div class="cc-desc">RLHF 三段式、PPO-Clip 与 KL、DPO 隐式奖励推导、GRPO 与不收敛排查</div>
-<a class="cc-link" href="学习html/大模型RL对齐原理与极简源码.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">27</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">28</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">5</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">1</div><div class="ml">模型专区</div></div>
 </div>
@@ -159,14 +159,14 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">27 篇 · 7 个专题</div>
+<div class="sec-badge">28 篇 · 7 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">27</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">28</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
-<button class="chip" data-topic="accel">推理加速<span class="count">4</span></button>
+<button class="chip" data-topic="accel">推理加速<span class="count">5</span></button>
 <button class="chip" data-topic="vllm">vLLM 源码<span class="count">2</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">4</span></button>
@@ -174,6 +174,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">6</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="accel" data-ts="20260921"><a href="学习html/DeepSeek-V4.1-Flash推理加速解读.html"><span class="li-date">2026-09-21</span><span class="li-main"><span class="li-title">DeepSeek-V4.1-Flash 推理加速解读<span class="li-tag">推理加速</span></span><span class="li-desc">CED 层切分 + CSA2 跨层 KV 共享：总体路径、Prefill 路径、Decode 路径与四种配置走查</span></span></a></li>
 <li class="li" data-topic="theory" data-ts="20260918"><a href="学习html/大模型RL对齐原理与极简源码.html"><span class="li-date">2026-09-18</span><span class="li-main"><span class="li-title">大模型 RL 对齐：RLHF / DPO 原理与极简源码<span class="li-tag">基础理论</span></span><span class="li-desc">RLHF 三段式、PPO-Clip 与 KL、DPO 隐式奖励推导、GRPO 与不收敛排查</span></span></a></li>
 <li class="li" data-topic="evolve" data-ts="20260916"><a href="学习html/RSI的五个关键点.html"><span class="li-date">2026-09-16</span><span class="li-main"><span class="li-title">RSI 的五个关键点：从核心逻辑到防退化<span class="li-tag">模型演进</span></span><span class="li-desc">递归自我改进能 work 的条件、机制与边界：三个 P0 环节与六层防退化体系</span></span></a></li>
 <li class="li" data-topic="evolve" data-ts="20260915"><a href="学习html/如何用RSI做模型自我演进.html"><span class="li-date">2026-09-15</span><span class="li-main"><span class="li-title">如何用 RSI 做模型自我演进<span class="li-tag">模型演进</span></span><span class="li-desc">递归自我改进的工程化落地：自训练闭环、三层奖励、五层验证与阶段 A–F 路线</span></span></a></li>
