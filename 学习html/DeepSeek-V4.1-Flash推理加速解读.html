@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek-V4.1-Flash 推理加速解读 - 华杉的技术博客</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f6f8fa;
+    --surface: #ffffff;
+    --border: #d0d7de;
+    --border-soft: #e6eaef;
+    --text: #1f2328;
+    --text-dim: #59636e;
+    --accent: #0969da;
+    --green: #1a7f37;
+    --orange: #9a6700;
+    --red: #cf222e;
+    --purple: #8250df;
+    --teal: #0d9488;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+    padding: 28px 16px 56px;
+    line-height: 1.6;
+  }
+  .container { max-width: 1140px; margin: 0 auto; }
+  .back { display: inline-block; font-size: 13px; color: #6b7280; text-decoration: none; margin-bottom: 16px; }
+  .back:hover { color: var(--accent); }
+  .meta { font-size: 12px; color: var(--text-dim); margin-bottom: 10px; }
+  .meta .tag { color: var(--accent); font-weight: 700; margin-right: 10px; }
+  h1 { font-size: 1.5rem; margin-bottom: 4px; color: #000; }
+  .subtitle { color: var(--text-dim); font-size: 0.875rem; margin-bottom: 22px; }
+
+  .lead-bg {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .lead-bg p { margin: 0 0 12px; font-size: 0.92rem; color: var(--text); }
+  .lead-bg p:last-child { margin-bottom: 0; }
+  .lead-bg strong { color: var(--accent); }
+
+  .scenario-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 18px;
+    margin-bottom: 28px;
+    display: flex; gap: 28px; flex-wrap: wrap;
+    font-size: 0.85rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .scenario-bar span { color: var(--text-dim); }
+  .scenario-bar strong { color: #000; }
+
+  /* 区块通用 */
+  .section {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 22px 24px 18px;
+    margin-bottom: 26px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    position: relative;
+    overflow: hidden;
+  }
+  .section::before {
+    content: '';
+    position: absolute; left: 0; top: 0; bottom: 0;
+    width: 4px;
+  }
+  .section.arch::before { background: var(--purple); }
+  .section.pd::before { background: var(--teal); }
+  .section.f1::before { background: var(--red); }
+  .section.f2::before { background: var(--orange); }
+  .section.f3::before { background: var(--accent); }
+  .section.f4::before { background: var(--green); }
+
+  .sec-head { margin-bottom: 6px; }
+  .sec-num {
+    font-size: 0.68rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .sec-title {
+    font-size: 1.15rem; font-weight: 700; color: #000;
+    margin-top: 2px;
+  }
+  .section.arch .sec-title { color: var(--purple); }
+  .section.pd .sec-title { color: var(--teal); }
+  .section.f1 .sec-title { color: var(--red); }
+  .section.f2 .sec-title { color: var(--orange); }
+  .section.f3 .sec-title { color: var(--accent); }
+  .section.f4 .sec-title { color: var(--green); }
+
+  .sec-desc {
+    font-size: 0.83rem; color: var(--text-dim);
+    margin-bottom: 16px;
+  }
+
+  /* 图编号标签 */
+  .fig-label {
+    display: inline-block;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #1a4ea8;
+    background: #eef3fb;
+    border: 1px solid #d4e2f7;
+    padding: 3px 10px;
+    border-radius: 12px;
+    margin-bottom: 10px;
+  }
+  .fig-label.teal { color: #0f766e; background: #e6f7f5; border-color: #b8e6e0; }
+  .fig-label.green { color: var(--green); background: #e6f5ed; border-color: #c3e6d4; }
+  .fig-label.blue { color: var(--accent); background: #e8f0fe; border-color: #c3d9f7; }
+  .fig-label.red { color: var(--red); background: #fdecec; border-color: #f5c6c6; }
+  .fig-label.orange { color: var(--orange); background: #fff4e5; border-color: #f5d9a8; }
+
+  /* 架构要点列表 */
+  .arch-points {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px 18px;
+    margin-top: 16px;
+    font-size: 0.82rem;
+  }
+  @media (max-width: 700px) { .arch-points { grid-template-columns: 1fr; } }
+  .arch-point {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    background: #f6f8fa;
+    border-radius: 8px;
+    border: 1px solid var(--border-soft);
+  }
+  .arch-point .bullet {
+    flex-shrink: 0;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-top: 7px;
+  }
+  .arch-point .bullet.purple { background: var(--purple); }
+  .arch-point .bullet.blue { background: var(--accent); }
+  .arch-point .bullet.green { background: var(--green); }
+  .arch-point .bullet.orange { background: var(--orange); }
+  .arch-point .bullet.teal { background: var(--teal); }
+  .arch-point strong { color: var(--text); }
+
+  .flow-chart { margin-bottom: 16px; }
+  .flow-chart svg { display: block; width: 100%; height: auto; }
+
+  /* 指标卡片 */
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  @media (max-width: 700px) { .metrics { grid-template-columns: 1fr; } }
+  .metric {
+    background: #f6f8fa;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .metric-name {
+    font-size: 0.7rem; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    font-weight: 600;
+  }
+  .metric-row {
+    display: flex; align-items: baseline; gap: 10px;
+    margin-top: 4px; flex-wrap: wrap;
+  }
+  .metric-val { font-size: 1.15rem; font-weight: 700; color: #000; }
+  .metric-delta {
+    font-size: 0.72rem; font-weight: 700;
+    padding: 1px 7px; border-radius: 10px;
+  }
+  .delta-save { background: #dafbe1; color: var(--green); }
+  .delta-none { background: #eaeef2; color: var(--text-dim); }
+  .metric-sub { font-size: 0.72rem; color: var(--text-dim); margin-top: 3px; }
+
+  /* 机制说明卡片 */
+  .mechanism {
+    background: #fbfcfd;
+    border: 1px dashed var(--border);
+    border-radius: 12px;
+    padding: 18px 22px 14px;
+    margin-bottom: 26px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+  }
+  .mech-ced { border-left: 4px solid var(--green); }
+  .mech-csa2 { border-left: 4px solid var(--accent); }
+
+  .mech-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .mech-tag {
+    font-size: 0.65rem; font-weight: 700;
+    letter-spacing: 0.1em; text-transform: uppercase;
+    color: #fff; background: var(--text-dim);
+    padding: 2px 9px; border-radius: 10px;
+  }
+  .mech-ced .mech-tag { background: var(--green); }
+  .mech-csa2 .mech-tag { background: var(--accent); }
+  .mech-title { font-size: 1.05rem; font-weight: 700; color: #000; }
+
+  .mech-desc {
+    font-size: 0.82rem; color: var(--text-dim);
+    margin: 8px 0 14px;
+  }
+
+  .mermaid {
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    padding: 12px 8px;
+    text-align: center;
+    overflow-x: auto;
+  }
+
+  .note {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 10px 10px 0;
+    padding: 14px 18px;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+  .note strong { color: var(--text); }
+
+  /* Prefill / Decode 对比表格 */
+  .pd-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    margin-top: 14px;
+    background: #fff;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .pd-table th, .pd-table td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  .pd-table th {
+    background: #f0f3f6;
+    color: var(--text-dim);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .pd-table tr:last-child td { border-bottom: none; }
+  .pd-table .hl-pf { color: var(--teal); font-weight: 700; }
+  .pd-table .hl-dc { color: var(--purple); font-weight: 700; }
+</style>
+</head>
+<body>
+<div class="container">
+  <a class="back" href="../index.html">&larr; 返回首页</a>
+  <div class="meta"><span class="tag">推理加速</span>2026-09-21 发布</div>
+
+  <h1>DeepSeek-V4.1-Flash 推理加速解读</h1>
+  <p class="subtitle">CED 层切分 + CSA2 跨层 KV 共享：四种推理配置的架构与路径图解</p>
+
+  <div class="lead-bg">
+    <p>
+      <strong>背景：</strong>DeepSeek V4.1 发布时，「1M 上下文下 KV Cache 成本远低于同级别模型」是官方技术报告里被反复引用的数字。
+      上下文越长、层数越多，KV Cache 占用越大——这是 Transformer 推理的固有矛盾：每一层都要存一份自己算出的 K 和 V，
+      32 层就是 32 份，上下文一长，显存和带宽两头告急。
+    </p>
+    <p>
+      V4.1-Flash 给出的答案是两套正交的优化：
+      <strong>CED</strong> 解决「读」的问题——Prefill 阶段只跑编码器 20 层，解码器的 KV 由编码器隐藏态一次性投影得到，读输入的计算量省一半；
+      <strong>CSA2</strong> 解决「记」的问题——解码器 4 个全注意力层共享 1 份 KV，每层只挂一个小转换模型做跨层映射，存储压到 1/4。
+      两者叠加，同一条请求的持久化缓存可以降到基线的 1/8。
+    </p>
+    <p>
+      本页把这套设计拆成图来讲：<strong>图 1</strong> 看架构怎么切，<strong>图 2–4</strong> 分别看总体执行路径、Prefill 路径与 Decode 路径，
+      <strong>图 5–6</strong> 看 CED 与 CSA2 的机制差异，<strong>图 7–10</strong> 用同一条请求（30,000 输入 / 1,000 输出）把四种配置各自走一遍。
+      文中数字为按官方报告口径的示意性推导，用于横向对比，不代表实测值。
+    </p>
+  </div>
+
+  <div class="scenario-bar">
+    <div><span>输入</span> <strong>30,000 tokens</strong></div>
+    <div><span>输出</span> <strong>1,000 tokens</strong></div>
+    <div><span>模型</span> <strong>552B MoE · 40 层（20 Enc + 20 Dec）</strong></div>
+    <div><span>KV 格式</span> <strong>FP4</strong></div>
+  </div>
+
+  <!-- ================= 图 1：模型架构（简化） ================= -->
+  <div class="section arch">
+    <div class="sec-head">
+      <div class="sec-num">架构总览</div>
+      <div class="sec-title">模型架构：40 层主干怎么切</div>
+    </div>
+    <p class="sec-desc">
+      40 层主干被切成两段：前 20 层是因果编码器，后 20 层是解码器。
+      两段之间通过 KV 投影连接——解码器的全局 KV 不从自身生成，而是由编码器最后一层投射得到。
+    </p>
+
+    <div class="fig-label purple" style="color: var(--purple); background: #f0ebff; border-color: #d9c9f5;">图 1 · 模型架构</div>
+    <div class="mermaid">
+flowchart TD
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+    classDef proj fill:#fff,stroke:#d0d7de,color:#59636e,stroke-dasharray:4 3
+
+    IN["输入 tokens<br/>文本 + 图像"]:::io
+
+    subgraph ENC["因果编码器 · 20 层"]
+        direction TB
+        E1["层 1–20<br/>每层内含 MoE 路由<br/>Prefill 激活 8B/token"]:::enc
+    end
+
+    PROJ["KV 投影<br/>每层独立投射权重<br/>不涉及注意力 / MoE"]:::proj
+
+    subgraph DEC["解码器 · 20 层"]
+        direction TB
+        D1["层 21–40<br/>每层内含 MoE 路由<br/>Decode 激活 16B/token"]:::dec
+    end
+
+    OUT["输出 tokens"]:::io
+
+    IN --> ENC
+    ENC -->|"H_20 隐藏态"| PROJ
+    PROJ --> DEC
+    DEC --> OUT
+    </div>
+
+    <div class="arch-points">
+      <div class="arch-point">
+        <span class="bullet purple"></span>
+        <span><strong>非对称 40 层</strong>：前 20 层编码器，后 20 层解码器</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet purple"></span>
+        <span><strong>KV 投影</strong>：解码器 KV 由编码器最后一层投射，每层独立权重</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet orange"></span>
+        <span><strong>MoE 路由</strong>：552B 总参数，每 token 只激活 8B 或 16B</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet blue"></span>
+        <span><strong>40 层全为因果注意力层</strong>：无 DeltaNet 等线性注意力，层类型均匀</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 图 2：总体执行路径 ================= -->
+  <div class="section pd">
+    <div class="sec-head">
+      <div class="sec-num">推理路径 · 总览</div>
+      <div class="sec-title">图 2 · 总体执行路径：Prefill 与 Decode 怎么衔接</div>
+    </div>
+    <p class="sec-desc">
+      先看整体节奏：<strong>Prefill 一次性读入 30,000 tokens，只跑编码器 20 层，产出全局 KV</strong>；
+      <strong>Decode 每步拿 1 个新 token，跑全栈 40 层，直接复用这份 KV</strong>，逐步生成输出。
+      两条路径通过「KV 投影」衔接——这也是后面 CED 优化的切入点。
+    </p>
+
+    <div class="fig-label teal">图 2 · 总体执行路径</div>
+    <div class="mermaid">
+flowchart LR
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+    classDef pf fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dc fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+    classDef kv fill:#dafbe1,stroke:#1a7f37,color:#1a7f37,stroke-width:1.5px
+
+    subgraph PF["Prefill · 一次性"]
+        direction LR
+        A1["读入 30,000 tokens"]:::io --> A2["编码器 20 层<br/>产出 H_20"]:::pf
+        A2 --> A3["KV 投影<br/>解码器全局 KV"]:::kv
+    end
+
+    subgraph DC["Decode · 逐步 × 1,000"]
+        direction LR
+        B1["每步 1 个新 token"]:::io --> B2["全栈 40 层<br/>复用投影 KV"]:::dc --> B3["输出 token"]:::io
+    end
+
+    A3 -.->|"Prefill 一次性生成<br/>Decode 每步直接复用"| B2
+    </div>
+
+    <div class="arch-points">
+      <div class="arch-point">
+        <span class="bullet teal"></span>
+        <span><strong>Prefill 一次性读入全部输入</strong>：30,000 tokens 只跑编码器 20 层（8B/token）</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet teal"></span>
+        <span><strong>KV 投影是一次性桥梁</strong>：H_20 → 解码器全局 KV，Prefill 产出、Decode 复用</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet teal"></span>
+        <span><strong>Decode 每步 1 个新 token 跑全栈</strong>：40 层都在工作，逐步生成 1,000 个输出</span>
+      </div>
+    </div>
+
+    <div class="note" style="border-left-color: var(--teal);">
+      <strong>一句话总结：</strong>两条路径靠「KV 投影」衔接——Prefill 产出，Decode 复用。
+      Prefill 和 Decode 各自的详细路径见图 3、图 4。
+    </div>
+  </div>
+
+  <!-- ================= 图 3：Prefill 路径详解 ================= -->
+  <div class="section pd">
+    <div class="sec-head">
+      <div class="sec-num">推理路径 · Prefill</div>
+      <div class="sec-title">图 3 · Prefill 路径：只跑编码器 20 层</div>
+    </div>
+    <p class="sec-desc">
+      Prefill 阶段的产出有两个：<strong>对输入的完整理解（H_20）</strong>和
+      <strong>解码器要用的全局 KV</strong>。解码器的 20 层在这个阶段完全不执行。
+    </p>
+
+    <div class="fig-label teal">图 3 · Prefill 路径</div>
+    <div class="mermaid">
+flowchart LR
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef proj fill:#fff,stroke:#d0d7de,color:#59636e,stroke-dasharray:4 3
+    classDef kv fill:#dafbe1,stroke:#1a7f37,color:#1a7f37,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.2px
+
+    A1["输入<br/>30,000 tokens"]:::io --> A2["编码器 20 层<br/>8B/token 激活"]:::enc
+    A2 --> A3["H_20<br/>浓缩全部上下文"]:::proj
+    A3 --> A4["KV 投影<br/>每层独立投射权重<br/>不涉及注意力 / MoE"]:::proj
+    A4 --> A5["解码器全局 KV<br/>≈ 640 B/token"]:::kv
+    X["解码器 20 层<br/>本阶段不执行"]:::dec
+    A5 -.-> X
+    </div>
+
+    <table class="pd-table">
+      <thead>
+        <tr><th>维度</th><th>Prefill（读）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>执行层数</strong></td>
+          <td class="hl-pf">只跑编码器 20 层</td>
+        </tr>
+        <tr>
+          <td><strong>每 token 激活参数</strong></td>
+          <td class="hl-pf">8B</td>
+        </tr>
+        <tr>
+          <td><strong>解码器 KV 来源</strong></td>
+          <td class="hl-pf">从编码器第 20 层隐藏态 H_20 投影生成，每层独立投射权重，不涉及注意力 / MoE</td>
+        </tr>
+        <tr>
+          <td><strong>处理 token 数</strong></td>
+          <td>30,000（全部输入，一次性）</td>
+        </tr>
+        <tr>
+          <td><strong>编码器在做什么</strong></td>
+          <td class="hl-pf">承担长上下文的主要计算</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="arch-points">
+      <div class="arch-point">
+        <span class="bullet teal"></span>
+        <span><strong>Prefill 只跑编码器</strong>：输入 token 只穿过前 20 层，解码器不参与 Prefill 计算</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet teal"></span>
+        <span><strong>KV 投影是一次性的</strong>：H_20 → 解码器 KV，每 token 只做一次，Decode 阶段直接复用</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 图 4：Decode 路径详解 ================= -->
+  <div class="section pd">
+    <div class="sec-head">
+      <div class="sec-num">推理路径 · Decode</div>
+      <div class="sec-title">图 4 · Decode 路径：跑全栈 40 层，逐步生成</div>
+    </div>
+    <p class="sec-desc">
+      Decode 阶段跑全栈 40 层：<strong>编码器轻量处理新生成的单个 token</strong>，
+      <strong>解码器基于 Prefill 投影的全局 KV 做注意力，逐步生成输出</strong>。
+    </p>
+
+    <div class="fig-label" style="color: var(--purple); background: #f0ebff; border-color: #d9c9f5;">图 4 · Decode 路径</div>
+    <div class="mermaid">
+flowchart LR
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+
+    B1["新 token<br/>每步 1 个"]:::io --> B2["编码器 20 层<br/>轻量处理单 token"]:::enc
+    B2 --> B3["解码器 20 层<br/>16B/token 激活<br/>复用投影 KV"]:::dec
+    B3 --> B4["输出 token"]:::io
+    B4 -.->|"自回归循环<br/>共 1,000 步"| B1
+    </div>
+
+    <table class="pd-table">
+      <thead>
+        <tr><th>维度</th><th>Decode（写）</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>执行层数</strong></td>
+          <td class="hl-dc">跑全栈 40 层（20 Enc + 20 Dec）</td>
+        </tr>
+        <tr>
+          <td><strong>每 token 激活参数</strong></td>
+          <td class="hl-dc">16B</td>
+        </tr>
+        <tr>
+          <td><strong>解码器 KV 来源</strong></td>
+          <td class="hl-dc">直接复用 Prefill 阶段生成的投影 KV</td>
+        </tr>
+        <tr>
+          <td><strong>处理 token 数</strong></td>
+          <td>1,000（逐步生成，每步 1 个）</td>
+        </tr>
+        <tr>
+          <td><strong>解码器在做什么</strong></td>
+          <td class="hl-dc">逐层计算注意力，基于投影 KV 生成输出</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="arch-points">
+      <div class="arch-point">
+        <span class="bullet" style="background: var(--purple);"></span>
+        <span><strong>Decode 跑全栈</strong>：编码器也在工作，只是每次只处理 1 个新 token，计算量很小</span>
+      </div>
+      <div class="arch-point">
+        <span class="bullet" style="background: var(--purple);"></span>
+        <span><strong>省的是 Prefill 计算量</strong>：30,000 个输入 token 少跑 20 层，这是 CED 的最大收益来源</span>
+      </div>
+    </div>
+
+    <div class="note" style="border-left-color: var(--teal);">
+      <strong>一句话总结：</strong>Prefill 只跑编码器（8B/token）产出全局 KV；Decode 跑全栈（16B/token）逐步生成，
+      直接复用投影 KV。后面的 CED 和 CSA2 都是在这条基本执行路径上做的优化。
+    </div>
+  </div>
+
+  <!-- ================= 图 3：CED 机制 ================= -->
+
+  <!-- ================= 图 3：CED 机制 ================= -->
+  <div class="mechanism mech-ced">
+    <div class="mech-head">
+      <span class="mech-tag">机制说明</span>
+      <span class="mech-title">CED 做了什么？—— 让 Prefill 少跑一半的层</span>
+    </div>
+    <p class="mech-desc">
+      CED 把 40 层 Transformer 拆成 20 层编码器 + 20 层解码器。Prefill 只跑编码器，
+      解码器的 KV 缓存不再由自己计算，而是直接从编码器输出投影得到。计算量因此减半。
+    </p>
+
+    <div class="fig-label green">图 5 · CED 机制</div>
+    <div class="mermaid">
+flowchart TD
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#cf222e,stroke-width:1.5px
+    classDef good fill:#dafbe1,stroke:#1a7f37,color:#1a7f37,stroke-width:1.5px
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+
+    subgraph OLD["无 CED · Prefill 跑满 40 层"]
+        direction LR
+        A1["输入<br/>30K tokens"]:::io --> B1["编码器<br/>20 层"]:::enc
+        B1 --> C1["解码器<br/>20 层<br/><i>自己算 KV</i>"]:::dec
+        C1 --> D1["Prefill 激活<br/><b>480,000 B</b>"]:::bad
+    end
+
+    subgraph NEW["有 CED · Prefill 只跑 20 层"]
+        direction LR
+        A2["输入<br/>30K tokens"]:::io --> B2["编码器<br/>20 层"]:::enc
+        B2 -->|"KV 投影"| C2["解码器<br/>20 层<br/><i>不重算 KV</i>"]:::dec
+        C2 --> D2["Prefill 激活<br/><b>240,000 B</b>"]:::good
+    end
+    </div>
+  </div>
+
+  <!-- ================= 图 4：CSA2 机制 ================= -->
+  <div class="mechanism mech-csa2">
+    <div class="mech-head">
+      <span class="mech-tag">机制说明</span>
+      <span class="mech-title">CSA2 做了什么？—— 让 KV 缓存不再每层都存一份</span>
+    </div>
+    <p class="mech-desc">
+      CSA2 把 40 层分成若干共享组，每组只有部分层存储完整的「主 KV + 索引器 K + Top-K 索引」，
+      其余层通过 Reindex（复用 KV、重选 Top-K）或 Reuse（KV 与 Top-K 全复用）来工作。
+      存储量因此大幅下降。
+    </p>
+
+    <div class="fig-label blue">图 6 · CSA2 机制</div>
+    <div class="mermaid">
+flowchart TD
+    classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
+    classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
+    classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
+
+    subgraph GA["共享组 A · 层 1–4"]
+        direction LR
+        FA["层 1 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        RA["层 2 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        RB["层 3 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
+        RC["层 4 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        FA -.->|共享| RA
+        FA -.->|共享| RB
+        FA -.->|共享| RC
+    end
+
+    subgraph GB["共享组 B · 层 5–8"]
+        direction LR
+        FB["层 5 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        RD["层 6 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        RE["层 7 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
+        RF["层 8 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        FB -.->|共享| RD
+        FB -.->|共享| RE
+        FB -.->|共享| RF
+    end
+    </div>
+  </div>
+
+  <!-- ================= 图 5：流程 1 ================= -->
+  <div class="section f1">
+    <div class="sec-head">
+      <div class="sec-num">流程 01</div>
+      <div class="sec-title">无优化 · Baseline</div>
+    </div>
+    <p class="sec-desc">
+      40 层全部执行，KV 缓存不做任何压缩。这是对比的起点：读输入最贵，记输入也最占内存。
+    </p>
+    <div class="fig-label red">图 7 · 流程 01 · 无优化</div>
+    <div class="flow-chart" id="flow1"></div>
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-name">Prefill 激活计算量</div>
+        <div class="metric-row">
+          <span class="metric-val">480,000 B</span>
+          <span class="metric-delta delta-none">基准</span>
+        </div>
+        <div class="metric-sub">30,000 × 16B/token</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">KV 缓存占用</div>
+        <div class="metric-row">
+          <span class="metric-val">110.4 MB</span>
+          <span class="metric-delta delta-none">基准</span>
+        </div>
+        <div class="metric-sub">31,000 × 3,560 B</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">持久化缓存（SSD）</div>
+        <div class="metric-row">
+          <span class="metric-val">110.4 MB</span>
+          <span class="metric-delta delta-none">基准</span>
+        </div>
+        <div class="metric-sub">完整落盘</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 图 6：流程 2 ================= -->
+  <div class="section f2">
+    <div class="sec-head">
+      <div class="sec-num">流程 02</div>
+      <div class="sec-title">仅开 CED</div>
+    </div>
+    <p class="sec-desc">
+      Prefill 只跑 20 层编码器，计算量直接减半。解码器的 KV 由编码器输出投影得到，不需要自己再算一遍。
+      但 KV 缓存本身没有压缩——省的是「读」的成本，不是「记」的成本。
+    </p>
+    <div class="fig-label orange">图 8 · 流程 02 · 仅开 CED</div>
+    <div class="flow-chart" id="flow2"></div>
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-name">Prefill 激活计算量</div>
+        <div class="metric-row">
+          <span class="metric-val">240,000 B</span>
+          <span class="metric-delta delta-save">↓ 50%</span>
+        </div>
+        <div class="metric-sub">30,000 × 8B/token</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">KV 缓存占用</div>
+        <div class="metric-row">
+          <span class="metric-val">110.4 MB</span>
+          <span class="metric-delta delta-none">无变化</span>
+        </div>
+        <div class="metric-sub">仍 31,000 × 3,560 B</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">持久化缓存（SSD）</div>
+        <div class="metric-row">
+          <span class="metric-val">110.4 MB</span>
+          <span class="metric-delta delta-none">无变化</span>
+        </div>
+        <div class="metric-sub">完整落盘</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 图 7：流程 3 ================= -->
+  <div class="section f3">
+    <div class="sec-head">
+      <div class="sec-num">流程 03</div>
+      <div class="sec-title">仅开 CSA2</div>
+    </div>
+    <p class="sec-desc">
+      40 层仍然全跑，Prefill 计算量不变。但 KV 缓存被 CSA2 压缩到 1/4：跨层共享主 KV，索引复用，
+      部分层直接复用其他层的 Top-K 索引。省的是「记」的成本，不是「读」的成本。
+    </p>
+    <div class="fig-label blue">图 9 · 流程 03 · 仅开 CSA2</div>
+    <div class="flow-chart" id="flow3"></div>
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-name">Prefill 激活计算量</div>
+        <div class="metric-row">
+          <span class="metric-val">480,000 B</span>
+          <span class="metric-delta delta-none">无变化</span>
+        </div>
+        <div class="metric-sub">30,000 × 16B/token</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">KV 缓存占用</div>
+        <div class="metric-row">
+          <span class="metric-val">27.6 MB</span>
+          <span class="metric-delta delta-save">↓ 75%</span>
+        </div>
+        <div class="metric-sub">31,000 × 890 B</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">持久化缓存（SSD）</div>
+        <div class="metric-row">
+          <span class="metric-val">27.6 MB</span>
+          <span class="metric-delta delta-save">↓ 75%</span>
+        </div>
+        <div class="metric-sub">随 HBM 同步压缩</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 图 8：流程 4 ================= -->
+  <div class="section f4">
+    <div class="sec-head">
+      <div class="sec-num">流程 04</div>
+      <div class="sec-title">CED + CSA2 全开</div>
+    </div>
+    <p class="sec-desc">
+      两个优化正交叠加：Prefill 只跑编码器，KV 缓存同时被 CSA2 压缩。
+      持久化缓存进一步受益于 SWA Bounded Replay，降到约 1/8。
+      这是同一条请求的完整形态。
+    </p>
+    <div class="fig-label green">图 10 · 流程 04 · 全开</div>
+    <div class="flow-chart" id="flow4"></div>
+    <div class="metrics">
+      <div class="metric">
+        <div class="metric-name">Prefill 激活计算量</div>
+        <div class="metric-row">
+          <span class="metric-val">240,000 B</span>
+          <span class="metric-delta delta-save">↓ 50%</span>
+        </div>
+        <div class="metric-sub">30,000 × 8B/token</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">KV 缓存占用</div>
+        <div class="metric-row">
+          <span class="metric-val">27.6 MB</span>
+          <span class="metric-delta delta-save">↓ 75%</span>
+        </div>
+        <div class="metric-sub">31,000 × 890 B</div>
+      </div>
+      <div class="metric">
+        <div class="metric-name">持久化缓存（SSD）</div>
+        <div class="metric-row">
+          <span class="metric-val">≈ 13.8 MB</span>
+          <span class="metric-delta delta-save">↓ 87.5%</span>
+        </div>
+        <div class="metric-sub">SWA Bounded Replay</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>数据口径：</strong>数字基于 DeepSeek-V4.1-Flash 官方技术报告推导。
+    Baseline 的 KV 缓存按 890 B/token × 4 ≈ 3,560 B/token 估算。
+    四个流程共用同一条请求：30,000 tokens 输入、1,000 tokens 输出、FP4 KV 格式。
+    实际部署会受硬件、量化方案、批次大小等因素影响，此处为示意性估算。
+  </div>
+
+</div>
+
+<script>
+/* ============================================================
+   Mermaid 初始化
+   ============================================================ */
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  themeVariables: {
+    fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif',
+    fontSize: '13px',
+    primaryColor: '#ffffff',
+    primaryTextColor: '#1f2328',
+    primaryBorderColor: '#d0d7de',
+    lineColor: '#8b949e',
+    clusterBkg: '#fbfcfd',
+    clusterBorder: '#d0d7de',
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 14,
+    nodeSpacing: 28,
+    rankSpacing: 44,
+    htmlLabels: true,
+  },
+});
+
+/* ============================================================
+   通用流程渲染器
+   ============================================================ */
+function renderFlow(containerId, steps) {
+  const boxW = 190, boxH = 116, gap = 24, padX = 14;
+  const n = steps.length;
+  const totalW = padX * 2 + n * boxW + (n - 1) * gap;
+  const totalH = 200;
+  const y = (totalH - boxH) / 2;
+
+  let s = `<svg viewBox="0 0 ${totalW} ${totalH}" xmlns="http://www.w3.org/2000/svg">`;
+  s += `<defs>
+    <marker id="arw-${containerId}" markerWidth="9" markerHeight="9" refX="7.5" refY="3" orient="auto">
+      <path d="M0,0 L7.5,3 L0,6 Z" fill="#8b949e"/>
+    </marker>
+  </defs>`;
+
+  steps.forEach((step, i) => {
+    const x = padX + i * (boxW + gap);
+    s += `<rect x="${x}" y="${y}" width="${boxW}" height="${boxH}" rx="10"
+            fill="#ffffff" stroke="${step.color}" stroke-width="1.8"/>`;
+    s += `<rect x="${x}" y="${y}" width="${boxW}" height="4" rx="2" fill="${step.color}"/>`;
+    s += `<text x="${x + boxW / 2}" y="${y + 27}" text-anchor="middle"
+            font-size="10.5" font-weight="700" fill="${step.color}"
+            letter-spacing="0.6">${step.label}</text>`;
+    s += `<text x="${x + boxW / 2}" y="${y + 56}" text-anchor="middle"
+            font-size="17" font-weight="700" fill="#1f2328">${step.value}</text>`;
+    step.sub.split('\n').forEach((line, li) => {
+      s += `<text x="${x + boxW / 2}" y="${y + 78 + li * 15}" text-anchor="middle"
+              font-size="10.5" fill="#59636e">${line}</text>`;
+    });
+    if (i < n - 1) {
+      const ax1 = x + boxW + 4;
+      const ax2 = x + boxW + gap - 4;
+      const ay = y + boxH / 2;
+      s += `<line x1="${ax1}" y1="${ay}" x2="${ax2}" y2="${ay}"
+              stroke="#8b949e" stroke-width="1.5"
+              marker-end="url(#arw-${containerId})"/>`;
+    }
+  });
+
+  s += `</svg>`;
+  document.getElementById(containerId).innerHTML = s;
+}
+
+renderFlow('flow1', [
+  { label: '输入', value: '30,000', sub: 'tokens', color: '#cf222e' },
+  { label: 'PREFILL', value: '40 层全跑', sub: '16B / token\n总激活 480,000 B', color: '#cf222e' },
+  { label: 'KV 缓存', value: '3,560 B/token', sub: '31,000 tokens\n合计 110.4 MB', color: '#cf222e' },
+  { label: 'DECODE', value: '1,000 步', sub: '跑全栈 40 层\n逐 token 生成', color: '#cf222e' },
+  { label: '输出', value: '1,000', sub: 'tokens', color: '#cf222e' },
+]);
+
+renderFlow('flow2', [
+  { label: '输入', value: '30,000', sub: 'tokens', color: '#9a6700' },
+  { label: 'PREFILL', value: '20 层编码器', sub: '8B / token\n总激活 240,000 B', color: '#9a6700' },
+  { label: 'KV 缓存', value: '3,560 B/token', sub: '解码器 KV 由编码器投影\n仍占 110.4 MB', color: '#9a6700' },
+  { label: 'DECODE', value: '1,000 步', sub: '跑全栈 40 层\n逐 token 生成', color: '#9a6700' },
+  { label: '输出', value: '1,000', sub: 'tokens', color: '#9a6700' },
+]);
+
+renderFlow('flow3', [
+  { label: '输入', value: '30,000', sub: 'tokens', color: '#0969da' },
+  { label: 'PREFILL', value: '40 层全跑', sub: '16B / token\n总激活 480,000 B', color: '#0969da' },
+  { label: 'KV 缓存', value: '890 B/token', sub: 'CSA2 压缩 4×\n合计 27.6 MB', color: '#0969da' },
+  { label: 'DECODE', value: '1,000 步', sub: '稀疏注意力\n跨层复用 KV', color: '#0969da' },
+  { label: '输出', value: '1,000', sub: 'tokens', color: '#0969da' },
+]);
+
+renderFlow('flow4', [
+  { label: '输入', value: '30,000', sub: 'tokens', color: '#1a7f37' },
+  { label: 'PREFILL', value: '20 层编码器', sub: '8B / token\n总激活 240,000 B', color: '#1a7f37' },
+  { label: 'KV 缓存', value: '890 B/token', sub: '压缩 4× · 持久化 1/8\n27.6 MB（SSD ≈13.8 MB）', color: '#1a7f37' },
+  { label: 'DECODE', value: '1,000 步', sub: '跑全栈 · 稀疏注意力\n逐 token 生成', color: '#1a7f37' },
+  { label: '输出', value: '1,000', sub: 'tokens', color: '#1a7f37' },
+]);
+
+/* ============================================================
+   渲染所有 Mermaid 图
+   ============================================================ */
+mermaid.run({ nodes: document.querySelectorAll('.mermaid') });
+</script>
+</body>
+</html>
