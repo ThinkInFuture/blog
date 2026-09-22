@@ -218,6 +218,11 @@
   .mermaid svg text{font-size:20px !important;}
   .mermaid .cluster-label foreignObject{overflow:visible !important;white-space:nowrap;}
   .mermaid .cluster-label{transform:translateY(-30px);}
+  .mermaid-wrap.tight{padding:20px 18px 14px;}
+  .fig-cap{font-size:12.5px;color:var(--muted);text-align:center;margin:10px 0 0;line-height:1.6;}
+  .mermaid svg a{cursor:pointer;}
+  .card[id]{scroll-margin-top:16px;}
+  .card:target{border-color:#7aa4f0;box-shadow:0 0 0 3px var(--accent-soft);}
 
   /* ---------- 列表 ---------- */
   ul.clean{padding-left:20px;margin:10px 0;}
@@ -278,9 +283,54 @@
   <h3>训练目的</h3>
   <p>在 <strong>Qwen3.5-4B</strong>（32 层混合架构，仅第 4/8/12/16/20/24/28/32 共 8 层为全注意力，其余 24 层为 GatedDeltaNet 线性注意力）上，验证 <strong>DeepSeek V4.1</strong> 报告中提出的三个核心设计是否能在混合架构模型上落地：</p>
   <ol class="steps">
-    <li><strong>CED（因果编码器-解码器）</strong>：在第 16 层切分，解码段全注意力层的 KV 由第 16 层隐藏态 <code>H_16</code> 经线性投影生成，验证"以隐状态重建 KV"这一替代路径的可训练性与质量代价。</li>
-    <li><strong>CSA2（压缩稀疏注意力简化版）</strong>：解码段 4 个全注意力层共享 1 份 KV，每层仅挂一个小适配器做跨层映射，验证"1 份 KV + 跨层小适配器"能否在保持质量的同时获得 4x 存储压缩。</li>
-    <li><strong>TurboQuant KV 量化</strong>：k8v4（K 8bit / V 4bit 分组 scale），在缓存后量化路径上验证质量扰动与压缩比。</li>
+    <li><strong>CED（因果编码器-解码器）</strong>：在第 16 层切分，解码段全注意力层的 KV 由第 16 层隐藏态 <code>H_16</code> 经线性投影生成，验证"以隐状态重建 KV"这一替代路径的可训练性与质量代价。
+      <div class="mermaid-wrap tight">
+        <div class="mermaid">
+flowchart TD
+    A["输入 tokens (L, 2560)"] --> B["编码段 layers[0..15]<br/>16 层正常计算"]
+    B --> C["H_16<br/>第 16 层隐藏态 (L, 2560)"]
+    C --> D["CED 投影器 P<br/>Linear 2560→2048"]
+    D --> E["投影 KV：K_20, V_20<br/>各 (L, 1024)，一次生成整段"]
+    E --> F["解码段全注意力层 20/24/28/32<br/>不再自算 k_proj / v_proj，直接注入"]
+    B --> G["解码段 layers[16..31]<br/>GatedDeltaNet 等其余层照常计算"]
+    G --> F
+    F --> H["输出 logits"]
+        </div>
+        <div class="fig-cap">CED 数据流：编码段算一次 H_16，投影器生成解码段全部全注意力层的 KV（算一次、用一段）</div>
+      </div>
+    </li>
+    <li><strong>CSA2（压缩稀疏注意力简化版）</strong>：解码段 4 个全注意力层共享 1 份 KV，每层仅挂一个小适配器做跨层映射，验证"1 份 KV + 跨层小适配器"能否在保持质量的同时获得 4x 存储压缩。
+      <div class="mermaid-wrap tight">
+        <div class="mermaid">
+flowchart TD
+    A["第 20 层 Full 模式<br/>k_proj / v_proj 正常计算"] --> B["共享存储：只保留 1 份 KV<br/>（K_20, V_20）"]
+    B --> C["第 24 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> D["第 28 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> E["第 32 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    C --> F["K_24, V_24"]
+    D --> G["K_28, V_28"]
+    E --> H["K_32, V_32"]
+    F --> I["各层 attention 正常计算<br/>存储 4 份 → 1 份，压缩约 4x"]
+    G --> I
+    H --> I
+        </div>
+        <div class="fig-cap">CSA2 数据流：4 层全注意力的 KV 收敛为 1 份存储，其余 3 层由小适配器映射生成</div>
+      </div>
+    </li>
+    <li><strong>TurboQuant KV 量化</strong>：k8v4（K 8bit / V 4bit 分组 scale），在缓存后量化路径上验证质量扰动与压缩比。
+      <div class="mermaid-wrap tight">
+        <div class="mermaid">
+flowchart TD
+    A["缓存后 KV（bf16）"] --> B["K (L, 1024)<br/>按 256 维一组求 scale<br/>线性量化为 8bit"]
+    A --> C["V (L, 1024)<br/>按 64 维一组求 scale<br/>线性量化为 4bit"]
+    C --> D["4bit 两两打包进 uint8<br/>体积再减半"]
+    B --> E["量化缓存<br/>压缩比实测 2.46x（理论 2.53x）"]
+    D --> E
+    E --> F["attention 前反量化<br/>top-5 重合 100% · top-1 一致 88.9%"]
+        </div>
+        <div class="fig-cap">TurboQuant k8v4 数据流：缓存写入路径上分组量化，attention 读取时反量化</div>
+      </div>
+    </li>
   </ol>
 
   <h3>要解决的问题</h3>
@@ -403,6 +453,37 @@
     <span class="lbl">数据用途配比小结：</span>
     数据采集阶段一次 forward 同时捕获 <code>H_16</code> 与第 20/24/28/32 层的真实 K/V（pre-norm, pre-RoPE 空间），后续投影器训练与适配器训练共享同一份 12.2GB 落盘数据，无需重复采集。
   </div>
+
+  <h3>CED 与 CSA2 模型架构（点击节点跳转源码）</h3>
+  <p>整体数据流：输入先走<strong>编码段 layers[0..15]</strong>得到 <code>H_16</code>；CED 投影器把 <code>H_16</code> 一次性映射为解码段全注意力层所需 KV，其中第 20 层以 Full 模式持有这份共享 KV，第 24/28/32 层各挂一个小适配器从共享 KV 映射出本层 KV（CSA2）；TurboQuant 在缓存写入路径上做 k8v4 量化。图中虚线为训练 / 运行时 / 量化环节，<strong>点击对应节点可跳转到 ④ 中该模块的源码</strong>。</p>
+
+  <div class="mermaid-wrap">
+    <div class="mermaid">
+flowchart TD
+    IN["输入 tokens"] --> ENC["编码段 layers[0..15]<br/>16 层正常计算"]
+    ENC --> H16["H_16 (L, 2560)"]
+    H16 --> PRJ["CED 投影器 P<br/>Linear 2560→2048"]
+    PRJ --> KV["K_20, V_20<br/>第 20 层 Full 模式持有<br/>1 份共享 KV"]
+    KV --> ADP["CSA2 适配器 × 3<br/>K: Linear / V: ResidualMLP"]
+    ADP --> MAP["K_24/V_24 · K_28/V_28 · K_32/V_32"]
+    KV --> ATTN["解码段全注意力层<br/>第 20 / 24 / 28 / 32 层"]
+    MAP --> ATTN
+    ATTN --> OUT["输出 logits"]
+    CAP["step1 数据捕获<br/>hook 抓 H_16 + 4 层真实 KV"] -.-> H16
+    T1["step2 投影器训练<br/>MSE + AdamW + cosine"] -.-> PRJ
+    T2["step2b 适配器训练<br/>闭式解 + SGD 残差"] -.-> ADP
+    RT["运行时注入<br/>Mode A hook / Mode B 旁路<br/>CSA2SharedCache"] -.-> ATTN
+    Q["TurboQuant k8v4<br/>K 8bit / V 4bit 分组 scale"] -.-> KV
+    click CAP href "#mod-m2" "跳转 M2 capture.py"
+    click PRJ href "#mod-m3" "跳转 M3 projector.py"
+    click T1 href "#mod-m4" "跳转 M4 train_projector.py"
+    click ADP href "#mod-m5" "跳转 M5 csa2.py"
+    click T2 href "#mod-m6" "跳转 M6 train_adapters.py"
+    click RT href "#mod-m7" "跳转 M7 ced_runtime.py"
+    click Q href "#mod-m8" "跳转 M8 quant.py"
+    </div>
+    <div class="fig-cap">CED + CSA2 架构与代码映射：实线为推理数据流，虚线为训练 / 运行时 / 量化环节；点击带虚线的节点跳到 ④ 对应模块源码（评测与入口见 M9 / M10）</div>
+  </div>
 </div>
 
 <!-- ============================ ③ Mermaid 训练流程图 ============================ -->
@@ -450,7 +531,7 @@ flowchart TD
 <h2>④ 各模块代码</h2>
 
 <!-- ---------------- M0 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m0">
   <h3><span class="tag mod">M0</span> 全局配置</h3>
 
   <div class="hint hint-use">
@@ -547,7 +628,7 @@ def setup_logging(name: str):
 </div>
 
 <!-- ---------------- M1 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m1">
   <h3><span class="tag mod">M1</span> 模型加载与结构工具</h3>
 
   <div class="hint hint-use">
@@ -658,7 +739,7 @@ def make_position_ids(batch_size, seq_len, offset=0, device="cuda"):
 </div>
 
 <!-- ---------------- M2 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m2">
   <h3><span class="tag mod">M2</span> 数据捕获（step1）</h3>
 
   <div class="hint hint-use">
@@ -833,7 +914,7 @@ def capture_dataset(model, tokenizer, texts, out_path, max_samples=config.CAPTUR
 </div>
 
 <!-- ---------------- M3 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m3">
   <h3><span class="tag mod">M3</span> CED 投影器定义</h3>
 
   <div class="hint hint-use">
@@ -891,7 +972,7 @@ def load_projector(path, device=config.DEVICE):
 </div>
 
 <!-- ---------------- M4 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m4">
   <h3><span class="tag mod">M4</span> 投影器训练（step2）</h3>
 
   <div class="hint hint-use">
@@ -1023,7 +1104,7 @@ def train_projector(data_path, out_path=None, epochs=config.TRAIN_EPOCHS,
 </div>
 
 <!-- ---------------- M5 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m5">
   <h3><span class="tag mod">M5</span> CSA2 适配器定义</h3>
 
   <div class="hint hint-use">
@@ -1176,7 +1257,7 @@ class CSA2ReuseRuntime:
 </div>
 
 <!-- ---------------- M6 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m6">
   <h3><span class="tag mod">M6</span> CSA2 适配器训练（step2b）</h3>
 
   <div class="hint hint-use">
@@ -1333,7 +1414,7 @@ def train_adapters(data_path, out_path=None, v_kind="mlp", k_kind="linear", lam=
 </div>
 
 <!-- ---------------- M7 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m7">
   <h3><span class="tag mod">M7</span> CED 运行时（Mode A / Mode B / 共享缓存）</h3>
 
   <div class="hint hint-use">
@@ -1693,7 +1774,7 @@ class CEDModeBRuntime:
 </div>
 
 <!-- ---------------- M8 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m8">
   <h3><span class="tag mod">M8</span> TurboQuant k8v4 量化</h3>
 
   <div class="hint hint-use">
@@ -1813,7 +1894,7 @@ def compression_report(stats: dict) -> dict:
 </div>
 
 <!-- ---------------- M9 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m9">
   <h3><span class="tag mod">M9</span> 评测模块（PPL / GSM8K / NIAH / 延迟 / 存储）</h3>
 
   <div class="hint hint-use">
@@ -2172,7 +2253,7 @@ def kv_cache_stats(model, seq_len=2048):
 </div>
 
 <!-- ---------------- M10 ---------------- -->
-<div class="card">
+<div class="card" id="mod-m10">
   <h3><span class="tag mod">M10</span> 脚本入口（step1 ~ step6）</h3>
 
   <div class="hint hint-use">
