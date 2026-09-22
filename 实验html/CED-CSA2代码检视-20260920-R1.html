@@ -287,48 +287,55 @@
       <div class="mermaid-wrap tight">
         <div class="mermaid">
 flowchart TD
-    A["输入 tokens (L, 2560)"] --> B["编码段 layers[0..15]<br/>16 层正常计算"]
-    B --> C["H_16<br/>第 16 层隐藏态 (L, 2560)"]
-    C --> D["CED 投影器 P<br/>Linear 2560→2048"]
-    D --> E["投影 KV：K_20, V_20<br/>各 (L, 1024)，一次生成整段"]
-    E --> F["解码段全注意力层 20/24/28/32<br/>不再自算 k_proj / v_proj，直接注入"]
-    B --> G["解码段 layers[16..31]<br/>GatedDeltaNet 等其余层照常计算"]
+    A["输入 tokens (L, 2560)"]:::trunk --> B["编码段 layers[0..15]<br/>16 层正常计算"]:::trunk
+    B --> C["H_16<br/>第 16 层隐藏态 (L, 2560)"]:::trunk
+    C --> D["CED 投影器 P<br/>Linear 2560→2048"]:::ced
+    D --> E["投影 KV：K_20, V_20<br/>各 (L, 1024)，一次生成整段"]:::ced
+    E --> F["解码段全注意力层 20/24/28/32<br/>不再自算 k_proj / v_proj，直接注入"]:::trunk
+    B --> G["解码段 layers[16..31]<br/>GatedDeltaNet 等其余层照常计算"]:::trunk
     G --> F
-    F --> H["输出 logits"]
+    F --> H["输出 logits"]:::trunk
+    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:1.5px,color:#15315c;
+    classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
         </div>
-        <div class="fig-cap">CED 数据流：编码段算一次 H_16，投影器生成解码段全部全注意力层的 KV（算一次、用一段）</div>
+        <div class="fig-cap">CED 数据流（<span style="color:#155c38;font-weight:600">绿</span>为 CED 加速组件，蓝为主干）：编码段算一次 H_16，投影器生成解码段全部全注意力层的 KV（算一次、用一段）</div>
       </div>
     </li>
     <li><strong>CSA2（压缩稀疏注意力简化版）</strong>：解码段 4 个全注意力层共享 1 份 KV，每层仅挂一个小适配器做跨层映射，验证"1 份 KV + 跨层小适配器"能否在保持质量的同时获得 4x 存储压缩。
       <div class="mermaid-wrap tight">
         <div class="mermaid">
 flowchart TD
-    A["第 20 层 Full 模式<br/>k_proj / v_proj 正常计算"] --> B["共享存储：只保留 1 份 KV<br/>（K_20, V_20）"]
-    B --> C["第 24 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
-    B --> D["第 28 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
-    B --> E["第 32 层适配器<br/>K: Linear<br/>V: ResidualMLP"]
-    C --> F["K_24, V_24"]
-    D --> G["K_28, V_28"]
-    E --> H["K_32, V_32"]
-    F --> I["各层 attention 正常计算<br/>存储 4 份 → 1 份，压缩约 4x"]
+    A["第 20 层 Full 模式<br/>k_proj / v_proj 正常计算"]:::ced --> B["共享存储：只保留 1 份 KV<br/>（K_20, V_20）"]:::ced
+    B --> C["第 24 层适配器<br/>K: Linear<br/>V: ResidualMLP"]:::csa2
+    B --> D["第 28 层适配器<br/>K: Linear<br/>V: ResidualMLP"]:::csa2
+    B --> E["第 32 层适配器<br/>K: Linear<br/>V: ResidualMLP"]:::csa2
+    C --> F["K_24, V_24"]:::csa2
+    D --> G["K_28, V_28"]:::csa2
+    E --> H["K_32, V_32"]:::csa2
+    F --> I["各层 attention 正常计算<br/>存储 4 份 → 1 份，压缩约 4x"]:::trunk
     G --> I
     H --> I
+    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:1.5px,color:#15315c;
+    classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
+    classDef csa2 fill:#fff4e5,stroke:#b45309,stroke-width:2px,color:#7c3e08;
         </div>
-        <div class="fig-cap">CSA2 数据流：4 层全注意力的 KV 收敛为 1 份存储，其余 3 层由小适配器映射生成</div>
+        <div class="fig-cap">CSA2 数据流（<span style="color:#155c38;font-weight:600">绿</span>为共享 KV、<span style="color:#7c3e08;font-weight:600">橙</span>为适配器支路，蓝为主干）：4 层全注意力的 KV 收敛为 1 份存储，其余 3 层由小适配器映射生成</div>
       </div>
     </li>
     <li><strong>TurboQuant KV 量化</strong>：k8v4（K 8bit / V 4bit 分组 scale），在缓存后量化路径上验证质量扰动与压缩比。
       <div class="mermaid-wrap tight">
         <div class="mermaid">
 flowchart TD
-    A["缓存后 KV（bf16）"] --> B["K (L, 1024)<br/>按 256 维一组求 scale<br/>线性量化为 8bit"]
-    A --> C["V (L, 1024)<br/>按 64 维一组求 scale<br/>线性量化为 4bit"]
-    C --> D["4bit 两两打包进 uint8<br/>体积再减半"]
-    B --> E["量化缓存<br/>压缩比实测 2.46x（理论 2.53x）"]
+    A["缓存后 KV（bf16）"]:::trunk --> B["K (L, 1024)<br/>按 256 维一组求 scale<br/>线性量化为 8bit"]:::quant
+    A --> C["V (L, 1024)<br/>按 64 维一组求 scale<br/>线性量化为 4bit"]:::quant
+    C --> D["4bit 两两打包进 uint8<br/>体积再减半"]:::quant
+    B --> E["量化缓存<br/>压缩比实测 2.46x（理论 2.53x）"]:::quant
     D --> E
-    E --> F["attention 前反量化<br/>top-5 重合 100% · top-1 一致 88.9%"]
+    E --> F["attention 前反量化<br/>top-5 重合 100% · top-1 一致 88.9%"]:::trunk
+    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:1.5px,color:#15315c;
+    classDef quant fill:#f0ebff,stroke:#6b46c1,stroke-width:2px,color:#4a2f9c;
         </div>
-        <div class="fig-cap">TurboQuant k8v4 数据流：缓存写入路径上分组量化，attention 读取时反量化</div>
+        <div class="fig-cap">TurboQuant k8v4 数据流（<span style="color:#4a2f9c;font-weight:600">紫</span>为量化环节，蓝为主干缓存读写）：缓存写入路径上分组量化，attention 读取时反量化</div>
       </div>
     </li>
   </ol>
@@ -455,25 +462,30 @@ flowchart TD
   </div>
 
   <h3>CED 与 CSA2 模型架构（点击节点跳转源码）</h3>
-  <p>整体数据流：输入先走<strong>编码段 layers[0..15]</strong>得到 <code>H_16</code>；CED 投影器把 <code>H_16</code> 一次性映射为解码段全注意力层所需 KV，其中第 20 层以 Full 模式持有这份共享 KV，第 24/28/32 层各挂一个小适配器从共享 KV 映射出本层 KV（CSA2）；TurboQuant 在缓存写入路径上做 k8v4 量化。图中虚线为训练 / 运行时 / 量化环节，<strong>点击对应节点可跳转到 ④ 中该模块的源码</strong>。</p>
+  <p><strong>蓝色为主干</strong>：原模型 Qwen3.5-4B 的计算路径（编码段 → H_16 → 解码段 → 输出）原样保留；<strong style="color:#155c38">绿色为 CED 加速支路</strong>、<strong style="color:#7c3e08">橙色为 CSA2 支路</strong>，两条支路从主干 <code>H_16</code> / 共享 KV 分出，最终把 KV「注入」回解码段全注意力层（虚线箭头）；<strong style="color:#4a2f9c">紫色为 TurboQuant 量化</strong>，作用在共享 KV 的缓存写入路径上。<strong>点击带虚线的支路节点可跳转到 ④ 中该模块的源码</strong>。</p>
 
   <div class="mermaid-wrap">
     <div class="mermaid">
 flowchart TD
-    IN["输入 tokens"] --> ENC["编码段 layers[0..15]<br/>16 层正常计算"]
-    ENC --> H16["H_16 (L, 2560)"]
-    H16 --> PRJ["CED 投影器 P<br/>Linear 2560→2048"]
-    PRJ --> KV["K_20, V_20<br/>第 20 层 Full 模式持有<br/>1 份共享 KV"]
-    KV --> ADP["CSA2 适配器 × 3<br/>K: Linear / V: ResidualMLP"]
-    ADP --> MAP["K_24/V_24 · K_28/V_28 · K_32/V_32"]
-    KV --> ATTN["解码段全注意力层<br/>第 20 / 24 / 28 / 32 层"]
-    MAP --> ATTN
-    ATTN --> OUT["输出 logits"]
-    CAP["step1 数据捕获<br/>hook 抓 H_16 + 4 层真实 KV"] -.-> H16
-    T1["step2 投影器训练<br/>MSE + AdamW + cosine"] -.-> PRJ
-    T2["step2b 适配器训练<br/>闭式解 + SGD 残差"] -.-> ADP
-    RT["运行时注入<br/>Mode A hook / Mode B 旁路<br/>CSA2SharedCache"] -.-> ATTN
-    Q["TurboQuant k8v4<br/>K 8bit / V 4bit 分组 scale"] -.-> KV
+    IN["输入 tokens"]:::trunk --> ENC["编码段 layers[0..15]<br/>16 层正常计算"]:::trunk
+    ENC --> H16["H_16 (L, 2560)"]:::trunk
+    H16 --> DEC["解码段 layers[16..31]<br/>4 个全注意力层 + 12 层 GatedDeltaNet<br/>主干照常计算"]:::trunk
+    DEC --> OUT["输出 logits"]:::trunk
+
+    H16 --> PRJ["CED 投影器 P<br/>Linear 2560→2048"]:::ced
+    PRJ --> KV["共享 KV（K_20, V_20）<br/>1 份全量缓存"]:::ced
+    KV -. "注入 KV" .-> DEC
+
+    KV --> ADP["CSA2 适配器 × 3<br/>K: Linear / V: ResidualMLP"]:::csa2
+    ADP -. "映射 24/28/32 层 KV" .-> DEC
+
+    Q["TurboQuant k8v4<br/>K 8bit / V 4bit 分组 scale"]:::quant -.-> KV
+
+    CAP["step1 数据捕获<br/>hook 抓 H_16 + 4 层真实 KV"]:::aux -.-> H16
+    T1["step2 投影器训练<br/>MSE + AdamW + cosine"]:::aux -.-> PRJ
+    T2["step2b 适配器训练<br/>闭式解 + SGD 残差"]:::aux -.-> ADP
+    RT["运行时注入<br/>Mode A hook / Mode B 旁路<br/>CSA2SharedCache"]:::aux -.-> DEC
+
     click CAP href "#mod-m2" "跳转 M2 capture.py"
     click PRJ href "#mod-m3" "跳转 M3 projector.py"
     click T1 href "#mod-m4" "跳转 M4 train_projector.py"
@@ -481,8 +493,19 @@ flowchart TD
     click T2 href "#mod-m6" "跳转 M6 train_adapters.py"
     click RT href "#mod-m7" "跳转 M7 ced_runtime.py"
     click Q href "#mod-m8" "跳转 M8 quant.py"
+
+    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:2px,color:#15315c;
+    classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
+    classDef csa2 fill:#fff4e5,stroke:#b45309,stroke-width:2px,color:#7c3e08;
+    classDef quant fill:#f0ebff,stroke:#6b46c1,stroke-width:2px,color:#4a2f9c;
+    classDef aux fill:#f4f5f7,stroke:#9aa4b2,stroke-width:1px,color:#5b6b7c;
+    linkStyle 0,1,2,3 stroke:#15315c,stroke-width:2.5px
+    linkStyle 4,5,6 stroke:#1a7f4b,stroke-width:2px
+    linkStyle 7,8 stroke:#b45309,stroke-width:2px
+    linkStyle 9 stroke:#6b46c1,stroke-width:2px
+    linkStyle 10,11,12,13 stroke:#9aa4b2,stroke-width:1.5px
     </div>
-    <div class="fig-cap">CED + CSA2 架构与代码映射：实线为推理数据流，虚线为训练 / 运行时 / 量化环节；点击带虚线的节点跳到 ④ 对应模块源码（评测与入口见 M9 / M10）</div>
+    <div class="fig-cap">CED + CSA2 架构与代码映射：蓝=主干原模型计算，<span style="color:#155c38;font-weight:600">绿=CED 支路</span>（省算），<span style="color:#7c3e08;font-weight:600">橙=CSA2 支路</span>（省存），<span style="color:#4a2f9c;font-weight:600">紫=量化</span>；虚线为注入/训练环节，点击支路节点跳到 ④ 对应模块源码（评测与入口见 M9 / M10）</div>
   </div>
 </div>
 
