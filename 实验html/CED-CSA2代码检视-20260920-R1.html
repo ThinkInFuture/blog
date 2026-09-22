@@ -217,7 +217,8 @@
   .mermaid svg{overflow:visible !important;max-width:100%;height:auto;}
   .mermaid svg text{font-size:20px !important;}
   .mermaid .cluster-label foreignObject{overflow:visible !important;white-space:nowrap;}
-  .mermaid .cluster-label{transform:translateY(-30px);}
+  .mermaid .cluster-label span,.mermaid .cluster-label div,.mermaid .cluster-label p{white-space:nowrap !important;overflow:visible !important;}
+  .mermaid .cluster-label{translate:0 -30px;}
   .mermaid-wrap.tight{padding:20px 18px 14px;}
   .fig-cap{font-size:12.5px;color:var(--muted);text-align:center;margin:10px 0 0;line-height:1.6;}
   .mermaid svg a{cursor:pointer;}
@@ -467,24 +468,29 @@ flowchart TD
   </div>
 
   <h3>CED 与 CSA2 模型架构（同一输入 · 两条分支对比，点击节点跳转源码）</h3>
-  <p>同一段输入走两条分支，对比一目了然：<strong>原始分支</strong>（标准 Qwen3.5-4B）后段 4 个全注意力层每层自算 k_proj / v_proj、各存 1 份 KV；<strong style="color:#155c38">新分支</strong>由 CED 投影器从 H_16 一次生成 KV、只存 1 份共享 KV，再经 <strong style="color:#7c3e08">CSA2 适配器</strong>映射出 24/28/32 层各自的 KV——省算、省存都发生在这条分支上；<strong style="color:#4a2f9c">紫色 TurboQuant</strong> 作用在新分支共享 KV 的缓存写入路径上。<strong>点击新分支与灰色配套节点可跳转到 ④ 中对应模块源码</strong>。</p>
+  <p>同一段输入走进两个色块、两条分支，逐环节对比：<strong style="color:#15315c">蓝框原始分支</strong>（标准 Qwen3.5-4B）后段 4 个全注意力层每层自算 k_proj / v_proj，各存 1 份、共 4 份 KV；<strong style="color:#155c38">绿框新分支</strong>由 CED 投影器从 H_16 一次生成 KV、只存 1 份共享 KV，再经 <strong style="color:#7c3e08">CSA2 适配器</strong>映射出 24/28/32 层各自的 KV；<strong style="color:#4a2f9c">紫色 TurboQuant</strong> 作用在新分支共享 KV 的缓存写入路径上。<strong>点击分支内与灰色配套节点可跳转到 ④ 中对应模块源码</strong>。</p>
 
   <div class="mermaid-wrap">
     <div class="mermaid">
 flowchart TD
     IN["输入 tokens（同一段输入）"]:::trunk
-    IN -->|"原始分支 · 标准注意力"| O1["后段 4 个全注意力层<br/>每层自算 k_proj / v_proj"]:::trunk
-    O1 --> O2["存 4 份 KV<br/>第 20 / 24 / 28 / 32 层各 1 份"]:::trunk
-    O2 --> O3["attention → 输出"]:::trunk
-    IN -->|"新分支 · CED + CSA2 加速"| N1["CED 投影器 P（Linear 2560→2048）<br/>由前段 H_16 一次生成 KV"]:::ced
-    N1 --> N2["只存 1 份共享 KV<br/>（K_20, V_20）"]:::ced
-    N2 --> N3["CSA2 适配器 × 3<br/>映射出 24 / 28 / 32 层各自 KV"]:::csa2
-    N3 --> N4["attention → 输出"]:::trunk
+
+    subgraph ORIG["原始分支 · 标准注意力"]
+        O1["后段 4 个全注意力层<br/>每层自算 k_proj / v_proj"]:::trunk --> O2["存 4 份 KV<br/>第 20 / 24 / 28 / 32 层各 1 份"]:::trunk --> O3["attention → 输出"]:::trunk
+    end
+
+    subgraph NEW["新分支 · CED + CSA2 加速"]
+        N1["CED 投影器 P（Linear 2560→2048）<br/>由前段 H_16 一次生成 KV"]:::ced --> N2["只存 1 份共享 KV<br/>（K_20, V_20）"]:::ced --> N3["CSA2 适配器 × 3<br/>映射出 24 / 28 / 32 层各自 KV"]:::csa2 --> N4["attention → 输出"]:::trunk
+    end
+
+    IN --> O1
+    IN --> N1
     Q["TurboQuant k8v4<br/>K 8bit / V 4bit 分组 scale"]:::quant -.-> N2
     CAP["step1 数据捕获<br/>hook 抓 H_16 + 4 层真实 KV"]:::aux -.-> O1
     T1["step2 投影器训练<br/>MSE + AdamW + cosine"]:::aux -.-> N1
     T2["step2b 适配器训练<br/>闭式解 + SGD 残差"]:::aux -.-> N3
     RT["运行时注入<br/>Mode A hook / Mode B 旁路<br/>CSA2SharedCache"]:::aux -.-> N4
+
     click CAP href "#mod-m2" "跳转 M2 capture.py"
     click N1 href "#mod-m3" "跳转 M3 projector.py"
     click T1 href "#mod-m4" "跳转 M4 train_projector.py"
@@ -492,19 +498,22 @@ flowchart TD
     click T2 href "#mod-m6" "跳转 M6 train_adapters.py"
     click RT href "#mod-m7" "跳转 M7 ced_runtime.py"
     click Q href "#mod-m8" "跳转 M8 quant.py"
+
     classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:2px,color:#15315c;
     classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
     classDef csa2 fill:#fff4e5,stroke:#b45309,stroke-width:2px,color:#7c3e08;
     classDef quant fill:#f0ebff,stroke:#6b46c1,stroke-width:2px,color:#4a2f9c;
     classDef aux fill:#f4f5f7,stroke:#9aa4b2,stroke-width:1px,color:#5b6b7c;
-    linkStyle 0,1,2 stroke:#15315c,stroke-width:2.5px
-    linkStyle 3,4 stroke:#1a7f4b,stroke-width:2.5px
-    linkStyle 5 stroke:#b45309,stroke-width:2.5px
-    linkStyle 6 stroke:#15315c,stroke-width:2px
+    style ORIG fill:#f4f6fa,stroke:#7aa4f0,stroke-width:2.5px
+    style NEW fill:#edf9f2,stroke:#1a7f4b,stroke-width:2.5px
+    linkStyle 0,1,5 stroke:#15315c,stroke-width:2.5px
+    linkStyle 2,6 stroke:#1a7f4b,stroke-width:2.5px
+    linkStyle 3 stroke:#b45309,stroke-width:2.5px
+    linkStyle 4 stroke:#15315c,stroke-width:2px
     linkStyle 7 stroke:#6b46c1,stroke-width:2px
     linkStyle 8,9,10,11 stroke:#9aa4b2,stroke-width:1.5px
     </div>
-    <div class="fig-cap">同一输入、两条分支对比：原始分支（蓝）每层自算 KV、共 4 份存储；新分支 <span style="color:#155c38;font-weight:600">绿=CED</span>（H_16 投影一次生成）、<span style="color:#7c3e08;font-weight:600">橙=CSA2</span>（适配器映射）只存 1 份共享 KV；<span style="color:#4a2f9c;font-weight:600">紫=量化</span>、灰=训练 / 运行时环节；点击节点跳到 ④ 对应模块源码（评测与入口见 M9 / M10）</div>
+    <div class="fig-cap">同一输入 · 两条分支对比：<strong style="color:#15315c">蓝框</strong>=原始分支（每层自算、存 4 份 KV），<strong style="color:#155c38">绿框</strong>=新分支（<span style="color:#155c38;font-weight:600">绿=CED</span> 投影一次生成、<span style="color:#7c3e08;font-weight:600">橙=CSA2</span> 适配器映射、只存 1 份），<span style="color:#4a2f9c;font-weight:600">紫=量化</span>、灰=训练 / 运行时环节；点击节点跳到 ④ 对应模块源码（评测与入口见 M9 / M10）</div>
   </div>
 </div>
 
@@ -2862,10 +2871,11 @@ docs/ tests/doc/ logs/ mail/  文档 / 日志 / 邮件
     });
 
     // 渲染完成后微调 cluster 标题位置（v11.4.1 已知问题）
+    // 用独立 translate 属性而非 transform，避免覆盖 mermaid 对标题的定位 transform
     window.addEventListener('load', () => {
       setTimeout(() => {
         document.querySelectorAll('.mermaid .cluster-label').forEach((el) => {
-          el.style.transform = 'translateY(-30px)';
+          el.style.translate = '0 -30px';
         });
       }, 600);
     });
