@@ -12,3 +12,7 @@ models/
 学习pdf/
 layout.png
 send_email.py
+drafts/
+
+# 邮件归档仅本地留存，不随站点部署
+mail/
