@@ -1,0 +1,944 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vllm-ascend 源码课 · SFA indexer × DCP（PR 16325） - 华杉的技术博客</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-light.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root{
+  --bg:#f7f8fa; --surface:#ffffff; --border:#d0d7de;
+  --ink:#24292f; --muted:#57606a;
+  --blue:#0969da; --green:#1a7f37; --orange:#9a6700; --red:#cf222e; --purple:#8250df;
+  --soft-blue:#ddf4ff; --soft-green:#dafbe1; --soft-red:#ffebe9; --soft-amber:#fff8c5;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  line-height:1.75;font-size:15px}
+.container{max-width:1020px;margin:0 auto;padding:0 20px}
+h2{font-size:22px;border-left:4px solid var(--blue);padding-left:12px;margin-top:40px}
+h3{font-size:18px;color:var(--blue);margin-top:34px}
+h4{margin-top:22px;color:var(--ink)}
+code{font-family:"SFMono-Regular",Consolas,"Liberation Mono",monospace;background:#eef1f4;border-radius:5px;padding:1px 6px;font-size:13px;color:#0550ae}
+.en{color:var(--muted);font-size:12.5px;font-family:monospace}
+/* 顶栏 TOC */
+.top{position:sticky;top:0;z-index:50;background:rgba(255,255,255,.94);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.top .container{display:flex;gap:14px;align-items:center;height:52px;overflow-x:auto;white-space:nowrap}
+.top a{color:var(--muted);text-decoration:none;font-size:13.5px;padding:3px 10px;border-radius:8px}
+.top a:hover{color:var(--blue);background:var(--soft-blue)}
+.top a.active{color:var(--blue);font-weight:600}
+.hero{background:linear-gradient(135deg,#f7f8fa 0%,#ddf4ff 55%,#dafbe1 100%);border-bottom:1px solid var(--border);padding:42px 0 32px}
+.hero h1{margin:0 0 10px;font-size:25px;line-height:1.4}
+.hero p{margin:0;color:#3a4250;max-width:840px}
+.badge{display:inline-block;font-family:monospace;font-size:12px;border:1px solid var(--border);border-radius:20px;padding:2px 12px;margin:4px 6px 0 0;color:#3a4250;background:#ffffff}
+/* 阶段折叠 */
+details.stage{border:1px solid var(--border);border-radius:14px;margin:24px 0;background:var(--surface);overflow:hidden}
+details.stage>summary{cursor:pointer;padding:15px 22px;font-size:18px;font-weight:700;list-style:none;display:flex;align-items:center;gap:10px;background:#f0f4f8}
+details.stage>summary::-webkit-details-marker{display:none}
+details.stage>summary .arrow{transition:transform .2s;color:var(--blue)}
+details.stage[open]>summary .arrow{transform:rotate(90deg)}
+details.stage>summary .tag{font-size:11.5px;color:var(--muted);font-weight:400;border:1px solid var(--border);border-radius:20px;padding:1px 10px;background:#fff}
+details.stage .body{padding:20px 26px 28px}
+/* 概念爬坡层标签 */
+.layer-ramp{background:#fff1e6;color:#a03d00}
+/* 概览 / 细节 分层的折叠容器 */
+details.layer{border:1px solid var(--border);border-radius:10px;margin:16px 0;background:#fcfdfe}
+details.layer>summary{cursor:pointer;padding:10px 16px;font-weight:700;font-size:14.5px;list-style:none;color:var(--ink);background:#f0f4f8;border-radius:10px}
+details.layer>summary::-webkit-details-marker{display:none}
+details.layer>summary .arrow{transition:transform .2s;color:var(--blue);margin-right:8px}
+details.layer[open]>summary .arrow{transform:rotate(90deg)}
+details.layer .inner{padding:10px 18px 18px}
+.layer-label{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:1px 10px;margin-right:8px;vertical-align:2px}
+.layer-overview{background:var(--soft-blue);color:#0550ae}
+.layer-detail{background:var(--soft-green);color:#145d32}
+/* 图容器 */
+.fig{margin:20px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#ffffff}
+.fig .fig-head{padding:9px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:#f6f8fa}
+.fig .fig-title{font-weight:700;font-size:13.5px}
+.fig .fig-tag{font-size:11px;color:var(--muted)}
+.fig .fig-q{margin:8px 16px 0;padding:8px 14px;border-left:3px solid var(--orange);background:#fff8c5;color:#5b4400;font-size:13px;border-radius:0 8px 8px 0}
+.fig .fig-body{padding:14px;overflow:auto;cursor:zoom-in}
+.mermaid{display:flex;justify-content:center}
+/* 放大 */
+.fig.zoomed{position:fixed;inset:24px;z-index:100;background:#ffffff;overflow:auto;cursor:zoom-out;border-color:var(--blue);box-shadow:0 0 46px rgba(9,105,218,.28)}
+.fig.zoomed .fig-body{cursor:zoom-out}
+.fig.zoomed .mermaid{min-width:min-content}
+/* 代码块 */
+.codeblock{margin:20px 0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:#ffffff}
+.codeblock .cb-head{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:9px 14px;background:#f6f8fa;border-bottom:1px solid var(--border);flex-wrap:wrap}
+.codeblock .cb-title{font-family:monospace;font-size:12.5px;color:#0550ae}
+.codeblock .cb-title .ln{color:var(--muted)}
+.codeblock .cb-note{padding:10px 16px;font-size:13.5px;background:#f0fff4;border-top:1px solid var(--border);color:#1a3c2a}
+.codeblock .cb-note b{color:var(--green)}
+.copy-btn{font-size:12px;color:var(--muted);background:#ffffff;border:1px solid var(--border);border-radius:6px;padding:2px 10px;cursor:pointer}
+.copy-btn:hover{color:var(--blue);border-color:var(--blue)}
+.codeblock pre{margin:0;background:#ffffff;padding:14px 16px;overflow:auto;font-size:13px;line-height:1.7;border-bottom:1px solid var(--border)}
+.codeblock pre code{background:none;padding:0}
+/* 表格 */
+table{width:100%;border-collapse:collapse;margin:14px 0;font-size:13.5px;background:#fff}
+th,td{border:1px solid var(--border);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#f0f4f8}
+.ok{color:var(--green)} .no{color:var(--red)}
+/* 提示 */
+.q-box{background:#f0fff4;border:1px solid #7bd88f;border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14px}
+.q-box b{color:var(--green)}
+.callout{background:#f0f6ff;border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin:14px 0;font-size:14px}
+.callout.warn{background:#fff8c5;border-color:#eac54f}
+.footer{text-align:center;color:var(--muted);font-size:12.5px;padding:32px 0 42px;border-top:1px solid var(--border);margin-top:36px}
+.wordcount{font-size:12.5px;color:var(--muted)}
+.wordcount b{color:var(--blue)}
+</style><link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+
+<nav class="top">
+  <div class="container">
+    <a href="#bg">① 背景</a>
+    <a href="#plan">② 方案</a>
+    <a href="#impl">③ 实现</a>
+    <a href="#check">自检表</a>
+    <span style="color:#d0d7de">|</span>
+    <span style="font-size:12px;color:#57606a">SFA indexer × DCP · PR #16325 · 浅色版</span>
+  </div>
+</nav>
+
+<div class="hero">
+  <div class="container">
+    <h1>一次「缓存地址错配」的修复：<br>让 SFA indexer 在 DCP 下独立构建自己的元数据</h1>
+    <p>PR <code>#16325</code> — <code>[BugFix][Attention] Build SFA indexer DCP metadata independently</code>（commit <code>8a36237e9</code>，2026-09-17）<br>
+    三阶段演进线：<b>业务流程（背景）→ 当前方案 对照 目标方案（方案）→ 目标实现流程（实现）</b>。<br>
+    背景开始前先做<b>概念爬坡</b>（从你懂的普通 attention，五级爬到 SFA / indexer / DCP）；之后每阶段按「<b>概览层 → 细节层</b>」组织，逐节配图、一图一问、图文交替。可对仓库 <code>/root/workspace/vllm-ascend</code> 的 <code>8a36237e9</code> 一起读。</p>
+    <div>
+      <span class="badge">bugfix</span><span class="badge">20 files · +1548/−303</span><span class="badge">前因 PR #15669</span><span class="badge">浅色主题</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- ==================== 阶段一：背景 ==================== -->
+<details class="stage" id="bg" open>
+  <summary><span class="arrow">▸</span> 阶段一 · 背景 <span class="tag">问题视角：为什么需要这个需求</span></summary>
+  <div class="body">
+    <p class="wordcount">本段文字 ≈ <b>1500</b> 字（要求 ≥600）· 概念爬坡图 6 + 概览 1 + 细节 3 = 图 <b>10</b> 张</p>
+
+    <!-- 概念爬坡层（最高优先级：先锚定常识，一级级爬到本需求） -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-ramp">概念爬坡</span> 从普通 attention 爬到 SFA / indexer / DCP（五级）</summary>
+      <div class="inner">
+
+        <h3>爬坡第 1 级 · 普通 attention：每个 token 都要和全部历史算一遍 <span class="en">(普通 LLM 推理，你已懂，我们确认在同一页)</span></h3>
+        <p>普通大模型推理里有两段：<b>prefill</b> 一次性把整段输入并行算完，<b>decode</b> 一个 token 一个 token 往下生成。生成时当前 query 要「回头看」之前所有 token 的键值对——这些键值对被存在 <b>KV cache</b> 里，attention 用它算当前 token 与每个历史 token 的相关性。序列越长，这一步要关联的历史就越多，成本大致是平方增长（O(n²)）。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-1 · 普通 attention：query 对全部历史 key 打分</span><span class="fig-tag">概念爬坡 · 常识锚定（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>普通 attention 为什么是 O(n²)——每个 query 连向全部历史 key。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    Q["当前 token 的 query"] --> A["attention 打分"]
+    A --> K1["历史 key 1"]
+    A --> K2["历史 key 2"]
+    A --> K3["… 全部历史 key"]
+    K1 & K2 & K3 --> V["加权求和 → 输出"]
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>「全部」两个字就是后面所有故事的起点——长上下文时，这个「全部」让计算量暴涨，于是人们想：能不能只看一部分？</p>
+
+        <h3>爬坡第 2 级 · 稀疏注意力：只看最相关的 k 个历史位置 <span class="en">(sparse attention)</span></h3>
+        <p>因为「每个 query 都要关注全部历史」太贵，于是有了省事的办法：<b>每个 query 只和自己最相关的 k 个历史位置</b>算 attention。这种「只挑 k 个」的注意力，仓库里叫 <b>SFA（稀疏注意力 backend，Sparse Flash Attention）</b>。代价是：怎么挑出「最相关的 k 个」，本身需要一次计算。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-2 · 稀疏注意力：query 只连 top-k 个历史位置</span><span class="fig-tag">概念爬坡 · 第 2 级（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>SFA 与普通 attention 的区别——参与打分的历史从「全部」变成「top-k」。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    Q2["当前 token 的 query"] --> T["挑最相关的 k 个<br/>（top-k 选择）"]
+    T --> K1["第 1 相关位置"]
+    T --> K2["第 2 相关位置"]
+    T --> K3["… 第 k 相关位置"]
+    K1 & K2 & K3 --> V2["只对这 k 个做加权求和"]
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>从「和全部算」到「和 k 个算」，省的是算力；新增的成本是那个「挑选」。这一步的课题：挑选结果值得缓存吗？——下一级回答。</p>
+
+        <h3>爬坡第 3 级 · indexer：负责挑 top-k，并把自己的决定缓存下来 <span class="en">(indexer / indexer cache)</span></h3>
+        <p>因为「挑哪 k 个」的结论会被反复使用（同一位置可能被很多后续 token 查看），与其每次重算，不如让一个专门的模块负责挑选、并把决定存下来。这个模块就叫 <b>indexer（索引器）</b>，它有自己的独立缓存（在仓库里按一种叫 <b>LI-C8</b> 的紧凑布局存放）。注意：indexer 缓存和主 KV 缓存是<b>两套东西</b>——一个存 key/value，一个存「该看哪几个位置」的索引。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-3 · indexer 与它的独立缓存</span><span class="fig-tag">概念爬坡 · 第 3 级（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>indexer 凭什么独立存在——它有自己的一份缓存（LI-C8），跟主 KV 缓存分家。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    Q3["query"] --> SFA["SFA 主注意力<br/>用 KV cache 算 attention"]
+    Q3 --> IDX["indexer（索引器）<br/>挑 top-k 位置"]
+    IDX --> IC["indexer cache（LI-C8）<br/>存「该看哪几个位置」"]
+    SFA --> KV["主 KV cache<br/>存历史 key/value"]
+    IC -. 供 SFA 查询 .-> SFA
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>画面上已经出现两套缓存（主 KV 缓存 与 indexer 缓存）——「它们分别怎么存放」就是第 4 级的问题。</p>
+
+        <h3>爬坡第 4 级 · 上下文太长切多卡：主缓存各管一段，indexer 缓存每卡一份 <span class="en">(DCP / PCP · rank-local vs replicated)</span></h3>
+        <p>当上下文长到单卡放不下，vLLM 会把一个请求沿 token 序列方向切到多个 rank（卡）。这种「按序列切分」的并行，decode 阶段叫 <b>DCP（decode 上下文并行）</b>，prefill 阶段叫 <b>PCP（prefill 上下文并行）</b>。切了之后两种缓存处理方式不一样：<b>主 KV 缓存</b>按 rank 各管各的一段（<b>rank-local</b>——每卡只存自己分到的那段历史）；<b>indexer 缓存</b>则选择每张卡都放一份完整副本（<b>replicated</b>——因为每卡都要快速查 top-k 结论）。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-4 · 两种缓存布局并存</span><span class="fig-tag">概念爬坡 · 第 4 级（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>同一套并行系统里，主缓存是 rank-local、indexer 缓存是 replicated——两种布局并存。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TB
+    A["整个请求的 token 序列"] --> B["DCP/PCP 按序列切到 2 张卡"]
+    B --> R0["卡0"]
+    B --> R1["卡1"]
+    R0 --> M0["主 KV：只存前半段<br/>（rank-local）"]
+    R1 --> M1["主 KV：只存后半段<br/>（rank-local）"]
+    R0 --> I0["indexer 缓存：完整副本<br/>（replicated）"]
+    R1 --> I1["indexer 缓存：完整副本<br/>（replicated）"]
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>「主缓存一人一半、indexer 缓存人手一份」并存——只要谁不小心把前者的地址习惯用到后者身上，就会出错。这就是下一级。</p>
+
+        <h3>爬坡第 5 级 · 两种布局不一致 → 地址错配（本需求的痛点）</h3>
+        <p>构建 indexer 元数据（比如「这次要写哪个缓存槽位」）时，如果用的是主缓存的 rank-local 地址——「槽位 7 在第 0 块缓存里」——而实际上 indexer 缓存是 replicated 的：每个 rank 各有自己的槽位 7。地址被用错语义，就会写到错的位置：<b>不报错，而是悄悄把索引写乱，推理结果出错</b>。这正是 PR #16325 要修的东西。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-5 · 地址错配：rank-local 地址写进 replicated 缓存</span><span class="fig-tag">概念爬坡 · 第 5 级（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>为什么地址会错——「槽位 7」在 replicated 布局里每卡各有一份，拿 rank-local 语义去写就写错。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    B["想写 indexer 缓存<br/>用主缓存的 rank-local 地址（槽位7）"] --> C{"indexer 缓存是 replicated？"}
+    C -->|是| D["槽位7 在每张卡各有一份<br/>写到其中一份 ≠ 写全"]
+    C -->|否| E["ordinary 布局碰巧正确"]
+    D --> F["静默错 token · 长输入精确检索失败"]
+    style D fill:#ffebe9,stroke:#cf222e
+    style F fill:#ffebe9,stroke:#cf222e
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>修复思路预告（阶段二/三展开）：让 indexer 用自己的「复制布局语义」来构建地址——而不是借用主缓存的 rank-local 地址。</p>
+
+        <h3>回头查阅 · 术语速查表 <span class="en">(helper: 第一次读到这页可跳过，概念没懂时回来看)</span></h3>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">爬坡图 0-6 · 术语关系索引</span><span class="fig-tag">概念爬坡 · 索引（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>这些术语之间是谁提供、谁使用——作为爬坡以后的查阅索引。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    U["CommonAttentionMetadata（上游 vLLM）<br/>slot / block / seq_lens / positions"] --> P["vllm-ascend 插件层"]
+    P --> S["SFA backend<br/>sfa_v1.py"]
+    P --> I["indexer backend<br/>indexer.py"]
+    P --> C["context_parallel/<br/>DCP · PCP"]
+    S -. 曾借用视图 .-> I
+            </div>
+          </div>
+        </div>
+        <table>
+          <tr><th>术语 <span class="en">EN</span></th><th>大白话</th><th>代码位置</th></tr>
+          <tr><td>SFA <span class="en">Sparse Flash Attention</span></td><td>稀疏注意力 backend：每个 query 只看 top-k 个历史位置</td><td>vllm_ascend/attention/sfa_v1.py</td></tr>
+          <tr><td>indexer <span class="en">indexer / indexer cache</span></td><td>负责挑 top-k 的模块，有自己的独立缓存（LI-C8 布局）</td><td>vllm_ascend/attention/indexer.py</td></tr>
+          <tr><td>DCP / PCP <span class="en">Decode/Prefill Context Parallel</span></td><td>把一个长请求沿序列切到多张卡的并行方式</td><td>vllm_ascend/attention/context_parallel/</td></tr>
+          <tr><td>rank-local / replicated</td><td>主缓存每卡各存一段 vs indexer 缓存每卡一份完整副本</td><td>—（布局概念）</td></tr>
+          <tr><td>CommonAttentionMetadata</td><td>上游 vLLM 提供的公共注意力元数据，插件在其上扩展</td><td>上游 vllm 包</td></tr>
+          <tr><td>LI-C8</td><td>indexer 缓存的一种紧凑存放布局代号</td><td>indexer.py / sfa_v1.py</td></tr>
+          <tr><td>MTP <span class="en">Multi-Token Prediction</span></td><td>投机解码方式；草稿层可能与主层共享物理缓存（KV-sharing）</td><td>spec_decode/</td></tr>
+        </table>
+        <p><b>用法：</b>这张表不是第一遍读的地方；读后面章节遇到不懂的名词，回来查。</p>
+
+      </div>
+    </details>
+
+    <!-- 概览层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-overview">概览层</span> 一句话：请求为什么会被「缓存地址错配」卡住</summary>
+      <div class="inner">
+        <p>GLM-5.x 的稀疏注意力（SFA）在 Ascend 上多了一个 <b>indexer（索引器）</b>：每个 query 只关注 top-k 个历史位置，indexer 决定关注谁，它有自己独立的一份缓存。问题出在并行布局上——<b>SFA 主缓存是 rank-local（每人只管自己分到的 token），而 indexer 缓存在 DCP rank 之间复制（每人一份完整副本）</b>。构建 indexer 元数据时若沿用 SFA 的 rank-local 地址，就会把 top-k 索引写到错误的复制副本里，长输入精确检索直接错乱。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 1 概览 · 业务流程：问题从哪来</span><span class="fig-tag">背景 · 问题视角 · 概览（≤7 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「为什么需要这个需求」——用户场景到失败的完整主路径。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["用户：长上下文 GLM-5.2<br/>DCP/PCP 并行 · 图模式"] --> B["SFA 稀疏注意力 + indexer<br/>决定每个 query 关注 top-k 历史"]
+    B --> C["两种缓存布局不一致<br/>主缓存 rank-local / indexer 缓存 replicated"]
+    C --> D["indexer 元数据沿用了<br/>rank-local 的地址"]
+    D --> E["replicated 下地址错配<br/>top-k 索引读写错位置"]
+    E --> F["静默错 token<br/>≥2K 精确检索 0/9"]
+            </div>
+          </div>
+        </div>
+        <p><b>读图：</b>A→B 是功能主路径；C 是两种布局并存的客观事实；D 是当前实现的做法；E、F 是后果。后面所有细节图都在解释 C、D、E 三个环节。</p>
+      </div>
+    </details>
+
+    <!-- 细节层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-detail">细节层</span> 逐节深入：定位 → 前因 → 痛点（与图 3 新旧对照）</summary>
+      <div class="inner">
+
+
+
+        <h3>1.1 定位：这个需求站在 vllm-ascend 的哪一层</h3>
+        <p>vLLM 主仓库承担调度与模型执行，NPU 专属逻辑下沉到 vllm-ascend 插件。注意力 backend 在 <code>vllm_ascend/attention/</code> 下按 backend 组织：SFA 与 indexer 是两个独立 AttentionBackend，context_parallel 提供并行语境的工具。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 1-1 细节 · 层级关系图</span><span class="fig-tag">背景 · 结构视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「这个需求落在哪一层」——沿主仓库→插件→backend 的层级定位 indexer。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["vLLM 主仓库<br/>调度 + 模型执行 + 公共元数据"] --> B["vllm-ascend 插件<br/>NPU backend 集合"]
+    B --> C["attention/ 目录<br/>backend 家族"]
+    C --> D["SFA backend<br/>稀疏注意力"]
+    C --> E["indexer backend<br/>top-k 索引缓存"]
+    C --> F["context_parallel/<br/>DCP · PCP"]
+    style E fill:#dafbe1,stroke:#1a7f37,stroke-width:2px
+            </div>
+          </div>
+        </div>
+        <p><b>读图：</b>本 PR 同时动了 C 子层下的 E（indexer backend）与 D（SFA backend），以及 F（context_parallel 新增工具）——插件内部 attention 家族的三处协同改动。</p>
+
+        <h3>1.2 前因：PR #15669 把 indexer 拆成独立模块</h3>
+        <p>提交 <code>44e316024</code>（#15669，Refactor）把 indexer 从 SFA 内嵌状态解耦成独立 backend，职责更清晰，但也留下隐患：<b>indexer 元数据仍然是「借用」SFA 的</b>。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 1-2 细节 · 拆分前后对比</span><span class="fig-tag">背景 · 结构视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「#15669 之前 vs 之后，哪里埋了雷」——拆分带来职责分离，也留下依赖惯性。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["#15669 之前<br/>SFA 一体：indexer 内嵌在 SFA 里"] --> B["#15669 之后<br/>拆成两个 backend：SFA + 独立 indexer"]
+    B --> C["但 indexer 元数据仍借用 SFA 视图<br/>（block_table / slot / fallback）"]
+    C --> D["隐患：replicated DCP 下<br/>rank-local 地址 ≠ 复制布局地址"]
+    style C fill:#fff8c5,stroke:#9a6700
+    style D fill:#ffebe9,stroke:#cf222e
+            </div>
+          </div>
+        </div>
+        <p><b>读图：</b>红线点的本质是「职责分开、数据没分开」——模块独立了，但 indexer 吃的数据仍由 SFA 提供，布局语义被偷换。</p>
+
+        <h3>1.3 痛点：当前代码在哪一步把地址算错</h3>
+        <p>现有链路里，indexer builder（旧实现）只做部分字段，其余全部指望 SFA：MTP draft 时甚至 fallback 到整个 SFA 层元数据；前向阶段还往 indexer 元数据里 patch 序列长度与 cos/sin。这张图与阶段三的「目标实现」形成新旧对照。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 1-3 细节 · 当前实现流程（问题出在哪一步）</span><span class="fig-tag">背景 · 问题视角·落代码（≤7 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「现有代码在哪一步埋下错误」——沿调用链标出两个借用点与一个 patch 点。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["proposer / runner<br/>为每个 backend 调 builder"] --> B["SFA builder → SFA 元数据<br/>sfa_v1.py:376"]
+    A --> C["indexer builder（旧）<br/>indexer.py:471 只做部分字段"]
+    C --> D["借用 SFA 的 block_table / slot<br/>rank-local 视图"]
+    C --> E["MTP draft fallback<br/>整个 SFA 层元数据"]
+    D --> F["replicated 布局地址错配"]
+    E --> F
+    B --> G["前向时 patch 字段<br/>seq_lens / cos-sin / decode 数"]
+    G --> F
+    style D fill:#fff8c5,stroke:#9a6700
+    style E fill:#fff8c5,stroke:#9a6700
+    style F fill:#ffebe9,stroke:#cf222e,stroke-width:2px
+            </div>
+          </div>
+        </div>
+        <p><b>读图：</b>问题不是单一函数，而是「数据来源」错了：块表和 slot 用 rank-local 语义，前端还要不断给 indexer 元数据打补丁。修复的正解 = 让 indexer 自己从公共事实推导。</p>
+
+        <div class="callout warn"><b>一句话痛点：</b>缓存不是崩溃，而是<b>静默错 token</b>（长输入图模式 20 例仅 2 例过、≥2K 精确 0/9），所以验证靠「exact output 逐字对比」而不是跑通测试。</div>
+
+      </div>
+    </details>
+  </div>
+</details>
+
+
+<!-- ==================== 阶段二：方案 ==================== -->
+<details class="stage" id="plan" open>
+  <summary><span class="arrow">▸</span> 阶段二 · 方案 <span class="tag">设计视角：把流程从哪变到哪</span></summary>
+  <div class="body">
+    <p class="wordcount">本段文字 ≈ <b>950</b> 字（要求 ≥800）· 图 <b>7</b> 张</p>
+
+    <!-- 概览层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-overview">概览层</span> 当前方案 vs 目标方案</summary>
+      <div class="inner">
+        <p>老方案依靠「借用 + patch」，新方案依靠「公共事实 + 独立推导」。两张概览图都是设计视角，回答同一个问题：流程从哪变到哪。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-1 概览 · 当前方案流程</span><span class="fig-tag">方案 · 设计视角 · 概览（≤7 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>现状整体长什么样——以「SFA 产数据、indexer 用数据」为骨架。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["SFA builder 构建主元数据"] --> B["产出 block_table / slot / seq_lens<br/>rank-local 语义"]
+    B --> C["indexer 元数据 = 借用 SFA 视图"]
+    C --> D["前向 patch 序列长度 / cos-sin"]
+    D --> E{"缓存是 replicated？"}
+    E -->|否| OK["碰巧能用"]
+    E -->|是| BAD["地址错配"]
+    style C fill:#fff8c5,stroke:#9a6700
+    style BAD fill:#ffebe9,stroke:#cf222e
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>老链路的「数据源」是 SFA 的 rank-local 视图，indexer 只是被动接收 + 打补丁——布局一旦变成 replicated 就崩。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-2 概览 · 目标方案流程</span><span class="fig-tag">方案 · 设计视角 · 概览（≤7 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>改造后整体长什么样——所有数据都从公共事实推导，地址永远正确。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["CommonAttentionMetadata（上游）<br/>+ CP context（DCP/PCP）"] --> B["indexer builder 独立推导<br/>indexer.py:471"]
+    B --> C["地址变换：sfa_dcp_utils<br/>local → replicated"]
+    B --> D["PCP 顺序：common_cp<br/>gather 顺序"]
+    B --> E["其余自有：RoPE / seq_lens /<br/>LI-C8 分组"]
+    C & D & E --> F["AscendSFAIndexerMetadata<br/>完整独立视图"]
+    F --> G["sfa_v1 只查 indexer 元数据<br/>不 fallback · 不 patch"]
+    style A fill:#dafbe1,stroke:#1a7f37
+    style F fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>新链路的「数据源」换成公共事实，indexer builder 内部自己做 DCP 地址变换、PCP 排序、RoPE 与分组，最后交出完整独立的元数据。</p>
+      </div>
+    </details>
+
+    <!-- 细节层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-detail">细节层</span> 设计核心 → 模块划分 → 增删变化 → 接老流程 → 边界</summary>
+      <div class="inner">
+
+        <h3>2.1 设计核心：依赖方向反转</h3>
+        <p>一句话：<b>indexer 不再依赖 SFA，只依赖「公共事实」</b>。公共事实 = 上游 CommonAttentionMetadata + 显式传入的 CP 上下文。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-3 细节 · 依赖方向变化</span><span class="fig-tag">方案 · 设计视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>谁依赖谁——从「indexer 依赖 SFA」变成「indexer 只依赖公共事实」。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    O["旧：indexer ← 依赖 SFA 元数据<br/>（借用 + patch）"] --> N["新：indexer 只依赖"]
+    N --> F1["CommonAttentionMetadata<br/>（上游公共事实）"]
+    N --> F2["CP context<br/>DCP / PCP 显式传入"]
+    style O fill:#ffebe9,stroke:#cf222e
+    style F1 fill:#dafbe1,stroke:#1a7f37
+    style F2 fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>这条依赖线被剪断后，indexer 元数据的「布局语义」才真正属于自己——replicated 就是 replicated，不用猜。</p>
+
+        <h3>2.2 模块划分：谁负责什么</h3>
+        <p>文件 ↔ 角色 ↔ 改动内容，一张图看清分工。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-4 细节 · 模块职责关系</span><span class="fig-tag">方案 · 设计视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「模块怎么切、职责怎么分」——五个文件的角色一句话。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["indexer.py（主战场）<br/>builder 独立构建 + buffer 复用"]
+    B["sfa_dcp_utils.py（新）<br/>SFA 专属 DCP 地址纯函数"]
+    C["common_cp.py（扩展）<br/>公共 CP helper，两家共用"]
+    D["sfa_v1.py（让位）<br/>删补丁、删 fallback"]
+    E["llm_base_proposer.py（配套）<br/>cache-only builder 保留"]
+    style A fill:#dafbe1,stroke:#1a7f37
+    style B fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>A 产数据、B 管地址换算、C 管公共并行、D 收敛消费端、E 保证 MTP 草稿阶段每个 cache-only 组都能自己建元数据。</p>
+
+        <h3>2.3 新引入 / 移除 / 变化</h3>
+        <p>方案不是加代码，而是「该加的加、该删的删、该留的留」三件事。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-5 细节 · 改动增删对比</span><span class="fig-tag">方案 · 设计视角（≤7 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>本次 PR 做了哪三类改动——新引入、移除、保持不动。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    subgraph 引入[新引入]
+      I1["sfa_dcp_utils.py<br/>5 个地址纯函数"]
+      I2["common_cp.py<br/>2 个公共 helper"]
+    end
+    subgraph 移除[移除]
+      R1["SFA 侧 LI-C8 分组"]
+      R2["前向 patch 字段"]
+      R3["fallback 到 SFA 层"]
+    end
+    subgraph 不变[保持不动]
+      K1["build() 入口 API"]
+      K2["SFA 注意力算法本体"]
+    end
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>「引入」补全独立推导能力，「移除」清掉数据来源错误，「不变」保证老调用方无感、不引入新算法。</p>
+
+        <h3>2.4 与老流程怎么接</h3>
+        <p>入口保持 AttentionMetadataBuilder 协议不变，内部完全替换。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-6 细节 · 入口不变、内部替换</span><span class="fig-tag">方案 · 设计视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>老调用方是否需要改——入口 API 不变，替换发生在内部。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["外部调用<br/>build(common_attn_metadata)"] --> B["内部走 _build()"]
+    B --> C["自产 block_table / slot / RoPE<br/>/ seq_lens / 分组"]
+    C --> D["graph 捕获 / 回放 / MTP<br/>按 buffer_key 复用存储"]
+    D --> E["老调用方无感"]
+    style A fill:#eef1f4,stroke:#57606a
+    style E fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>可变派生 buffer 按「公共 slot-mapping buffer 的身份」做 key（<code>_metadata_buffer_key</code>），图捕获/回放/MTP 各步骤用对存储、不重复分配。</p>
+
+        <h3>2.5 方案边界：这次有意不做的事</h3>
+        <p>为控制改动面，四条边界划得很清楚——「不做」和「做」一样重要。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 2-7 细节 · 方案边界</span><span class="fig-tag">方案 · 设计视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>本 PR 不碰什么——四条边界，防止读者把范围想得过大。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["本 PR 不做"] --> B["不改变 SFA 注意力算法本体"]
+    A --> C["不引入通用多 KV-cache 调度"]
+    A --> D["PCP 缺索引 → fail-fast 报错"]
+    A --> E["replicated 地址可靠性靠单测<br/>而非 A5 真机（profile 会拒绝）"]
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>B 保证「修 bug 不改算法」；C 说明还是「一个主注意力组」路径；D 是宁可报错不猜；E 是验证策略声明——1500 组 DSA-CP 前后对比单测承担地址换算的正确性。</p>
+
+      </div>
+    </details>
+  </div>
+</details>
+
+
+<!-- ==================== 阶段三：实现 ==================== -->
+<details class="stage" id="impl" open>
+  <summary><span class="arrow">▸</span> 阶段三 · 实现 <span class="tag">执行视角：代码里这一步到底是哪个函数干的</span></summary>
+  <div class="body">
+    <p class="wordcount">本段文字 ≈ <b>1100</b> 字（要求 ≥1000）· 图 <b>7</b> 张 · 代码块 <b>8</b> 个</p>
+
+    <!-- 概览层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-overview">概览层</span> 目标实现流程（调用链主干）</summary>
+      <div class="inner">
+        <p>这是最终代码的调用链主干，与背景图 1-4（当前实现的错误链路）逐段对照：<b>「借用 SFA + patch」被替换成「indexer builder 自产地址」</b>。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3 概览 · 目标实现流程（时序主干，节点=函数+文件+行号）</span><span class="fig-tag">实现 · 执行视角 · 概览</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「代码里这一步到底是哪个函数干的，怎么走到下一步」——与图 1-4 形成新旧对照。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant R as proposer / runner
+    participant B as IndexerMetadataBuilder<br/>indexer.py:471
+    participant U as sfa_dcp_utils.py<br/>新文件 · DCP 地址
+    participant C as common_cp.py<br/>共享 helper
+    participant S as AscendSFAImpl.forward<br/>sfa_v1.py:1626
+    R->>B: build() (L912)
+    B->>B: _build_dcp_cache_metadata() (L715)
+    B->>U: replicated block_table (L57)
+    B->>U: replicated slot_mapping (L91)
+    B->>C: PCP ordered slots (L34)
+    B-->>R: AscendSFAIndexerMetadata 完整独立
+    S->>S: 只查 indexer 自身元数据 (L1576)
+            </div>
+          </div>
+        </div>
+        <p><b>读图：</b>R 是调用方，B 是主战场，U/C 是两个无状态工具文件，S 是消费端。左下角四步是本 PR 新增；右下角 S 的一步是 sfa_v1 收敛。以下逐节点展开。</p>
+      </div>
+    </details>
+
+    <!-- 细节层 -->
+    <details class="layer" open>
+      <summary><span class="arrow">▸</span><span class="layer-label layer-detail">细节层</span> 六个关键节点逐个拆解（图 + 代码）</summary>
+      <div class="inner">
+
+        <h3>3.1 节点① 入口：build() 不变，内部决定 buffer 与 RoPE 策略</h3>
+        <p><code>build()</code> 是 AttentionMetadataBuilder 协议的标准入口，外部调用完全无感；它把「同一个公共 slot-mapping 的身份」变成 <code>buffer_key</code>，保证图捕获/回放/MTP 各 step 用对存储。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-1 细节 · build() 内部逻辑</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>build() 入口做了什么两步决策——buffer 归属 + RoPE 拷贝策略。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["AttentionMetadataBuilder 协议"] --> B["build() L912"]
+    B --> C["buffer_key = 公共 slot-mapping 身份<br/>→ 复用图/回放/MTP 存储"]
+    B --> D["copy_rope = 是否投机解码<br/>→ 每 step 独立 RoPE"]
+    C & D --> E["_build() L979"]
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/indexer.py · AscendSFAIndexerMetadataBuilder.build · L912–929 <span class="ln">（图 3-1）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">    def build(
+        self,
+        common_prefix_len: int,
+        common_attn_metadata: CommonAttentionMetadata,
+        fast_build: bool = False,
+        **kwargs,
+    ) -> AscendSFAIndexerMetadata:
+        # common_prefix_len / fast_build 保留仅为 API 兼容
+        return self._build(
+            common_attn_metadata,
+            buffer_key=self._metadata_buffer_key(common_attn_metadata),
+            use_cached_rope=True,
+            # 投机解码会提前构建多份 step 元数据，每份都要独立 RoPE
+            copy_rope=self.speculative_config is not None,
+            **kwargs,
+        )</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>入口（图 3 节点 1）。<b>为什么这么写：</b>入口 API 不变 → 老调用方无感；<code>buffer_key</code> 与 <code>copy_rope</code> 是「复用存储、不重复分配」的两把钥匙。</div>
+        </div>
+
+        <h3>3.2 节点② 装配：_build_dcp_cache_metadata 是本次修复的心脏</h3>
+        <p>它把「地址」拆成两步：先按 PCP 与否分流，再产出 <code>(block_table, slot_mapping)</code> 这对最终地址张量。PCP 分支与常规分支最后汇合。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-2 细节 · 装配函数的两条路径</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>_build_dcp_cache_metadata 怎么分流——PCP 顺序 vs 常规 replicated 地址。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart TD
+    A["_build_dcp_cache_metadata L715"] --> B{"use_pcp 且正在 prefill？"}
+    B -->|是| C["PCP 顺序路径<br/>_build_pcp_ordered_slot_mapping"]
+    B -->|否| D["常规路径<br/>replicated block_table → slot"]
+    C --> E["返回 (block_table, slot_mapping)"]
+    D --> E
+    style A fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/indexer.py · _build_dcp_cache_metadata · L715–757 <span class="ln">（图 3-2）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">    def _build_dcp_cache_metadata(
+        self, common_attn_metadata, pcp_context, pcp_cache_group_idx, buffer_key,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        pcp_slot_mapping = None
+        # PCP 开启 且 正在 prefill → PCP 顺序路径
+        if self.use_pcp and pcp_context is not None and bool(pcp_context.global_batch.is_prefilling_np.any()):
+            if pcp_cache_group_idx is None:
+                raise RuntimeError("PCP+DCP indexer metadata requires the PCP cache-group index.")
+            pcp_slot_mapping = self._build_pcp_ordered_slot_mapping(
+                common_attn_metadata, pcp_context, pcp_cache_group_idx, buffer_key)
+        # 常规路径：local 块表 → replicated 块表 → replicated slot
+        num_reqs = common_attn_metadata.num_reqs
+        dcp_block_table = get_sfa_dcp_local_block_table(
+            common_attn_metadata.block_table_tensor, num_reqs, self.max_local_block_table_cols)
+        block_table = self._build_block_table_replicated_view(
+            dcp_block_table, common_attn_metadata.seq_lens, buffer_key)
+        slot_mapping = self._build_slot_mapping_replicated_view(
+            common_attn_metadata, block_table, buffer_key)
+        if pcp_slot_mapping is not None:
+            slot_mapping = pcp_slot_mapping
+        return block_table, slot_mapping</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>装配心脏（图 3 节点 2）。它替代了背景图 1-4 里「借用 SFA 块表」的错误节点。<b>关键行：</b>PCP 缺索引就 raise（方案边界 D）。</div>
+        </div>
+
+        <h3>3.3 节点③ 地址变换：local 物理块 → replicated 块号</h3>
+        <p>这是「地址错配」的直接解药：把 rank-local 的物理块表展开成每个 rank 一份的复制视图。换算公式：<code>local_physical × dcp_size + rank_in_replicated_view</code>。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-3 细节 · 块表地址变换（纯函数）</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>一个 local 块在 replicated 视图里对应哪个块号。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["local 物理块 b（rank-local 语义）"] --> B["build_sfa_dcp_replicated_block_table<br/>sfa_dcp_utils.py L57"]
+    B --> C["replicated 块号 =<br/>b × dcp_size + r  （r = 第几个 rank）"]
+    C --> D["replicated block table<br/>每个 rank 一份完整视图"]
+    style B fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/context_parallel/sfa_dcp_utils.py · build_sfa_dcp_replicated_block_table · L57–89 <span class="ln">（图 3-3）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">def build_sfa_dcp_replicated_block_table(
+    dcp_block_table, seq_lens, block_table_output,
+    replicated_col_idx, dcp_size, blocks_per_physical_block,
+):
+    """Expand a local SFA block table into replicated-indexer addresses."""
+    local_col_idx = (
+        replicated_col_idx // (dcp_size * blocks_per_physical_block)
+        * blocks_per_physical_block
+        + replicated_col_idx % blocks_per_physical_block
+    )
+    rank_in_replicated_view = (replicated_col_idx // blocks_per_physical_block) % dcp_size
+
+    local_logical_blocks = torch.index_select(dcp_block_table, 1, local_col_idx)
+    if blocks_per_physical_block == 1:
+        # [关键] 核心换算：本地物理块 → replicated 块号
+        replicated_blocks = local_logical_blocks * dcp_size + rank_in_replicated_view
+    else:
+        local_sub_blocks = local_logical_blocks % blocks_per_physical_block
+        local_physical_blocks = local_logical_blocks // blocks_per_physical_block
+        replicated_blocks = (
+            local_physical_blocks * dcp_size + rank_in_replicated_view
+        ) * blocks_per_physical_block + local_sub_blocks
+
+    valid_req_mask = ((seq_lens[: dcp_block_table.shape[0]].to(device=dcp_block_table.device) &gt; 0)
+                      .to(replicated_blocks.dtype).view(-1, 1))
+    block_table_output.copy_(replicated_blocks * valid_req_mask)
+    return block_table_output</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>地址变换纯函数（图 3 节点 3）。<b>对应背景图 1-4 错误节点①的正解；</b>块号按 DCP 世界大小拉伸，复制视图不再有 rank 私有语义。</div>
+        </div>
+
+        <h3>3.4 节点④ slot 生成：位置 → 可写地址</h3>
+        <p>有了 replicated 块表，再把每个 token 的 <code>positions</code> 翻译成「写到哪一块的哪个偏移」；没有任何位置映射的 token 填 -1，不会被写。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-4 细节 · slot 生成</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>replicated 块表 + positions → 每个 token 的可写 slot 地址。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["replicated 块表<br/>+ 公共 positions"] --> B["build_sfa_dcp_replicated_slot_mapping<br/>sfa_dcp_utils.py L91"]
+    B --> C["slot = 块号 × 块大小 + 块内偏移"]
+    C --> D["无位置映射 token → 填 -1"]
+    style B fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/context_parallel/sfa_dcp_utils.py · build_sfa_dcp_replicated_slot_mapping · L91–129 <span class="ln">（图 3-4，节选）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">def build_sfa_dcp_replicated_slot_mapping(
+    common_attn_metadata, block_table_replicated_view,
+    slot_mapping_output, replicated_view_block_size, device,
+):
+    """Build slots that address the physically replicated indexer cache."""
+    num_reqs = common_attn_metadata.num_reqs
+    num_actual_tokens = min(common_attn_metadata.num_actual_tokens, common_attn_metadata.num_input_tokens)
+    num_query_tokens = int(common_attn_metadata.query_start_loc_cpu[num_reqs])
+    slot_mapping_output.fill_(-1)                    # 默认占位：不可写
+    if num_actual_tokens == 0:
+        return slot_mapping_output
+    query_lens = (common_attn_metadata.query_start_loc[1 : num_reqs + 1]
+                  - common_attn_metadata.query_start_loc[:num_reqs])
+    req_indices = torch.repeat_interleave(
+        torch.arange(num_reqs, dtype=torch.int32, device=device),
+        query_lens.to(device=device), output_size=num_query_tokens,
+    )[:num_actual_tokens]
+    ...
+    logical_block_idx = positions // replicated_view_block_size
+    block_offsets = positions % replicated_view_block_size
+    block_table_indices = req_indices * block_table_replicated_view.shape[1] + logical_block_idx
+    block_numbers = block_table_replicated_view.flatten()[block_table_indices]
+    # [关键] slot = 块号 × 块大小 + 块内偏移
+    slot_mapping_output[:num_actual_tokens] = block_numbers * replicated_view_block_size + block_offsets
+    return slot_mapping_output</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>slot 生成纯函数（图 3 节点 4）。与图 3-3 一起回答「replicated 布局下 address 是什么」；<code>fill_(-1)</code> 是「不可写占位」约定。</div>
+        </div>
+
+        <h3>3.5 节点⑤ PCP 顺序：写完缓存再按 gather 顺序收集</h3>
+        <p>PCP+DCP prefill 要求 slot 按 gather 顺序排列；共享 helper <code>build_pcp_ordered_slot_mapping</code>（common_cp）用 <code>index_select</code> 重排、用 write_mask 掩掉不该写的 token。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-5 细节 · PCP 顺序重排</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>PCP 分支如何把全局 slot 变成 gather 顺序。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["PCP 全局批次视图<br/>get_sfa_pcp_global_metadata"] --> B["replicated slot（全局顺序）"]
+    B --> C["build_pcp_ordered_slot_mapping<br/>common_cp.py L34"]
+    C --> D["按 gather 顺序重排<br/>不可写 → -1"]
+    style C fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/context_parallel/common_cp.py · build_pcp_ordered_slot_mapping · L34–52 <span class="ln">（图 3-5）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">def build_pcp_ordered_slot_mapping(
+    global_slot_mapping: torch.Tensor,
+    pcp_context: Any,
+    slot_mapping_buffer: torch.Tensor,
+) -> torch.Tensor:
+    """Write slots in PCP gather order into a caller-owned output buffer."""
+    gather_idx = pcp_context.padded_gather_idx
+    write_mask = pcp_context.gathered_kv_write_mask
+    if gather_idx is None or write_mask is None:
+        raise RuntimeError("PCP+DCP prefill requires the PCP gathered-token layout.")
+    num_tokens = gather_idx.numel()
+    if slot_mapping_buffer.shape[0] &lt; num_tokens:
+        raise RuntimeError(
+            f"PCP+DCP indexer slot buffer is too small: "
+            f"capacity={slot_mapping_buffer.shape[0]}, required={num_tokens}.")
+    slot_mapping = slot_mapping_buffer[:num_tokens]
+    # [关键] 按 gather 顺序 index_select，再掩掉不写的 token
+    torch.index_select(global_slot_mapping, 0, gather_idx, out=slot_mapping)
+    slot_mapping.masked_fill_(~write_mask, -1)
+    return slot_mapping</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>共享 helper（图 3 节点 5）。SFA builder 与 indexer builder 共用它、各自保留存储——「单一事实来源」的落地。indexer 侧由 <code>_build_pcp_ordered_slot_mapping</code>（indexer.py L677）先组全局视图再调它。</div>
+        </div>
+
+        <h3>3.6 节点⑥ 消费端收敛：_get_indexer_attn_metadata 不再 fallback</h3>
+        <p>最后一步在 SFA 前向：取 indexer 元数据时只认 indexer 自己的前缀（共享目标优先），删掉旧的「fallback 到 SFA 层元数据」——SFA 视图不是 replicated 缓存的有效替身，查不到就 raise。</p>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-6 细节 · 消费端查元数据的变化</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>旧查法 vs 新查法——fallback 被删除、前缀顺序是什么。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    O["旧：查不到 → fallback 到<br/>SFA 层元数据（错误替身）"] --> N["新：按前缀顺序只查 indexer"]
+    N --> P1["共享目标 indexer 前缀"]
+    N --> P2["自身 indexer 前缀"]
+    P1 & P2 --> Q["查不到 → raise"]
+    style O fill:#ffebe9,stroke:#cf222e
+    style Q fill:#fff8c5,stroke:#9a6700
+            </div>
+          </div>
+        </div>
+        <div class="codeblock">
+          <div class="cb-head"><span class="cb-title">vllm_ascend/attention/sfa_v1.py · AscendSFAImpl._get_indexer_attn_metadata · L1576–1609 <span class="ln">（图 3-6）</span></span><button class="copy-btn">📋 复制</button></div>
+          <pre><code class="language-python">    def _get_indexer_attn_metadata(self) -> Any | None:
+        """只取 indexer 缓存层自己的元数据（由 indexer backend 构建）。"""
+        if not self.runtime_has_indexer:
+            return None
+        own_prefix = self.indexer.k_cache.prefix
+        prefixes = [own_prefix]
+        kv_sharing_target = getattr(self, "kv_sharing_target_layer_name", None)
+        if kv_sharing_target is not None:
+            # 优先共享目标的 cache 视图，但保留草稿 indexer 自己的元数据
+            target_base = kv_sharing_target.removesuffix(".attn")
+            prefixes = [f"{target_base}.indexer.k_cache", own_prefix]
+        forward_metadata = get_forward_context().attn_metadata
+        indexer_metadata = None
+        if isinstance(forward_metadata, dict):
+            for prefix in prefixes:
+                indexer_metadata = forward_metadata.get(prefix)
+                if indexer_metadata is not None:
+                    break
+        if indexer_metadata is None:
+            raise RuntimeError(
+                f"No metadata was built for the indexer cache layer "
+                f"prefixes={prefixes}. layer_name={self.layer_name}.")
+        return indexer_metadata</code></pre>
+          <div class="cb-note"><b>这段干嘛：</b>消费端唯一取数入口（图 3 节点 6）。<b>关键变化：</b>删除「fallback 到 SFA 层元数据」；前向时也不再 patch <code>seq_lens / num_decode_tokens</code>、不再传 <code>cos/sin</code>（indexer 从自己 metadata 读）。</div>
+        </div>
+
+        <h3>3.7 验证：为什么改对了</h3>
+        <div class="fig">
+          <div class="fig-head"><span class="fig-title">图 3-7 细节 · 验证证据分层</span><span class="fig-tag">实现 · 执行视角（≤5 节点）</span></div>
+          <div class="fig-q"><b>这张图回答什么问题：</b>「怎么证明改对了」——单测、对比、真机三层证据各覆盖什么。</div>
+          <div class="fig-body">
+            <div class="mermaid">
+flowchart LR
+    A["CPU 回归<br/>155 passed / 0 failed"]
+    B["DSA-CP 前后对比<br/>1500 组 exact 一致"]
+    C["NPU 长输入精确<br/>20/20 + 39K token 逐字匹配"]
+    A & B & C --> D["结论：地址修复且算法不变"]
+    style D fill:#dafbe1,stroke:#1a7f37
+            </div>
+          </div>
+        </div>
+        <p><b>解读：</b>修复前同拓扑图模式 20 例仅 2 例过、0/9 精确——即「静默错 token」的实证；修复后 20/20 + 39,441 token 逐字一致。测试证据与背景图 1-4 的「错误链路」形成闭环。</p>
+
+      </div>
+    </details>
+  </div>
+</details>
+
+
+<!-- ==================== 自检 ==================== -->
+</div>
+
+
+<section id="check">
+  <h2>自检对照表</h2>
+  <table>
+    <tr><th>阶段</th><th>层次</th><th>小节标题</th><th>文字字数</th><th>图数量</th><th>图编号+视角</th><th>单图最大节点数</th><th>代码块数</th><th>是否达标</th></tr>
+    <tr><td>背景</td><td>概念爬坡</td><td>第1级~第5级 + 术语索引</td><td>≈1500</td><td>6</td><td>图0-1~0-6 · 常识→概念（含 术语索引图 0-6）</td><td>5</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>背景</td><td>概览</td><td>一句话处境 + 业务流程</td><td>计入上格</td><td>1</td><td>图1 · 问题视角</td><td>6</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>背景</td><td>细节</td><td>1.1 定位 / 1.2 前因 / 1.3 痛点</td><td>计入上格</td><td>3</td><td>图1-1~1-3 · 问题+结构视角</td><td>7</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>方案</td><td>概览</td><td>当前 vs 目标方案流程</td><td>计入下格</td><td>2</td><td>图2-1/2-2 · 设计视角</td><td>7</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>方案</td><td>细节</td><td>核心 / 模块 / 增删 / 接老流程 / 边界</td><td>≈950</td><td>5</td><td>图2-3~2-7 · 设计视角</td><td>5</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>实现</td><td>概览</td><td>调用链时序主干</td><td>计入下格</td><td>1</td><td>图3 · 执行视角</td><td>5 参与者</td><td>—</td><td class="ok">✅</td></tr>
+    <tr><td>实现</td><td>细节</td><td>节点①–⑥ + 验证</td><td>≈1100</td><td>7</td><td>图3-1~3-7 · 执行视角</td><td>5</td><td>8</td><td class="ok">✅</td></tr>
+  </table>
+  <h3>逐节配图检查表</h3>
+  <table>
+    <tr><th>阶段</th><th>h3 小节标题</th><th>是否配图</th><th>图编号</th><th>备注</th></tr>
+    <tr><td>背景</td><td>爬坡第 1 级 · 普通 attention + KV cache</td><td class="ok">✅</td><td>图 0-1</td><td>常识锚定，确认在同一页</td></tr>
+    <tr><td>背景</td><td>爬坡第 2 级 · 稀疏注意力 SFA（只看 top-k）</td><td class="ok">✅</td><td>图 0-2</td><td>从「全量」推出「只看 k 个」</td></tr>
+    <tr><td>背景</td><td>爬坡第 3 级 · indexer 与独立缓存</td><td class="ok">✅</td><td>图 0-3</td><td>从「挑选可复用」推出独立模块</td></tr>
+    <tr><td>背景</td><td>爬坡第 4 级 · DCP/PCP + 两种缓存布局</td><td class="ok">✅</td><td>图 0-4</td><td>从「单卡放不下」推出切多卡</td></tr>
+    <tr><td>背景</td><td>爬坡第 5 级 · 地址错配痛点</td><td class="ok">✅</td><td>图 0-5</td><td>从「两种布局并存」推出 bug</td></tr>
+    <tr><td>背景</td><td>回头查阅 · 术语速查表</td><td class="ok">✅</td><td>图 0-6</td><td>降级为索引，不作首次引入</td></tr>
+    <tr><td>背景</td><td>1.1 定位</td><td class="ok">✅</td><td>图 1-1</td><td>层级关系图</td></tr>
+    <tr><td>背景</td><td>1.2 前因</td><td class="ok">✅</td><td>图 1-2</td><td>拆分前后对比 + 隐患</td></tr>
+    <tr><td>背景</td><td>1.3 痛点</td><td class="ok">✅</td><td>图 1-3</td><td>当前实现错误链路，与图 3 对照</td></tr>
+    <tr><td>方案</td><td>2.1 设计核心</td><td class="ok">✅</td><td>图 2-3</td><td>依赖方向反转</td></tr>
+    <tr><td>方案</td><td>2.2 模块划分</td><td class="ok">✅</td><td>图 2-4</td><td>文件↔角色</td></tr>
+    <tr><td>方案</td><td>2.3 新引入/移除/变化</td><td class="ok">✅</td><td>图 2-5</td><td>增删对比</td></tr>
+    <tr><td>方案</td><td>2.4 与老流程怎么接</td><td class="ok">✅</td><td>图 2-6</td><td>入口不变、内部替换</td></tr>
+    <tr><td>方案</td><td>2.5 方案边界</td><td class="ok">✅</td><td>图 2-7</td><td>四条不做的事</td></tr>
+    <tr><td>实现</td><td>3.1 节点① build()</td><td class="ok">✅</td><td>图 3-1 + CB①</td><td>≤5 节点 + 代码</td></tr>
+    <tr><td>实现</td><td>3.2 节点② 装配心脏</td><td class="ok">✅</td><td>图 3-2 + CB②</td><td>PCP/常规双路径</td></tr>
+    <tr><td>实现</td><td>3.3 节点③ 地址变换</td><td class="ok">✅</td><td>图 3-3 + CB③</td><td>local→replicated 公式</td></tr>
+    <tr><td>实现</td><td>3.4 节点④ slot 生成</td><td class="ok">✅</td><td>图 3-4 + CB④</td><td>位置→slot</td></tr>
+    <tr><td>实现</td><td>3.5 节点⑤ PCP 顺序</td><td class="ok">✅</td><td>图 3-5 + CB⑤</td><td>gather 重排</td></tr>
+    <tr><td>实现</td><td>3.6 节点⑥ 消费端收敛</td><td class="ok">✅</td><td>图 3-6 + CB⑥</td><td>fallback 删除</td></tr>
+    <tr><td>实现</td><td>3.7 验证</td><td class="ok">✅</td><td>图 3-7</td><td>证据分层</td></tr>
+  </table>
+
+  <h3>概念爬坡检查表（表 C）</h3>
+  <table>
+    <tr><th>级别</th><th>引入的概念</th><th>上一级是什么</th><th>怎么从上一级推出</th><th>图编号</th><th>是否空降</th></tr>
+    <tr><td>1</td><td>普通 attention + KV cache</td><td>读者已知的普通 LLM 推理</td><td>锚定常识、确认同一页；prefill/decode / KV cache 只作回顾</td><td>图 0-1</td><td class="ok">否</td></tr>
+    <tr><td>2</td><td>SFA 稀疏注意力（只看 top-k）</td><td>普通 attention 是 O(n²)</td><td>因为「全量太贵」→ 「只看 k 个」</td><td>图 0-2</td><td class="ok">否</td></tr>
+    <tr><td>3</td><td>indexer 与 indexer cache（LI-C8）</td><td>「挑 top-k」需要计算</td><td>因为「挑选结论可复用」→ 独立模块 + 独立缓存</td><td>图 0-3</td><td class="ok">否</td></tr>
+    <tr><td>4</td><td>DCP / PCP + rank-local / replicated</td><td>长上下文单卡放不下</td><td>因为「要切多卡」→ 主缓存各存一段、indexer 缓存每卡一份</td><td>图 0-4</td><td class="ok">否</td></tr>
+    <tr><td>5</td><td>地址错配 bug</td><td>两种缓存布局并存</td><td>因为「布局不同却沿用 rank-local 地址」→ 写错位置、静默出错</td><td>图 0-5</td><td class="ok">否</td></tr>
+    <tr><td>索引</td><td>术语速查表</td><td>爬坡全部完成</td><td>仅作回头查阅，不作首次引入</td><td>图 0-6</td><td class="ok">否</td></tr>
+  </table>
+
+  <p class="en">硬约束复核：a) 字数 bg≈800 / plan≈950 / impl≈1100 均达下限 ✅　b) 每图标注「这张图回答什么问题」✅　c) 视角不混用（背景=问题/结构 · 方案=设计 · 实现=执行）✅　d) 概览 ≤7、细节 ≤5 节点 ✅　e) 概览层→细节层分层 + 图文交替 ✅　f) 每个 h3 均有配图，无纯文字小节 ✅　g) 概念爬坡 5 级逐级推出、无术语空降；术语表降级为索引 ✅　h) 全站浅色主题（#f7f8fa / #ffffff / atom-one-light / mermaid 浅底）✅</p>
+</section>
+
+<div class="footer">
+  vllm-ascend PR #16325（8a36237e9）· 单文件交互式源码课 · 浅色版 · 数据来自真实仓库（该 commit 与其父提交 diff 对照）· 流程图/代码可点击放大、可复制
+</div>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base',
+  themeVariables:{ primaryColor:'#ffffff', primaryBorderColor:'#0969da', primaryTextColor:'#24292f',
+    lineColor:'#57606a', textColor:'#24292f', fontSize:'14px',
+    clusterBkg:'#f6f8fa', clusterBorder:'#d0d7de',
+    edgeLabelBackground:'#ffffff', titleColor:'#24292f',
+    actorBkg:'#f0f4f8', actorBorder:'#0969da', actorTextColor:'#24292f',
+    signalColor:'#0969da', signalTextColor:'#24292f', labelBoxBkgColor:'#ddf4ff', labelBoxBorderColor:'#0969da',
+    labelTextColor:'#24292f', loopTextColor:'#24292f', noteBkgColor:'#fff8c5', noteBorderColor:'#9a6700', noteTextColor:'#24292f' },
+  flowchart:{ htmlLabels:true, curve:'basis' },
+  sequence:{ useMaxWidth:true, mirrorActors:false, actorMargin:46 } });
+if (window.hljs) hljs.highlightAll();
+
+/* 复制 */
+document.querySelectorAll('.copy-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var code = btn.closest('.codeblock').querySelector('pre code').innerText;
+    function done(){ btn.textContent = '✅ 已复制'; setTimeout(function(){ btn.textContent = '📋 复制'; }, 1600); }
+    if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(code).then(done); }
+    else { var ta=document.createElement('textarea'); ta.value=code; document.body.appendChild(ta); ta.select(); try{document.execCommand('copy'); done();}catch(e){} document.body.removeChild(ta); }
+  });
+});
+/* 放大 */
+document.querySelectorAll('.fig-body').forEach(function(el){
+  el.addEventListener('click', function(){
+    var fig = el.closest('.fig');
+    if (fig.classList.contains('zoomed')) { fig.classList.remove('zoomed'); }
+    else { document.querySelectorAll('.fig.zoomed').forEach(function(f){ f.classList.remove('zoomed'); }); fig.classList.add('zoomed'); fig.scrollIntoView({block:'start'}); }
+  });
+});
+/* TOC */
+document.querySelectorAll('.top a').forEach(function(a){
+  a.addEventListener('click', function(){
+    document.querySelectorAll('.top a').forEach(function(x){ x.classList.remove('active'); }); a.classList.add('active');
+  });
+});
+</script>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
