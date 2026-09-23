@@ -116,18 +116,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-23</span></div>
-<div class="cc-title">DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点</div>
-<div class="cc-desc">890 B/token KV 的由来：CED/CSA2 拆解对照昇腾现状，7 个性能协助机会点定位到链路段</div>
-<a class="cc-link" href="学习html/DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-09-23</span></div>
-<div class="cc-title">DeepSeek V4.1-Flash 登陆昇腾 · 需求故事（PR 16925）</div>
-<div class="cc-desc">从跑不动到 A3 五件套补齐：执行链路与三段关键代码走读，三个跟进 PR 与部署形态</div>
-<a class="cc-link" href="学习html/DeepSeek V4.1-Flash 登陆昇腾 · 需求故事（PR 16925）.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-21</span></div>
 <div class="cc-title">DeepSeek-V4.1-Flash 推理加速解读</div>
 <div class="cc-desc">CED 层切分 + CSA2 跨层 KV 共享：总体路径、Prefill 路径、Decode 路径与四种配置走查</div>
@@ -144,6 +132,18 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-title">PyroDash 训练项目 · 代码检视（第 1 轮）</div>
 <div class="cc-desc">成本感知 GRPO + 小模型 offload 协同引擎：三阶段训练管线、GSM8K 评估与 7×24 巡检</div>
 <a class="cc-link" href="实验html/PyroDash代码检视-20260919-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
+<div class="cc-title">mlx-lora-finetune · 训练项目代码检视（第 1 轮）</div>
+<div class="cc-desc">Apple M4 端侧训练：TinyStories 预训练跑通、Mamba 混合架构、MLX→HF 转换与 7×24 看门狗</div>
+<a class="cc-link" href="实验html/mlx-lora代码检视-20260919-R1.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">代码检视</span><span class="cc-date">2026-09-19</span></div>
+<div class="cc-title">Tequila 三值量化训练 · 代码检视（第 1 轮）</div>
+<div class="cc-desc">M01–M15 模块源码汇总：训练流程图、UltraQuantV2 死区复活、部署导出与核心超参配置</div>
+<a class="cc-link" href="实验html/Tequila代码检视-20260919-R1.html">阅读 &rarr;</a>
 </div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
@@ -166,15 +166,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip active" data-topic="all">全部<span class="count">29</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
-<button class="chip" data-topic="accel">推理加速<span class="count">6</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">3</span></button>
+<button class="chip" data-topic="accel">推理加速<span class="count">5</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">4</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">4</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">3</span></button>
 <button class="chip" data-topic="theory">基础理论<span class="count">6</span></button>
 </div>
 <ul class="list" id="learningList">
-<li class="li" data-topic="accel" data-ts="20260923"><a href="学习html/DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点.html"><span class="li-date">2026-09-23</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点<span class="li-tag">推理加速</span></span><span class="li-desc">890 B/token KV 的由来：CED/CSA2 拆解对照昇腾现状，7 个性能协助机会点定位到链路段</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20260923"><a href="学习html/DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点.html"><span class="li-date">2026-09-23</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash CED·CSA2 架构拆解 × vllm-ascend 性能协助点<span class="li-tag">vLLM 源码</span></span><span class="li-desc">890 B/token KV 的由来：CED/CSA2 拆解对照昇腾现状，7 个性能协助机会点定位到链路段</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20260923"><a href="学习html/DeepSeek V4.1-Flash 登陆昇腾 · 需求故事（PR 16925）.html"><span class="li-date">2026-09-23</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash 登陆昇腾 · 需求故事（PR 16925）<span class="li-tag">vLLM 源码</span></span><span class="li-desc">从跑不动到 A3 五件套补齐：执行链路与三段关键代码走读，三个跟进 PR 与部署形态</span></span></a></li>
 <li class="li" data-topic="accel" data-ts="20260921"><a href="学习html/DeepSeek-V4.1-Flash推理加速解读.html"><span class="li-date">2026-09-21</span><span class="li-main"><span class="li-title">DeepSeek-V4.1-Flash 推理加速解读<span class="li-tag">推理加速</span></span><span class="li-desc">CED 层切分 + CSA2 跨层 KV 共享：总体路径、Prefill 路径、Decode 路径与四种配置走查</span></span></a></li>
 <li class="li" data-topic="theory" data-ts="20260918"><a href="学习html/大模型RL对齐原理与极简源码.html"><span class="li-date">2026-09-18</span><span class="li-main"><span class="li-title">大模型 RL 对齐：RLHF / DPO 原理与极简源码<span class="li-tag">基础理论</span></span><span class="li-desc">RLHF 三段式、PPO-Clip 与 KL、DPO 隐式奖励推导、GRPO 与不收敛排查</span></span></a></li>
