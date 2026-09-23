@@ -288,86 +288,46 @@
       <div class="mermaid-wrap">
         <div class="mermaid">
 flowchart TD
-    IN["输入 tokens（同一段输入）"]:::trunk
-
-    subgraph ORIG["原始分支 · 每层各算"]
-        OA["后段 4 个全注意力层<br/>第 20 / 24 / 28 / 32 层<br/>各自跑 k_proj / v_proj"]:::dim --> OB["4 次投影计算<br/>存 4 份 KV"]:::dim --> OC["attention → 输出"]:::trunk
-    end
-
-    subgraph NEW["新分支 · CED 算一次用一段"]
-        NA["前段 H_16 → 投影器 P<br/>Linear 2560→2048<br/>一次生成整段 KV"]:::ced --> NB["1 次投影计算 · 1 份 KV<br/>直接注入 4 个全注意力层"]:::ced --> NC["attention → 输出"]:::trunk
-    end
-
-    IN --> OA
-    IN --> NA
-
-    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:2px,color:#15315c;
-    classDef dim fill:#f4f6f8,stroke:#9aa4b2,stroke-width:1.5px,color:#4b5563;
-    classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
-    style ORIG fill:#f6f7f9,stroke:#9aa4b2,stroke-width:2px
-    style NEW fill:#edf9f2,stroke:#1a7f4b,stroke-width:2.5px
-    linkStyle 0,1,4 stroke:#9aa4b2,stroke-width:2px
-    linkStyle 2,3,5 stroke:#1a7f4b,stroke-width:2.5px
+    A["输入 tokens"] --> B["layers 0..15<br/>编码段"]
+    B --> C["H_16<br/>第16层隐藏态 (L, 2560)"]
+    C --> D["P(H_16)<br/>Linear 2560→2048"]
+    D --> E["K_20, V_20<br/>(L, 1024) × 2"]
+    C --> F["layers 16..31<br/>解码段"]
+    E --> F
+    F --> G["输出 logits"]
         </div>
-        <div class="fig-cap">同一输入 · 两条分支对比：<strong style="color:#6b7280">灰框原始分支</strong>每层各算、4 次投影存 4 份；<strong style="color:#155c38">绿框新分支</strong>由 H_16 一次投影生成整段 KV 直接注入（2048 token prefill 实测 1.56x，随长度增长）</div>
+        <div class="fig-cap">图 1 · Qwen3.5-4B 32 层结构里 CED 的位置：在第 16 层切分，解码段全注意力层的 KV 由 <code>H_16</code> 投影生成</div>
       </div>
     </li>
     <li><strong>CSA2（压缩稀疏注意力简化版）</strong>：解码段 4 个全注意力层共享 1 份 KV，每层仅挂一个小适配器做跨层映射，验证"1 份 KV + 跨层小适配器"能否在保持质量的同时获得 4x 存储压缩。
       <div class="mermaid-wrap">
         <div class="mermaid">
 flowchart TD
-    IN["解码段 4 个全注意力层<br/>（第 20 / 24 / 28 / 32 层都需要 KV）"]:::trunk
-
-    subgraph ORIG["原始分支 · 各存一份"]
-        OA["4 层各自保留完整 KV<br/>K_20V_20 · K_24V_24<br/>K_28V_28 · K_32V_32"]:::dim --> OB["存 4 份全量 KV<br/>存储 1x（基准）"]:::dim --> OC["attention 正常计算"]:::trunk
-    end
-
-    subgraph NEW["新分支 · 共享 1 份 + 适配器"]
-        NA["只存第 20 层 1 份 KV<br/>（K_20, V_20）"]:::ced --> NB["CSA2 适配器 × 3 映射<br/>出 24/28/32 层各自 KV<br/>存 1 份 + 3 个小适配器"]:::csa2 --> NC["attention 正常计算<br/>质量基本无损"]:::trunk
-    end
-
-    IN --> OA
-    IN --> NA
-
-    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:2px,color:#15315c;
-    classDef dim fill:#f4f6f8,stroke:#9aa4b2,stroke-width:1.5px,color:#4b5563;
-    classDef ced fill:#e6f5ed,stroke:#1a7f4b,stroke-width:2px,color:#155c38;
-    classDef csa2 fill:#fff4e5,stroke:#b45309,stroke-width:2px,color:#7c3e08;
-    style ORIG fill:#f6f7f9,stroke:#9aa4b2,stroke-width:2px
-    style NEW fill:#edf9f2,stroke:#1a7f4b,stroke-width:2.5px
-    linkStyle 0,1,4 stroke:#9aa4b2,stroke-width:2px
-    linkStyle 2,5 stroke:#1a7f4b,stroke-width:2.5px
-    linkStyle 3 stroke:#b45309,stroke-width:2.5px
+    A["第20层<br/>Full 模式<br/>K_20, V_20"] --> B["K_20, V_20<br/>1 份存储"]
+    B --> C["第24层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> D["第28层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> E["第32层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    C --> F["K_24, V_24"]
+    D --> G["K_28, V_28"]
+    E --> H["K_32, V_32"]
         </div>
-        <div class="fig-cap">同一输入 · 两条分支对比：<strong style="color:#6b7280">灰框原始分支</strong>4 层各存一份全量 KV；<strong style="color:#155c38">绿框新分支</strong>只存 1 份共享 KV，其余 3 层由 <span style="color:#7c3e08;font-weight:600">橙色适配器</span>映射生成，压缩约 4x，质量基本无损（GSM8K -1pp / NIAH -2pp）</div>
+        <div class="fig-cap">图 2 · CSA2 共享机制：4 层只保留 1 份 KV，其余层通过小适配器做跨层映射</div>
       </div>
     </li>
     <li><strong>TurboQuant KV 量化</strong>：k8v4（K 8bit / V 4bit 分组 scale），在缓存后量化路径上验证质量扰动与压缩比。
       <div class="mermaid-wrap">
         <div class="mermaid">
 flowchart TD
-    IN["同一份 KV（写入缓存时）"]:::trunk
-
-    subgraph ORIG["原始分支 · bf16 全精度"]
-        OA["K / V 均按 16bit<br/>存储与读取"]:::dim --> OB["体积 1x（基准）"]:::dim --> OC["attention 直接读写"]:::trunk
-    end
-
-    subgraph NEW["新分支 · k8v4 分组量化"]
-        NA["K 按 256 维分组求 scale → 8bit<br/>V 按 64 维分组求 scale → 4bit<br/>4bit 两两打包进 uint8"]:::quant --> NB["体积压缩 2.46x<br/>（理论 2.53x）"]:::quant --> NC["attention 前反量化<br/>top-5 重合 100%<br/>top-1 一致 88.9%"]:::trunk
-    end
-
-    IN --> OA
-    IN --> NA
-
-    classDef trunk fill:#e8f0fe,stroke:#7aa4f0,stroke-width:2px,color:#15315c;
-    classDef dim fill:#f4f6f8,stroke:#9aa4b2,stroke-width:1.5px,color:#4b5563;
-    classDef quant fill:#f0ebff,stroke:#6b46c1,stroke-width:2px,color:#4a2f9c;
-    style ORIG fill:#f6f7f9,stroke:#9aa4b2,stroke-width:2px
-    style NEW fill:#f7f3fe,stroke:#6b46c1,stroke-width:2.5px
-    linkStyle 0,1,4 stroke:#9aa4b2,stroke-width:2px
-    linkStyle 2,3,5 stroke:#6b46c1,stroke-width:2.5px
+    A["输入 tokens"] --> B["编码段 layers 0..15"]
+    B --> C["H_16"]
+    C --> D["CED 投影器 P<br/>Linear 2560→2048"]
+    D --> E["K_20, V_20<br/>全量 KV"]
+    E --> F["CSA2 适配器 × 3<br/>→ K_24/V_24, K_28/V_28, K_32/V_32"]
+    F --> G["TurboQuant k8v4<br/>K 8bit / V 4bit"]
+    G --> H["解码段 attention<br/>layers 16..31"]
+    H --> I["输出 logits"]
         </div>
-        <div class="fig-cap">同一输入 · 两条分支对比：<strong style="color:#6b7280">灰框原始分支</strong>bf16 全精度（体积 1x）；<strong style="color:#4a2f9c">紫框新分支</strong>k8v4 分组量化，压缩 2.46x，反量化后 top-5 重合 100%、top-1 一致 88.9%，质量扰动极小</div>
+        <div class="fig-cap">图 3 · KV 量化在整体数据流中的位置：CED 投影、CSA2 共享、TurboQuant 量化三者叠加后的数据流</div>
       </div>
     </li>
   </ol>
