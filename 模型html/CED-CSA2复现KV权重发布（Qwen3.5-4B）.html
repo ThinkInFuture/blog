@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CED + CSA2 复现：KV 投影器与跨层适配器权重发布（Qwen3.5-4B）</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:#fff;color:#111;line-height:1.8}
+.wrap{max-width:800px;margin:0 auto;padding:48px 24px}
+.back{font-size:13px;color:#888;text-decoration:none}
+.back:hover{color:#3b82f6}
+.meta{font-size:12px;color:#aaa;margin:20px 0 8px}
+.meta .tag{color:#3b82f6;font-weight:600;margin-right:10px}
+h1{font-size:28px;font-weight:700;margin-bottom:24px;letter-spacing:-0.5px}
+h2{font-size:19px;font-weight:700;margin:36px 0 12px;padding-top:20px;border-top:1px solid #eee}
+h3{font-size:16px;font-weight:600;margin:20px 0 8px}
+p{font-size:15px;color:#444;margin-bottom:12px}
+ul{margin:0 0 12px 22px}
+li{font-size:14px;color:#444;margin-bottom:6px}
+code{font-family:Consolas,Menlo,monospace;background:#f2f3f5;border-radius:4px;padding:1px 6px;font-size:13px;color:#c7254e}
+pre{background:#f7f8fa;border:1px solid #e8e8e8;border-radius:8px;padding:14px 16px;overflow-x:auto;margin:14px 0;font-size:13px;line-height:1.6;font-family:Consolas,Menlo,monospace;color:#333}
+pre code{background:none;padding:0;color:#333}
+.note{background:#eef4ff;border-left:3px solid #3b82f6;padding:14px 18px;font-size:14px;color:#444;margin:16px 0;border-radius:0 6px 6px 0}
+.warn{background:#fffbeb;border-left:3px solid #d97706;padding:14px 18px;font-size:14px;color:#444;margin:16px 0;border-radius:0 6px 6px 0}
+table{width:100%;border-collapse:collapse;margin:16px 0;font-size:14px}
+th,td{border:1px solid #eee;padding:8px 12px;text-align:left}
+th{background:#f9f9f9;font-weight:600}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.hl-row{background:#f0f9ff}
+.big{display:flex;gap:16px;margin:20px 0;flex-wrap:wrap}
+.stat{flex:1;min-width:180px;background:#f7f8fa;border-radius:10px;padding:18px 20px;text-align:center}
+.stat .v{font-size:26px;font-weight:700;color:#3b82f6}
+.stat .l{font-size:12px;color:#888;margin-top:4px}
+footernote{display:block;margin-top:32px;font-size:13px;color:#999}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">自研模型</span>2026-09-23 发布</div>
+<h1>CED + CSA2 复现：KV 投影器与跨层适配器权重发布（Qwen3.5-4B）</h1>
+
+<p style="background:#f0f9ff;border:1px solid #d6e4ff;border-radius:8px;padding:12px 18px;font-size:14px"><strong>权重已发布：</strong><a href="https://modelscope.cn/models/conanfans/ced-csa2-qwen3.5-4b-kv-adapters" target="_blank" rel="nofollow" style="color:#3b82f6;font-weight:600">conanfans/ced-csa2-qwen3.5-4b-kv-adapters</a>（ModelScope · CED 投影器约 10MB + CSA2 适配器 3 组）</p>
+
+<div class="note"><strong>一句话结论：</strong>这是在 Qwen3.5-4B 上复现 DeepSeek V4.1 两个核心 KV 压缩设计的产物权重。加载后：GSM8K 无损（0.735 → 0.740）、NIAH -2pp 噪声内、prefill 最快 1.56x，解码段 KV 存储从 4 份压到 1 份（3.44x）。训练代码与评测全记录见站内代码检视文章。</div>
+
+<div class="big">
+<div class="stat"><div class="v">3.44x</div><div class="l">解码段 KV 存储：4 份 → 1 份</div></div>
+<div class="stat"><div class="v">1.56x</div><div class="l">prefill 加速 @2048 token（mode_b 延迟口径）</div></div>
+<div class="stat"><div class="v">无损</div><div class="l">GSM8K 0.735 → 0.740（+0.5pp，噪声内）</div></div>
+</div>
+
+<h2>一、这是什么权重</h2>
+<p>在 <strong>Qwen3.5-4B</strong>（32 层混合架构：8 层全注意力 + 24 层 GatedDeltaNet）上，复现 DeepSeek V4.1 技术报告的两个核心 KV 压缩设计，训练得到的两个可插拔权重文件：</p>
+<ul>
+<li><strong>CED 投影器</strong>（<code>projector_k20v20.pt</code>）：第 16 层切分，用第 16 层隐藏态 <code>H_16</code> 直接投影出解码段第 20 层（首个全注意力层）所需的 K/V，替代该层的 <code>k_proj/v_proj</code> 计算。<code>Linear(2560 → 2048)</code>，5.24M 参数（约 10MB FP16）。</li>
+<li><strong>CSA2 跨层适配器</strong>（<code>adapters.pt</code>）：解码段 4 个全注意力层（20/24/28/32）共享第 20 层的 1 份 KV；第 24/28/32 层各配一组 K/V 映射适配器（Linear 基座 + ResidualMLP 残差），从第 20 层 KV 生成各层所需 KV。每组约 8.4M 参数。</li>
+</ul>
+
+<h2>二、架构与数据流</h2>
+<pre><code>输入 -&gt; 第 1~16 层（编码器） -&gt; H_16
+  H_16 --[CED 投影器 2560-&gt;2048]--&gt; K/V_20（第 20 层 KV，共享 1 份）
+  K/V_20 --[适配器 layer24]--&gt; K/V_24
+  K/V_20 --[适配器 layer28]--&gt; K/V_28
+  K/V_20 --[适配器 layer32]--&gt; K/V_32
+解码段第 17~32 层只处理生成 token；DeltaNet 层状态为已知近似</code></pre>
+<p>CED 省"算"：解码段全注意力层不再各自算 KV；CSA2 省"存"：4 层 KV 收敛为 1 份共享存储。K/V 注入点在层内 <code>k_norm</code> 与 RoPE 之前（pre-norm / pre-RoPE），各层自己的归一化和位置编码照常作用。</p>
+
+<h2>三、训练数据与配置</h2>
+<h3>1. 数据</h3>
+<ul>
+<li>语料：WikiText-2 raw train 长行 1200 条 + WikiText-103 长行 1200 条，共 2400 条（每条 ≤512 token，均值 262），fp32 落盘 24GB；</li>
+<li>每条记录：<code>H_16 (L,2560)</code> + 第 20/24/28/32 层真实 K/V <code>(L,1024) × 4</code>；</li>
+<li>用途配比：CED 投影器 63 万 token 对 ｜ 适配器 61.5 万对（256/条，95/5 划分）。</li>
+</ul>
+<h3>2. 训练配置</h3>
+<ul>
+<li>CED 投影器：MSE 损失，AdamW lr 2e-3 + cosine，12 epoch，bf16 单卡（RTX 4070 Ti SUPER）；</li>
+<li>CSA2 适配器：K/V 闭式解（岭回归 λ=1）初始化 + SGD 微调（base lr 3e-4 / refine lr 3e-3 分组，120 epoch，batch 65536）。</li>
+</ul>
+
+<h2>四、评测结果</h2>
+<table>
+<tr><th>指标</th><th>baseline</th><th>本权重（CED+CSA2）</th><th>说明</th></tr>
+<tr class="hl-row"><td>PPL（WikiText-2 test 100 条）</td><td class="num">12.55</td><td class="num">13.44（+7.1%）</td><td>消融：CED 单独 +0.27%，CSA2 单独 +5.3%</td></tr>
+<tr><td>GSM8K（200 题）</td><td class="num">0.735</td><td class="num">0.740（+0.5pp）</td><td>噪声内（SE 3.1pp）</td></tr>
+<tr><td>NIAH（50 条）</td><td class="num">0.940</td><td class="num">0.920（-2pp）</td><td>噪声内</td></tr>
+<tr><td>Prefill 加速</td><td class="num">--</td><td class="num">1.56x @2048 tok</td><td>mode_b 延迟口径，连续生成不可用已单独定性</td></tr>
+<tr><td>KV 解码段存储</td><td class="num">4 份</td><td class="num">1 份（3.44x）</td><td>持久/落盘口径；运行时驻留需惰性物化</td></tr>
+<tr><td>KV 量化 k8v4</td><td class="num">--</td><td class="num">2.46x 压缩，top5 重合 100%</td><td>TurboQuant 独立叠加</td></tr>
+</table>
+
+<h2>五、消融实验摘要</h2>
+<p>GSM8K 200 题/组，PPL 100 条：</p>
+<table>
+<tr><th>组</th><th>CED</th><th>CSA2</th><th>量化</th><th>PPL</th><th>GSM8K</th></tr>
+<tr><td>基线</td><td class="num">x</td><td class="num">x</td><td class="num">x</td><td class="num">12.55</td><td class="num">0.735</td></tr>
+<tr><td>仅 CED</td><td class="num">v</td><td class="num">x</td><td class="num">x</td><td class="num">12.58（+0.27%）</td><td class="num">0.735</td></tr>
+<tr><td>仅 CSA2</td><td class="num">x</td><td class="num">v</td><td class="num">x</td><td class="num">13.22（+5.32%）</td><td class="num">0.735</td></tr>
+<tr class="hl-row"><td>CED+CSA2</td><td class="num">v</td><td class="num">v</td><td class="num">x</td><td class="num">13.44（+7.09%）</td><td class="num">0.740</td></tr>
+<tr><td>全开</td><td class="num">v</td><td class="num">v</td><td class="num">v</td><td class="num">--</td><td class="num">0.745</td></tr>
+</table>
+<p>两个读法：<strong>CED 几乎免费</strong>（PPL 只 +0.27%，因为投影目标是单一确定映射）；<strong>代价集中在 CSA2</strong>（+5.3%，跨层 KV 余弦相似度接近 0，适配器映射是必然代价），但换来了 3.44x 存储压缩，且任务分数不掉。</p>
+
+<h2>六、用法</h2>
+<pre><code>import torch
+from ced_csa2.projector import load_projector
+from ced_csa2.csa2 import load_adapters
+from ced_csa2.model_utils import load_model_and_tokenizer
+
+model, tokenizer = load_model_and_tokenizer()          # Qwen/Qwen3.5-4B
+projector, _ = load_projector("projector_k20v20.pt")   # CED 投影器
+adapters = load_adapters("adapters.pt", device="cuda",
+                         dtype=next(model.parameters()).dtype)
+# 配合 ced_csa2/ced_runtime.py 的 CEDModeARuntime / CEDModeBRuntime 使用</code></pre>
+<p>全部模块源码（M0–M10）见站内<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:#3b82f6">代码检视文章</a>；设计背景见<a href="../学习html/DeepSeek-V4.1-Flash推理加速解读.html" style="color:#3b82f6">DeepSeek-V4.1-Flash 推理加速解读</a>。</p>
+
+<h2>七、限制与口径</h2>
+<div class="warn"><strong>口径提醒：</strong>
+<ul style="margin:8px 0 0 22px">
+<li>PPL 口径：WikiText-2 test 100 条；GSM8K 200 题（SE 约 3.1pp，差异 &lt;3pp 视为噪声）；</li>
+<li>KV 压缩为「持久/落盘口径」；运行时显存压缩需 attention 内惰性物化（未实现）；</li>
+<li>mode_b（prefill 跳过）连续生成不可用（DeltaNet 零状态失忆，已定性为设计代价）；</li>
+<li>量化组为「产物 KV 量化净效果」，与真实 KV 量化不正交；</li>
+<li>全部结论基于 Qwen3.5-4B 混合架构；迁移到标准全注意力架构未验证。</li>
+</ul></div>
+
+<h2>八、下载与相关材料</h2>
+<ul>
+<li><strong>权重下载</strong>：<a href="https://modelscope.cn/models/conanfans/ced-csa2-qwen3.5-4b-kv-adapters" target="_blank" rel="nofollow" style="color:#3b82f6">conanfans/ced-csa2-qwen3.5-4b-kv-adapters</a>（ModelScope，Apache-2.0）</li>
+<li><strong>基座模型</strong>：Qwen/Qwen3.5-4B</li>
+<li><strong>全模块源码</strong>：<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:#3b82f6">CED + CSA2 复现 · 代码检视（第 1 轮）</a></li>
+</ul>
+<p>如使用本权重，请说明复现自 DeepSeek V4.1 技术报告的 CED/CSA2 设计（研究用途复现）。</p>
+
+<footernote>基座模型：Qwen/Qwen3.5-4B（混合架构） · 权重：CED 投影器 5.24M + CSA2 适配器 ×3 各约 8.4M · 数据：WikiText-2/103 长行 2400 条 · 权重：ModelScope conanfans/ced-csa2-qwen3.5-4b-kv-adapters</footernote>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+<div style="max-width:800px;margin:44px auto 28px;padding:16px 24px 0;border-top:1px solid #eee;font-size:13px;color:#999"><a href="../index.html" style="color:#999;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:#999;text-decoration:none">苏ICP备2026063680号-1</a></div>
+</body>
+</html>
