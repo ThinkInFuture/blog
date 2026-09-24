@@ -49,6 +49,13 @@
   .lead-bg p { margin: 0 0 12px; font-size: 0.92rem; color: var(--text); }
   .lead-bg p:last-child { margin-bottom: 0; }
   .lead-bg strong { color: var(--accent); }
+  .lead-h { margin: 0 0 8px; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.12em; color: var(--text-dim); }
+  .lead-bg ul { margin: 0 0 12px; padding-left: 20px; }
+  .lead-bg li { font-size: 0.92rem; color: var(--text); margin-bottom: 6px; }
+  .lead-bg li:last-child { margin-bottom: 0; }
+  .lead-bg .opt-head { margin: 14px 0 6px; font-size: 0.95rem; color: var(--text); }
+  .lead-bg .opt-head b { color: var(--accent); }
+  .lead-note { margin: 8px 0 0; font-size: 0.8rem; color: var(--text-dim); }
 
   .scenario-bar {
     background: var(--surface);
@@ -283,22 +290,38 @@
   <p class="subtitle">CED 层切分 + CSA2 跨层 KV 共享：四种推理配置的架构与路径图解</p>
 
   <div class="lead-bg">
-    <p>
-      <strong>背景：</strong>DeepSeek V4.1 发布时，「1M 上下文下 KV Cache 成本远低于同级别模型」是官方技术报告里被反复引用的数字。
-      上下文越长、层数越多，KV Cache 占用越大——这是 Transformer 推理的固有矛盾：每一层都要存一份自己算出的 K 和 V，
-      32 层就是 32 份，上下文一长，显存和带宽两头告急。
-    </p>
-    <p>
-      V4.1-Flash 给出的答案是两套正交的优化：
-      <strong>CED</strong> 解决「读」的问题——Prefill 阶段只跑编码器 20 层，解码器的 KV 由编码器隐藏态一次性投影得到，读输入的计算量省一半；
-      <strong>CSA2</strong> 解决「记」的问题——解码器 4 个全注意力层共享 1 份 KV，每层只挂一个小转换模型做跨层映射，存储压到 1/4。
-      两者叠加，同一条请求的持久化缓存可以降到基线的 1/8。
-    </p>
-    <p>
-      本页把这套设计拆成图来讲：<strong>图 1</strong> 看架构怎么切，<strong>图 2–4</strong> 分别看总体执行路径、Prefill 路径与 Decode 路径，
-      <strong>图 5–6</strong> 看 CED 与 CSA2 的机制差异，<strong>图 7–10</strong> 用同一条请求（30,000 输入 / 1,000 输出）把四种配置各自走一遍。
-      文中数字为按官方报告口径的示意性推导，用于横向对比，不代表实测值。
-    </p>
+    <p class="lead-h">背景</p>
+    <ul>
+      <li><strong>固有瓶颈：</strong>Transformer 每一层都独立保存专属 K、V 张量——层数越多、上下文越长，KV Cache 的显存占用与内存带宽开销同步上涨；</li>
+      <li><strong>核心卖点：</strong>DeepSeek V4.1-Flash 在 1M 上下文场景下，KV Cache 成本显著低于同级别大模型；</li>
+      <li><strong>实现路径：</strong>整套方案由两套<strong>正交</strong>优化构成——CED 优化 Prefill 计算开销，CSA2 压缩 KV 存储开销。</li>
+    </ul>
+  </div>
+
+  <div class="lead-bg">
+    <p class="lead-h">两大核心正交优化</p>
+    <p class="opt-head"><b>① CED（Causal Encoder-Decoder）</b>——解决 Prefill「读」的计算开销</p>
+    <ul>
+      <li><strong>做法：</strong>Prefill 阶段仅执行编码器 20 层；解码器侧 KV 不再逐层计算，直接由编码器隐藏态一次性投影生成；</li>
+      <li><strong>收益：</strong>输入 Prefill 阶段计算量减少一半。</li>
+    </ul>
+    <p class="opt-head"><b>② CSA2（Compressed Sparse Attention 2）</b>——解决 KV「存储」开销</p>
+    <ul>
+      <li><strong>做法：</strong>解码器内 4 个全注意力层共享同一份 KV 缓存，每层配套小型转换模块完成跨层映射；</li>
+      <li><strong>收益：</strong>KV 存储容量压缩至原基线的 1/4。</li>
+    </ul>
+    <p><strong>叠加收益：</strong>CED + CSA2 组合，同一条请求的持久化 Prefix 缓存可压缩至原始基线的 <strong>1/8</strong>。</p>
+  </div>
+
+  <div class="lead-bg">
+    <p class="lead-h">页面图示规划（本页配套图解）</p>
+    <ul>
+      <li><strong>图 1</strong>：CED + CSA2 整体架构切分示意图；</li>
+      <li><strong>图 2–4</strong>：完整执行链路拆解——图 2 总执行路径、图 3 Prefill 执行路径、图 4 Decode 执行路径；</li>
+      <li><strong>图 5–6</strong>：CED、CSA2 机制对比差异；</li>
+      <li><strong>图 7–10</strong>：同一条请求（输入 30k token / 输出 1k token）在 4 种不同配置下的端到端推演对比。</li>
+    </ul>
+    <p class="lead-note">说明：图内数值为基于官方报告口径的示意推导，仅用于横向对比，非硬件实测数据。</p>
   </div>
 
   <div class="scenario-bar">
