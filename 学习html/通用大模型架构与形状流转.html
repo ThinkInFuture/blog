@@ -93,28 +93,39 @@ footer.end{margin-top:56px;padding-top:18px;border-top:1px dashed var(--border);
 </table>
 <p>维度字母对照：<code>B</code> = batch（本例 1）、<code>S</code> = 序列长度（本例 6）、<code>H</code> = 隐藏维（本例 4096）、<code>V</code> = 词表（本例 152000）。</p>
 
-<h2>二、总流程：八个阶段（带具体数字）</h2>
+<h2>二、总流程：九个阶段（带具体数字，阶段四展开到 QKV / Attention）</h2>
 
 <div class="mermaid-wrap">
 <div class="mermaid">
 flowchart TD
     classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2937,stroke-width:1.5px
     classDef stage fill:#eff6ff,stroke:#3b82f6,color:#1f2937,stroke-width:1.5px
+    classDef attn fill:#e8f0fe,stroke:#2f6feb,color:#1a4ea8,stroke-width:1.5px
+    classDef ffn fill:#e6f5ed,stroke:#1a7f4b,color:#155c38,stroke-width:1.5px
     classDef out fill:#e6f5ed,stroke:#1a7f4b,color:#155c38,stroke-width:1.5px
 
     T0["原始文本<br/>「订单有问题，需要退款吗」"]:::io
-    S1["阶段一 · tokenize<br/>切分成 6 个 token<br/>IDs = [1533, 100157, 3493, 11, 2762, 104120]（示意）<br/>形状 [6] → 加 batch 维 [1, 6]"]:::stage
-    S2["阶段二 · Embedding 查表<br/>词表矩阵 [152000, 4096] 按 ID 取 6 行<br/>形状 [1, 6, 4096]"]:::stage
-    S3["阶段三 · 32 层 decoder block<br/>每层：注意力 + FFN + 残差<br/>形状 [1, 6, 4096] 进出不变"]:::stage
-    S4["阶段四 · 最终 RMSNorm<br/>形状 [1, 6, 4096]"]:::stage
-    S5["阶段五 · LM head 投影<br/>[1, 6, 4096] @ [4096, 152000]<br/>logits 形状 [1, 6, 152000]"]:::stage
-    S6["阶段六 · 取最后位置<br/>只要第 6 个位置的打分<br/>[1, 152000]"]:::stage
-    S7["阶段七 · 采样<br/>温度 / top-p → 下一个 token「是」"]:::out
-    S8["阶段八 · 自回归<br/>「是」拼回输入（现在 7 个 token）<br/>解码阶段每步只进 1 个新 token [1, 1, 4096]<br/>历史 KV 已缓存，无需重算"]:::stage
-    T0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
-    S7 -.->|"循环直到结束符"| S3
+    S1["阶段一 · 分词（tokenizer）<br/>按词表切分 → 6 个 token<br/>[订单] [有问题] [，] [需要] [退款] [吗]"]:::stage
+    S2["阶段二 · 查词表换成整数 ID<br/>[1533, 100157, 3493, 11, 2762, 104120]（示意）<br/>形状 [6] → 加 batch 维 [1, 6]"]:::stage
+    S3["阶段三 · Embedding 查表<br/>词表矩阵 [152000, 4096] 按 ID 取 6 行<br/>形状 [1, 6, 4096]"]:::stage
+    S4["阶段四 · 进入 32 层 decoder block<br/>以第 1 层为例（32 层结构完全相同）"]:::stage
+    S4a["④-a RMSNorm<br/>[1, 6, 4096]"]:::attn
+    S4b["④-b Q / K / V 投影<br/>Q [1, 6, 4096] @ [4096, 4096] → 拆 32 头 [1, 32, 6, 128]<br/>K, V @ [4096, 1024] → 8 组头 [1, 8, 6, 128]（GQA）"]:::attn
+    S4c["④-c Attention 注意力<br/>scores = Q @ Kᵀ ÷ √128 → [1, 32, 6, 6]<br/>因果掩码（第 3 个 token 看不到第 5 个）→ softmax<br/>probs @ V → [1, 32, 6, 128]"]:::attn
+    S4d["④-d 合并 32 头 → [1, 6, 4096]<br/>输出投影 + 残差"]:::attn
+    S4e["④-e FFN（SwiGLU）<br/>[1, 6, 4096] → 升维 [1, 6, 11008] × 2 → 降回 [1, 6, 4096]<br/>+ 残差"]:::ffn
+    S4f["④-f 第 2 … 32 层：重复同样流程<br/>形状始终 [1, 6, 4096]"]:::stage
+    S5["阶段五 · 最终 RMSNorm<br/>[1, 6, 4096]"]:::stage
+    S6["阶段六 · LM head 投影<br/>[1, 6, 4096] @ [4096, 152000]<br/>logits 形状 [1, 6, 152000]"]:::stage
+    S7["阶段七 · 取最后位置<br/>只要第 6 个位置的打分<br/>[1, 152000]"]:::stage
+    S8["阶段八 · 采样<br/>温度 / top-p → 下一个 token「是」"]:::out
+    S9["阶段九 · 自回归<br/>「是」拼回输入（现在 7 个 token）<br/>解码阶段每步只进 1 个新 token [1, 1, 4096]<br/>历史 KV 已缓存，无需重算"]:::stage
+    T0 --> S1 --> S2 --> S3 --> S4
+    S4 --> S4a --> S4b --> S4c --> S4d --> S4e --> S4f
+    S4f --> S5 --> S6 --> S7 --> S8
+    S8 -.->|"循环直到结束符"| S4
 </div>
-<div class="fig-cap">图 1 · 一条 6 token 请求的完整前向：形状从 [6] 出发，[1, 6, 4096] 穿过 32 层，LM head 投到 [1, 6, 152000]，采样出第 7 个 token</div>
+<div class="fig-cap">图 1 · 一条 6 token 请求的完整前向（九个阶段）：形状从 [6] 出发，[1, 6, 4096] 穿过 32 层，LM head 投到 [1, 6, 152000]，采样出第 7 个 token；阶段四展开到 QKV 与 Attention</div>
 </div>
 
 <p>三个关键观察：</p>
@@ -182,18 +193,21 @@ flowchart TD
 <table>
 <thead><tr><th>阶段</th><th>张量</th><th>形状</th><th>维度含义（字母对照）</th></tr></thead>
 <tbody>
-<tr><td>① tokenize</td><td>token IDs</td><td class="mono">[6]</td><td>S = 6 个整数</td></tr>
-<tr><td>② 加 batch</td><td>token IDs</td><td class="mono">[1, 6]</td><td>B = 1 条请求</td></tr>
+<tr><td>① 分词</td><td>token 序列</td><td class="mono">[6]</td><td>S = 6 个 token</td></tr>
+<tr><td>② 查词表 + 加 batch</td><td>token IDs</td><td class="mono">[1, 6]</td><td>B = 1 条请求</td></tr>
 <tr><td>③ embedding</td><td>初始 hidden</td><td class="mono">[1, 6, 4096]</td><td>H = 4096 维向量</td></tr>
-<tr class="hl-row"><td>④ ×32 层 block</td><td>层输出</td><td class="mono">[1, 6, 4096]</td><td>形状不变，语义逐层加深</td></tr>
-<tr><td>④-a Q 拆头</td><td>query</td><td class="mono">[1, 32, 6, 128]</td><td>32 头 × 6 位置 × 128 头维</td></tr>
+<tr class="hl-row"><td>④ ×32 层 block</td><td>层输出</td><td class="mono">[1, 6, 4096]</td><td>形状不变，语义逐层加深（内部 ④-a ~ ④-f）</td></tr>
+<tr><td>④-a RMSNorm</td><td>归一化</td><td class="mono">[1, 6, 4096]</td><td>Pre-Norm</td></tr>
+<tr><td>④-b Q/K/V 投影</td><td>query / key / value</td><td class="mono">[1, 32, 6, 128] / [1, 8, 6, 128]</td><td>32 个 Q 头、8 组 KV 头</td></tr>
+<tr><td>④-c Attention</td><td>scores → probs @ V</td><td class="mono">[1, 32, 6, 6] → [1, 32, 6, 128]</td><td>6×6 的"谁看谁"方阵</td></tr>
+<tr><td>④-e FFN 中间</td><td>query</td><td class="mono">[1, 32, 6, 128]</td><td>32 头 × 6 位置 × 128 头维</td></tr>
 <tr><td>④-b K/V（GQA）</td><td>key / value</td><td class="mono">[1, 8, 6, 128]</td><td>8 组 KV 头</td></tr>
-<tr><td>④-c 分数</td><td>scores</td><td class="mono">[1, 32, 6, 6]</td><td>6×6 的"谁看谁"方阵</td></tr>
-<tr><td>④-d FFN 中间</td><td>gate / up</td><td class="mono">[1, 6, 11008]</td><td>升维后的门控表示</td></tr>
-<tr><td>⑤ 最终 norm</td><td>最终 hidden</td><td class="mono">[1, 6, 4096]</td><td>深层语义向量</td></tr>
-<tr><td>⑥ LM head</td><td>logits</td><td class="mono">[1, 6, 152000]</td><td>6 个位置各 152000 个打分</td></tr>
-<tr><td>⑦ 取最后位</td><td>logits</td><td class="mono">[1, 152000]</td><td>只看第 6 个位置</td></tr>
-<tr><td>⑧ 采样</td><td>next token</td><td class="mono">标量</td><td>采出「是」，拼回输入进下一轮</td></tr>
+<tr><td>④-d 合并 + 残差</td><td>层中间输出</td><td class="mono">[1, 6, 4096]</td><td>加回主干</td></tr>
+<tr><td>④-e FFN 中间</td><td>gate / up</td><td class="mono">[1, 6, 11008]</td><td>升维后的门控表示</td></tr>
+<tr><td>⑥ 最终 norm</td><td>最终 hidden</td><td class="mono">[1, 6, 4096]</td><td>深层语义向量</td></tr>
+<tr><td>⑦ LM head</td><td>logits</td><td class="mono">[1, 6, 152000]</td><td>6 个位置各 152000 个打分</td></tr>
+<tr><td>⑧ 取最后位</td><td>logits</td><td class="mono">[1, 152000]</td><td>只看第 6 个位置</td></tr>
+<tr><td>⑨ 采样</td><td>next token</td><td class="mono">标量</td><td>采出「是」，拼回输入进下一轮</td></tr>
 </tbody>
 </table>
 
