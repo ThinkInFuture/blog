@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kev 复现实验：全周期问题总账（含底座选型期补录）</title>
+<style>
+:root{
+  --bg:#f7f9fc; --panel:#ffffff; --panel-2:#f2f5fa;
+  --border:#dfe6ef; --border-soft:#e8eef6;
+  --text:#1c2733; --muted:#5b6b7c;
+  --accent:#2f6feb; --accent-soft:#e8f0fe;
+  --green:#1a7f4b; --green-soft:#e6f5ed;
+  --orange:#b45309; --orange-soft:#fff4e5;
+  --red:#b91c1c; --red-soft:#fdecec;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.75}
+.wrap{max-width:1000px;margin:0 auto;padding:32px 24px 80px}
+.back{display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin-bottom:14px}
+.back:hover{color:var(--accent)}
+header.top{background:linear-gradient(135deg,#eef4ff 0%,#f7f9fc 60%);border:1px solid var(--border);border-radius:14px;padding:26px 30px;margin-bottom:26px;box-shadow:0 1px 3px rgba(20,40,80,.04)}
+header.top .crumb{font-size:12px;color:#6b7280;margin-bottom:8px}
+header.top .crumb .tag{color:var(--accent);font-weight:700;margin-right:10px}
+header.top h1{margin:0 0 10px;font-size:25px;letter-spacing:.2px;color:#15315c}
+header.top .sub{color:var(--muted);font-size:14px}
+header.top .meta{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+header.top .meta span{background:#fff;border:1px solid var(--border);border-radius:20px;padding:3px 12px;font-size:12.5px;color:var(--muted)}
+h2{font-size:19px;margin:38px 0 14px;padding:0 0 10px 12px;border-left:5px solid var(--accent);color:#15315c}
+h2.stg{border-left-color:var(--purple)}
+p{margin:10px 0;color:#26384d}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:18px 22px;margin-bottom:18px;box-shadow:0 1px 2px rgba(20,40,80,.03)}
+.alert{background:var(--red-soft);border:1px solid #f0c8c8;border-left:5px solid var(--red);border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;font-size:14px;color:#7a1f1f}
+.alert .lbl{font-weight:700;color:var(--red)}
+.status-box{background:var(--green-soft);border:1px solid #c3e6d4;border-left:5px solid var(--green);border-radius:0 10px 10px 0;padding:16px 20px;margin:18px 0;font-size:14px;color:#155c38}
+.status-box .lbl{font-weight:700}
+.big{display:flex;gap:14px;margin:18px 0;flex-wrap:wrap}
+.stat{flex:1;min-width:160px;background:#f7f8fa;border-radius:10px;padding:16px 18px;text-align:center}
+.stat .v{font-size:24px;font-weight:700;color:var(--accent)}
+.stat .v.ok{color:var(--green)}
+.stat .v.warn{color:var(--orange)}
+.stat .l{font-size:12px;color:#888;margin-top:4px}
+table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:13.5px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(20,40,80,.04)}
+th{background:#eef3fb;text-align:left;padding:9px 12px;color:#15315c;font-weight:700;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:9px 12px;border-bottom:1px solid var(--border-soft);vertical-align:top;color:#26384d}
+tr:last-child td{border-bottom:none}
+td.id{font-family:"SF Mono",Consolas,monospace;font-weight:700;color:#15315c;white-space:nowrap}
+.pill{display:inline-block;padding:1px 10px;border-radius:10px;font-size:12px;font-weight:700;white-space:nowrap}
+.pill.ok{background:var(--green-soft);color:var(--green)}
+.pill.warn{background:var(--orange-soft);color:var(--orange)}
+.pill.no{background:var(--red-soft);color:var(--red)}
+code{font-family:"SF Mono",Consolas,Monaco,monospace;background:#eef2f7;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;font-size:12.5px;color:#1a4ea8;white-space:normal;overflow-wrap:anywhere;word-break:break-all}
+ul{margin:8px 0 12px;padding-left:22px}
+li{margin:5px 0;color:#26384d}
+.foot-note{font-size:12.5px;color:var(--muted);margin-top:6px}
+footer.end{margin-top:52px;padding-top:18px;border-top:1px dashed var(--border);text-align:center;color:var(--muted);font-size:13px}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+
+<header class="top">
+  <div class="crumb"><span class="tag">复现实验</span>2026-09-27 发布 · 全周期盘点</div>
+  <h1>Kev 复现实验：全周期问题总账（含底座选型期补录）</h1>
+  <div class="sub">内部代号 jev_test · 覆盖从最早的模型选型期到交付流程期的 20 条问题：每条含发生/发现时点、根因与状态，此前历次汇总遗漏的早期问题一并补录</div>
+  <div class="meta">
+    <span>复现对象：Kev / Jev 风格决策模型</span>
+    <span>底座 Qwen3.5-4B</span>
+    <span>当前 v3 重训中（12,330 步）</span>
+    <span>问题 20 条 · 已修 16 · 部分或持续 4</span>
+  </div>
+</header>
+
+<h2>〇、背景：Kev 是什么，这次复现在做什么</h2>
+<div class="card">
+  <p><strong>Kev 是一个 Jev 风格的「决策模型」（decision model）家族</strong>：不做逐 token 的自回归生成，而是<strong>一次前向传播</strong>读入一段状态文本（state）和一组带类型的提问槽位，由一个可训练的<strong>指针头（Pointer Head）</strong>直接在候选位置上打出概率分数，输出结构化决策。底座冻结，只训 LoRA 和指针头；配套温度校准与 kev.benchmark 冻结评测。详细架构见学习专区《<a href="../学习html/Kev 架构详解（含源码）.html" style="color:var(--accent)">Kev 架构详解（含源码）</a>》。</p>
+  <p>本次实验（内部代号 <code>jev_test</code>）在 <strong>Qwen3.5-4B</strong> 上复现这套设计：自建训练与评测数据（贪吃蛇 / 方块两类游戏决策，加上 PII、毒性、求助等业务判断题），LoRA 微调 + 指针头训练 + 温度校准，目标是在线低延迟的结构化决策。项目跑了一个完整周期，踩过的坑不少——这篇把<strong>从最早的模型选型期到现在的 20 条问题</strong>一次性盘点入账：每条含发生/发现时点、根因、状态，此前历次汇总遗漏的早期问题一并补录。</p>
+</div>
+
+<div class="big">
+<div class="stat"><div class="v">20</div><div class="l">问题全收录（P / D / E / F 四阶段）</div></div>
+<div class="stat"><div class="v ok">16</div><div class="l">已修</div></div>
+<div class="stat"><div class="v warn">4</div><div class="l">部分修复 / 持续执行</div></div>
+<div class="stat"><div class="v">0</div><div class="l">未解决</div></div>
+</div>
+
+<div class="alert">
+<span class="lbl">【重大更正 · 本账补录 P-01】</span>关于最早指出的那个问题：项目一开始用的底座是<strong>对话版 Qwen3.5-4B</strong>（目录里带 chat_template.jinja，实锤），不是 Base。早期询问「是不是 Base」时得到的回答「是」是<strong>错的——回答前没有做任何核验</strong>（没有检查目录里的 chat_template）。此错误直到 2026-09-27 对照原版仓库时才被发现。v3 已换真正的 Base 并做了核验（models/Qwen3.5-4B-Base 无 chat_template ✓）。<strong>此条此前所有问题汇总均未收录，本账补录，编号 P-01。</strong>
+</div>
+
+<h2>一、阶段〇：模型选型期（项目最早期）</h2>
+<table>
+<thead><tr><th>编号</th><th>问题</th><th>根因</th><th>发现时点</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td class="id">P-01</td><td><strong>底座用错：对话版当 Base 用</strong>。v1/v2 两轮训练全部基于对话版 Qwen3.5-4B（带 chat_template.jinja）；原版 kev-4b 用的是 Qwen3.5-4B-Base。早期询问时，未核验即回答「是 Base」。</td>
+<td>下载模型后未检查模型版本标识；回答凭印象而非实证</td>
+<td>2026-09-27 对照原版 adapter_config（base_model = Qwen/Qwen3.5-4B-Base）时</td>
+<td><span class="pill ok">已修</span> v3 换 Base（魔搭），并实证核验无 chat_template</td></tr>
+<tr><td class="id">P-02</td><td>分隔符用字面文本 [STATE]/[Q]/[OPT]/[DECIDE]；原版复用 Qwen 特殊 token 5 枚（embedding 可训练）</td>
+<td>复刻时仅依据架构文章描述，未读到原版实现</td>
+<td>2026-09-27 对照原版 model.py</td>
+<td><span class="pill warn">部分</span> v3 暂保留字面（减少变量）；v4 改特殊 token</td></tr>
+<tr><td class="id">P-03</td><td>LoRA 目标缺 DeltaNet 5 投影（Qwen3.5 线性注意力层未被适配）</td>
+<td>同上，按通用 LoRA 惯例而非原版配置</td>
+<td>2026-09-27 对照原版 adapter_config</td>
+<td><span class="pill ok">已修</span> v3 补全 12 组目标</td></tr>
+<tr><td class="id">P-04</td><td>训练超参偏离：lr 1e-4（原版 2e-5）、batch 32（原版 8）、bf16 权重（原版 fp32 主权重）</td>
+<td>未对照原版配方</td>
+<td>2026-09-27</td>
+<td><span class="pill ok">已修</span> lr/batch 已修；fp32 受 16GB 显存限制列 v4</td></tr>
+<tr><td class="id">P-05</td><td>无温度校准机制（原版每 checkpoint 拟合 temperature）</td>
+<td>复刻时未实现该卖点</td>
+<td>2026-09-27</td>
+<td><span class="pill ok">已修</span> 已实现（fit_temperature.py），v3 训后自动拟合</td></tr>
+</tbody>
+</table>
+
+<h2>二、阶段一：数据期</h2>
+<table>
+<thead><tr><th>编号</th><th>问题</th><th>根因</th><th>发现时点</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td class="id">D-01</td><td>训练集 870 条泄漏（早期版本）</td><td>生成器分层不严</td>
+<td>第一轮评审</td><td><span class="pill ok">已修</span> 全局去重重建</td></tr>
+<tr><td class="id">D-02</td><td><strong>蛇头位置恒定 [(5,6),(4,6),(3,6)]</strong>：蛇头左侧格 100% 是蛇身，q_danger_left 标签恒「是」，模型学成常数先验，真实对局即失效（35% 危险错误率）。此为两次游戏录制失败的根因</td>
+<td>生成器初始 body 硬编码</td>
+<td>2026-09-26 录制诊断（diag_snake_kev）</td>
+<td><span class="pill ok">已修</span> 蛇头全随机 + 3–12 节长满制，分布审计实证</td></tr>
+<tr><td class="id">D-03</td><td>游戏评测集与训练题同源（game_test = train 副本），「73.37%」实为训练集成绩；train.jsonl append 模式有重复注入风险</td>
+<td>转换脚本设计缺陷</td><td>复审</td>
+<td><span class="pill ok">已修</span> 90/10 → 后升级 OOD + iid 双口径；整体重写</td></tr>
+<tr><td class="id">D-04</td><td>方块训练棋盘固定 4–7 行，对局开局空棋盘属分布外（目标列退化 0/4）</td>
+<td>生成器分布窄</td><td>录制日志</td>
+<td><span class="pill ok">已修</span> 0–12 行 / 密度随机</td></tr>
+<tr><td class="id">D-05</td><td>蛇身长 3–8 且 state 只显示 body[:8]，对局超 8 节模型失明</td>
+<td>设计未考虑对局增长</td><td>34 项评审 #2</td>
+<td><span class="pill ok">已修</span> 3–12 节长满制 + 完整蛇身展示</td></tr>
+<tr><td class="id">D-06</td><td>业务先验比例（PII 30% / 毒性 30% / 求助 8%）无业务依据</td>
+<td>合成数据刻意均衡，未文档化</td><td>34 项评审 #8</td>
+<td><span class="pill warn">部分</span> 已文档化为限制项；是否对齐真实分布待定</td></tr>
+</tbody>
+</table>
+
+<h2>三、阶段二：评测期</h2>
+<table>
+<thead><tr><th>编号</th><th>问题</th><th>根因</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td class="id">E-01</td><td>「游戏准确率 73.37%」是训练集成绩，当成了评测口径对外汇报</td>
+<td>评测集与训练同源</td><td><span class="pill ok">已修</span> 作废该口径；换 OOD + iid 双口径</td></tr>
+<tr><td class="id">E-02</td><td>T 网格在 test 上搜索温度（T=1.3「甜点」为自洽污染产物）</td>
+<td>搜索集与汇报集未分离</td><td><span class="pill ok">已修</span> 重做（val 搜索，T=1.0 即最优）</td></tr>
+<tr><td class="id">E-03</td><td>危险判断错误率 35% 未进评测报告</td>
+<td>诊断脚本游离于验收体系外</td><td><span class="pill ok">已修</span> 已纳入验收（&lt;10%）</td></tr>
+</tbody>
+</table>
+
+<h2>四、阶段三：交付与流程期</h2>
+<table>
+<thead><tr><th>编号</th><th>问题</th><th>状态</th></tr></thead>
+<tbody>
+<tr><td class="id">F-01</td><td>坏数据训出的模型所录两支游戏视频曾作为交付（蛇为引擎辅助、方块 0 消行）</td><td><span class="pill ok">已修</span> 更正邮件已单发；视频面板加水印；新视频达标才交付</td></tr>
+<tr><td class="id">F-02</td><td>「0 死亡」依赖引擎过滤，表述不显眼</td><td><span class="pill ok">已修</span> 标题水印「引擎辅助」已加；邮件口径已更正</td></tr>
+<tr><td class="id">F-03</td><td>改完 bug 未全链路验证就推进（convert 未同步改等）</td><td><span class="pill warn">部分</span> 已建立 verify_kev_encode 全量验证 + 审计前置；持续执行</td></tr>
+<tr><td class="id">F-04</td><td>发现一个修一个，缺系统性体检</td><td><span class="pill ok">已修</span> audit_game_data / audit_data_integrity / verify_kev_encode 三件套落地</td></tr>
+<tr><td class="id">F-05</td><td>进展/问题未及时邮件（多次）</td><td><span class="pill warn">部分</span> 电子狗每小时邮件已上线；发车/中检/交付节点邮件已制度化，仍需自律</td></tr>
+<tr><td class="id">F-06</td><td>逐段解读 HTML 文字重叠（阅读问题反馈）</td><td><span class="pill ok">已修</span> 后续 HTML 已改单列大字号排版</td></tr>
+</tbody>
+</table>
+
+<h2>五、当前状态</h2>
+<div class="status-box">
+<span class="lbl">v3 重训中：</span>Base 底座 ✓ + DeltaNet LoRA 目标 ✓ + lr 2e-5 / batch 8 ✓ + 温度校准 ✓。12,330 步，预计约 20 小时。训后自动执行：温度拟合 → 业务回归 → 游戏 OOD / iid 评测 → 验收比对 → 达标自动录制 v3 视频。电子狗每小时邮件巡检。
+</div>
+<p class="foot-note">本账为一次性全周期盘点；此后新问题按 P / D / E / F 编号追加，不再遗漏早期项。</p>
+
+<footer class="end">Kev 复现实验 · jev_test · 全周期问题总账 · 2026-09-27</footer>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+<div style="max-width:1000px;margin:44px auto 28px;padding:16px 24px 0;border-top:1px solid #eee;font-size:13px;color:#999"><a href="../index.html" style="color:#999;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:#999;text-decoration:none">苏ICP备2026063680号-1</a></div>
+</body>
+</html>
