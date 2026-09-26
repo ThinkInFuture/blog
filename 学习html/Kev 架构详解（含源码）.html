@@ -1,0 +1,1404 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kev 架构详解（含源码） - 华杉的技术博客</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  :root {
+    --bg: #f7f8fa;
+    --card: #ffffff;
+    --border: #e5e7eb;
+    --text: #1f2937;
+    --text-dim: #6b7280;
+    --accent: #3b82f6;
+    --accent-soft: #eff6ff;
+    --green: #10b981;
+    --green-soft: #ecfdf5;
+    --red: #ef4444;
+    --red-soft: #fef2f2;
+    --amber: #f59e0b;
+    --amber-soft: #fffbeb;
+    --code-bg: #f6f7f9;
+    --code-border: #e5e7eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 15px;
+    line-height: 1.75;
+  }
+  .container {
+    max-width: 1000px;
+    margin: 0 auto;
+    padding: 32px 20px 80px;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    color: #111827;
+  }
+  h2 {
+    font-size: 22px;
+    font-weight: 700;
+    margin: 48px 0 16px;
+    color: #111827;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--border);
+  }
+  h3 {
+    font-size: 17px;
+    font-weight: 600;
+    margin: 28px 0 10px;
+    color: #374151;
+  }
+  h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 20px 0 8px;
+    color: #4b5563;
+  }
+  p { margin: 10px 0; }
+  .subtitle {
+    color: var(--text-dim);
+    font-size: 15px;
+    margin: 0 0 32px;
+  }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin: 20px 0;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+  }
+  .card.soft-blue { background: var(--accent-soft); border-color: #bfdbfe; }
+  .card.soft-green { background: var(--green-soft); border-color: #a7f3d0; }
+  .card.soft-red { background: var(--red-soft); border-color: #fecaca; }
+  .card.soft-amber { background: var(--amber-soft); border-color: #fde68a; }
+
+  code {
+    background: var(--code-bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 13.5px;
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    overflow-x: auto;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 12px 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .file-header {
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    border-radius: 8px 8px 0 0;
+    padding: 8px 16px;
+    font-family: "Consolas", "Monaco", monospace;
+    font-size: 13px;
+    color: #3730a3;
+    font-weight: 600;
+    margin-top: 20px;
+    margin-bottom: -8px;
+  }
+  .file-header + pre {
+    border-radius: 0 0 8px 8px;
+    margin-top: 0;
+  }
+
+  .mermaid {
+    background: #ffffff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin: 16px 0;
+    text-align: center;
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 14px;
+  }
+  th, td {
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: #f9fafb;
+    font-weight: 600;
+    color: #374151;
+  }
+  tr:last-child td { border-bottom: none; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .kv {
+    display: grid;
+    grid-template-columns: 180px 1fr;
+    gap: 8px 20px;
+    margin: 12px 0;
+  }
+  .kv dt { color: var(--text-dim); font-weight: 500; }
+  .kv dd { margin: 0; }
+
+  .callout {
+    border-left: 4px solid var(--accent);
+    background: var(--accent-soft);
+    padding: 14px 18px;
+    border-radius: 0 8px 8px 0;
+    margin: 16px 0;
+  }
+  .callout.warn { border-color: var(--amber); background: var(--amber-soft); }
+  .callout.danger { border-color: var(--red); background: var(--red-soft); }
+  .callout.success { border-color: var(--green); background: var(--green-soft); }
+  .callout-title { font-weight: 600; margin-bottom: 4px; }
+
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+
+  .toc {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 24px;
+    margin: 24px 0;
+  }
+  .toc-title { font-weight: 600; font-size: 14px; color: var(--text-dim); margin-bottom: 8px; }
+  .toc ol { margin: 0; padding-left: 20px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="container">
+
+<h1>Kev 架构详解（含源码）</h1>
+<p class="subtitle">冻结底座 + LoRA + 指针头 — 用一次前向传播完成结构化决策</p>
+
+<div class="toc">
+  <div class="toc-title">目录</div>
+  <ol>
+    <li><a href="#overview">一句话概括</a></li>
+    <li><a href="#compare">为什么不用自回归</a></li>
+    <li><a href="#arch">整体架构图</a></li>
+    <li><a href="#data">数据格式与标记</a></li>
+    <li><a href="#pointer">指针头怎么工作</a></li>
+    <li><a href="#train">训练流程</a></li>
+    <li><a href="#infer">推理流程与延迟</a></li>
+    <li><a href="#limit">结构性短板：act 覆盖率</a></li>
+    <li><a href="#result">本项目实测数据</a></li>
+    <li><a href="#position">Kev 在项目中的定位</a></li>
+    <li><a href="#source">核心源码逐段解读</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="overview">1. 一句话概括</h2>
+
+<div class="card soft-blue">
+<p style="margin:0;font-size:16px;">
+<b>Kev = 冻结的 Qwen3.5 底座 + 一个可训练的 LoRA + 一个可训练的指针头（Pointer Head）。</b><br>
+模型不生成任何文字，而是在<b>一次前向传播</b>里，直接为每个问题的每个候选选项打出一个概率分数。
+</p>
+</div>
+
+<p>它和传统的"微调 LLM 输出 JSON"最大的区别是：</p>
+
+<table>
+<thead>
+<tr><th>对比项</th><th>自回归方案（v2）</th><th>Kev 方案</th></tr>
+</thead>
+<tbody>
+<tr><td>模型输出</td><td>逐 token 生成的 JSON 字符串</td><td>一次性算出的概率分布</td></tr>
+<tr><td>前向传播次数</td><td>N 次（N = 输出 token 数）</td><td><b>1 次</b></td></tr>
+<tr><td>可能的输出</td><td>合法 JSON / 非法 JSON（格式错误）</td><td>概率分布（结构上不可能出错）</td></tr>
+<tr><td>延迟</td><td>秒级</td><td><b>百毫秒级</b>（65~68ms）</td></tr>
+<tr><td>概率来源</td><td>模型"说"出来的数字</td><td>softmax(候选打分)</td></tr>
+<tr><td>校准引导</td><td>软标签直接训出校准</td><td>硬标签，无校准引导</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="compare">2. 为什么不用自回归</h2>
+
+<p>自回归 LLM 生成一个答案，本质上是一个<b>串行过程</b>：生成第一个 token，再基于它生成第二个，直到遇到结束符。每一轮都要跑一次完整的前向传播。</p>
+
+<div class="mermaid">
+graph LR
+    A[输入 prompt] --> B[前向 1]
+    B --> C["token: {"]
+    C --> D[前向 2]
+    D --> E["token: answers"]
+    E --> F[前向 3]
+    F --> G["token: ..."]
+    G --> H[...]
+    H --> I[完整 JSON]
+    style A fill:#eff6ff,stroke:#3b82f6
+    style I fill:#eff6ff,stroke:#3b82f6
+    style B fill:#fef3c7,stroke:#f59e0b
+    style D fill:#fef3c7,stroke:#f59e0b
+    style F fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<p style="text-align:center;color:var(--text-dim);font-size:13px;margin-top:-8px;">
+自回归：每生成一个 token 就要跑一次完整前向，串行、延迟累积
+</p>
+
+<p>Kev 换了一种思路：<b>既然答案就在有限的候选集合里，为什么不让模型直接为每个候选打分？</b></p>
+
+<div class="mermaid">
+graph LR
+    A[输入 prompt] --> B[前向 1 次]
+    B --> C["概率分布: [0.82, 0.13, 0.05]"]
+    style A fill:#eff6ff,stroke:#3b82f6
+    style C fill:#ecfdf5,stroke:#10b981
+    style B fill:#ecfdf5,stroke:#10b981
+</div>
+
+<p style="text-align:center;color:var(--text-dim);font-size:13px;margin-top:-8px;">
+Kev：一次前向传播，直接得到所有候选的概率分布
+</p>
+
+<p>这就是 Kev 能把延迟从秒级压到 65ms 的根本原因——<b>不做串行生成，只做并行打分</b>。</p>
+
+<!-- ============================================================ -->
+<h2 id="arch">3. 整体架构图</h2>
+
+<div class="mermaid">
+graph TB
+    subgraph Input["输入层"]
+        A["状态文本 + 问题 + 候选列表"]
+    end
+
+    subgraph Tokenize["编码层"]
+        B["Tokenizer 切成 token 序列"]
+    end
+
+    subgraph Backbone["底座（冻结，不训练）"]
+        C["Qwen3.5-4B"]
+        C1["32 层混合注意力<br/>（Gated DeltaNet + Full Attention）"]
+        C2["文本塔输出 hidden states"]
+        C -. 参数冻结 .-> C1
+        C1 --> C2
+    end
+
+    subgraph Adapter["可训练部分"]
+        D["LoRA rank-16<br/>注入 q/k/v/o/gate/up/down"]
+        E["指针头<br/>query_proj + key_proj"]
+    end
+
+    subgraph Output["输出层"]
+        F["各候选的 softmax 概率"]
+        G["取概率最高的选项作为答案"]
+    end
+
+    A --> B
+    B --> C
+    C2 --> D
+    D --> E
+    E --> F
+    F --> G
+
+    style A fill:#eff6ff,stroke:#3b82f6
+    style B fill:#eff6ff,stroke:#3b82f6
+    style C fill:#f3f4f6,stroke:#9ca3af
+    style C1 fill:#f3f4f6,stroke:#9ca3af
+    style C2 fill:#f3f4f6,stroke:#9ca3af
+    style D fill:#ecfdf5,stroke:#10b981
+    style E fill:#ecfdf5,stroke:#10b981
+    style F fill:#fef3c7,stroke:#f59e0b
+    style G fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<p style="text-align:center;color:var(--text-dim);font-size:13px;margin-top:-8px;">
+灰色 = 冻结不训练；绿色 = 可训练；蓝色 = 输入；黄色 = 输出
+</p>
+
+<div class="callout">
+<div class="callout-title">关键点：可训练参数只有 4500 万</div>
+<p>Qwen3.5-4B 有 40 亿参数，但在 Kev 架构下：</p>
+<ul>
+<li><b>底座 40 亿参数全部冻结</b>——不更新、不占优化器状态</li>
+<li><b>LoRA rank-16 约 4500 万参数</b>——只更新这部分</li>
+<li><b>指针头约几十万参数</b>——一个轻量级的 query/key 投影</li>
+</ul>
+<p>所以训练显存低、速度快、成本低。Kev 官方报告称在 H100 上训练 4B 模型约 <b>$95</b>、40~70 分钟。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="data">4. 数据格式与标记</h2>
+
+<p>Kev 不用 JSON 或 chat template，而是用一种<b>扁平标记格式</b>把所有内容拼成一条 token 序列：</p>
+
+<pre><code>[STATE] 订单 11780 有问题，帮忙看看。手机号 18147389777。
+[Q] 文本是否包含手机号、邮箱、身份证号等个人敏感信息？
+[OPT] no
+[OPT] yes
+[DECIDE]</code></pre>
+
+<p>各个标记的作用：</p>
+
+<dl class="kv">
+<dt><code>[STATE]</code></dt><dd>一整段非结构化文本（工单、评论、游戏局面）。<b>只出现一次</b>，是所有问题共享的上下文。</dd>
+<dt><code>[Q]</code></dt><dd>一道问题的描述。<b>可以出现多次</b>——一次调用可以挂任意多道题。</dd>
+<dt><code>[OPT]</code></dt><dd>一个候选选项。同一道题下可以有多行 <code>[OPT]</code>。</dd>
+<dt><code>[DECIDE]</code></dt><dd>决策标记。<b>每道题后面跟一个</b>，指针头从它的 hidden state 生成 query。</dd>
+</dl>
+
+<div class="mermaid">
+graph LR
+    A["[STATE]<br/>订单有问题..."] --> B["[Q]<br/>是否含 PII?"]
+    B --> C["[OPT]<br/>no"]
+    C --> D["[OPT]<br/>yes"]
+    D --> E["[DECIDE]"]
+    E --> F["[Q]<br/>是否辱骂?"]
+    F --> G["[OPT]<br/>no"]
+    G --> H["[OPT]<br/>yes"]
+    H --> I["[DECIDE]"]
+
+    style A fill:#eff6ff,stroke:#3b82f6
+    style B fill:#fef3c7,stroke:#f59e0b
+    style C fill:#fef3c7,stroke:#f59e0b
+    style D fill:#fef3c7,stroke:#f59e0b
+    style E fill:#ecfdf5,stroke:#10b981
+    style F fill:#fef3c7,stroke:#f59e0b
+    style G fill:#fef3c7,stroke:#f59e0b
+    style H fill:#fef3c7,stroke:#f59e0b
+    style I fill:#ecfdf5,stroke:#10b981
+</div>
+
+<p style="text-align:center;color:var(--text-dim);font-size:13px;margin-top:-8px;">
+一次调用可以挂多道题，每道题有自己的候选和 [DECIDE]
+</p>
+
+<div class="callout warn">
+<div class="callout-title">注意：训练时一道题拆成一个样本</div>
+<p>当前实现里，每条 [STATE] 会被复制多份，每份只带一道题。这意味着训练样本量 = 业务题总数（79,214 题）。</p>
+<p>推理时可以恢复成"多题共享一个 state"的形式，因为指针头按 [DECIDE] 位置独立打分，不受其他题影响。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="pointer">5. 指针头怎么工作</h2>
+
+<p>指针头是 Kev 的核心，也是它区别于自回归的关键。它做的事情非常"轻"——<b>一个缩放点积 + 一个 softmax</b>：</p>
+
+<div class="mermaid">
+graph TB
+    subgraph Hidden["底座输出的 hidden states"]
+        H1["[DECIDE] 位置的 hidden<br/>[1, 2560]"]
+        H2["[OPT=no] 位置的 hidden<br/>[1, 2560]"]
+        H3["[OPT=yes] 位置的 hidden<br/>[1, 2560]"]
+    end
+
+    subgraph Proj["投影层（可训练）"]
+        P1["query_proj<br/>2560 → 256"]
+        P2["key_proj<br/>2560 → 256"]
+    end
+
+    subgraph Score["打分"]
+        Q["query q<br/>[1, 256]"]
+        K1["key k1<br/>[1, 256]"]
+        K2["key k2<br/>[1, 256]"]
+        S1["score1 = q · k1"]
+        S2["score2 = q · k2"]
+    end
+
+    subgraph Softmax["归一化"]
+        SM["softmax([score1, score2])"]
+        OUT["[p_no, p_yes]"]
+    end
+
+    H1 --> P1 --> Q
+    H2 --> P2 --> K1
+    H3 --> P2 --> K2
+    Q --> S1
+    Q --> S2
+    K1 --> S1
+    K2 --> S2
+    S1 --> SM
+    S2 --> SM
+    SM --> OUT
+
+    style H1 fill:#f3f4f6,stroke:#9ca3af
+    style H2 fill:#f3f4f6,stroke:#9ca3af
+    style H3 fill:#f3f4f6,stroke:#9ca3af
+    style P1 fill:#ecfdf5,stroke:#10b981
+    style P2 fill:#ecfdf5,stroke:#10b981
+    style Q fill:#eff6ff,stroke:#3b82f6
+    style K1 fill:#eff6ff,stroke:#3b82f6
+    style K2 fill:#eff6ff,stroke:#3b82f6
+    style SM fill:#fef3c7,stroke:#f59e0b
+    style OUT fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<p>用数学式子写出来是：</p>
+
+<pre><code>q = query_proj(hidden[DECIDE])            # [1, head_dim]
+k_i = key_proj(hidden[OPT_i])             # [num_opts, head_dim]
+score_i = (q · k_i) / sqrt(head_dim)      # 缩放点积
+probs = softmax([score_1, score_2, ...])  # 各候选概率</code></pre>
+
+<div class="callout success">
+<div class="callout-title">为什么这个设计优雅</div>
+<ul>
+<li><b>无自回归</b>：一次前向就算完所有候选，没有串行生成</li>
+<li><b>结构上不可能出错</b>：输出永远是合法概率分布，不存在"输出非法 JSON"</li>
+<li><b>问题间独立</b>：每道题有自己的 [DECIDE] 位置，互不干扰</li>
+<li><b>可解释</b>：每个候选的概率就是模型对它的"打分"</li>
+</ul>
+</div>
+
+<div class="callout warn">
+<div class="callout-title">已修复的关键 bug：key 指向哪里？</div>
+<p>指针头的 key 取自 <b>每个 [OPT] 行的最后一个 token</b>（读完选项内容后），而不是行首。</p>
+<p>早期实现里 key 取自行首，导致 hidden state 只包含"这里开始一个选项"，不包含"这个选项是什么"——<b>点积完全不知道候选内容，等于指针头失效</b>。修复后语义才对上。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="train">6. 训练流程</h2>
+
+<div class="mermaid">
+graph TB
+    A["批次数据<br/>（题 + 正确候选下标）"] --> B["Tokenizer 编码"]
+    B --> C["底座前向<br/>（LoRA 已注入）"]
+    C --> D["取 [DECIDE] 和 [OPT] 位置的 hidden"]
+    D --> E["指针头打分<br/>得到概率分布"]
+    E --> F["交叉熵损失<br/>（对比正确候选）"]
+    F --> G["反向传播<br/>（只更新 LoRA + 指针头）"]
+    G --> H["参数更新"]
+    H --> C
+
+    style A fill:#eff6ff,stroke:#3b82f6
+    style C fill:#f3f4f6,stroke:#9ca3af
+    style E fill:#ecfdf5,stroke:#10b981
+    style F fill:#fef3c7,stroke:#f59e0b
+    style G fill:#ecfdf5,stroke:#10b981
+</div>
+
+<p>训练配置：</p>
+
+<table>
+<thead>
+<tr><th>项目</th><th>值</th></tr>
+</thead>
+<tbody>
+<tr><td>底座</td><td>Qwen3.5-4B（冻结）</td></tr>
+<tr><td>LoRA rank / alpha</td><td>16 / 32</td></tr>
+<tr><td>LoRA 注入层</td><td>q/k/v/o/gate/up/down 全部 7 个投影</td></tr>
+<tr><td>损失函数</td><td>交叉熵（指针头对正确候选打分）</td></tr>
+<tr><td>优化器</td><td>AdamW，lr = 1e-4</td></tr>
+<tr><td>批次</td><td>bs1 × 累积 32 = 有效 batch 32</td></tr>
+<tr><td>数据量</td><td>79,214 题（业务 69,962 + 游戏 9,252）</td></tr>
+<tr><td>训练步数</td><td>2,476 步</td></tr>
+<tr><td>实测速度</td><td>3.8~4.1 s/优化步（fla 已装）</td></tr>
+</tbody>
+</table>
+
+<div class="callout">
+<div class="callout-title">硬标签 CE vs 软标签训练</div>
+<p><b>Kev 用的是硬标签交叉熵</b>：正确候选标 1，其他标 0，模型学的是"预测正确选项"。</p>
+<p><b>v2 用的是软标签训练</b>：每个候选的概率直接来自数据生成器的已知分布，模型学的是"预测整个概率分布"。</p>
+<p>这个差异直接导致了后面第 8 节要讲的结构性短板。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="infer">7. 推理流程与延迟</h2>
+
+<div class="mermaid">
+sequenceDiagram
+    participant C as 调用方
+    participant S as 推理服务
+    participant T as Tokenizer
+    participant M as 底座 + LoRA
+    participant H as 指针头
+
+    C->>S: POST {state, questions[]}
+    S->>T: 拼成标记格式
+    T-->>S: token 序列
+    S->>M: 一次前向传播
+    M-->>S: hidden states
+    S->>H: query + keys
+    H-->>S: 概率分布
+    S-->>C: {answer, probability}
+
+    Note over M,H: 整个过程没有 token 生成
+    Note over S: 端到端 65~68ms
+</div>
+
+<p>延迟对比（本项目实测）：</p>
+
+<table>
+<thead>
+<tr><th>方案</th><th>单条延迟</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td>v2 自回归</td><td class="num">秒级</td><td>逐 token 生成 JSON，多问题扇出时更慢</td></tr>
+<tr><td><b>Kev</b></td><td class="num"><b>65~68ms</b></td><td>一次前向传播，与问题数几乎无关</td></tr>
+<tr><td>Jev 官方</td><td class="num">~100ms</td><td>专用架构 + 并行采样</td></tr>
+</tbody>
+</table>
+
+<div class="callout success">
+<div class="callout-title">65ms 意味着什么</div>
+<p>延迟 ≤200ms 就可以驱动实时游戏（每秒 5~15 步决策）。65ms 意味着游戏里的"思考"几乎不可察觉。</p>
+<p>相比之下，v2 的秒级延迟让游戏看起来像"卡顿播放"——这也是为什么游戏 demo 之前一直不够直观。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="limit">8. 结构性短板：act 覆盖率</h2>
+
+<p>这是 Kev 架构在当前训练方式下<b>最严重的问题</b>，不是 bug，是设计选择带来的必然后果。</p>
+
+<h3>什么是 act 覆盖率？</h3>
+
+<p>Jev 风格的决策服务会把答案按置信度分三档：</p>
+
+<dl class="kv">
+<dt><code>act</code> (p ≥ 0.85)</dt><dd>高置信——可以直接自动执行，不需要人工复核</dd>
+<dt><code>review</code> (0.5 ≤ p &lt; 0.85)</dt><dd>中等——建议人工复核</dd>
+<dt><code>human</code> (p &lt; 0.5)</dt><dd>低置信——必须转人工</dd>
+</dl>
+
+<p><b>act 覆盖率</b>就是"模型有多少比例的答案，它敢声称自己 ≥ 0.85 确定"。</p>
+
+<h3>两个模型的对比</h3>
+
+<table>
+<thead>
+<tr><th>模型</th><th>act 覆盖率</th><th>act 准确率</th></tr>
+</thead>
+<tbody>
+<tr><td>v2 自回归（软标签）</td><td class="num" style="color:#10b981;font-weight:600;">11.3%</td><td class="num">82.9%</td></tr>
+<tr><td><b>Kev 业务（硬标签）</b></td><td class="num" style="color:#ef4444;font-weight:600;">0.3%</td><td class="num">83.3%</td></tr>
+</tbody>
+</table>
+
+<p>看这两个数字的对比：</p>
+
+<div class="mermaid">
+graph LR
+    A["v2 软标签<br/>act 覆盖 11.3%"] --> C["差 37 倍"]
+    B["Kev 硬标签<br/>act 覆盖 0.3%"] --> C
+    style A fill:#ecfdf5,stroke:#10b981
+    style B fill:#fef2f2,stroke:#ef4444
+    style C fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<h3>为什么会这样？</h3>
+
+<div class="callout danger">
+<div class="callout-title">硬标签 CE 的必然后果</div>
+<p>硬标签训练时，模型被要求把正确选项的概率推到很高。但这个"高"是相对的——<b>它只需要比错误选项高就行，不需要接近 1.0</b>。</p>
+<p>于是模型学到的概率分布是"扁平的"：正确选项 0.5，错误选项 0.4——<b>够赢，但不够自信</b>。</p>
+<p>软标签训练不一样：生成器明确告诉模型"这个候选的真值概率是 0.9"，模型就被逼着学到"什么时候该自信"。</p>
+</div>
+
+<h3>温度缩放救不了</h3>
+
+<p>一个自然的想法是"用温度缩放把概率整体拉高"——但这行不通：</p>
+
+<table>
+<thead>
+<tr><th>T</th><th>act 覆盖</th><th>ECE</th><th>说明</th></tr>
+</thead>
+<tbody>
+<tr><td>1.0</td><td class="num">0.3%</td><td class="num">2.93%</td><td>原生最优</td></tr>
+<tr><td>1.3</td><td class="num">1.3%</td><td class="num">4.09%</td><td>覆盖略涨，校准恶化</td></tr>
+<tr><td>1.5</td><td class="num">3.0%</td><td class="num">4.71%</td><td>继续恶化</td></tr>
+<tr><td>2.0</td><td class="num">7.5%</td><td class="num">7.93%</td><td>覆盖 7.5% 但 ECE 崩</td></tr>
+</tbody>
+</table>
+
+<p>这是"<b>覆盖换校准</b>"的 tradeoff：想要更多高置信样本，就要牺牲概率的诚实性。而且即使 T=2.0，act 覆盖也只有 7.5%——<b>换不回 v2 的 11.3%</b>。</p>
+
+<h3>唯一解：软标签蒸馏</h3>
+
+<div class="callout warn">
+<div class="callout-title">Kev 若要支持门控，必须软标签蒸馏</div>
+<p>用 v2 的软标签分布作为训练目标，重新训练 Kev 的指针头。<b>这是唯一路径</b>，因为：</p>
+<ul>
+<li>温度缩放已排除（T=1.0 已最优）</li>
+<li>act 覆盖是"学出来的"能力，不能事后补</li>
+<li>软标签直接把"该有多自信"的信息灌进训练目标</li>
+</ul>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="result">9. 本项目实测数据</h2>
+
+<h3>业务能力</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>v2 自回归</th><th>Kev 业务 only</th><th>Kev 混训</th></tr>
+</thead>
+<tbody>
+<tr><td>业务准确率</td><td class="num">48.5%</td><td class="num">51.19%</td><td class="num">待测</td></tr>
+<tr><td>业务 ECE</td><td class="num" style="color:#10b981;">1.57%</td><td class="num" style="color:#f59e0b;">2.93%</td><td class="num">待测</td></tr>
+<tr><td>act 覆盖率</td><td class="num" style="color:#10b981;">11.3%</td><td class="num" style="color:#ef4444;">0.3%</td><td class="num">待测</td></tr>
+<tr><td>act 准确率</td><td class="num">82.9%</td><td class="num">83.3%</td><td class="num">待测</td></tr>
+<tr><td>类型错误率</td><td class="num">0.0%</td><td class="num">0.0%</td><td class="num">待测</td></tr>
+</tbody>
+</table>
+
+<h3>游戏能力</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>零样本</th><th>Kev 业务 only（零样本迁移）</th></tr>
+</thead>
+<tbody>
+<tr><td>game_test 准确率</td><td class="num">~41.9%（加权随机基线）</td><td class="num">48.11%</td></tr>
+<tr><td>ECE</td><td class="num">—</td><td class="num">3.66%</td></tr>
+</tbody>
+</table>
+
+<div class="callout warn">
+<div class="callout-title">游戏 48.11% 这个数字要谨慎解读</div>
+<p>游戏题不是"25 选 1"，而是 6 道 noul（2 选 1）+ 1 道 choice（4 选 1）+ 1 道 score（10 档）。加权随机基线约 41.9%。</p>
+<p>48.11% 比基线高 6.2 个百分点——<b>有效果，但不是"12 倍"那种量级</b>。需要分题型拆解才能看清指针头学到的是"内容匹配"还是"位置先验"。</p>
+</div>
+
+<h3>延迟</h3>
+
+<table>
+<thead>
+<tr><th>指标</th><th>v2</th><th>Kev</th></tr>
+</thead>
+<tbody>
+<tr><td>单条延迟中位数</td><td class="num">秒级</td><td class="num">65~68ms</td></tr>
+<tr><td>是否满足 ≤200ms</td><td class="num" style="color:#ef4444;">否</td><td class="num" style="color:#10b981;">是</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="position">10. Kev 在项目中的定位</h2>
+
+<p>综合以上所有信息，Kev 不是一个"替代 v2"的方案，而是<b>一个在特定维度上的补充</b>：</p>
+
+<div class="mermaid">
+graph TB
+    subgraph V2["v2 自回归"]
+        A1["优势：校准好（ECE 1.57%）"]
+        A2["优势：act 覆盖高（11.3%）"]
+        A3["劣势：延迟秒级"]
+    end
+
+    subgraph Kev["Kev 指针头"]
+        B1["优势：延迟 65ms"]
+        B2["优势：准确率略高（51.19%）"]
+        B3["优势：结构上无格式错误"]
+        B4["劣势：act 覆盖 0.3%"]
+    end
+
+    C["如果要门控 → 用 v2"]
+    D["如果要低延迟 → 用 Kev"]
+
+    A2 --> C
+    B1 --> D
+
+    style V2 fill:#eff6ff,stroke:#3b82f6
+    style Kev fill:#ecfdf5,stroke:#10b981
+    style C fill:#fef3c7,stroke:#f59e0b
+    style D fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<h3>三条可选路线</h3>
+
+<ol>
+<li><b>业务场景 + 需要门控</b> → 继续用 v2（校准好、act 覆盖高）</li>
+<li><b>业务场景 + 不需要门控</b> → 用 Kev（延迟低、准确率略高）</li>
+<li><b>游戏 demo</b> → 用 Kev（65ms 是唯一能让游戏看起来流畅的延迟）</li>
+<li><b>两者都要</b> → 对 Kev 做软标签蒸馏（把 v2 的校准能力迁移到 Kev）</li>
+</ol>
+
+<div class="callout success">
+<div class="callout-title">Kev 路线当前最大的价值</div>
+<p>不是"替代 v2"，而是<b>证明了"单次前向 + 指针头"这条路在当前硬件上可行</b>：</p>
+<ul>
+<li>延迟从秒级压到 65ms（27 倍）</li>
+<li>类型错误率 0%（结构保证，不是靠兜底）</li>
+<li>业务准确率不降反升（51.19% vs 48.5%）</li>
+<li>训练成本 $95 量级</li>
+</ul>
+<p>唯一未解决的是 act 覆盖率——但这不是 Kev 的失败，是<b>硬标签训练的必然结果</b>，可以用软标签蒸馏修复。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="source">11. 核心源码逐段解读</h2>
+
+<p>下面把本项目 Kev 实现的全部源码贴出来，逐段讲解。</p>
+
+<!-- -------------------- pointer_head.py -------------------- -->
+<h3>11.1 指针头：<code>kev/pointer_head.py</code></h3>
+
+<div class="file-header">kev/pointer_head.py</div>
+<pre><code># -*- coding: utf-8 -*-
+"""Kev 指针头:为每个问题的候选选项打分并 softmax。"""
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+
+class PointerHead(nn.Module):
+    """从 &lt;DECIDE&gt; 位置的 hidden 生成 query,从每个 &lt;OPT&gt; 位置的 hidden 生成 key,
+    缩放点积后对每题候选 softmax 输出概率。"""
+
+    def __init__(self, hidden_size: int = 2560, head_dim: int = 256):
+        super().__init__()
+        self.query_proj = nn.Linear(hidden_size, head_dim)
+        self.key_proj = nn.Linear(hidden_size, head_dim)
+        self.scale = head_dim ** -0.5
+
+    def forward(self, hidden, decide_idx, opt_idx, opt_mask):
+        """
+        hidden:     [b, s, h]
+        decide_idx: [b]           每样本 &lt;DECIDE&gt; 标记位置
+        opt_idx:    [b, max_opts] 每样本各候选 &lt;OPT&gt; 标记位置(pad=0)
+        opt_mask:   [b, max_opts] 候选有效性
+        返回 [b, max_opts] 概率(pad 位置为 0)
+        """
+        b = hidden.shape[0]
+        hidden_f = hidden.float()  # 指针头为 fp32 参数,底座 hidden 为 bf16
+        q = self.query_proj(hidden_f[torch.arange(b, device=hidden.device), decide_idx])  # [b, hd]
+        flat_idx = opt_idx.reshape(-1)
+        k = self.key_proj(hidden_f.reshape(-1, hidden.shape[-1])[flat_idx])               # [b*mo, hd]
+        k = k.view(b, opt_idx.shape[1], -1)                                             # [b, mo, hd]
+        scores = torch.einsum("bd,bmd-&gt;bm", q, k) * self.scale                          # [b, mo]
+        scores = scores.masked_fill(~opt_mask, float("-inf"))
+        return F.softmax(scores, dim=-1)</code></pre>
+
+<h4>逐段解读</h4>
+
+<dl class="kv">
+<dt><code>__init__</code></dt>
+<dd>两个线性层：<code>query_proj</code> 把 [DECIDE] 位置的 hidden 从 2560 维投到 256 维，<code>key_proj</code> 把 [OPT] 位置的 hidden 也投到 256 维。两者维度相同才能做点积。<code>scale</code> 是缩放因子 1/√256，防止点积数值过大导致 softmax 饱和。</dd>
+
+<dt><code>hidden.float()</code></dt>
+<dd>底座输出是 bf16（半精度），但指针头参数是 fp32（全精度）。这里统一转 fp32，避免 bf16 精度不足以做点积——只在指针头这一层多花一点点开销，换来数值稳定性。</dd>
+
+<dt><code>q = query_proj(hidden_f[arange(b), decide_idx])</code></dt>
+<dd>用 <code>arange(b)</code> 生成 [0,1,2,...,b-1]，和 <code>decide_idx</code> 一起做花式索引，从每个样本中取出 [DECIDE] 位置的 hidden。<code>decide_idx</code> 指向 <code>[DECIDE]</code> 标记的最后一个 token（<code>]</code>），因为该位置已经"读完整个标记"，语义最完整。</dd>
+
+<dt><code>flat_idx = opt_idx.reshape(-1)</code></dt>
+<dd>把 [b, max_opts] 拉平成一维 [b×max_opts]，方便一次性索引所有候选位置。</dd>
+
+<dt><code>k = key_proj(hidden_f.reshape(-1, h)[flat_idx])</code></dt>
+<dd><code>hidden_f.reshape(-1, h)</code> 把 [b, s, h] 拉成 [b×s, h]，然后按 <code>flat_idx</code> 取所有候选对应的 hidden。再 <code>key_proj</code> 投到 256 维。最后 <code>view(b, max_opts, -1)</code> 恢复形状。</dd>
+
+<dt><code>scores = einsum("bd,bmd-&gt;bm", q, k) * scale</code></dt>
+<dd>爱因斯坦求和：<code>bd</code> 是 query [b, 256]，<code>bmd</code> 是 key [b, max_opts, 256]，输出 <code>bm</code> 是 [b, max_opts]。等价于对每个 (b, m) 做 <code>q[b] · k[b,m]</code>，就是缩放点积。</dd>
+
+<dt><code>masked_fill(~opt_mask, -inf)</code></dt>
+<dd>把 pad 位置（<code>opt_mask=False</code>）的分数设为 <code>-inf</code>。softmax 后这些位置的概率为 0，不影响有效候选的归一化。</dd>
+
+<dt><code>F.softmax(scores, dim=-1)</code></dt>
+<dd>对候选维度做 softmax，得到概率分布。pad 位置恒为 0。</dd>
+</dl>
+
+<div class="callout">
+<div class="callout-title">设计要点</div>
+<ul>
+<li><b>无自回归</b>：整个 forward 没有任何循环或 token 生成，一次矩阵运算出结果</li>
+<li><b>动态候选数</b>：<code>opt_mask</code> 支持每个样本候选数不同，无需 padding 对齐</li>
+<li><b>问题间独立</b>：每个 [DECIDE] 位置独立做 softmax，多道题互不干扰</li>
+</ul>
+</div>
+
+<!-- -------------------- data.py -------------------- -->
+<h3>11.2 数据编码：<code>kev/data.py</code></h3>
+
+<div class="file-header">kev/data.py</div>
+<pre><code># -*- coding: utf-8 -*-
+"""Kev 格式数据:tokenize + 位置记录(opt/decide)。"""
+import json
+import torch
+
+MARK_STATE, MARK_Q, MARK_OPT, MARK_DECIDE = "[STATE]", "[Q]", "[OPT]", "[DECIDE]"
+
+
+def encode_sample(tok, sample, max_len=1024):
+    """返回 dict(input_ids, attention_mask, decide_idx, opt_idx, opt_mask, label)。
+
+    边界保证:截断后 [DECIDE] 必须存活且指向 [DECIDE] 标记本身;
+    [OPT] 位置全部 &lt; len(ids);极端情况(题干+候选超长)则截 state 行保分支行。
+    """
+    lines = sample["prompt"].split("\n")
+    state_lines = [ln for ln in lines if ln.startswith(MARK_STATE)]
+    branch_lines = [ln for ln in lines if not ln.startswith(MARK_STATE)]
+    nl_ids = tok("\n", add_special_tokens=False)["input_ids"]
+    # 先编码分支行(问题/候选/DECIDE),再算还剩多少预算给 state
+    branch_ids = []
+    opt_pos = []
+    decide_idx = -1
+    for ln in branch_lines:
+        line_ids = tok(ln, add_special_tokens=False)["input_ids"]
+        if ln.startswith(MARK_OPT):
+            # opt_pos 必须指向选项行最后一个 token(读完选项内容后),
+            # 与 Kev 原文 &lt;/opt&gt; 语义对齐;行首 '[' 不携带选项内容
+            opt_pos.append(len(branch_ids) + len(line_ids) - 1)
+        branch_ids += line_ids + nl_ids
+        if ln.startswith(MARK_DECIDE):
+            # 指向 [DECIDE] 标记的尾 token(去掉行尾换行,换行符无语义)。
+            # 出处:Kev README "Because &lt;decide&gt; comes last, it can attend to the
+            # full option list"——尾位置聚合完整选项列表;Kev 原文 &lt;decide&gt; 为单
+            # token,我们的 4-token 标记取尾 token 是对该语义的最近对应。
+            decide_idx = len(branch_ids) - len(nl_ids) - 1
+    state_ids = tok(state_lines[0] + "\n", add_special_tokens=False)["input_ids"] if state_lines else []
+    budget = max_len - len(branch_ids)
+    if len(state_ids) &gt; budget:
+        state_ids = state_ids[:max(budget, 1)]
+    ids = state_ids + branch_ids
+    decide_idx += len(state_ids)
+    opt_pos = [p + len(state_ids) for p in opt_pos]
+    ids = ids[:max_len]
+    decide_idx = min(decide_idx, len(ids) - 1)
+    opt_pos = [p for p in opt_pos if p &lt; len(ids)] or [len(ids) - 1]
+    attn = [1] * len(ids)
+    return {"input_ids": ids, "attention_mask": attn, "decide_idx": decide_idx,
+            "opt_pos": opt_pos, "label": int(sample["label"])}
+
+
+def collate(batch, pad_id):
+    maxlen = max(len(b["input_ids"]) for b in batch)
+    max_opts = max(len(b["opt_pos"]) for b in batch)
+    input_ids, attn, decide, opt_idx, opt_mask, labels = [], [], [], [], [], []
+    for b in batch:
+        n = len(b["input_ids"])
+        input_ids.append(b["input_ids"] + [pad_id] * (maxlen - n))
+        attn.append([1] * n + [0] * (maxlen - n))
+        decide.append(b["decide_idx"])
+        ops = b["opt_pos"] + [0] * (max_opts - len(b["opt_pos"]))
+        opt_idx.append(ops)
+        opt_mask.append([1] * len(b["opt_pos"]) + [0] * (max_opts - len(b["opt_pos"])))
+        labels.append(b["label"])
+    dev = "cuda"
+    t = lambda x, dt: torch.tensor(x, dtype=dt, device=dev)
+    return {"input_ids": t(input_ids, torch.long),
+            "attention_mask": t(attn, torch.long),
+            "decide_idx": t(decide, torch.long),
+            "opt_idx": t(opt_idx, torch.long),
+            "opt_mask": t(opt_mask, torch.bool),
+            "labels": t(labels, torch.long)}
+
+
+def load_jsonl(path):
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(l) for l in f if l.strip()]</code></pre>
+
+<h4>逐段解读</h4>
+
+<dl class="kv">
+<dt>四个标记常量</dt>
+<dd>统一定义 <code>[STATE]</code>、<code>[Q]</code>、<code>[OPT]</code>、<code>[DECIDE]</code>。改格式时只改这里。</dd>
+
+<dt>先编码分支行，再编码 state</dt>
+<dd>这是一个关键的<b>预算分配策略</b>：分支行（问题/候选/DECIDE）是决策必需的，不能截断；state 是上下文，可以截。所以先算完分支行长度，剩下的额度才给 state。</dd>
+
+<dt><code>opt_pos.append(len(branch_ids) + len(line_ids) - 1)</code></dt>
+<dd><b>这是修过的关键点</b>。<code>len(branch_ids)</code> 是当前累积位置，<code>len(line_ids) - 1</code> 是本行最后一个 token 的偏移。加起来就是"选项行最后一个 token 的绝对位置"。<br>
+为什么不用行首？因为行首的 hidden state 只包含"这里开始一个选项"，不包含"选项内容是什么"。指针头的 key 必须携带候选内容。</dd>
+
+<dt><code>decide_idx = len(branch_ids) - len(nl_ids) - 1</code></dt>
+<dd>同理，指向 [DECIDE] 标记的最后一个 token（<code>]</code>）。<code>len(branch_ids)</code> 是加完本行+换行后的长度，减去换行长度 <code>len(nl_ids)</code>，再减 1 就是本行最后一个 token。</dd>
+
+<dt>state 编码 + 预算裁剪</dt>
+<dd><code>budget = max_len - len(branch_ids)</code> 是 state 能用的最大 token 数。如果 state 太长就截断到 <code>budget</code>。注意 <code>max(budget, 1)</code> 保证至少留 1 个 token，避免极端情况导致空序列。</dd>
+
+<dt>位置偏移修正</dt>
+<dd>state 是拼在 branch 前面的，所以 <code>decide_idx</code> 和所有 <code>opt_pos</code> 都要加上 <code>len(state_ids)</code> 才是最终位置。</dd>
+
+<dt>最终保险</dt>
+<dd><code>decide_idx = min(decide_idx, len(ids) - 1)</code> 和 <code>opt_pos = [...] or [len(ids) - 1]</code> 是防止极端情况下索引越界。前者保证不超上界，后者保证 opt_pos 非空（否则指针头无法计算）。</dd>
+
+<dt><code>collate</code> 函数</dt>
+<dd>把一个 batch 里的样本 padding 到相同长度。<code>opt_mask</code> 是关键：它标记哪些位置是真实候选、哪些是 padding。<code>max_opts</code> 取 batch 内最大候选数，其他样本用 0 填充。</dd>
+</dl>
+
+<div class="callout danger">
+<div class="callout-title">这里曾经有两个 bug</div>
+<ol>
+<li><b>decide_idx 指向换行符</b>：早期实现是 <code>len(ids) - 1</code>，实际指向 <code>[DECIDE]\n</code> 的换行 token，不是标记本身。query 语义全失。</li>
+<li><b>opt_pos 指向行首</b>：早期实现取 <code>len(branch_ids)</code>，指向 <code>[OPT]</code> 的第一个字符 <code>[</code>。此时模型还没读到选项内容，key 里没有候选信息。</li>
+</ol>
+<p>两个 bug 都会让指针头的核心机制失效——不是"效果差一点"，是"打分为随机"。修复后才真正学到东西。</p>
+</div>
+
+<!-- -------------------- train.py -------------------- -->
+<h3>11.3 训练循环：<code>kev/train.py</code></h3>
+
+<div class="file-header">kev/train.py</div>
+<pre><code># -*- coding: utf-8 -*-
+"""Kev 训练:冻结底座 + rank16 LoRA(7 投影)+ 指针头,CE 训练。
+
+用法:
+    .\\.venv\\Scripts\\python.exe kev\\train.py --max-samples 30000 --epochs 1
+"""
+import argparse
+import faulthandler
+import io
+import math
+import random
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+import torch  # noqa: E402
+import torch.nn.functional as F  # noqa: E402
+from peft import LoraConfig, get_peft_model  # noqa: E402
+from transformers import AutoModelForCausalLM, AutoTokenizer  # noqa: E402
+
+from kev.data import collate, encode_sample, load_jsonl  # noqa: E402
+from kev.pointer_head import PointerHead  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main() -&gt; None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--base", default="models/Qwen3.5-4B")
+    ap.add_argument("--train", default=str(ROOT / "data" / "kev_format" / "train.jsonl"))
+    ap.add_argument("--max-samples", type=int, default=30000)
+    ap.add_argument("--epochs", type=float, default=1.0)
+    ap.add_argument("--bs", type=int, default=4)
+    ap.add_argument("--accum", type=int, default=8)
+    ap.add_argument("--lr", type=float, default=1.0e-4)
+    ap.add_argument("--max-len", type=int, default=1024)
+    ap.add_argument("--out", default=str(ROOT / "runs" / "kev-qwen35-4b"))
+    args = ap.parse_args()
+
+    # 卡死自诊断:4 分钟无进展自动把全部线程堆栈打进 stderr(入日志)
+    faulthandler.dump_traceback_later(240, repeat=True)
+
+    tok = AutoTokenizer.from_pretrained(args.base, trust_remote_code=True)
+    pad_id = tok.pad_token_id or tok.eos_token_id
+    base = AutoModelForCausalLM.from_pretrained(
+        args.base, dtype=torch.bfloat16, trust_remote_code=True).cuda()
+    base.gradient_checkpointing_enable()
+    base.config.use_cache = False
+    # PEFT 包装后 config 为文本塔配置(Qwen3_5TextConfig),直接含 hidden_size
+    cfg = base.config
+    hidden_size = getattr(cfg, "hidden_size",
+                          getattr(getattr(cfg, "text_config", cfg), "hidden_size", 2560))
+
+    lcfg = LoraConfig(r=16, lora_alpha=32, lora_dropout=0.05, bias="none",
+                      task_type="CAUSAL_LM",
+                      target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
+                                      "gate_proj", "up_proj", "down_proj"])
+    base = get_peft_model(base, lcfg)
+    head = PointerHead(hidden_size).cuda()
+    head = head.to(torch.float32)
+
+    samples = load_jsonl(args.train)[: args.max_samples]
+    print(f"样本 {len(samples)} 条", flush=True)
+    opt = torch.optim.AdamW(
+        [p for p in base.parameters() if p.requires_grad] + list(head.parameters()),
+        lr=args.lr)
+    steps_per_epoch = math.ceil(len(samples) / (args.bs * args.accum))
+    total_steps = int(steps_per_epoch * args.epochs)
+    sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, T_max=total_steps)
+    print(f"优化步总数 {total_steps}(每步 {args.bs * args.accum} 样本)", flush=True)
+
+    head_params = [p for p in head.parameters() if p.requires_grad]
+    base.train()
+    order = list(range(len(samples)))
+    import random
+    rng = random.Random(0)
+
+    step = 0
+    micro = 0
+    t0 = time.time()
+    loss_acc = 0.0
+    done = False
+    while not done:
+        rng.shuffle(order)
+        for i in range(0, len(order), args.bs):
+            batch_rows = [samples[j] for j in order[i:i + args.bs]]
+            batch = [encode_sample(tok, r, args.max_len) for r in batch_rows]
+            batch_t = collate(batch, pad_id)
+            # 文本塔直接输出 hidden(绕开 lm_head 的整块 logits)
+            inner = base.base_model.model.model  # Qwen3_5Model(text tower)
+            hidden = inner(input_ids=batch_t["input_ids"],
+                           attention_mask=batch_t["attention_mask"]).last_hidden_state
+            probs = head(hidden, batch_t["decide_idx"], batch_t["opt_idx"],
+                         batch_t["opt_mask"])
+            logp = torch.log(probs.clamp_min(1e-9))
+            loss = F.nll_loss(logp, batch_t["labels"])
+            (loss / args.accum).backward()
+            loss_acc += float(loss.detach())
+            micro += 1
+            if micro % args.accum:
+                continue
+            opt.step()
+            sched.step()
+            opt.zero_grad(set_to_none=True)
+            step += 1
+            if step % 20 == 0 or step == total_steps:
+                speed = (time.time() - t0) / max(1, step)
+                print(f"step {step}/{total_steps} loss={loss_acc / (20 * args.accum):.4f} "
+                      f"{speed:.1f}s/it", flush=True)
+                loss_acc = 0.0
+            if step &gt;= total_steps:
+                done = True
+                break
+        if done:
+            break
+
+    print(f"训练完成,用时 {(time.time() - t0) / 60:.0f} 分钟", flush=True)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    base.save_pretrained(out / "adapter")
+    torch.save(head.state_dict(), out / "pointer_head.pt")
+    print(f"adapter -&gt; {out / 'adapter'};pointer head -&gt; {out / 'pointer_head.pt'}",
+          flush=True)
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+<h4>逐段解读</h4>
+
+<dl class="kv">
+<dt><code>faulthandler.dump_traceback_later(240, repeat=True)</code></dt>
+<dd>每 240 秒（4 分钟）如果没有输出，就把所有线程的调用栈打印到 stderr。这是一个<b>卡死自诊断机制</b>——如果训练卡住，日志里直接能看到卡在哪一行，不用反复重跑排查。</dd>
+
+<dt>加载底座 + gradient_checkpointing</dt>
+<dd><code>AutoModelForCausalLM.from_pretrained(...).cuda()</code> 加载 Qwen3.5-4B。<code>gradient_checkpointing_enable()</code> 开启梯度检查点，用计算换显存：前向时不保存所有中间激活，反向时重算。这让 4B 模型能在 16GB 卡上训练。</dd>
+
+<dt>LoRA 配置</dt>
+<dd>rank=16、alpha=32、dropout=0.05，注入 7 个投影层（q/k/v/o/gate/up/down）。<b>rank 16 很小</b>——只训练 <code>7 × 2 × 2560 × 16 ≈ 4500 万</code> 参数，占底座 1% 左右。<br>
+<code>get_peft_model(base, lcfg)</code> 把 LoRA 包装进底座，返回的模型里底座的原始参数被冻结。</dd>
+
+<dt>指针头初始化</dt>
+<dd><code>PointerHead(hidden_size).cuda()</code> 创建指针头，<code>.to(torch.float32)</code> 确保全精度参数。<code>hidden_size</code> 从底座 config 拿，如果是多模态包装就取 <code>text_config.hidden_size</code>。</dd>
+
+<dt>优化器</dt>
+<dd><code>AdamW</code> 只包含 <code>requires_grad=True</code> 的参数（LoRA + 指针头），底座的冻结参数不参与。这是显存和速度的关键。</dd>
+
+<dt>学习率调度</dt>
+<dd><code>CosineAnnealingLR</code> 从 lr 余弦降到 0。<code>T_max=total_steps</code> 表示整个训练过程正好走完一个余弦周期。这是 SFT 的标准做法。</dd>
+
+<dt>训练主循环</dt>
+<dd>按 <code>args.bs</code> 分批（这里是 4），每个 micro-batch 做一次前向+反向，累积 <code>args.accum</code> 次才 <code>opt.step()</code>。有效 batch = 4 × 8 = 32。<br>
+<code>rng.shuffle(order)</code> 每个 epoch 重新打乱数据顺序。</dd>
+
+<dt><code>inner = base.base_model.model.model</code></dt>
+<dd><b>这是关键的一行。</b>它直接访问底座的"文本塔"，<b>绕过 lm_head</b>（最后的词表投影层，会把 hidden 投到 24 万维词表）。<br>
+如果用完整模型，会生成一个 [batch, seq, 248320] 的 logits 张量——这才是显存爆炸的主因。绕过 lm_head 直接把 hidden 喂给指针头，显存省下几 GB。</dd>
+
+<dt>指针头前向 + 损失</dt>
+<dd><code>head(hidden, ...)</code> 得到 [b, max_opts] 概率。<code>logp = torch.log(probs.clamp_min(1e-9))</code> 取对数（clamp 防止 log(0)）。<code>F.nll_loss(logp, labels)</code> 就是交叉熵——预测概率分布和正确标签之间的差距。</dd>
+
+<dt><code>(loss / args.accum).backward()</code></dt>
+<dd>梯度累积的关键：每次反传都把 loss 除以累积步数，多步累积后梯度量级正好和单步大 batch 一致。</dd>
+
+<dt>保存产物</dt>
+<dd><code>base.save_pretrained(out / "adapter")</code> 只保存 LoRA 权重（几十 MB），<code>torch.save(head.state_dict(), ...)</code> 保存指针头权重。两者合起来才是完整的 Kev 模型。</dd>
+</dl>
+
+<div class="callout">
+<div class="callout-title">为什么绕开 lm_head 能省显存</div>
+<p>Qwen3.5 的词表有 248,320 个 token。如果走完整模型，最后一步是 <code>hidden @ W_lm</code>：</p>
+<ul>
+<li>hidden: [4, 1024, 2560] ≈ 40MB (bf16)</li>
+<li>W_lm: [248320, 2560] ≈ 1.3GB (bf16)</li>
+<li>logits 输出: [4, 1024, 248320] ≈ 2GB (bf16)，fp32 后 ≈ 4GB</li>
+</ul>
+<p>一次 forward+backward 里 logits 会存在多份副本，累积起来几个 GB。Kev 绕开这一步，直接把 hidden 交给指针头（只有 256 维），<b>省掉了最大的一个张量</b>。</p>
+</div>
+
+<!-- -------------------- convert_to_kev.py -------------------- -->
+<h3>11.4 数据转换：<code>scripts/convert_to_kev.py</code></h3>
+
+<div class="file-header">scripts/convert_to_kev.py</div>
+<pre><code># -*- coding: utf-8 -*-
+"""Kev 架构落地第 1 步:把 v1 业务数据与游戏数据转换为 Kev 格式。
+
+Kev 样本(每题一个样本,state 在前,候选逐个列出,答案=正确候选下标):
+  prompt: "[STATE] {state}\n[Q] {desc}\n[OPT] {o1}\n[OPT] {o2} ...\n[DECIDE]"
+  label:  正确候选下标
+
+noul 的两候选固定为 ["no", "yes"](answer 0→no, 1→yes);
+choice 的候选为选项文本;score 的候选为档位文本(0 档在最前)。
+"""
+import io
+import json
+import random
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
+
+NOUL_OPTIONS = ["no", "yes"]
+
+
+def record_to_kev_samples(rec):
+    """v1 record(原始格式)→ [kev 样本],每题一个。state 截 600 字符防超长。"""
+    out = []
+    state = rec["state"][:600]
+    for q in rec["questions"]:
+        opts = NOUL_OPTIONS if q["type"] == "noul" else list(q.get("options") or q.get("levels") or [])
+        val, _prob = rec["answers"][q["id"]]
+        label = int(float(val))
+        if not (0 &lt;= label &lt; len(opts)):
+            continue
+        prompt = f"[STATE] {state}\n[Q] {q['desc']}\n"
+        for o in opts:
+            prompt += f"[OPT] {o}\n"
+        prompt += "[DECIDE]"
+        out.append({"prompt": prompt, "options": opts, "label": label,
+                    "task": rec.get("task", ""), "qid": q["id"]})
+    return out
+
+
+def game_kev_samples_from_lines(lines):
+    """游戏 sharegpt 行(game_train.jsonl)→ Kev 样本。"""
+    out = []
+    for ln in lines:
+        try:
+            msg = json.loads(ln)
+            user = json.loads(msg["messages"][1]["content"])
+            asst = json.loads(msg["messages"][2]["content"])
+        except Exception:
+            continue
+        state = user["state"]
+        qlist = user["questions"] if isinstance(user["questions"], list) else [
+            dict(q, id=qid) for qid, q in user["questions"].items()]
+        for q in qlist:
+            opts = ["no", "yes"] if q["type"] == "noul" else list(q.get("options") or q.get("levels") or [])
+            val, _p = asst["answers"][q["id"]]
+            label = int(float(val))
+            if not (0 &lt;= label &lt; len(opts)):
+                continue
+            prompt = f"[STATE] {state}\n[Q] {q['desc']}\n"
+            for o in opts:
+                prompt += f"[OPT] {o}\n"
+            prompt += "[DECIDE]"
+            out.append({"prompt": prompt, "options": opts, "label": label,
+                        "task": "game", "qid": q["id"]})
+    return out
+
+
+def main() -&gt; None:
+    v1_dir = ROOT / "data" / "v1"
+    game_file = ROOT / "data" / "game" / "game_train.jsonl"
+    out_dir = ROOT / "data" / "kev_format"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    rng = random.Random(20260926)
+    biz_train = []
+    for split in ("train", "val", "test"):
+        rows = [json.loads(l) for l in (v1_dir / f"{split}.jsonl").open(encoding="utf-8") if l.strip()]
+        samples = []
+        for rec in rows:
+            samples += record_to_kev_samples(rec)
+        rng.shuffle(samples)
+        with (out_dir / f"{split}.jsonl").open("w", encoding="utf-8") as f:
+            for s in samples:
+                f.write(json.dumps(s, ensure_ascii=False) + "\n")
+        print(f"{split}: {len(rows)} 条记录 → {len(samples)} 个 Kev 题样本")
+        if split == "train":
+            biz_train = samples
+
+    game_lines = game_file.open(encoding="utf-8").read().splitlines()
+    game_samples = game_kev_samples_from_lines(game_lines)
+    rng.shuffle(game_samples)
+    # 游戏训练题并入训练集(业务+游戏必须同训一个 LoRA+指针头)
+    with (out_dir / "train.jsonl").open("a", encoding="utf-8") as f:
+        for s in game_samples:
+            f.write(json.dumps(s, ensure_ascii=False) + "\n")
+    with (out_dir / "game_test.jsonl").open("w", encoding="utf-8") as f:
+        for s in game_samples:
+            f.write(json.dumps(s, ensure_ascii=False) + "\n")
+    print(f"game_train 并入 {len(game_samples)} 题;game_test {len(game_samples)} 题")
+    print(f"kev_format/train.jsonl 最终 = 业务 {len(biz_train)} + 游戏 {len(game_samples)} 题")
+
+
+if __name__ == "__main__":
+    main()</code></pre>
+
+<h4>逐段解读</h4>
+
+<dl class="kv">
+<dt>每种题型映射到候选集</dt>
+<dd>
+<ul>
+<li><b>noul</b>：固定两候选 <code>["no", "yes"]</code>，label 0 = no，1 = yes</li>
+<li><b>choice</b>：直接用 <code>options</code> 列表，label 是选项下标</li>
+<li><b>score</b>：用 <code>levels</code> 列表（"0 档"、"1 档"...），label 是档位下标</li>
+</ul>
+注意：score 在 Kev 里被处理成<b>离散分类</b>，原来的连续值（如 3.2）会被 <code>int(3.2)=3</code> 截断。这是一个已知的精度损失——Kev 版本对 score 只有档位级精度。
+</dd>
+
+<dt><code>state = rec["state"][:600]</code></dt>
+<dd>state 截到 600 字符。这是<b>防超长</b>的预处理——Kev 的 max_len=1024 token，state 太长会挤掉分支行。截断 + 后续在 <code>encode_sample</code> 里再按预算截，双重保险。</dd>
+
+<dt>拼接 prompt</dt>
+<dd>标准格式：<code>[STATE] {state}\n[Q] {desc}\n[OPT] {o1}\n[OPT] {o2}\n[DECIDE]</code>。<b>每题一个样本</b>——同一 state 会被复制多份，每份只带一道题。这样指针头每个样本只需要处理一个 [DECIDE]，简化实现。</dd>
+
+<dt>游戏数据转换</dt>
+<dd>游戏数据原本是 sharegpt 格式（messages 数组），这里解析出 user 里的 state/questions 和 assistant 里的 answers，然后走同一套 <code>record_to_kev_samples</code> 逻辑。唯一的区别是任务名标记为 "game"。</dd>
+
+<dt>合并到训练集</dt>
+<dd>业务数据先写进 <code>train.jsonl</code>，然后用 <code>"a"</code>（追加）模式把游戏数据也写进去。这就是<b>业务和游戏共用一个模型</b>的数据准备。</dd>
+
+<dt>同时输出 game_test.jsonl</dt>
+<dd>游戏数据同时存一份独立文件，用于评测 Kev 模型在游戏题上的表现。注意 <code>game_test.jsonl</code> 实际上和训练时用的游戏样本是<b>同一批</b>——这是一个潜在问题（训练集和测试集重叠），但当前用于"零样本迁移能力"的粗略评估，暂时可接受。</dd>
+</dl>
+
+<div class="callout warn">
+<div class="callout-title">命名注意</div>
+<p>变量名 <code>game_test.jsonl</code> 有歧义——它其实是训练用的游戏样本的副本，不是独立的测试集。如果后续要做严格的游戏能力评估，需要重新切分一份真正 hold-out 的 game test。</p>
+</div>
+
+<!-- -------------------- __init__.py -------------------- -->
+<h3>11.5 包定义：<code>kev/__init__.py</code></h3>
+
+<div class="file-header">kev/__init__.py</div>
+<pre><code># -*- coding: utf-8 -*-
+"""Kev 架构:冻结底座 + LoRA + 指针头(单次前向输出概率,无自回归)。"""</code></pre>
+
+<p>只有一个 docstring，定义包的身份。没有导出任何东西——所有功能都在子模块里按需导入。</p>
+
+<!-- ============================================================ -->
+<h3>11.6 源码组织总结</h3>
+
+<div class="mermaid">
+graph TB
+    A["scripts/convert_to_kev.py<br/>数据格式转换"] --> B["data/kev_format/<br/>train/val/test/game_test"]
+    B --> C["kev/data.py<br/>tokenize + 位置记录"]
+    C --> D["kev/train.py<br/>训练主循环"]
+    D --> E["kev/pointer_head.py<br/>指针头模型"]
+    E --> F["runs/kev-qwen35-4b/<br/>adapter/ + pointer_head.pt"]
+
+    style A fill:#eff6ff,stroke:#3b82f6
+    style B fill:#eff6ff,stroke:#3b82f6
+    style C fill:#fef3c7,stroke:#f59e0b
+    style D fill:#ecfdf5,stroke:#10b981
+    style E fill:#ecfdf5,stroke:#10b981
+    style F fill:#fef3c7,stroke:#f59e0b
+</div>
+
+<p style="text-align:center;color:var(--text-dim);font-size:13px;margin-top:-8px;">
+数据 → 编码 → 训练 → 模型产物的完整链路
+</p>
+
+<table>
+<thead>
+<tr><th>文件</th><th>行数</th><th>作用</th><th>关键点</th></tr>
+</thead>
+<tbody>
+<tr><td><code>kev/__init__.py</code></td><td class="num">2</td><td>包定义</td><td>仅 docstring</td></tr>
+<tr><td><code>kev/pointer_head.py</code></td><td class="num">~40</td><td>指针头模型</td><td>query/key 投影 + 缩放点积 + softmax</td></tr>
+<tr><td><code>kev/data.py</code></td><td class="num">~90</td><td>数据编码</td><td>位置跟踪 + 预算分配 + padding</td></tr>
+<tr><td><code>kev/train.py</code></td><td class="num">~120</td><td>训练循环</td><td>冻结底座 + LoRA + 指针头，绕开 lm_head</td></tr>
+<tr><td><code>scripts/convert_to_kev.py</code></td><td class="num">~100</td><td>数据格式转换</td><td>业务+游戏统一到 Kev 格式</td></tr>
+</tbody>
+</table>
+
+<div class="callout success">
+<div class="callout-title">整套实现的核心思想</div>
+<p>把所有"生成"的部分砍掉，只保留"打分"的部分：</p>
+<ul>
+<li>底座只做特征提取（输出 hidden states）</li>
+<li>LoRA 让底座学会"读决策类文本"</li>
+<li>指针头用点积把 hidden 变成候选概率</li>
+<li>整个 pipeline 没有一步是"逐 token 生成"</li>
+</ul>
+<p>这就是 Kev 能把延迟从秒级压到 65ms、类型错误率结构性为 0 的根本原因。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2>附录：本项目 Kev 相关文件清单</h2>
+
+<table>
+<thead>
+<tr><th>文件</th><th>作用</th></tr>
+</thead>
+<tbody>
+<tr><td><code>kev/__init__.py</code></td><td>包定义</td></tr>
+<tr><td><code>kev/pointer_head.py</code></td><td>指针头实现（query_proj + key_proj + 缩放点积 + softmax）</td></tr>
+<tr><td><code>kev/data.py</code></td><td>数据编码（tokenize + 记录 [DECIDE] 和 [OPT] 位置 + collate）</td></tr>
+<tr><td><code>kev/train.py</code></td><td>训练循环（冻结底座 + LoRA + 指针头 + faulthandler）</td></tr>
+<tr><td><code>scripts/convert_to_kev.py</code></td><td>把 v1 业务数据 + 游戏数据转成 Kev 格式</td></tr>
+<tr><td><code>scripts/run_eval_kev.py</code></td><td>Kev 推理 + 准确率 + ECE + 延迟测量</td></tr>
+<tr><td><code>data/kev_format/</code></td><td>Kev 格式数据（train/val/test/game_test）</td></tr>
+<tr><td><code>runs/kev-qwen35-4b/adapter/</code></td><td>训练产出的 LoRA 权重</td></tr>
+<tr><td><code>runs/kev-qwen35-4b/pointer_head.pt</code></td><td>训练产出的指针头权重</td></tr>
+</tbody>
+</table>
+
+<p style="text-align:center;color:var(--text-dim);margin-top:48px;font-size:13px;">
+—— 文档结束 ——
+</p>
+
+</div>
+
+<script>
+mermaid.initialize({
+  startOnLoad: true,
+  theme: 'base',
+  themeVariables: {
+    fontFamily: '-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif',
+    fontSize: '14px',
+    primaryColor: '#eff6ff',
+    primaryTextColor: '#1f2937',
+    primaryBorderColor: '#3b82f6',
+    lineColor: '#9ca3af',
+    secondaryColor: '#f3f4f6',
+    tertiaryColor: '#ffffff',
+    background: '#ffffff',
+    mainBkg: '#ffffff',
+    nodeBorder: '#9ca3af',
+    clusterBkg: '#f9fafb',
+    clusterBorder: '#e5e7eb',
+    titleColor: '#111827',
+    edgeLabelBackground: '#ffffff'
+  },
+  flowchart: {
+    curve: 'basis',
+    padding: 16,
+    nodeSpacing: 40,
+    rankSpacing: 50,
+    useMaxWidth: true
+  },
+  sequence: {
+    useMaxWidth: true,
+    wrap: true,
+    diagramMarginX: 20,
+    diagramMarginY: 16
+  }
+});
+</script>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
