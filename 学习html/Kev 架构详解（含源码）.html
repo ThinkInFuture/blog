@@ -201,6 +201,7 @@
   <div class="toc-title">目录</div>
   <ol>
     <li><a href="#overview">一句话概括</a></li>
+    <li><a href="#flow">决策全流程</a></li>
     <li><a href="#why">为什么不用自回归</a></li>
     <li><a href="#arch">整体架构图</a></li>
     <li><a href="#data">数据格式与标记</a></li>
@@ -241,7 +242,72 @@
 </table>
 
 <!-- ============================================================ -->
-<h2 id="why">2. 为什么不用自回归</h2>
+<h2 id="flow">2. 决策全流程：从文本到答案</h2>
+
+<p>以一条真实请求为例（判断「订单有问题」是否包含 PII），从原始文本到最终答案，一次前向的完整形状流转如下。阶段一到阶段四是任何 Transformer 都一样的通用链路，阶段五的指针头才是 Kev 真正新增的计算。</p>
+
+<div class="mermaid">
+flowchart TD
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2937
+    classDef stage fill:#eff6ff,stroke:#3b82f6,color:#1f2937
+    classDef head fill:#fff7ed,stroke:#f59e0b,color:#1f2937
+    classDef out fill:#e6f5ed,stroke:#1a7f4b,color:#155c38
+
+    T0["原始文本<br/>[STATE] 订单有问题 [Q] 是否包含 PII？[OPT] no [OPT] yes [DECIDE]"]:::io
+    S1["阶段一 · tokenize<br/>切分 30 个 token → 查词表得 IDs [30]<br/>加 batch 维 → [1, 30]"]:::stage
+    S2["阶段二 · Embedding<br/>每个 ID 查表换成 2560 维向量<br/>形状 [1, 30, 2560]"]:::stage
+    S3["阶段三 · 32 层 decoder<br/>每层：注意力 + FFN + 残差<br/>形状始终 [1, 30, 2560]"]:::stage
+    S4["阶段四 · 取关键位置 hidden<br/>[DECIDE] 位置 → [2560]<br/>[OPT] no/yes 位置 → [2, 2560]"]:::stage
+    S5["阶段五 · 指针头<br/>投影 → 点积 → 缩放 → softmax<br/>候选概率 [0.4785, 0.5215]"]:::head
+    S6["阶段六 · 最终输出<br/>答案「yes」· 置信度 0.5215"]:::out
+    T0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6
+</div>
+
+<p>把阶段五的指针头单独放大看——九小步，每一步的形状和数值：</p>
+
+<div class="mermaid">
+flowchart TD
+    classDef head fill:#fff7ed,stroke:#f59e0b,color:#1f2937
+    classDef out fill:#e6f5ed,stroke:#1a7f4b,color:#155c38
+
+    H0["输入：[DECIDE] hidden [2560] ＋ [OPT] hidden [2, 2560]"]:::head
+    H1["⑥-b query 投影<br/>[2560] @ [2560, 256] → [256]"]:::head
+    H2["⑥-c key 投影<br/>[2, 2560] @ [2560, 256] → [2, 256]"]:::head
+    H3["⑥-d 点积<br/>score_no = 0.35 · score_yes = 1.72 → 形状 [2]"]:::head
+    H4["⑥-e 缩放（除以 √256 = 16）<br/>[0.022, 0.108]"]:::head
+    H5["⑥-f softmax<br/>[0.4785, 0.5215]"]:::head
+    H6["⑥-g argmax<br/>索引 = 1"]:::head
+    H7["⑥-h 查候选列表<br/>candidates[1] = 「yes」"]:::head
+    H8["⑥-i 取对应概率作为置信度<br/>probs[1] = 0.5215"]:::head
+    OUT["最终输出：答案「yes」· 置信度 0.5215"]:::out
+    H0 --> H1 --> H2 --> H3 --> H4 --> H5 --> H6 --> H7 --> H8 --> OUT
+</div>
+
+<p>完整形状流转总表：</p>
+
+<table>
+<thead><tr><th>步骤</th><th>张量</th><th>形状</th></tr></thead>
+<tbody>
+<tr><td>① tokenize</td><td>token 序列</td><td>[30]</td></tr>
+<tr><td>② 查表</td><td>token IDs</td><td>[30]</td></tr>
+<tr><td>③ 加 batch</td><td>token IDs</td><td>[1, 30]</td></tr>
+<tr><td>④ embedding</td><td>初始 hidden</td><td>[1, 30, 2560]</td></tr>
+<tr><td>⑤ 32 层 decoder</td><td>最终 hidden</td><td>[1, 30, 2560]</td></tr>
+<tr><td>⑥-a 索引 [DECIDE]</td><td>[DECIDE] hidden</td><td>[2560]</td></tr>
+<tr><td>⑥-a 索引 [OPT]</td><td>[OPT] hidden</td><td>[2, 2560]</td></tr>
+<tr><td>⑥-b query_proj</td><td>query</td><td>[256]</td></tr>
+<tr><td>⑥-c key_proj</td><td>key</td><td>[2, 256]</td></tr>
+<tr><td>⑥-d 点积</td><td>scores</td><td>[2]</td></tr>
+<tr><td>⑥-e 缩放</td><td>scores</td><td>[2]</td></tr>
+<tr><td>⑥-f softmax</td><td>probs</td><td>[2]</td></tr>
+<tr><td>⑥-g argmax</td><td>索引</td><td>标量</td></tr>
+<tr><td>⑥-h 查候选列表</td><td>答案文字</td><td>字符串</td></tr>
+<tr><td>⑥-i 取对应概率</td><td>置信度</td><td>float</td></tr>
+</tbody>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="why">3. 为什么不用自回归</h2>
 
 <p>自回归 LLM 生成一个答案，本质上是一个<b>串行过程</b>：生成第一个 token，再基于它生成第二个，直到遇到结束符。每一轮都要跑一次完整的前向传播。</p>
 
@@ -284,7 +350,7 @@ Kev：一次前向传播，直接得到所有候选的概率分布
 <p>这就是 Kev 能把延迟压到 65ms 的根本原因——<b>不做串行生成，只做并行打分</b>。</p>
 
 <!-- ============================================================ -->
-<h2 id="arch">3. 整体架构图</h2>
+<h2 id="arch">4. 整体架构图</h2>
 
 <div class="mermaid">
 graph TB
@@ -348,7 +414,7 @@ graph TB
 </div>
 
 <!-- ============================================================ -->
-<h2 id="data">4. 数据格式与标记</h2>
+<h2 id="data">5. 数据格式与标记</h2>
 
 <p>Kev 不用 JSON 或 chat template，而是用一种<b>扁平标记格式</b>把所有内容拼成一条 token 序列：</p>
 
@@ -400,7 +466,7 @@ graph TD
 </div>
 
 <!-- ============================================================ -->
-<h2 id="pointer">5. 指针头怎么工作</h2>
+<h2 id="pointer">6. 指针头怎么工作</h2>
 
 <p>指针头是 Kev 的核心，也是它区别于自回归的关键。它做的事情非常"轻"——<b>一个缩放点积 + 一个 softmax</b>：</p>
 
@@ -477,7 +543,7 @@ probs = softmax([score_1, score_2, ...])  # 各候选概率</code></pre>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="train">6. 训练流程</h2>
+<h2 id="train">7. 训练流程</h2>
 
 <div class="mermaid">
 graph TB
@@ -520,11 +586,11 @@ graph TB
 <div class="callout-title">硬标签 CE 与软标签训练</div>
 <p><b>硬标签 CE</b>：正确候选标 1，其他标 0，模型学的是"预测正确选项"。</p>
 <p><b>软标签训练</b>：每个候选的概率直接来自数据生成器的已知分布，模型学的是"预测整个概率分布"。</p>
-<p>这个差异直接导致了后面第 8 节要讲的结构性短板，以及它的解法。</p>
+<p>这个差异直接导致了后面第 9 节要讲的结构性短板，以及它的解法。</p>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="infer">7. 推理流程与延迟</h2>
+<h2 id="infer">8. 推理流程与延迟</h2>
 
 <div class="mermaid">
 sequenceDiagram
@@ -567,7 +633,7 @@ sequenceDiagram
 </div>
 
 <!-- ============================================================ -->
-<h2 id="limit">8. 当前短板与解法：软标签蒸馏</h2>
+<h2 id="limit">9. 当前短板与解法：软标签蒸馏</h2>
 
 <p>当前 Kev 用<b>硬标签交叉熵</b>训练，存在一个可量化的短板。</p>
 
@@ -638,7 +704,7 @@ sequenceDiagram
 </div>
 
 <!-- ============================================================ -->
-<h2 id="result">9. 实测数据</h2>
+<h2 id="result">10. 实测数据</h2>
 
 <h3>业务能力</h3>
 
@@ -688,7 +754,7 @@ sequenceDiagram
 </table>
 
 <!-- ============================================================ -->
-<h2 id="position">10. Kev 的能力边界</h2>
+<h2 id="position">11. Kev 的能力边界</h2>
 
 <p>Kev 不是一个"通用决策模型"，它的定位非常明确：</p>
 
@@ -743,12 +809,12 @@ graph TB
 </div>
 
 <!-- ============================================================ -->
-<h2 id="source">11. 核心源码逐段解读</h2>
+<h2 id="source">12. 核心源码逐段解读</h2>
 
 <p>下面把 Kev 实现的全部源码贴出来，逐段讲解。</p>
 
 <!-- -------------------- pointer_head.py -------------------- -->
-<h3>11.1 指针头：<code>kev/pointer_head.py</code></h3>
+<h3>12.1 指针头：<code>kev/pointer_head.py</code></h3>
 
 <div class="file-header">kev/pointer_head.py</div>
 <pre><code># -*- coding: utf-8 -*-
@@ -824,7 +890,7 @@ class PointerHead(nn.Module):
 </div>
 
 <!-- -------------------- data.py -------------------- -->
-<h3>11.2 数据编码：<code>kev/data.py</code></h3>
+<h3>12.2 数据编码：<code>kev/data.py</code></h3>
 
 <div class="file-header">kev/data.py</div>
 <pre><code># -*- coding: utf-8 -*-
@@ -943,7 +1009,7 @@ def load_jsonl(path):
 </div>
 
 <!-- -------------------- train.py -------------------- -->
-<h3>11.3 训练循环：<code>kev/train.py</code></h3>
+<h3>12.3 训练循环：<code>kev/train.py</code></h3>
 
 <div class="file-header">kev/train.py</div>
 <pre><code># -*- coding: utf-8 -*-
@@ -1129,7 +1195,7 @@ if __name__ == "__main__":
 </div>
 
 <!-- -------------------- convert_to_kev.py -------------------- -->
-<h3>11.4 数据转换：<code>scripts/convert_to_kev.py</code></h3>
+<h3>12.4 数据转换：<code>scripts/convert_to_kev.py</code></h3>
 
 <div class="file-header">scripts/convert_to_kev.py</div>
 <pre><code># -*- coding: utf-8 -*-
@@ -1275,7 +1341,7 @@ if __name__ == "__main__":
 </div>
 
 <!-- -------------------- __init__.py -------------------- -->
-<h3>11.5 包定义：<code>kev/__init__.py</code></h3>
+<h3>12.5 包定义：<code>kev/__init__.py</code></h3>
 
 <div class="file-header">kev/__init__.py</div>
 <pre><code># -*- coding: utf-8 -*-
@@ -1284,7 +1350,7 @@ if __name__ == "__main__":
 <p>只有一个 docstring，定义包的身份。没有导出任何东西——所有功能都在子模块里按需导入。</p>
 
 <!-- ============================================================ -->
-<h3>11.6 源码组织总结</h3>
+<h3>12.6 源码组织总结</h3>
 
 <div class="mermaid">
 graph TB
