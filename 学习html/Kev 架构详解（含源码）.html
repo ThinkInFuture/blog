@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kev 架构详解（含源码） - 华杉的技术博客</title>
+<title>Kev 架构详解（含源码）</title>
 <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
   :root {
@@ -200,15 +200,15 @@
   <div class="toc-title">目录</div>
   <ol>
     <li><a href="#overview">一句话概括</a></li>
-    <li><a href="#compare">为什么不用自回归</a></li>
+    <li><a href="#why">为什么不用自回归</a></li>
     <li><a href="#arch">整体架构图</a></li>
     <li><a href="#data">数据格式与标记</a></li>
     <li><a href="#pointer">指针头怎么工作</a></li>
     <li><a href="#train">训练流程</a></li>
     <li><a href="#infer">推理流程与延迟</a></li>
-    <li><a href="#limit">结构性短板：act 覆盖率</a></li>
-    <li><a href="#result">本项目实测数据</a></li>
-    <li><a href="#position">Kev 在项目中的定位</a></li>
+    <li><a href="#limit">当前短板与解法：软标签蒸馏</a></li>
+    <li><a href="#result">实测数据</a></li>
+    <li><a href="#position">Kev 的能力边界</a></li>
     <li><a href="#source">核心源码逐段解读</a></li>
   </ol>
 </div>
@@ -223,29 +223,29 @@
 </p>
 </div>
 
-<p>它和传统的"微调 LLM 输出 JSON"最大的区别是：</p>
+<p>它的关键特征：</p>
 
 <table>
 <thead>
-<tr><th>对比项</th><th>自回归方案（v2）</th><th>Kev 方案</th></tr>
+<tr><th>特征</th><th>Kev 的做法</th></tr>
 </thead>
 <tbody>
-<tr><td>模型输出</td><td>逐 token 生成的 JSON 字符串</td><td>一次性算出的概率分布</td></tr>
-<tr><td>前向传播次数</td><td>N 次（N = 输出 token 数）</td><td><b>1 次</b></td></tr>
-<tr><td>可能的输出</td><td>合法 JSON / 非法 JSON（格式错误）</td><td>概率分布（结构上不可能出错）</td></tr>
-<tr><td>延迟</td><td>秒级</td><td><b>百毫秒级</b>（65~68ms）</td></tr>
-<tr><td>概率来源</td><td>模型"说"出来的数字</td><td>softmax(候选打分)</td></tr>
-<tr><td>校准引导</td><td>软标签直接训出校准</td><td>硬标签，无校准引导</td></tr>
+<tr><td>输出形式</td><td>直接算出概率分布，不生成文字</td></tr>
+<tr><td>前向传播次数</td><td><b>1 次</b>（与问题数、候选数无关）</td></tr>
+<tr><td>可能的输出</td><td>概率分布——结构上不可能出现格式错误</td></tr>
+<tr><td>延迟</td><td>65~68ms（单条决策）</td></tr>
+<tr><td>可训练参数</td><td>LoRA rank-16（约 4500 万）+ 指针头（几十万）</td></tr>
+<tr><td>训练成本</td><td>H100 上约 $95、40~70 分钟</td></tr>
 </tbody>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="compare">2. 为什么不用自回归</h2>
+<h2 id="why">2. 为什么不用自回归</h2>
 
 <p>自回归 LLM 生成一个答案，本质上是一个<b>串行过程</b>：生成第一个 token，再基于它生成第二个，直到遇到结束符。每一轮都要跑一次完整的前向传播。</p>
 
 <div class="mermaid">
-graph LR
+graph TD
     A[输入 prompt] --> B[前向 1]
     B --> C["token: {"]
     C --> D[前向 2]
@@ -268,7 +268,7 @@ graph LR
 <p>Kev 换了一种思路：<b>既然答案就在有限的候选集合里，为什么不让模型直接为每个候选打分？</b></p>
 
 <div class="mermaid">
-graph LR
+graph TD
     A[输入 prompt] --> B[前向 1 次]
     B --> C["概率分布: [0.82, 0.13, 0.05]"]
     style A fill:#eff6ff,stroke:#3b82f6
@@ -280,7 +280,7 @@ graph LR
 Kev：一次前向传播，直接得到所有候选的概率分布
 </p>
 
-<p>这就是 Kev 能把延迟从秒级压到 65ms 的根本原因——<b>不做串行生成，只做并行打分</b>。</p>
+<p>这就是 Kev 能把延迟压到 65ms 的根本原因——<b>不做串行生成，只做并行打分</b>。</p>
 
 <!-- ============================================================ -->
 <h2 id="arch">3. 整体架构图</h2>
@@ -367,7 +367,7 @@ graph TB
 </dl>
 
 <div class="mermaid">
-graph LR
+graph TD
     A["[STATE]<br/>订单有问题..."] --> B["[Q]<br/>是否含 PII?"]
     B --> C["[OPT]<br/>no"]
     C --> D["[OPT]<br/>yes"]
@@ -516,10 +516,10 @@ graph TB
 </table>
 
 <div class="callout">
-<div class="callout-title">硬标签 CE vs 软标签训练</div>
-<p><b>Kev 用的是硬标签交叉熵</b>：正确候选标 1，其他标 0，模型学的是"预测正确选项"。</p>
-<p><b>v2 用的是软标签训练</b>：每个候选的概率直接来自数据生成器的已知分布，模型学的是"预测整个概率分布"。</p>
-<p>这个差异直接导致了后面第 8 节要讲的结构性短板。</p>
+<div class="callout-title">硬标签 CE 与软标签训练</div>
+<p><b>硬标签 CE</b>：正确候选标 1，其他标 0，模型学的是"预测正确选项"。</p>
+<p><b>软标签训练</b>：每个候选的概率直接来自数据生成器的已知分布，模型学的是"预测整个概率分布"。</p>
+<p>这个差异直接导致了后面第 8 节要讲的结构性短板，以及它的解法。</p>
 </div>
 
 <!-- ============================================================ -->
@@ -546,29 +546,29 @@ sequenceDiagram
     Note over S: 端到端 65~68ms
 </div>
 
-<p>延迟对比（本项目实测）：</p>
+<p>延迟实测：</p>
 
 <table>
 <thead>
-<tr><th>方案</th><th>单条延迟</th><th>说明</th></tr>
+<tr><th>指标</th><th>值</th></tr>
 </thead>
 <tbody>
-<tr><td>v2 自回归</td><td class="num">秒级</td><td>逐 token 生成 JSON，多问题扇出时更慢</td></tr>
-<tr><td><b>Kev</b></td><td class="num"><b>65~68ms</b></td><td>一次前向传播，与问题数几乎无关</td></tr>
-<tr><td>Jev 官方</td><td class="num">~100ms</td><td>专用架构 + 并行采样</td></tr>
+<tr><td>单条延迟中位数</td><td class="num">65~68ms</td></tr>
+<tr><td>目标上限</td><td class="num">200ms</td></tr>
+<tr><td>是否达标</td><td style="color:#10b981;font-weight:600;">是</td></tr>
 </tbody>
 </table>
 
 <div class="callout success">
 <div class="callout-title">65ms 意味着什么</div>
 <p>延迟 ≤200ms 就可以驱动实时游戏（每秒 5~15 步决策）。65ms 意味着游戏里的"思考"几乎不可察觉。</p>
-<p>相比之下，v2 的秒级延迟让游戏看起来像"卡顿播放"——这也是为什么游戏 demo 之前一直不够直观。</p>
+<p>这也是为什么 Kev 适合做游戏 demo——低延迟让"决策"这件事在视觉上变得实时。</p>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="limit">8. 结构性短板：act 覆盖率</h2>
+<h2 id="limit">8. 当前短板与解法：软标签蒸馏</h2>
 
-<p>这是 Kev 架构在当前训练方式下<b>最严重的问题</b>，不是 bug，是设计选择带来的必然后果。</p>
+<p>当前 Kev 用<b>硬标签交叉熵</b>训练，存在一个可量化的短板。</p>
 
 <h3>什么是 act 覆盖率？</h3>
 
@@ -582,28 +582,19 @@ sequenceDiagram
 
 <p><b>act 覆盖率</b>就是"模型有多少比例的答案，它敢声称自己 ≥ 0.85 确定"。</p>
 
-<h3>两个模型的对比</h3>
+<h3>Kev 当前的表现</h3>
 
 <table>
 <thead>
-<tr><th>模型</th><th>act 覆盖率</th><th>act 准确率</th></tr>
+<tr><th>指标</th><th>值</th></tr>
 </thead>
 <tbody>
-<tr><td>v2 自回归（软标签）</td><td class="num" style="color:#10b981;font-weight:600;">11.3%</td><td class="num">82.9%</td></tr>
-<tr><td><b>Kev 业务（硬标签）</b></td><td class="num" style="color:#ef4444;font-weight:600;">0.3%</td><td class="num">83.3%</td></tr>
+<tr><td>act 覆盖率（T=1.0）</td><td class="num" style="color:#ef4444;font-weight:600;">0.3%</td></tr>
+<tr><td>act 准确率</td><td class="num">83.3%</td></tr>
 </tbody>
 </table>
 
-<p>看这两个数字的对比：</p>
-
-<div class="mermaid">
-graph LR
-    A["v2 软标签<br/>act 覆盖 11.3%"] --> C["差 37 倍"]
-    B["Kev 硬标签<br/>act 覆盖 0.3%"] --> C
-    style A fill:#ecfdf5,stroke:#10b981
-    style B fill:#fef2f2,stroke:#ef4444
-    style C fill:#fef3c7,stroke:#f59e0b
-</div>
+<p>act 覆盖率只有 0.3%——门控功能基本处于关闭状态，几乎所有答案都落在 review 和 human 两档。</p>
 
 <h3>为什么会这样？</h3>
 
@@ -630,125 +621,130 @@ graph LR
 </tbody>
 </table>
 
-<p>这是"<b>覆盖换校准</b>"的 tradeoff：想要更多高置信样本，就要牺牲概率的诚实性。而且即使 T=2.0，act 覆盖也只有 7.5%——<b>换不回 v2 的 11.3%</b>。</p>
+<p>这是"<b>覆盖换校准</b>"的 tradeoff：想要更多高置信样本，就要牺牲概率的诚实性。而且即使 T=2.0，act 覆盖也只有 7.5%——<b>离可用的门控还有很大距离</b>。</p>
 
-<h3>唯一解：软标签蒸馏</h3>
+<h3>解法：软标签蒸馏</h3>
 
 <div class="callout warn">
 <div class="callout-title">Kev 若要支持门控，必须软标签蒸馏</div>
-<p>用 v2 的软标签分布作为训练目标，重新训练 Kev 的指针头。<b>这是唯一路径</b>，因为：</p>
+<p>用带软标签的数据重新训练 Kev 的指针头。<b>这是唯一路径</b>，因为：</p>
 <ul>
 <li>温度缩放已排除（T=1.0 已最优）</li>
 <li>act 覆盖是"学出来的"能力，不能事后补</li>
 <li>软标签直接把"该有多自信"的信息灌进训练目标</li>
 </ul>
+<p>本项目已有 24,000 条带软标签的合成数据（生成器已知真实分布），可以直接作为蒸馏数据源。</p>
 </div>
 
 <!-- ============================================================ -->
-<h2 id="result">9. 本项目实测数据</h2>
+<h2 id="result">9. 实测数据</h2>
 
 <h3>业务能力</h3>
 
 <table>
 <thead>
-<tr><th>指标</th><th>v2 自回归</th><th>Kev 业务 only</th><th>Kev 混训</th></tr>
+<tr><th>指标</th><th>Kev 业务 only</th></tr>
 </thead>
 <tbody>
-<tr><td>业务准确率</td><td class="num">48.5%</td><td class="num">51.19%</td><td class="num">待测</td></tr>
-<tr><td>业务 ECE</td><td class="num" style="color:#10b981;">1.57%</td><td class="num" style="color:#f59e0b;">2.93%</td><td class="num">待测</td></tr>
-<tr><td>act 覆盖率</td><td class="num" style="color:#10b981;">11.3%</td><td class="num" style="color:#ef4444;">0.3%</td><td class="num">待测</td></tr>
-<tr><td>act 准确率</td><td class="num">82.9%</td><td class="num">83.3%</td><td class="num">待测</td></tr>
-<tr><td>类型错误率</td><td class="num">0.0%</td><td class="num">0.0%</td><td class="num">待测</td></tr>
+<tr><td>业务准确率</td><td class="num">51.19%</td></tr>
+<tr><td>业务 ECE</td><td class="num">2.93%</td></tr>
+<tr><td>act 覆盖率</td><td class="num">0.3%</td></tr>
+<tr><td>act 准确率</td><td class="num">83.3%</td></tr>
+<tr><td>类型错误率</td><td class="num">0.0%（结构保证）</td></tr>
 </tbody>
 </table>
 
-<h3>游戏能力</h3>
+<h3>游戏能力（零样本迁移）</h3>
 
 <table>
 <thead>
-<tr><th>指标</th><th>零样本</th><th>Kev 业务 only（零样本迁移）</th></tr>
+<tr><th>指标</th><th>零样本迁移</th></tr>
 </thead>
 <tbody>
-<tr><td>game_test 准确率</td><td class="num">~41.9%（加权随机基线）</td><td class="num">48.11%</td></tr>
-<tr><td>ECE</td><td class="num">—</td><td class="num">3.66%</td></tr>
+<tr><td>game_test 准确率</td><td class="num">48.11%</td></tr>
+<tr><td>加权随机基线</td><td class="num">~41.9%</td></tr>
+<tr><td>ECE</td><td class="num">3.66%</td></tr>
 </tbody>
 </table>
 
 <div class="callout warn">
 <div class="callout-title">游戏 48.11% 这个数字要谨慎解读</div>
 <p>游戏题不是"25 选 1"，而是 6 道 noul（2 选 1）+ 1 道 choice（4 选 1）+ 1 道 score（10 档）。加权随机基线约 41.9%。</p>
-<p>48.11% 比基线高 6.2 个百分点——<b>有效果，但不是"12 倍"那种量级</b>。需要分题型拆解才能看清指针头学到的是"内容匹配"还是"位置先验"。</p>
+<p>48.11% 比基线高 6.2 个百分点——<b>有效果，但需要分题型拆解才能看清指针头学到的是"内容匹配"还是"位置先验"</b>。</p>
 </div>
 
 <h3>延迟</h3>
 
 <table>
 <thead>
-<tr><th>指标</th><th>v2</th><th>Kev</th></tr>
+<tr><th>指标</th><th>Kev</th></tr>
 </thead>
 <tbody>
-<tr><td>单条延迟中位数</td><td class="num">秒级</td><td class="num">65~68ms</td></tr>
-<tr><td>是否满足 ≤200ms</td><td class="num" style="color:#ef4444;">否</td><td class="num" style="color:#10b981;">是</td></tr>
+<tr><td>单条延迟中位数</td><td class="num">65~68ms</td></tr>
+<tr><td>目标上限</td><td class="num">200ms</td></tr>
+<tr><td>是否达标</td><td style="color:#10b981;font-weight:600;">是</td></tr>
 </tbody>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="position">10. Kev 在项目中的定位</h2>
+<h2 id="position">10. Kev 的能力边界</h2>
 
-<p>综合以上所有信息，Kev 不是一个"替代 v2"的方案，而是<b>一个在特定维度上的补充</b>：</p>
+<p>Kev 不是一个"通用决策模型"，它的定位非常明确：</p>
 
 <div class="mermaid">
 graph TB
-    subgraph V2["v2 自回归"]
-        A1["优势：校准好（ECE 1.57%）"]
-        A2["优势：act 覆盖高（11.3%）"]
-        A3["劣势：延迟秒级"]
-    end
-
     subgraph Kev["Kev 指针头"]
         B1["优势：延迟 65ms"]
-        B2["优势：准确率略高（51.19%）"]
+        B2["优势：准确率 51.19%"]
         B3["优势：结构上无格式错误"]
-        B4["劣势：act 覆盖 0.3%"]
+        B4["优势：训练成本低（$95 量级）"]
+        B5["短板：act 覆盖 0.3%"]
     end
 
-    C["如果要门控 → 用 v2"]
-    D["如果要低延迟 → 用 Kev"]
+    D["适合：低延迟、无需门控的场景"]
+    E["补齐方向：软标签蒸馏"]
 
-    A2 --> C
     B1 --> D
+    B2 --> D
+    B3 --> D
+    B4 --> D
+    B5 --> E
 
-    style V2 fill:#eff6ff,stroke:#3b82f6
     style Kev fill:#ecfdf5,stroke:#10b981
-    style C fill:#fef3c7,stroke:#f59e0b
     style D fill:#fef3c7,stroke:#f59e0b
+    style E fill:#eff6ff,stroke:#3b82f6
 </div>
 
-<h3>三条可选路线</h3>
+<h3>适合的应用场景</h3>
 
 <ol>
-<li><b>业务场景 + 需要门控</b> → 继续用 v2（校准好、act 覆盖高）</li>
-<li><b>业务场景 + 不需要门控</b> → 用 Kev（延迟低、准确率略高）</li>
-<li><b>游戏 demo</b> → 用 Kev（65ms 是唯一能让游戏看起来流畅的延迟）</li>
-<li><b>两者都要</b> → 对 Kev 做软标签蒸馏（把 v2 的校准能力迁移到 Kev）</li>
+<li><b>需要低延迟的在线决策</b> —— 65ms 是 Kev 最大的竞争力</li>
+<li><b>不需要置信度门控的场景</b> —— 比如直接取 argmax 就能用</li>
+<li><b>游戏/实时交互 demo</b> —— 低延迟让决策看起来"实时"</li>
+<li><b>结构化输出要求严格的场景</b> —— 概率分布天然不会格式错误</li>
 </ol>
 
+<h3>需要补齐的方向</h3>
+
+<p>如果场景需要 Jev 式的 act/review/human 门控（高置信自动执行、低置信转人工），当前 Kev 还不满足。<b>软标签蒸馏是唯一路径</b>——用带软标签的数据重新训练指针头，把"该有多自信"这个能力学进去。</p>
+
 <div class="callout success">
-<div class="callout-title">Kev 路线当前最大的价值</div>
-<p>不是"替代 v2"，而是<b>证明了"单次前向 + 指针头"这条路在当前硬件上可行</b>：</p>
+<div class="callout-title">Kev 路线的核心价值</div>
+<p>它证明了"单次前向 + 指针头"这条架构在当前硬件上完全可行：</p>
 <ul>
-<li>延迟从秒级压到 65ms（27 倍）</li>
+<li>延迟 65ms（一次性前向，与问题数无关）</li>
 <li>类型错误率 0%（结构保证，不是靠兜底）</li>
-<li>业务准确率不降反升（51.19% vs 48.5%）</li>
+<li>业务准确率 51.19%</li>
 <li>训练成本 $95 量级</li>
+<li>可训练参数只有 4500 万（占底座 1%）</li>
 </ul>
-<p>唯一未解决的是 act 覆盖率——但这不是 Kev 的失败，是<b>硬标签训练的必然结果</b>，可以用软标签蒸馏修复。</p>
+<p>这是一个从零到一被跑通的架构。剩下的 act 覆盖率短板是训练方式的问题（硬标签 CE），不是架构的问题——用软标签蒸馏可以直接补上。</p>
 </div>
 
 <!-- ============================================================ -->
 <h2 id="source">11. 核心源码逐段解读</h2>
 
-<p>下面把本项目 Kev 实现的全部源码贴出来，逐段讲解。</p>
+<p>下面把 Kev 实现的全部源码贴出来，逐段讲解。</p>
 
 <!-- -------------------- pointer_head.py -------------------- -->
 <h3>11.1 指针头：<code>kev/pointer_head.py</code></h3>
@@ -1331,11 +1327,11 @@ graph TB
 <li>指针头用点积把 hidden 变成候选概率</li>
 <li>整个 pipeline 没有一步是"逐 token 生成"</li>
 </ul>
-<p>这就是 Kev 能把延迟从秒级压到 65ms、类型错误率结构性为 0 的根本原因。</p>
+<p>这就是 Kev 能把延迟压到 65ms、类型错误率结构性为 0 的根本原因。</p>
 </div>
 
 <!-- ============================================================ -->
-<h2>附录：本项目 Kev 相关文件清单</h2>
+<h2>附录：Kev 相关文件清单</h2>
 
 <table>
 <thead>
@@ -1346,7 +1342,7 @@ graph TB
 <tr><td><code>kev/pointer_head.py</code></td><td>指针头实现（query_proj + key_proj + 缩放点积 + softmax）</td></tr>
 <tr><td><code>kev/data.py</code></td><td>数据编码（tokenize + 记录 [DECIDE] 和 [OPT] 位置 + collate）</td></tr>
 <tr><td><code>kev/train.py</code></td><td>训练循环（冻结底座 + LoRA + 指针头 + faulthandler）</td></tr>
-<tr><td><code>scripts/convert_to_kev.py</code></td><td>把 v1 业务数据 + 游戏数据转成 Kev 格式</td></tr>
+<tr><td><code>scripts/convert_to_kev.py</code></td><td>把业务数据 + 游戏数据转成 Kev 格式</td></tr>
 <tr><td><code>scripts/run_eval_kev.py</code></td><td>Kev 推理 + 准确率 + ECE + 延迟测量</td></tr>
 <tr><td><code>data/kev_format/</code></td><td>Kev 格式数据（train/val/test/game_test）</td></tr>
 <tr><td><code>runs/kev-qwen35-4b/adapter/</code></td><td>训练产出的 LoRA 权重</td></tr>
