@@ -155,8 +155,9 @@
     gap: 8px 20px;
     margin: 12px 0;
   }
-  .kv dt { color: var(--text-dim); font-weight: 500; }
-  .kv dd { margin: 0; }
+  .kv dt { color: var(--text-dim); font-weight: 500; min-width: 0; overflow-wrap: anywhere; word-break: break-all; }
+  .kv dt code { white-space: normal; }
+  .kv dd { margin: 0; min-width: 0; }
 
   .callout {
     border-left: 4px solid var(--accent);
