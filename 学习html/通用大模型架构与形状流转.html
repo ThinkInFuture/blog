@@ -56,39 +56,44 @@ footer.end{margin-top:56px;padding-top:18px;border-top:1px dashed var(--border);
 <body>
 <div class="wrap">
 <a class="back" href="../index.html">&larr; 返回首页</a>
-<div class="meta"><span class="tag">基础理论</span>2026-09-26 发布 · 基础篇 v1（持续更新）</div>
+<div class="meta"><span class="tag">基础理论</span>2026-09-26 发布 · 基础篇 v1.1（持续更新）</div>
 <h1>通用大模型架构详解：一次前向的形状流转</h1>
-<p class="subtitle">用特征维度的"形状语言"，把一个通用 decoder-only 大模型从文本到答案的完整链路讲清楚</p>
+<p class="subtitle">拿一条真实请求（6 个 token）走完一个通用 decoder-only 大模型的全流程，每一步都标出具体形状</p>
 
 <div class="note">
-<strong>一句话概括：</strong>一个通用大模型 = <strong>Embedding 查表 + N 层 decoder block（注意力 + FFN + 残差）+ 最终归一化 + LM head</strong>。整个前向传播里，主数据流的形状始终是 <code>[batch, seq_len, hidden]</code>，进多少层都不变——读懂了形状流转，就读懂了大模型的骨架。
+<strong>一句话概括：</strong>一个通用大模型 = <strong>Embedding 查表 + 32 层 decoder block（注意力 + FFN + 残差）+ 最终归一化 + LM head</strong>。整个前向传播里，主数据流的形状始终是 <code>[1, 6, 4096]</code>——进多少层都不变；只有入口（分词）和出口（LM head）改形状。
+</div>
+
+<div class="note">
+<strong>本篇的讲法：</strong>像 Kev 决策流程那篇一样，<strong>全程用一个具体例子走到底、全程写具体数字</strong>：输入是一条 6 个 token 的真实请求，隐藏维 4096、32 层、32 个注意力头（每头 128 维）、8 组 KV 头、FFN 中间层 11008、词表 152000——这些数字取自 Qwen / Llama 系主流开源模型的典型量级。<code>B</code>（batch）、<code>S</code>（序列长）、<code>H</code>（隐藏维）这些字母只在解释维度含义时出现。
 </div>
 
 <div class="big">
-<div class="stat"><div class="v">[B, S, H]</div><div class="l">主数据流形状：批大小 × 序列长 × 隐藏维</div></div>
-<div class="stat"><div class="v">×N 层</div><div class="l">decoder block 堆叠，形状进出不变</div></div>
-<div class="stat"><div class="v">[B, S, V]</div><div class="l">LM head 输出 logits，V 为词表大小</div></div>
+<div class="stat"><div class="v">[1, 6, 4096]</div><div class="l">主数据流形状：1 条请求 × 6 token × 4096 维</div></div>
+<div class="stat"><div class="v">×32 层</div><div class="l">decoder block 堆叠，形状进出不变</div></div>
+<div class="stat"><div class="v">[1, 152000]</div><div class="l">最后位置的 logits，152000 为词表大小</div></div>
 </div>
 
-<h2>一、为什么要用"形状"来讲架构</h2>
-<p>读大模型源码或论文时，最容易迷路的地方不是数学，而是<strong>张量形状</strong>：一个 [B, S, H] 什么时候被拆成 [B, 头数, S, 头维]？logits 的 [B, S, V] 为什么采样时只看 [B, V]？KV Cache 到底缓存的是什么形状？这些问题搞不清，源码里每行矩阵乘法都像天书。</p>
-<p>所以这篇基础篇用<strong>形状流转</strong>作为主线：从原始文本进模型，到下一个 token 出模型，每一步都标注张量的形状和每个维度的含义。文中用一个<strong>通用示意配置</strong>做参照（取自 Qwen / Llama 这类主流开源模型的典型量级，不同模型数值有差异，但结构完全一致）：</p>
+<h2>一、例子与参照配置</h2>
+<p>全篇用同一条请求做例子：</p>
+<p style="text-align:center"><strong>原始文本：「订单有问题，需要退款吗」</strong></p>
+<p>经 tokenizer 分词后是 <strong>6 个 token</strong>。模型用的参照配置（Qwen / Llama 系典型量级，不同模型数值有差异，结构完全一致）：</p>
 
 <table>
-<thead><tr><th>配置项</th><th>通用示意值</th><th>含义</th></tr></thead>
+<thead><tr><th>配置项</th><th>具体值</th><th>含义</th></tr></thead>
 <tbody>
-<tr><td>词表大小 V</td><td class="mono">≈ 152,000</td><td>模型认识多少个 token</td></tr>
-<tr><td>隐藏维 H</td><td class="mono">4096</td><td>每个 token 被表示成多少维向量（模型的"宽度"）</td></tr>
-<tr><td>层数 N</td><td class="mono">32</td><td>decoder block 堆叠多少层（模型的"深度"）</td></tr>
-<tr><td>注意力头数</td><td class="mono">32 × 128 维</td><td>多头注意力：32 个头，每头 128 维（32×128=4096=H）</td></tr>
-<tr><td>KV 头数（GQA）</td><td class="mono">8</td><td>K/V 共享分组：8 组 KV 头服务 32 个 Q 头，省 KV Cache</td></tr>
-<tr><td>FFN 中间维</td><td class="mono">≈ 11008</td><td>FFN 先升维再降维，中间层约 2.7×H（SwiGLU 门控）</td></tr>
+<tr><td>词表大小 V</td><td class="mono">152000</td><td>模型认识多少个 token</td></tr>
+<tr><td>隐藏维 H</td><td class="mono">4096</td><td>每个 token 被表示成 4096 维向量（模型的"宽度"）</td></tr>
+<tr><td>层数 N</td><td class="mono">32</td><td>decoder block 堆叠 32 层（模型的"深度"）</td></tr>
+<tr><td>注意力头</td><td class="mono">32 头 × 128 维</td><td>32×128 = 4096 = H</td></tr>
+<tr><td>KV 头（GQA）</td><td class="mono">8 组</td><td>8 组 KV 头服务 32 个 Q 头，KV Cache 省 4 倍</td></tr>
+<tr><td>FFN 中间维</td><td class="mono">11008</td><td>先升到 11008 再降回 4096（SwiGLU 门控）</td></tr>
+<tr><td>本例输入</td><td class="mono">S = 6</td><td>「订单有问题，需要退款吗」分词后 6 个 token，batch = 1</td></tr>
 </tbody>
 </table>
-<p>记号约定：<code>B</code> = batch（一次同时处理几条请求），<code>S</code> = seq_len（序列长度），<code>H</code> = hidden_size，<code>V</code> = vocab_size。</p>
+<p>维度字母对照：<code>B</code> = batch（本例 1）、<code>S</code> = 序列长度（本例 6）、<code>H</code> = 隐藏维（本例 4096）、<code>V</code> = 词表（本例 152000）。</p>
 
-<h2>二、总流程：八个阶段</h2>
-<p>先看全景。从一段文本进来，到一个 token 出去，一共八个阶段：</p>
+<h2>二、总流程：八个阶段（带具体数字）</h2>
 
 <div class="mermaid-wrap">
 <div class="mermaid">
@@ -98,29 +103,29 @@ flowchart TD
     classDef out fill:#e6f5ed,stroke:#1a7f4b,color:#155c38,stroke-width:1.5px
 
     T0["原始文本<br/>「订单有问题，需要退款吗」"]:::io
-    S1["① tokenize 分词<br/>文本 → token IDs<br/>形状 [S]，S = 序列长度"]:::stage
-    S2["② 加 batch 维<br/>[S] → [B, S]"]:::stage
-    S3["③ Embedding 查表<br/>词表矩阵 [V, H] 按 ID 取行<br/>形状 [B, S, H]"]:::stage
-    S4["④ N 层 decoder block<br/>每层：注意力 + FFN + 残差<br/>形状 [B, S, H] 进出不变"]:::stage
-    S5["⑤ 最终 RMSNorm<br/>[B, S, H]"]:::stage
-    S6["⑥ LM head 投影<br/>[B, S, H] @ [H, V] → [B, S, V]"]:::stage
-    S7["⑦ 取最后位置 + 采样<br/>[B, V] → 温度 / top-p → 下一个 token"]:::out
-    S8["⑧ 自回归：token 拼回输入<br/>解码阶段每步只进 1 个 token [B, 1, H]<br/>历史 KV 已缓存，无需重算"]:::stage
+    S1["阶段一 · tokenize<br/>切分成 6 个 token<br/>IDs = [1533, 100157, 3493, 11, 2762, 104120]（示意）<br/>形状 [6] → 加 batch 维 [1, 6]"]:::stage
+    S2["阶段二 · Embedding 查表<br/>词表矩阵 [152000, 4096] 按 ID 取 6 行<br/>形状 [1, 6, 4096]"]:::stage
+    S3["阶段三 · 32 层 decoder block<br/>每层：注意力 + FFN + 残差<br/>形状 [1, 6, 4096] 进出不变"]:::stage
+    S4["阶段四 · 最终 RMSNorm<br/>形状 [1, 6, 4096]"]:::stage
+    S5["阶段五 · LM head 投影<br/>[1, 6, 4096] @ [4096, 152000]<br/>logits 形状 [1, 6, 152000]"]:::stage
+    S6["阶段六 · 取最后位置<br/>只要第 6 个位置的打分<br/>[1, 152000]"]:::stage
+    S7["阶段七 · 采样<br/>温度 / top-p → 下一个 token「是」"]:::out
+    S8["阶段八 · 自回归<br/>「是」拼回输入（现在 7 个 token）<br/>解码阶段每步只进 1 个新 token [1, 1, 4096]<br/>历史 KV 已缓存，无需重算"]:::stage
     T0 --> S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7
-    S7 -.->|"生成下一个 token，循环直到结束符"| S4
+    S7 -.->|"循环直到结束符"| S3
 </div>
-<div class="fig-cap">图 1 · 通用大模型一次前向的八个阶段：主数据流形状 [B, S, H] 贯穿始终，只有入口（分词）和出口（LM head）改变形状</div>
+<div class="fig-cap">图 1 · 一条 6 token 请求的完整前向：形状从 [6] 出发，[1, 6, 4096] 穿过 32 层，LM head 投到 [1, 6, 152000]，采样出第 7 个 token</div>
 </div>
 
-<p>几个关键观察：</p>
+<p>三个关键观察：</p>
 <ul>
-<li><strong>入口和出口改形状，中间不改</strong>：tokenize 把文字变成 [S] 的整数序列，embedding 把它升到 [B, S, H]；此后穿过所有层形状都不变，直到最后的 LM head 把 [B, S, H] 投到 [B, S, V]。这就是"残差流"设计的直观体现——主干通道保持恒定宽度，每个子层只做"加工"，加工完加回主干。</li>
-<li><strong>训练与解码的形状不同</strong>：训练时整段文本一次性进来（[B, S, H]，S 是全序列长），并行算所有位置；推理（生成）时用 KV Cache，每步只进 1 个新 token（[B, 1, H]），S 维只有缓存里的历史。</li>
-<li><strong>LM head 是唯一接词表的投影</strong>：[H, V] 的矩阵把 4096 维隐状态映射到 15 万个 token 的打分（logits），这一步计算量和显存都不小，是长序列推理的隐形开销之一。</li>
+<li><strong>入口和出口改形状，中间不改</strong>：tokenize 把文字变成 [6] 的整数序列，embedding 查表升到 [1, 6, 4096]；此后穿过全部 32 层形状不变，直到 LM head 投到 [1, 6, 152000]。残差流设计的直观体现——主干通道恒定宽度，子层只做"加工"，加工完加回主干。</li>
+<li><strong>训练与解码的形状不同</strong>：训练时整段文本一次性进来（本例 [1, 6, 4096]），并行算所有 6 个位置；推理（生成）时用 KV Cache，每步只进 1 个新 token（[1, 1, 4096]），历史 6 个位置的结果都在缓存里。</li>
+<li><strong>LM head 是唯一接词表的投影</strong>：[4096, 152000] 的矩阵一次乘法就是约 37 亿次乘加（6 位置 × 4096 × 152000），长序列下是隐形开销大户。</li>
 </ul>
 
-<h2>三、单层 decoder block 放大：注意力 + FFN + 残差</h2>
-<p>总流程里的第④阶段是模型的主体。把其中<strong>一层</strong>放大看，数据流是这样的：</p>
+<h2>三、单层 decoder block 放大：还是 6 个 token 的例子</h2>
+<p>总流程的阶段三是主体。把其中<strong>一层</strong>放大，看 6 个 token 是怎么被加工的：</p>
 
 <div class="mermaid-wrap">
 <div class="mermaid">
@@ -130,82 +135,81 @@ flowchart TD
     classDef attn fill:#e8f0fe,stroke:#2f6feb,color:#1a4ea8,stroke-width:1.5px
     classDef ffn fill:#e6f5ed,stroke:#1a7f4b,color:#155c38,stroke-width:1.5px
 
-    X["输入 [B, S, H]"]:::io
-    N1["Pre-Norm（RMSNorm）<br/>[B, S, H] 归一化"]:::norm
-    QKV["Q / K / V 线性投影<br/>Q [B,S,H] → 拆成 32 头 [B, 32, S, 128]<br/>K, V → 8 组 KV 头 [B, 8, S, 128]（GQA）"]:::attn
-    SC["注意力分数<br/>scores = Q @ Kᵀ ÷ √128 → [B, 32, S, S]<br/>加因果掩码（只能看前文）→ softmax<br/>probs @ V → [B, 32, S, 128]"]:::attn
-    MG["合并多头 → [B, S, H]<br/>输出投影 [H, H]<br/><b>残差：加回输入 X</b>"]:::attn
-    N2["第二个 RMSNorm<br/>[B, S, H]"]:::norm
-    FFN["FFN（SwiGLU 门控）<br/>升维 [B, S, 11008] × 2（gate / up）<br/>SiLU(gate) × up → 降维回 [B, S, H]<br/><b>残差：加回子层输入</b>"]:::ffn
-    O["输出 [B, S, H]<br/>交给下一层，重复 N 次"]:::io
+    X["输入 [1, 6, 4096]"]:::io
+    N1["RMSNorm（Pre-Norm）<br/>[1, 6, 4096]"]:::norm
+    QKV["Q / K / V 线性投影<br/>Q [1, 6, 4096] @ [4096, 4096] → 拆 32 头 [1, 32, 6, 128]<br/>K, V @ [4096, 1024] → 8 组头 [1, 8, 6, 128]（GQA）"]:::attn
+    SC["注意力分数<br/>scores = Q @ Kᵀ ÷ √128 → [1, 32, 6, 6]<br/>因果掩码（第 3 个 token 看不到第 5 个）→ softmax<br/>probs @ V → [1, 32, 6, 128]"]:::attn
+    MG["合并 32 头 → [1, 6, 4096]<br/>输出投影 [4096, 4096]<br/><b>残差：加回输入 X</b>"]:::attn
+    N2["第二个 RMSNorm<br/>[1, 6, 4096]"]:::norm
+    FFN["FFN（SwiGLU 门控）<br/>[1, 6, 4096] 升维到 [1, 6, 11008] × 2（gate / up）<br/>SiLU(gate) × up → 降维回 [1, 6, 4096]<br/><b>残差：加回子层输入</b>"]:::ffn
+    O["输出 [1, 6, 4096]<br/>交给下一层，共重复 32 次"]:::io
     X --> N1 --> QKV --> SC --> MG --> N2 --> FFN --> O
 </div>
-<div class="fig-cap">图 2 · 单层 decoder block 内部：紫色为归一化，蓝色为注意力，绿色为 FFN；两个残差把子层输出加回主干，主干形状始终 [B, S, H]</div>
+<div class="fig-cap">图 2 · 单层 decoder block：紫色归一化、蓝色注意力、绿色 FFN；两个残差把子层输出加回主干，主干形状始终 [1, 6, 4096]</div>
 </div>
 
-<h3>1. 注意力部分：形状怎么变</h3>
-<p>注意力是唯一让 token 之间"互相看"的地方，也是形状变化最多的地方：</p>
+<h3>1. 注意力部分：6 个 token 怎么互相看</h3>
 <table>
 <thead><tr><th>步骤</th><th>运算</th><th>形状</th></tr></thead>
 <tbody>
-<tr><td>Q 投影</td><td class="mono">[B, S, H] @ [H, H]</td><td class="mono">[B, S, H] → 拆头 [B, 32, S, 128]</td></tr>
-<tr><td>K / V 投影（GQA）</td><td class="mono">[B, S, H] @ [H, 1024]</td><td class="mono">[B, 8, S, 128]（只有 8 组头）</td></tr>
-<tr><td>分数</td><td class="mono">Q @ Kᵀ ÷ √128</td><td class="mono">[B, 32, S, S]</td></tr>
-<tr><td>掩码 + softmax</td><td class="mono">逐行归一化</td><td class="mono">[B, 32, S, S]（因果掩码后上三角为 0）</td></tr>
-<tr><td>加权求和</td><td class="mono">probs @ V</td><td class="mono">[B, 32, S, 128]</td></tr>
-<tr><td>合并多头</td><td class="mono">32 × 128 → H</td><td class="mono">[B, S, H]</td></tr>
+<tr><td>Q 投影</td><td class="mono">[1, 6, 4096] @ [4096, 4096]</td><td class="mono">[1, 6, 4096] → 拆头 [1, 32, 6, 128]</td></tr>
+<tr><td>K / V 投影（GQA）</td><td class="mono">[1, 6, 4096] @ [4096, 1024]</td><td class="mono">[1, 8, 6, 128]（只有 8 组头）</td></tr>
+<tr><td>分数</td><td class="mono">Q @ Kᵀ ÷ √128</td><td class="mono">[1, 32, 6, 6]</td></tr>
+<tr><td>掩码 + softmax</td><td class="mono">因果掩码逐行归一化</td><td class="mono">[1, 32, 6, 6]（6×6 的"谁能看谁"表）</td></tr>
+<tr><td>加权求和</td><td class="mono">probs @ V</td><td class="mono">[1, 32, 6, 128]</td></tr>
+<tr><td>合并多头</td><td class="mono">32 头 × 128 → 4096</td><td class="mono">[1, 6, 4096]</td></tr>
 </tbody>
 </table>
-<p>两个易混点：<strong>①</strong> [B, 32, S, 128] 里的 32 是"头的维度"，和 S 没关系——每个头独立看完整序列，各自输出 128 维；<strong>②</strong> GQA 下 K/V 只有 8 组头，Q 的 32 个头分组共享同一组 K/V（每 4 个 Q 头共用 1 组），分数矩阵依然是 [B, 32, S, S]，只是 K/V 的存储省了 4 倍。</p>
+<p>两个易混点：<strong>①</strong> [1, 32, 6, 128] 里的 32 是"头的维度"——6 个 token 各自被 32 个头分别表示成 128 维，和序列长度无关；<strong>②</strong> [1, 32, 6, 6] 的注意力分数是 6×6 的小方阵：第 i 行第 j 列表示"第 i 个 token 对第 j 个 token 的关注程度"，因果掩码把 j&gt;i 的格子置 −∞（未来的内容不许看）。GQA 下 K/V 只有 8 组头，Q 的 32 个头每 4 个一组共用，分数矩阵依然是 [1, 32, 6, 6]，只是 K/V 存储省了 4 倍。</p>
 
 <h3>2. FFN 部分：升维、门控、降维</h3>
-<p>FFN（前馈网络）不和 token 之间交互，只对每个位置独立做"加深加工"：<code>[B, S, H]</code> 先升到 <code>[B, S, 11008]</code>，经过 SwiGLU 门控（两个矩阵一个过 SiLU 激活当"门"、一个当"值"，相乘），再降回 <code>[B, S, H]</code>。参数量上 FFN 约占整层的三分之二，是大模型参数的主要存放地。</p>
+<p>FFN 不做 token 之间的交互，只对每个位置独立"加深加工"：<code>[1, 6, 4096]</code> 先升到 <code>[1, 6, 11008]</code>（SwiGLU 有 gate / up 两份），SiLU(gate) × up 逐元素相乘后再降回 <code>[1, 6, 4096]</code>。参数量上 FFN 约占整层的三分之二，是大模型参数的主要存放地。</p>
 
 <h3>3. 残差连接：形状不变的秘密</h3>
-<p>每个子层（注意力、FFN）的输出都会<strong>加回它的输入</strong>：<code>output = x + sublayer(norm(x))</code>。这就是主干形状恒为 [B, S, H] 的原因——子层可以随便加工，主干始终保留原始信息通道。没有残差，几十层堆叠梯度根本传不回去。</p>
+<p>每个子层的输出都会<strong>加回它的输入</strong>：<code>output = x + sublayer(norm(x))</code>。这就是主干形状恒为 [1, 6, 4096] 的原因——子层随便加工，主干始终保留原始信息通道。没有残差，32 层堆叠梯度根本传不回去。</p>
 
 <h2>四、解码阶段与 KV Cache：为什么长上下文贵</h2>
-<p>生成阶段的每一步只处理 1 个新 token，但注意力需要"回看"所有历史位置。为避免重算，每层把历史 K/V 缓存下来：</p>
+<p>第 6 个位置采样出「是」之后开始自回归。每步只进 1 个新 token，但注意力需要"回看"全部历史，所以每层把历史 K/V 缓存下来：</p>
 <ul>
-<li>每层缓存的形状：<code>K, V = [B, 8, S, 128]</code>（GQA 8 组头）；</li>
-<li>每 token 每层的 KV 元素数：2（K+V）× 8 × 128 = <strong>2048 个元素</strong>；</li>
+<li>每层缓存的形状：<code>K, V = [1, 8, S, 128]</code>（S 是当前总长度，GQA 8 组头）；</li>
+<li>每 token 每层的 KV 元素数：2（K+V）× 8 头 × 128 维 = <strong>2048 个元素</strong>；</li>
 <li>fp16 存储（2 字节）→ <strong>4KB / token / 层</strong>；32 层合计 <strong>128KB / token</strong>；</li>
-<li>一条 32K 上下文的请求：32,000 × 128KB ≈ <strong>4GB</strong>——仅仅是 KV Cache。</li>
+<li>本例 6 个 token 的前缀：6 × 128KB ≈ <strong>768KB</strong>——很小；但 32K 上下文的请求：32,000 × 128KB ≈ <strong>4GB</strong>，这就是长上下文贵的原因。</li>
 </ul>
-<div class="warn"><strong>这就是长上下文贵的根源：</strong>KV Cache 随序列长度线性增长、随 batch 倍增。站内另外两篇文章讲的正是压它的一套方案——<a href="DeepSeek-V4.1-Flash推理加速解读.html" style="color:var(--accent)">DeepSeek-V4.1-Flash 推理加速解读</a>（CED 层切分 + CSA2 跨层共享）与<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:var(--accent)">CED + CSA2 复现代码检视</a>。</div>
+<div class="warn"><strong>KV Cache 随序列长度线性增长、随 batch 倍增。</strong>站内另外两篇文章讲的正是压它的一套方案——<a href="DeepSeek-V4.1-Flash推理加速解读.html" style="color:var(--accent)">DeepSeek-V4.1-Flash 推理加速解读</a>（CED 层切分 + CSA2 跨层共享）与<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:var(--accent)">CED + CSA2 复现代码检视</a>。</div>
 
-<h2>五、完整形状流转总表</h2>
+<h2>五、完整形状流转总表（本例 S=6，B=1）</h2>
 <table>
-<thead><tr><th>阶段</th><th>张量</th><th>形状</th><th>维度含义</th></tr></thead>
+<thead><tr><th>阶段</th><th>张量</th><th>形状</th><th>维度含义（字母对照）</th></tr></thead>
 <tbody>
-<tr><td>① tokenize</td><td>token IDs</td><td class="mono">[S]</td><td>S 个整数</td></tr>
-<tr><td>② 加 batch</td><td>token IDs</td><td class="mono">[B, S]</td><td>B 条请求 × S 个位置</td></tr>
-<tr><td>③ embedding</td><td>初始 hidden</td><td class="mono">[B, S, H]</td><td>每位置一个 H 维向量</td></tr>
-<tr class="hl-row"><td>④ ×N 层 block</td><td>层输出</td><td class="mono">[B, S, H]</td><td>形状不变，语义逐层加深</td></tr>
-<tr><td>④-a Q 拆头</td><td>query</td><td class="mono">[B, 32, S, 128]</td><td>B×头×位置×头维</td></tr>
-<tr><td>④-b K/V（GQA）</td><td>key / value</td><td class="mono">[B, 8, S, 128]</td><td>8 组 KV 头</td></tr>
-<tr><td>④-c 分数</td><td>scores</td><td class="mono">[B, 32, S, S]</td><td>每头每位置对全序列的打分</td></tr>
-<tr><td>④-d FFN 中间</td><td>gate / up</td><td class="mono">[B, S, 11008]</td><td>升维后的门控表示</td></tr>
-<tr><td>⑤ 最终 norm</td><td>最终 hidden</td><td class="mono">[B, S, H]</td><td>深层语义向量</td></tr>
-<tr><td>⑥ LM head</td><td>logits</td><td class="mono">[B, S, V]</td><td>每位置对全词表的打分</td></tr>
-<tr><td>⑦ 取最后位</td><td>logits</td><td class="mono">[B, V]</td><td>只取最后一个位置的打分</td></tr>
-<tr><td>⑧ 采样</td><td>next token</td><td class="mono">标量</td><td>温度 / top-p 采样出一个 ID</td></tr>
+<tr><td>① tokenize</td><td>token IDs</td><td class="mono">[6]</td><td>S = 6 个整数</td></tr>
+<tr><td>② 加 batch</td><td>token IDs</td><td class="mono">[1, 6]</td><td>B = 1 条请求</td></tr>
+<tr><td>③ embedding</td><td>初始 hidden</td><td class="mono">[1, 6, 4096]</td><td>H = 4096 维向量</td></tr>
+<tr class="hl-row"><td>④ ×32 层 block</td><td>层输出</td><td class="mono">[1, 6, 4096]</td><td>形状不变，语义逐层加深</td></tr>
+<tr><td>④-a Q 拆头</td><td>query</td><td class="mono">[1, 32, 6, 128]</td><td>32 头 × 6 位置 × 128 头维</td></tr>
+<tr><td>④-b K/V（GQA）</td><td>key / value</td><td class="mono">[1, 8, 6, 128]</td><td>8 组 KV 头</td></tr>
+<tr><td>④-c 分数</td><td>scores</td><td class="mono">[1, 32, 6, 6]</td><td>6×6 的"谁看谁"方阵</td></tr>
+<tr><td>④-d FFN 中间</td><td>gate / up</td><td class="mono">[1, 6, 11008]</td><td>升维后的门控表示</td></tr>
+<tr><td>⑤ 最终 norm</td><td>最终 hidden</td><td class="mono">[1, 6, 4096]</td><td>深层语义向量</td></tr>
+<tr><td>⑥ LM head</td><td>logits</td><td class="mono">[1, 6, 152000]</td><td>6 个位置各 152000 个打分</td></tr>
+<tr><td>⑦ 取最后位</td><td>logits</td><td class="mono">[1, 152000]</td><td>只看第 6 个位置</td></tr>
+<tr><td>⑧ 采样</td><td>next token</td><td class="mono">标量</td><td>采出「是」，拼回输入进下一轮</td></tr>
 </tbody>
 </table>
 
 <h2>六、常见易混点</h2>
 <ul>
-<li><strong>[B, S, H] vs [B, S, S]</strong>：前者是每个位置的表示（3 维里 S 是"有多少个位置"），后者是注意力分数（S×S 是"每个位置看所有位置"）。长序列下 [B, 32, S, S] 的显存是平方增长的，这也是长序列要用 FlashAttention / 稀疏注意力的原因；</li>
-<li><strong>拆头的两种写法</strong>：[B, S, H] → [B, 头数, S, 头维]（主流实现，先按头分组）或 [B, S, 头数, 头维] → 转置，读源码时注意 permute / transpose 出现的位置；</li>
-<li><strong>训练看 [B, S, V]，推理只看 [B, V]</strong>：训练时 S 个位置的 logits 都要算 loss；生成时只关心最后一个位置的打分；</li>
+<li><strong>[1, 6, 4096] vs [1, 32, 6, 6]</strong>：前者是每个位置的表示（6 个位置 × 4096 维），后者是注意力分数（每头一张 6×6 的"谁看谁"表）。序列长了后者平方增长——32K 序列时是 [1, 32, 32768, 32768]，必须 FlashAttention / 稀疏注意力才能装下；</li>
+<li><strong>拆头的两种写法</strong>：[1, 6, 4096] → [1, 32, 6, 128]（主流，先按头分组）或 [1, 6, 32, 128] 再转置，读源码时注意 permute / transpose 出现的位置；</li>
+<li><strong>训练看 [1, 6, 152000]，推理只看 [1, 152000]</strong>：训练时 6 个位置的 logits 都要算 loss；生成时只关心最后一个位置；</li>
 <li><strong>Pre-Norm vs Post-Norm</strong>：现代模型几乎都是 Pre-Norm（先归一化再进子层），残差通道更干净、深层训练更稳；</li>
 <li><strong>混合架构的差异</strong>：不是每层的"注意力"都是全注意力——如 Qwen3.5 系列大部分层是 Gated DeltaNet 线性注意力，只有少数层是全注意力，但"形状进出不变"的规律不变。</li>
 </ul>
 
 <h2>七、本篇版本与更新计划</h2>
-<div class="warn"><strong>基础篇 v1（2026-09-26）：</strong>本篇是基础参考知识的第一版，先搭通"形状流转"的主线，后续计划补充：注意力变体（MQA / MLA / NSA）的形状对比、MoE 层的形状与路由、位置编码（RoPE）在哪个维度起作用、多模态输入的形状拼接等。有想看的主题欢迎指出。</div>
+<div class="warn"><strong>基础篇 v1.1（2026-09-26）：</strong>本篇是基础参考知识的第一版，先搭通"具体数字形状流转"的主线，后续计划补充：注意力变体（MQA / MLA / NSA）的形状对比、MoE 层的形状与路由、位置编码（RoPE）在哪个维度起作用、多模态输入的形状拼接、不同序列长度下的显存速查表等。有想看的主题欢迎指出。</div>
 
-<footer class="end">通用 decoder-only 架构 · 形状流转主线 · 基础篇 v1 · 2026-09-26</footer>
+<footer class="end">通用 decoder-only 架构 · 6 token 实例形状流转 · 基础篇 v1.1 · 2026-09-26</footer>
 </div>
 
 <script>
