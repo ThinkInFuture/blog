@@ -183,8 +183,8 @@
       <p><b>是什么</b>：每步起草的 token 数。GLM-5.1-198k 用 3、DSV32-MTP2 用 2、A5 GLM-5.2 两份脚本都用 5。</p>
       <p><b>深入</b>：越大潜在加速越多，但 draft 变差时浪费越多；同时 max_num_scheduled_tokens 会被压（日志有提示行）。</p>
       <p><b>调优</b>：3 是常用值；AIME 精度评估下接受率可在日志/spec_decode_metrics 中观察。</p>
-      <p class="src">源码：<a href="../vllm-ascend-main/vllm_ascend/spec_decode/mtp.py">mtp.py</a> ·
-      <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/spec_decode/mtp.py">GitHub</a></p>
+      <p class="src">源码：<a href="../vllm-ascend-main/vllm_ascend/models/deepseek_mtp.py">deepseek_mtp.py</a> ·
+      <a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/models/deepseek_mtp.py">GitHub</a></p>
     </div>
     <div class="param">
       <h4><code>enforce_eager</code>（speculative-config 内）—— draft 强制 eager</h4>
