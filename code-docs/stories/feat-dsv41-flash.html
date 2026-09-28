@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>需求故事 · DeepSeek V4.1-Flash 登陆昇腾：框架支持与 Engram 主机卸载 - vLLM Ascend</title>
+<link rel="stylesheet" href="../assets/highlight/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root { --accent:#667eea; --text:#333; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f5f7fa; color:var(--text); line-height:1.7; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.nav { background:#fff; border-radius:12px; padding:12px 24px; margin-bottom:24px; box-shadow:0 2px 10px rgba(0,0,0,.05); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+.nav a { color:#666; text-decoration:none; padding:5px 12px; border-radius:8px; font-size:.88rem; }
+.nav a:hover { background:var(--accent); color:#fff; }
+h1 { font-size:1.55rem; margin:6px 0 4px; }
+h2 { font-size:1.25rem; margin:28px 0 12px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:18px 0 8px; color:#4a5fc1; }
+.subtitle { color:#666; margin-bottom:20px; font-size:.95rem; }
+.card { background:#fff; border-radius:12px; padding:18px 22px; margin:14px 0; box-shadow:0 2px 10px rgba(0,0,0,.05); }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.8rem; font-weight:bold; margin-right:6px; }
+.b-purple { background:#f0e3ff; color:#8250df; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 6px; }
+.guide { background:#f0f4ff; border-left:4px solid #667eea; padding:10px 16px; border-radius:8px; margin:10px 0; font-size:.92rem; }
+.legend { background:#fafafa; border:1px dashed #d0d7de; padding:8px 14px; border-radius:8px; margin:10px 0; font-size:.88rem; color:#555; }
+.mermaid { overflow-x:auto; padding-bottom:4px; }
+pre { background:#f6f8fa; border-radius:8px; padding:14px 16px; overflow-x:auto; line-height:1.5; font-size:.85rem; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#eef1f5; color:#be5026; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; }
+th, td { border:1px solid #e3e8ef; padding:7px 10px; font-size:.88rem; text-align:left; vertical-align:top; }
+th { background:#f0f2fb; }
+footer { text-align:center; color:#999; padding:26px; font-size:.82rem; }
+.linklist li { margin:6px 0; }
+.linklist a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="nav">
+    <a href="../index.html">← 架构总览</a>
+    <span style="color:#999;font-size:.85rem;">需求故事 · 一个 HTML 讲清一个需求</span>
+    <a href="stories.html">需求故事目录</a>
+</div>
+
+<h1>DeepSeek V4.1-Flash 登陆昇腾：框架支持与 Engram 主机卸载</h1>
+<p class="subtitle">
+<span class="badge b-purple">DeepSeek V4.1-Flash</span>
+<span class="badge b-green">已合入 main</span>
+PR <a href="https://github.com/vllm-project/vllm-ascend/pull/16925" target="_blank" style="color:#667eea;">#16925</a> · commit 0deca3181 · 2026-09-21 合入 · 73 文件 +10554/-665 · 代码基线 a71b766ce</p>
+
+<h2>一、背景：DeepSeek 发了个新模型，昇腾为什么跑不动</h2>
+<div class="card">
+<p>2026-09-10，DeepSeek 发布 <a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash" target="_blank">DeepSeek-V4.1-Flash</a>：
+552B 参数 MoE（每 token 激活 prefill 8B / decode 16B），训练 64K 稀疏注意力、外推 <strong>1M 上下文</strong>。
+它的主线思路是把 KV Cache 压到极限，靠三件新架构武器：</p>
+<table>
+<tr><th style="width:16%;">武器</th><th>一句话</th><th style="width:24%;">关键数字</th></tr>
+<tr><td><strong>CED</strong><br/>因果编码器-解码器</td><td>解码器的全局 KV 不由自己的 20 层逐层产生——输入先过 <strong>20 层因果编码器</strong>，再由<strong>末端隐状态一次性投影</strong>出解码器要用的全局 KV</td><td>持久 KV ≈ V4-Flash 的 <strong>1/8</strong></td></tr>
+<tr><td><strong>CSA2</strong><br/>压缩稀疏注意力 2</td><td>每层静态分派 Full / Reindex / Reuse 三种模式，跨层<strong>共享主 KV 与索引 K、复用 Top-K 索引</strong>；主 KV 用 FP4 存</td><td>全局 KV <strong>890 B/token</strong></td></tr>
+<tr><td><strong>Engram</strong><br/>条件记忆</td><td>196B 参数的<strong>稀疏查表记忆</strong>：token 哈希命中才注入隐状态，不命中不花访存</td><td>按需访问，不全驻显存</td></tr>
+</table>
+<p>三者相乘，得到 <strong>890 字节/token 的全局 KV + 1M 上下文</strong>。上游 vLLM main 已带 V4.1 模型实现
+（<a href="https://github.com/vllm-project/vllm/commit/84030bbe3d74d99bad477a3d2e37a973ccd8865c" target="_blank">vllm commit 84030bbe</a>）——
+<strong>但昇腾一处都跑不动</strong>。</p>
+</div>
+<div class="guide"><strong>读图指引</strong>：下面这张图回答一个问题——请求进来后，第一个断点在哪？
+看那四条带 <strong>✗</strong> 的虚线：注意力后端、缓存分配、Engram 存储、DSpark 注册，
+每一处都是"上游要、昇腾没有"。改动前四条全断（本图）；改动后四条全通（图3）。</div>
+<div class="fig-caption">图1 · 改动前：V4.1-Flash 在昇腾上的四个断点</div>
+<div class="mermaid">
+sequenceDiagram
+    participant U as 用户 vllm serve V4.1-Flash
+    participant V as 上游 vLLM（V4.1 模型代码）
+    participant A as vllm-ascend 平台层
+    U->>V: 加载模型与配置（上游已支持）
+    V->>A: 请求 V4.1 注意力后端
+    A--xV: ✗ 无 dsa_v41 后端
+    V->>A: 请求压缩/共享 KV 分配
+    A--xV: ✗ 无四槽层外置分配器
+    V->>A: 初始化 Engram 条件记忆
+    A--xV: ✗ 无 Engram 存储/主机卸载
+    V->>A: 注册 DSpark 草稿模型
+    A--xV: ✗ 无 V4.1 DSpark 适配
+    V--xU: 启动失败（前次合入已被回退）
+</div>
+
+<h2>二、前史：这个需求为什么是第二次提交</h2>
+<div class="card">
+<p>它不是一次成功的普通 PR。<a href="https://github.com/vllm-project/vllm-ascend/pull/16544" target="_blank">#16544</a>
+曾把完整框架集成首次合入，但与当周 main 产生集成冲突，被
+<a href="https://github.com/vllm-project/vllm-ascend/pull/16905" target="_blank">#16905</a> 回退——
+于是有了图1 里"改了却又没有"的空窗期。</p>
+</div>
+<div class="guide"><strong>读图指引</strong>：这张图回答"这个 PR 为什么看着眼熟"。看两条汇入线：
+二次提交不是简单 revert 重放，而是踩着<strong>已合入的原生算子（#16422）与环形缓冲状态（#16890）</strong>这两块地基重新长出来。</div>
+<div class="fig-caption">图2 · 从回退到重新合入：两条地基线汇入二次提交</div>
+<div class="mermaid">
+graph TD
+    A["#16544 首次合入（完整框架集成）"] --> B["与当周 main 集成冲突"]
+    B --> C["#16905 回退"]
+    D["#16422 原生算子先行合入"] --> E["#16925 基于地基重新提交"]
+    F["#16890 环形缓冲状态"] --> E
+    C --> E
+    E --> G["09-21 合入 main ✅ commit 0deca3181"]
+</div>
+<div class="card">
+<p><strong>能二次成功的关键</strong>：把大特性拆成"算子先行 → 框架跟上"两步走，二次提交只做框架集成、对齐当周 main、重建回归测试。
+这也是这个 PR 体积高达 73 文件的原因——框架层一次补齐。</p>
+</div>
+
+<h2>三、诉求与方案：在 A3 上完整跑起来，五件套补齐</h2>
+<div class="card">
+<p><strong>诉求</strong>不是"能 import"，而是教程里的完整部署形态：<strong>A3 双机 16 卡（DP4×TP8+EP）、
+1M 上下文、block 128、W8A8 权重</strong>，能出 token、能开全量解码图、能跑 DSpark 投机
+（<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md" target="_blank">教程</a>）。
+这决定了改动必然横跨模型、注意力、缓存、算子、Runner 五层——即"五件套"：</p>
+<table>
+<tr><th style="width:18%;">件</th><th style="width:36%;">载体</th><th>干什么</th></tr>
+<tr><td>注意力执行边界</td><td><code>attention/dsa_v41.py</code>（1098 行）</td><td>每层的三阶段执行：双流预处理 → 索引选择 → 双阶段稀疏注意力</td></tr>
+<tr><td>模型与缓存</td><td><code>models/deepseek_v41/</code>（12 文件）</td><td>拓扑层规划、MoE/视觉、四槽页分配、压缩环形缓冲</td></tr>
+<tr><td>条件记忆</td><td><code>models/deepseek_v41/engram/</code>（7 文件）</td><td>Engram 的 HBM 存储 + CPU 主机卸载 + 跨 DP 副本共享</td></tr>
+<tr><td>投机解码</td><td><code>models/deepseek_v41/dspark.py</code> + spec_decode</td><td>DSpark 草稿模型，复用目标侧共享 SWA KV</td></tr>
+<tr><td>平台接线</td><td><code>patch/</code> + <code>worker/model_runner_v1.py</code>（+254 行）</td><td>上游 config 注入、Engram 前向元数据、图输入定址</td></tr>
+</table>
+<h3>核心改动 3 项（★ 没有它会怎样）</h3>
+<table>
+<tr><th style="width:40%;">★ 改动</th><th>没有它会怎样</th></tr>
+<tr><td>★ 新增 <code>attention/dsa_v41.py</code></td><td>注意力请求第一步就查无后端——图1 的第 1 个断点原样保留，服务起不来</td></tr>
+<tr><td>★ 新增 <code>models/deepseek_v41/</code>（model.py 1647 行为主）</td><td>上游 V4.1 权重在昇腾上没有可执行载体：拓扑规划、MoE、Engram 注入、视觉全无</td></tr>
+<tr><td>★ 新增 <code>models/deepseek_v41/cache_config.py</code>（163 行）</td><td>KV、索引 K、FP16 scale、滑窗四类缓存各自为战争抢显存——四槽"同页打包、一个块 ID 定位"的布局无从谈起</td></tr>
+</table>
+<h3>配套改动（7 项）</h3>
+<ul>
+<li><code>engram/</code> 七文件：<code>HostUvaBuffer</code> 钉住内存（UVA，统一虚拟寻址：主机内存可被设备直接寻址）+ Triton INT8 融合查表 + 跨 DP 共享</li>
+<li><code>dspark.py</code>（583 行）：DSpark 草稿模型，<code>_store_standard_swa_kv</code> 复用共享滑窗缓存</li>
+<li><code>indexer.py</code>（227 行）：接入 QLI V3 算子（QLI = Quantized Lightning Indexer，量化闪电索引器：用 INT8 的 Q/K 给每个 token 挑出值得读的 Top-K 位置）</li>
+<li><code>attention/context_parallel/dsa_v41_cp.py</code>（240 行）：CP（Context Parallel，上下文并行）下复制缓存先行更新</li>
+<li><code>model_runner_v1.py</code>：Engram 前向元数据、lookback 窗口、定长图输入地址</li>
+<li><code>patch/platform/</code> 三件：Engram / DSpark / KV 布局的 config 注入</li>
+<li>压缩环形缓冲（<code>compressor.py</code>）、QLI Triton 预热、ModelSlim W8A8 配置、9 个 UT 文件、484 行教程</li>
+</ul>
+</div>
+
+<h2>四、实现：先看执行链路，再读三段代码</h2>
+<div class="guide"><strong>读图指引</strong>：这张图回答"一个解码器层在昇腾上到底经过哪几步"。
+loop 里的五步其实是<strong>三个阶段</strong>（图中色块）：①预处理——Q 投影与 KV 写入<strong>双流并行</strong>；
+②索引选择——QLI V3 给每个 token 挑 Top-K 位置（候选三模式）；
+③稀疏注意力——SparseFlashMla 滑窗一遍 + 压缩全局一遍。
+层外的 Engram（命中注入）与 DSpark（草稿投机）是旁路，不占层内关键路径。</div>
+<div class="fig-caption">图3 · 改动后：一个解码器层的昇腾执行链路（三阶段）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant R as ModelRunnerV1
+    participant M as DeepseekV41Model
+    participant I as AscendDSAV41Impl
+    participant K as AscendC 算子
+    R->>M: prepare_engram：设备端哈希+查表
+    M->>M: Engram 命中注入隐状态
+    loop 每个解码器层
+        rect rgb(238,242,255)
+            note over I,K: 阶段① 预处理
+            I->>K: 双流预处理：Q 投影∥KV Cube
+        end
+        rect rgb(238,248,240)
+            note over I,K: 阶段② 索引选择
+            I->>K: QLI V3（候选三模式）
+        end
+        rect rgb(255,242,238)
+            note over I,K: 阶段③ 稀疏注意力
+            I->>K: SparseFlashMla：SWA+压缩双阶段
+            I->>I: 逆 RoPE → o_proj（图稳定缓冲）
+        end
+    end
+    M->>M: 末层 hc_collapse（超连接收束）
+    R->>R: DSpark 复用共享 SWA KV 投机
+</div>
+<div class="legend"><strong>代码注释符号约定</strong>：⚡ = 昇腾特有的优化点　|　↳ = 承接上游/模型侧既有约定　|　→NPU = 调用昇腾自研 AscendC 算子。<br/>
+三段代码按 <strong>"先规划 → 再分配 → 再执行"</strong> 的顺序读。</div>
+
+<div class="fig-caption">代码 A（规划）· build_layer_plan：跨层共享拓扑（models/deepseek_v41/model.py:494，摘录自 a71b766ce）</div>
+<div class="guide"><strong>看这段代码，只需抓一个点</strong>：每层的"KV/索引从哪来、要不要候选过滤"，在启动时就<strong>静态算死</strong>了——
+原注释说得很直白：26 层复用 24 层 TopK，而 TopK 又是在 20 层候选块内算的。</div>
+<pre><code class="language-python">    roles.append(
+        DeepseekV41LayerRole(
+            layer_idx=layer_idx,
+            compress_ratio=ratio,
+            kv_source=...,  # ↳ 该层全局 KV 来自哪个源层（CED：解码器 KV 由编码器源层投影）
+            index_source=...,  # ↳ 该层稀疏索引来自哪个索引源层（跨层共享 TopK）
+            is_candidate_source=layer_idx == candidate_source,  # ⚡分层索引器：候选池只由首个 Full 层构建
+            # Consumer layers inherit the selection policy of their index
+            # source.  For example, layer 26 reuses layer 24 TopK, and that
+            # TopK was computed inside layer 20's candidate blocks.  ← 原注释
+            uses_candidate_filter=index_source is not None and index_source &gt; candidate_source,
+            engram_slot=engram_slots.get(layer_idx),  # ↳ 该层是否挂 Engram 条件记忆注入
+        )
+    )
+</code></pre>
+
+<div class="fig-caption">代码 B（分配）· get_layer_tuples：四槽层外置，KV/索引 K/scale 同页打包（models/deepseek_v41/cache_config.py:47，摘录）</div>
+<div class="guide"><strong>看这段代码，只需抓一个点</strong>：物理页容量 = 槽内最大成员——
+全局 KV、索引 K、FP16 scale、滑窗/状态环<strong>同页打包</strong>，调度器的一个块 ID 同时定位四类缓存。</div>
+<pre><code class="language-python">def get_layer_tuples(specs):
+    &quot;&quot;&quot;Return DSV4-style ordered layer tuples and their physical page sizes.&quot;&quot;&quot;
+    mla = {name for name, spec in specs.items() if isinstance(spec, AscendMLAAttentionSpec)}
+    state = sorted((name for name, spec in specs.items() if isinstance(spec, CircularBufferSpec)), key=_layer_number)
+    swa = {name for name, spec in specs.items() if isinstance(spec, AscendSlidingWindowMLASpec)}
+    ...
+    for slot_idx, kv_name in enumerate(full):
+        prefix = kv_name.rsplit(&quot;.&quot;, 1)[0]
+        index_name = prefix + &quot;.indexer.k_cache&quot;  # ⚡索引器 K 缓存与全局 KV 同槽配对
+        index_spec = specs[index_name]
+        kv_spec = specs[kv_name]
+        aliases = ([state[slot_idx]] if slot_idx &lt; len(state) else []) + target_swa[slot_idx :: len(full)]
+        kv_bytes = kv_spec.unpadded_page_size_bytes
+        index_bytes = index_spec.unpadded_page_size_bytes
+        ...
+        capacity = max(  # ⚡页容量=槽内最大成员：索引 K 与 FP16 scale 排在 KV 之后同页（压缩比2：64 行/131072B；压缩比1：128 行/147712B）
+            kv_bytes + index_bytes,
+            *(specs[name].unpadded_page_size_bytes for name in aliases),
+        )
+        layer_tuples.append((kv_name, index_name, *aliases))  # ⚡一个块 ID 同时定位四类缓存（层外置）
+        page_sizes.append(capacity)
+    return page_sizes, layer_tuples
+</code></pre>
+
+<div class="fig-caption">代码 C（执行）· AscendDSAV41Impl.forward：三阶段串起来（attention/dsa_v41.py:538，摘录）</div>
+<div class="guide"><strong>看这段代码，只需抓一个点</strong>：Q 投影与 KV 写入是<strong>双流并行</strong>的（⚡那一行，即图3 阶段①）；
+随后的两步依次落在阶段②（<code>_select_sparse_indices</code>）和阶段③（<code>npu_sparse_flash_mla</code>），其余都是收尾。</div>
+<pre><code class="language-python">def forward(self, attn, positions, hidden_states, output: torch.Tensor | None = None):
+    # ↳ 自定义算子调用方传入图稳定输出缓冲：O 投影结果直写，免去图边界的整张拷贝（⚡昇腾图优化）
+    if output is None:
+        output = torch.empty_like(hidden_states)
+    forward_context = get_forward_context()
+    if forward_context.attn_metadata is None:
+        output.zero_()  # ↳ dummy 前向（剖析/捕获期）直接清零返回
+        return output
+    metadata = self._get_layer_metadata(forward_context.attn_metadata)
+    self._prepare_inputs_and_caches(attn, hidden_states, metadata, forward_context.attn_metadata)
+    num_tokens = metadata.swa.num_actual_tokens
+    if num_tokens:
+        positions = metadata.positions[:num_tokens]
+        cos, sin = metadata.rope(attn.rotary_emb.layername, num_tokens)
+        q, qr = self._prepare_queries(attn, hidden_states, positions, cos, sin, metadata)  # ⚡阶段①：双流 Q 投影∥KV Cube
+        compressed_indices = self._select_sparse_indices(attn, hidden_states, qr, positions, cos, sin, metadata)  # ⚡阶段②：QLI V3 候选三模式
+        attention_output = self._forward_attention(attn, q, metadata, compressed_indices)  # →NPU 阶段③：SparseFlashMla 双阶段
+        torch.ops._C_ascend.inplace_partial_rotary_mul(  # →NPU：输出侧逆 RoPE 原地完成，不落临时张量
+            attention_output.unsqueeze(1),
+            cos,
+            -sin,
+            rotary_mode=&quot;interleave&quot;,
+            partial_slice=[attn.nope_head_dim, attn.head_dim],
+        )
+    else:
+        heads = attn.n_heads if getattr(attn, &quot;enable_dsa_cp&quot;, False) else attn.n_local_heads
+        attention_output = hidden_states.new_empty((0, heads, attn.head_dim))
+    self._project_output(attn, attention_output, hidden_states, metadata, projected=output)
+    return output
+</code></pre>
+
+<h2>五、后续：三个跟进 PR 与部署形态</h2>
+<div class="card">
+<table>
+<tr><th style="width:14%;">跟进 PR</th><th>改了什么</th><th>为什么</th></tr>
+<tr><td><a href="https://github.com/vllm-project/vllm-ascend/pull/17116" target="_blank">#17116</a></td><td>只在 vLLM 0.29 以上的版本通道注册 V4.1 与其 DSpark</td><td>v0.29 缺上游 V4.1 config/model 模块，import 即失败，连非 V4.1 模型都被拖垮</td></tr>
+<tr><td><a href="https://github.com/vllm-project/vllm-ascend/pull/17134" target="_blank">#17134</a></td><td>Engram 主机头分片跨本地 DP 副本共享（<code>SharedUvaBuffer</code>）</td><td>多副本各存一份主机侧权重，白白浪费内存</td></tr>
+<tr><td><a href="https://github.com/vllm-project/vllm-ascend/pull/17243" target="_blank">#17243</a></td><td>Engram 平台补丁加模块可用性守卫</td><td>无 <code>vllm.config.engram</code> 的上游构建在导入补丁时启动即崩（nightly 回归）</td></tr>
+</table>
+<p><strong>部署形态</strong>：A3 双机 16 卡 <code>DP4 × TP8 + EP</code>、<code>--max-model-len 1048576</code>、<code>--block-size 128</code>，
+tokenizer / reasoning-parser / tool-call-parser 三件套均为 <code>deepseek_v41</code>（<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md" target="_blank">教程</a>）。</p>
+<p><strong>接力棒</strong>：到这里你知道了"改了什么"。想知道"模型设计的红利还有哪些没兑现、下一步能优化什么"，
+请读续篇 <a href="../compare/dsv41-ced-csa2-ascend.html" style="color:#667eea;">专题：CED/CSA2 架构 × vllm-ascend 性能协助点（7 条）</a>。</p>
+</div>
+
+<h2>六、相关链接</h2>
+<div class="card">
+<ul class="linklist">
+<li>GitHub PR：<a href="https://github.com/vllm-project/vllm-ascend/pull/16925" target="_blank">#16925（本需求）</a>
+· 前史 <a href="https://github.com/vllm-project/vllm-ascend/pull/16544" target="_blank">#16544（首次合入）</a> →
+<a href="https://github.com/vllm-project/vllm-ascend/pull/16905" target="_blank">#16905（回退）</a>；
+地基 <a href="https://github.com/vllm-project/vllm-ascend/pull/16422" target="_blank">#16422（原生算子）</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/pull/16890" target="_blank">#16890（环形缓冲）</a></li>
+<li>GitHub Commit：<a href="https://github.com/vllm-project/vllm-ascend/commit/0deca318102a07f9d8e027047652a2a0baab4fbc" target="_blank">0deca3181 · [Feature] Add DeepSeek V4.1 framework support and Engram host offload</a></li>
+<li>跟进修复：<a href="https://github.com/vllm-project/vllm-ascend/pull/17116" target="_blank">#17116</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/pull/17134" target="_blank">#17134</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/pull/17243" target="_blank">#17243</a></li>
+<li>上游依赖：vLLM main <a href="https://github.com/vllm-project/vllm/commit/84030bbe3d74d99bad477a3d2e37a973ccd8865c" target="_blank">commit 84030bbe（V4.1 模型实现）</a></li>
+<li>模型与文档：<a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash" target="_blank">HF 模型卡</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md" target="_blank">部署教程</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/deepseek_v41_qli_candidate.md" target="_blank">QLI 开发者指南</a></li>
+<li>续篇专题：<a href="../compare/dsv41-ced-csa2-ascend.html" target="_blank">CED/CSA2 架构 × vllm-ascend 性能协助点</a></li>
+<li>文件级讲解：<a href="../panorama/panorama-models.html" target="_blank">panorama-models</a> ·
+<a href="../panorama/panorama-attention.html" target="_blank">panorama-attention</a>
+（panorama 与源码查看器基线为 09-07 快照，本需求新增文件以 GitHub 链接为准）</li>
+<li>流水线入口：<a href="https://github.com/vllm-project/vllm-ascend/actions/workflows/schedule_nightly_test_a3.yaml" target="_blank">Nightly-A3</a>（workflow id 228664976）</li>
+</ul>
+</div>
+
+<footer>vLLM Ascend 需求故事 · 数据来源：commit 0deca3181 与 a71b766ce 代码树、HF 模型卡、仓库内 QLI 开发者指南 · <a href="../index.html" style="color:#667eea;">返回总览</a></footer>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#f6f8fa', primaryTextColor:'#1f2328', primaryBorderColor:'#d0d7de', lineColor:'#656d76', noteBkgColor:'#eef2ff', noteTextColor:'#1f2328', noteBorderColor:'#d0d7de', fontSize:'16px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:36, mirrorActors:false, useMaxWidth:false, messageFontSize:15 } });
+</script>
+<script src="../assets/highlight/highlight.min.js"></script>
+<script>
+try { document.querySelectorAll("pre code.language-python").forEach(function(el) { hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
