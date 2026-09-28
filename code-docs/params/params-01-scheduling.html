@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>源码教学 · 调度类参数（params-01）- vLLM Ascend</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:24px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:18px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; cursor:zoom-in; }
+.mermaid:hover { outline:1px solid var(--accent); }
+pre { position:relative; background:#f6f8fa; border:1px solid #d0d7de; border-radius:8px; padding:36px 14px 12px; overflow-x:auto; line-height:1.55; font-size:.84rem; }
+pre .fname { position:absolute; top:0; left:0; right:0; padding:5px 12px; background:#eaeef2; border-bottom:1px solid #d0d7de; color:#57606a; font-size:.78rem; display:flex; justify-content:space-between; align-items:center; border-radius:8px 8px 0 0; }
+.copybtn { background:#fff; color:#57606a; border:1px solid #d0d7de; border-radius:6px; padding:1px 10px; cursor:pointer; font-size:.75rem; }
+.copybtn:hover { background:var(--accent); color:#fff; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 10px; font-size:.87rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; color:#24292f; }
+.stage { border:1px solid #d0d7de; border-radius:12px; margin:14px 0; overflow:hidden; background:#fff; }
+.stage-head { background:#eef1f6; padding:11px 18px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; }
+.stage-head:hover { background:#e6eaf0; }
+.stage-head h2 { margin:0; border:none; padding:0; font-size:1.1rem; }
+.stage-head .arrow { color:var(--accent); transition:transform .2s; }
+.stage.closed .arrow { transform:rotate(-90deg); }
+.stage-body { padding:4px 18px 14px; }
+.stage.closed .stage-body { display:none; }
+#allbtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:6px 16px; cursor:pointer; margin:10px 0; }
+#overlay { display:none; position:fixed; inset:0; z-index:100; background:rgba(255,255,255,.96); overflow:auto; padding:30px; cursor:zoom-out; }
+#overlay .inner { max-width:1600px; margin:0 auto; background:#fff; border-radius:12px; padding:20px; border:1px solid #d0d7de; }
+.pill { display:inline-block; background:#eef3ff; border:1px solid #c9d6f5; color:#3a4aa8; border-radius:999px; padding:1px 10px; font-size:.82rem; margin:2px 4px 2px 0; }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+</style>
+</head>
+<body>
+<div class="topnav">
+    <span class="brand">vLLM Ascend · 参数源码教学</span>
+    <a href="#s1">①干嘛的</a><a href="#s2">②位置</a><a href="#s3">③概念爬坡</a><a href="#s4">④主干流程</a>
+    <a href="#s5">⑤关键节点</a><a href="#s6">⑥数据结构</a><a href="#s7">⑦边界异常</a><a href="#s8">⑧小结</a>
+    <a href="#check">自检表</a>
+</div>
+
+<h1>调度类参数：vllm-ascend 怎么"决定每一步算什么"</h1>
+<p class="subtitle">
+<span class="badge b-blue">参数组 1/8 · 调度</span>
+<span class="badge b-green">代码基线 a71b766ce（2026-09-23）</span><br>
+讲解范围：<code>vllm_ascend/ascend_config.py</code> 中 <code>scheduler_config</code> 子配置
+（enable_balance_scheduling / recompute_scheduler_enable / short_request_first_config / profiling_chunk_config /
+batch_job_sched_config / dyntra_lb_config）+ 顶层 <code>enable_reduce_sample</code>、<code>mega_moe_max_tokens</code>，
+以及它们的 8 个实现文件（BalanceScheduler、ShortRequestFirstRequestQueue、ProfilingChunkScheduler、
+RecomputeScheduler、BatchJobAwareScheduler、DyntraLBDPEngineCoreProc、sampler 分支、mega_moe 算子加载）。</p>
+
+<h2 id="s1">① 这段代码是干嘛的</h2>
+<div class="card">
+<p>一句话：<strong>这批参数控制"推理服务每一小步，算哪些请求的哪些 token"。</strong>
+大模型生成一个回答不是一次算完的，而是一个字一个字往外蹦（后面第③节会从常识爬到这）。
+每"蹦"一步，调度器（scheduler，一个专门决定下一步算什么的程序）就要重新组织一批活儿。
+vLLM 上游有一套通用调度器，但昇腾集群上有几个它没管好的问题——多个实例忙闲不均、
+长短请求互相堵、预填充块大小靠拍脑袋、MoE 通信算子有容量上限——vllm-ascend 就用这 8 个参数
+把自家的调度增强"插"进去。每个参数对应一个具体问题，这是本文唯一需要先记住的事：</p>
+<p>
+<span class="pill">忙闲不均 → enable_balance_scheduling</span>
+<span class="pill">卡间不均 → dyntra_lb_config</span>
+<span class="pill">长堵短 → short_request_first_config</span>
+<span class="pill">chunk 拍脑袋 → profiling_chunk_config</span>
+<span class="pill">抢占代价高 → recompute_scheduler_enable</span>
+<span class="pill">在线离线混跑 → batch_job_sched_config</span>
+<span class="pill">MoE 融合算子容量 → mega_moe_max_tokens</span>
+<span class="pill">采样重复计算 → enable_reduce_sample</span></p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>8 个参数各自"治什么病"——先见森林，后文逐个看树。</div>
+<div class="fig-caption">图 1-1 · 全景：四类调度问题 → 8 个参数（概览）</div>
+<div class="mermaid">
+flowchart TD
+    A["调度问题之一<br/>多个并行实例忙闲不均"] --> B["enable_balance_scheduling<br/>dyntra_lb_config"]
+    A2["调度问题之二<br/>长请求把短请求堵在队里"] --> B2["short_request_first_config"]
+    A3["调度问题之三<br/>预填充块大小没有实测依据"] --> B3["profiling_chunk_config"]
+    A4["调度问题之四<br/>抢占重算太贵 / 批量作业挤占 /<br/>MoE 算子容量 / 采样重复"] --> B4["recompute_scheduler_enable<br/>batch_job_sched_config<br/>mega_moe_max_tokens<br/>enable_reduce_sample"]
+</div>
+
+<h2 id="s2">② 它在系统中的位置</h2>
+<div class="card">
+<p>先明确这段代码"住"在哪。vLLM 是推理服务框架的上游（负责通用逻辑），vllm-ascend 是它
+在昇腾 NPU 硬件上的插件（负责让同样的逻辑在华为芯片上跑得快）。
+调度器本体在上游 <code>vllm.v1.core.sched.scheduler.Scheduler</code>；
+vllm-ascend 不改上游代码，而是在<strong>启动时按参数把调度器"换"成自己的子类</strong>
+（这个"偷梁换柱"发生在 vllm_ascend 的 patch 机制里，第④节看完整链路）。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>这些参数、vLLM 上游、vllm-ascend 三者是什么关系——谁定义语义、谁替换实现。</div>
+<div class="fig-caption">图 2-1 · 系统位置：上游定义，插件替换（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    U["vLLM 上游<br/>vllm.v1.core.sched.scheduler.Scheduler<br/>（通用调度器，定义每步怎么组 batch）"] --> P["vllm-ascend patch 机制<br/>ascend_config.py 收参数<br/>platform 检测参数 → 换类"]
+    P --> C1["BalanceScheduler<br/>patch_balance_schedule.py"]
+    P --> C2["RecomputeScheduler（+DyntraLB 组合）<br/>core/recompute_scheduler.py 等"]
+    P --> C3["ProfilingChunk / BatchJobAware /<br/>ShortRequestFirst 队列"]
+    C1 & C2 & C3 --> N["昇腾 NPU 执行<br/>（FIA 算子 / HCCL 通信）"]
+    style U fill:#eef3ff,stroke:#5b6ee1
+    style N fill:#fff8e1,stroke:#9a6700
+</div>
+
+<h2 id="s3">③ 概念爬坡：从"发个请求"走到"这 8 个参数"</h2>
+<div class="card">
+<p><strong>级 1 · LLM 的回答是逐字蹦出来的。</strong>你熟悉的普通 Web 服务（比如查订单），一次请求
+就是一次数据库查询、一次返回，服务器"处理完"这个请求就结束了。但大模型不同：它回答一段话，
+是把这段话<strong>一个 token 一个 token 接连生成</strong>的（token 可粗略理解为"词元"，模型的最小文字单位）。
+生成 500 字的回答，模型的前向计算（forward，喂入内容算出下一个词）要跑几十上百次。
+所以同一个请求，会在服务器里<strong>活很久、反复被计算</strong>。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>为什么"服务一个 LLM 请求"和"服务一个普通 Web 请求"完全是两种工作量模式。</div>
+<div class="fig-caption">图 3-1 · 爬坡级 1：一次请求 ≠ 一次计算</div>
+<div class="mermaid">
+flowchart LR
+    W["你熟悉的 Web 服务<br/>1 个请求 = 1 次处理 = 完成"] --> Q["LLM 服务<br/>1 个请求 = 几十上百次前向计算<br/>（每算一次，多生成一个 token）"]
+    Q --> R["所以同一时刻服务器里<br/>每个请求都是'半成品'，都还在排队等着被反复计算"]
+    style W fill:#eef3ff,stroke:#5b6ee1
+    style R fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="card">
+<p><strong>级 2 · 所以"调度"是每一步都在发生的动作。</strong>既然所有请求都是半成品、都要反复计算，
+服务器每个时刻只能算一批（芯片算力有限）。于是需要一个角色，<strong>每算完一步就重新决定：
+下一步把哪些请求、各自算到哪、一起凑成一个批次（batch，一起送进芯片的一组任务）</strong>。
+这个角色就是调度器（scheduler）。它每步的输出叫 SchedulerOutput——一张"这一步都算什么"的清单。
+调度器不是启动时跑一次就完事，而是和计算交替进行的循环。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>调度器的工作节奏——它和计算如何交替成循环，每步产出什么。</div>
+<div class="fig-caption">图 3-2 · 爬坡级 2：调度-计算循环（执行视角）</div>
+<div class="mermaid">
+flowchart LR
+    A["schedule()<br/>决定这一步算哪些请求的哪些 token<br/>产出 SchedulerOutput"] --> B["execute()<br/>把这批任务送进 NPU 算"]
+    B --> C["update_from_output()<br/>回收结果、更新每个请求的进度"]
+    C -->|下一步| A
+    style A fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="card">
+<p><strong>级 3 · 组 batch 的本质是"花两本预算"。</strong>调度器凭什么决定算谁、不算谁？凭两本预算：
+一本是 <strong>KV cache（键值缓存）的显存块</strong>——每个请求算过的历史都要缓存下来供下一步复用，
+缓存按"块"（block，固定大小的显存单元）计费，显存就那么多；
+另一本是<strong>每步 token 总量上限</strong>——一步最多送多少个 token 进芯片。调度器的所有策略，
+拆开看都是"这两本预算怎么分配"：先给谁、给多少、什么时候抢回来（抢占，preempt：预算不够时
+把某些请求的缓存扔掉、退回重算）。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>调度器决策的两个约束是什么——后文每个参数都是在改这个分配策略。</div>
+<div class="fig-caption">图 3-3 · 爬坡级 3：两本预算（数据视角）</div>
+<div class="mermaid">
+flowchart TD
+    K["预算①：KV cache 显存块<br/>每个请求的'记忆'按块计费"] --> S["调度器<br/>每步分配：谁进 batch、占多少块"]
+    T["预算②：每步 token 上限<br/>一步最多送进芯片的总量"] --> S
+    S --> O["SchedulerOutput：这一步的活儿清单"]
+    style S fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="card">
+<p><strong>级 4 · 昇腾集群上，通用调度器少了四样东西。</strong>上游 vLLM 的调度器是为 NVIDIA 生态写的，
+拿到昇腾多卡集群上，出现了四类它没覆盖的问题：<strong>① 多实例忙闲不均</strong>——为了容量和隔离，
+服务常开多份数据并行实例（DP，data parallel：几个实例各自持有一份模型、各自接请求），
+上游调度器各管各的，有的实例排长队、有的在发呆；<strong>② 长请求堵短请求</strong>——一个超长输入
+（比如整本书）的预填充会占住预算很久，排它后面的短问题（"今天天气？"）明明一秒能答完却干等；
+<strong>③ 预填充块大小没依据</strong>——长输入会切块（chunk）分步算，块切多大影响时延和吞吐，
+上游是固定值；<strong>④ 昇腾特有的算子与并行形态</strong>——MoE（专家混合，一种把大模型拆成多个
+"专家"子网络按需调用的结构）的通信计算融合算子有 token 容量上限，跨 DP 的细粒度并行需要
+"重算代替干等"，采样阶段有可以省掉的重复计算。8 个参数正是按这四类问题对号入座的。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>通用调度器在昇腾集群上缺了什么——8 个参数是怎么按问题"对号入座"的。</div>
+<div class="fig-caption">图 3-4 · 爬坡级 4：四类新问题 → 8 个参数（概览）</div>
+<div class="mermaid">
+flowchart TD
+    P1["问题① 多实例忙闲不均"] --> Q1["enable_balance_scheduling<br/>dyntra_lb_config"]
+    P2["问题② 长请求堵短请求"] --> Q2["short_request_first_config"]
+    P3["问题③ 预填充块大小拍脑袋"] --> Q3["profiling_chunk_config"]
+    P4["问题④ 昇腾特有约束：<br/>抢占重算贵 / 在线离线混跑 /<br/>MoE 算子容量 / 采样重复"] --> Q4["recompute_scheduler_enable<br/>batch_job_sched_config<br/>mega_moe_max_tokens<br/>enable_reduce_sample"]
+    style Q1 fill:#eef3ff,stroke:#5b6ee1
+    style Q4 fill:#eef3ff,stroke:#5b6ee1
+</div>
+
+<div class="card">
+<p><strong>术语表（回头查阅用，不是首次引入）</strong>：token＝词元，模型最小文字单位；forward＝前向计算；
+scheduler＝调度器；batch＝批次；KV cache＝键值缓存（请求的"记忆"，按块计费）；block＝显存块；
+preempt＝抢占（收回预算，缓存丢弃或卸载）；DP＝data parallel 数据并行（多实例各持模型各接请求）；
+chunk＝把长输入切块分步算；MoE＝专家混合结构；HCCL＝华为集合通信库（多卡间通信的底层）；
+symmetric buffer＝对称缓冲（多卡可直接互相读写的共享显存区）。</p>
+</div>
+
+<h2 id="s4">④ 主干流程：一个参数从"命令行"走到"生效"</h2>
+<div class="card">
+<p>这 8 个参数的生效路径完全一致，学会一次就认识全家。你在启动命令里写
+<code>--additional-config '{"scheduler_config": {"enable_balance_scheduling": true}}'</code>，
+这串 JSON 被解析进 <code>AscendConfig</code>（vllm_ascend 自己的配置容器，ascend_config.py），
+先做类型与<strong>互斥校验</strong>（比如 profiling_chunk 与 balance 不能同时开，第⑦节细讲），
+然后平台的 patch 机制按参数值把上游调度器<strong>替换成对应子类</strong>或注入队列。
+也就是说：每个参数背后都站着"一个真实存在的类/分支"，参数只是扳道岔。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>参数值是怎么一步步变成"运行中的行为"的——JSON 进、行为出。</div>
+<div class="fig-caption">图 4-1 · 参数生效链（执行视角，启动时一次性发生）</div>
+<div class="mermaid">
+flowchart TD
+    A["启动命令<br/>--additional-config JSON"] --> B["AscendConfig 解析<br/>ascend_config.py:391 scheduler_config"]
+    B --> C["derive_and_validate()<br/>类型/范围/互斥校验"]
+    C --> D["平台 patch<br/>按参数选实现类"]
+    D --> E["运行中的调度器<br/>= 上游 Scheduler 的昇腾子类"]
+    style E fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="card">
+<p>下面这段是参数的"户口本"：全部 6 个子配置都在 <code>scheduler_config</code> 名下
+（行号 391-423），另有 <code>enable_reduce_sample</code>（L464）与
+<code>mega_moe_max_tokens</code>（L483）在顶层。每行默认值就是"不开"——
+vllm-ascend 的原则是增强特性全部 opt-in（你要显式打开）。</p>
+</div>
+<div class="fig-caption">代码 B1 · 参数定义总览：scheduler_config 全家福</div>
+<pre><span class="fname">vllm_ascend/ascend_config.py · AscendConfig 默认值示例 · L391-423</span><code class="language-python">            "scheduler_config": {                       # ← 6 个调度子配置都住这里
+                "enable_balance_scheduling": false,     # ⚡多实例均衡调度（→5.1）
+                "recompute_scheduler_enable": false,    # ⚡重计算调度（→5.5）
+                "short_request_first_config": {
+                    "enabled": false,
+                    "threshold": 256,                   # ↳ prompt ≤256 token 算"短请求"
+                    "long_max_wait_ms": 0.0             # ↳ 长请求最多被晾这么久（防饿死）
+                },
+                "profiling_chunk_config": {
+                    "enabled": false,
+                    "smooth_factor": 1.0,
+                    "min_chunk": 4096,
+                    "need_timing": null,
+                    "max_fit_chunk": 30
+                },
+                "batch_job_sched_config": {
+                    "enabled": false,
+                    "max_jobs": 20,
+                    "reserve_margin_blocks": 2,
+                    "reserve_max_blocks": 8,
+                    "low_available_tokens_threshold": 4096,
+                    "short_decode_token_threshold": 32
+                },
+                "dyntra_lb_config": {
+                    "enabled": false,
+                    ...
+                    "bubble_threshold": 5.0,            # ↳ 气泡超过均值 5 倍才触发迁移
+                    "long_req_block_threshold": 700,
+                },
+            },
+</code></pre>
+
+<h2 id="s5">⑤ 关键节点逐个展开：8 个参数，8 个"治病"的故事</h2>
+<div class="card"><p>下面 8 节结构完全相同：<strong>先说病，再看治法（图），最后对代码</strong>。每段代码都来自 a71b766ce 真实源码，行号可直接跳转核对。</p></div>
+
+<h3>5.1 enable_balance_scheduling —— 多实例"各调各的"，先让大家互相看见</h3>
+<div class="card">
+<p><strong>病</strong>：服务开了多份 DP 实例（每个实例一份模型、各自接请求），上游调度器各管各的。
+请求分配稍有不均，就会出现 rank0 排着 12 个请求忙到冒烟、rank1 空转发呆——整体吞吐被最闲的那张卡拉低。</p>
+<p><strong>治法</strong>：开了这个开关后，调度器被换成 <code>BalanceScheduler</code>。它在每一轮循环里用
+<strong>all_gather（集合通信：所有人上交自己的数字，同时拿到所有人的数字）</strong>汇总各实例正在处理的请求数，
+把全局视图注入调度决策。代码里有一句非常值得学的注释：<strong>all_gather 是集体操作，任何 rank 都不能缺席</strong>——
+哪怕某个实例这轮没活儿（空转轮），也必须参与 gather，否则忙的实例会永远等它，全组死锁。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>balance 的信息是怎么从"各管各的"变成"全局可见"的。</div>
+<div class="fig-caption">图 5-1 · 细节：balance_gather 全局视图（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    R0["rank0 running=5"] --> G["每轮 all_gather<br/>balance_queue=[5, 0, 12]"]
+    R1["rank1 running=0（空转也必须参加）"] --> G
+    R2["rank2 running=12"] --> G
+    G --> S["BalanceScheduler 按全局视图调度"]
+    style G fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B2 · 每轮汇总各实例请求数</div>
+<pre><span class="fname">vllm_ascend/patch/platform/patch_balance_schedule.py · BalanceScheduler.balance_gather · L146-162</span><code class="language-python">    def balance_gather(self):
+        &quot;&quot;&quot;All-gather per-rank running counts into ``self.balance_queue``.
+
+        ... This MUST be invoked on every rank every non-idle iteration, including
+        dummy-batch iterations where a drained rank never enters ``schedule()`` --
+        ``all_gather`` is a collective, so any rank skipping it deadlocks
+        the busy ranks.  ← ⚡集体操作纪律：缺席即死锁
+        &quot;&quot;&quot;
+        if not self._balance_enabled or self.dp_group is None:
+            return
+        running_tensor = torch.tensor([len(self.running)], dtype=torch.int, device=&quot;cpu&quot;)
+        dist.all_gather(self.balance_queue, running_tensor, group=self.dp_group)  # →NPU/HCCL 集合通信
+</code></pre>
+
+<h3>5.2 dyntra_lb_config —— 均衡的进阶版：按 KV 块算"气泡"，把请求搬去闲卡</h3>
+<div class="card">
+<p><strong>病</strong>：5.1 只看"请求数"，但请求的胖瘦差别巨大（KV cache 占的块数不同）。
+数量均衡了，显存占用照样可能一头撑死一头空转——空转比例就是<strong>气泡（bubble）</strong>。</p>
+<p><strong>治法</strong>：<code>DyntraLBDPEngineCoreProc._balance_load</code>（DyntraLB = 动态负载均衡）改按
+<strong>KV 块数</strong>衡量负载：算出"最忙卡的块数相对平均值的超出倍数"，超过
+<code>bubble_threshold</code>（默认 5.0）才动手；动手的方式是产出 <code>_Modification</code>
+（每张卡的迁出块 / 迁入块 / 是否冻结）清单，把请求从忙卡搬去闲卡。注意
+<code>start_step=250</code>：服务刚起的前 250 步请求分布本来就不稳，先不搬，避免抖动。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>"气泡"怎么算、超过阈值后搬什么。</div>
+<div class="fig-caption">图 5-2 · 细节：按块数迁移（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["各卡块数<br/>card0=3000 card1=600 card2=2800 card3=700"] --> B["calc_bubble：<br/>max/avg 超过 bubble_threshold=5.0？"]
+    B -->|超阈值| C["产出 _Modification 清单<br/>忙卡 out_blk → 闲卡 in_blk"]
+    C --> D["跨卡迁移请求<br/>（配合 recompute 调度安全落地）"]
+    B -->|未超| E["不动，避免抖动"]
+    style C fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B3 · 气泡计算与迁移清单</div>
+<pre><span class="fname">vllm_ascend/patch/platform/patch_dyntra_lb_core.py · DyntraLBDPEngineCoreProc._balance_load · L121-136</span><code class="language-python">class DyntraLBDPEngineCoreProc(DPEngineCoreProc):
+    @staticmethod
+    def _balance_load(
+        requests_by_rank: Sequence[tuple[Sequence[int], int]],  # ↳ 各卡（请求块列表, 总块数）
+        dev_num: int,
+        max_num_seqs: int | None = None,
+        max_iters: int = 1000,
+        threshold: float = 5,          # ↳ 即 bubble_threshold，气泡倍数阈值
+    ) -&gt; list[_Modification]:
+        modifications: list[_Modification] = [{&quot;out_blk&quot;: [], &quot;in_blk&quot;: [], &quot;freeze&quot;: False} for _ in range(dev_num)]
+
+        def calc_bubble(cards_info: Sequence[_CardData]) -&gt; float:  # ⚡气泡 = 块数不均的程度
+            tot_blks = [c[&quot;tot_blk&quot;] for c in cards_info]
+            max_blk = max(tot_blks)
+            avg_blk = sum(tot_blks) / dev_num
+</code></pre>
+
+<h3>5.3 short_request_first_config —— 三个队列，让短请求插队但不让长请求饿死</h3>
+<div class="card">
+<p><strong>病</strong>：一个 2 万 token 的长文档和一句"今天天气？"同时到达。预填充（prefill，处理输入）
+按 chunk 切着算，长请求反复占预算，短请求排在后面——明明一秒能答完，TTFT（首字延迟）却被拖到几十秒。</p>
+<p><strong>治法</strong>：把等待队列拆成三份：<code>immediate</code>（系统插单）、<code>short</code>
+（prompt ≤ threshold=256 token）、<code>long</code>。取请求时严格按优先级：
+立即队列 → <strong>但要防饿死</strong>：长队列队头等太久（超过 <code>long_max_wait_ms</code>）且短队列非空时，
+强制"晋升"长请求先走（注释里的 aged long promotions；连续晋升还会触发告警——那是阈值设歪了的信号）。
+于是默认顺序是短先行、长请求有保底等待时间。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>取请求的优先级顺序，以及"防饿死"插在哪。</div>
+<div class="fig-caption">图 5-3 · 细节：三队列与弹取顺序（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["新请求到达"] --> B{"prompt ≤ 256 token？"}
+    B -->|是| S["short 队列"]
+    B -->|否| L["long 队列"]
+    P["pop_request 取队头"] --> C1{"immediate 有货？"}
+    C1 -->|是| T1["取 immediate"]
+    C1 -->|否| C2{"long 队头等待 ≥ long_max_wait_ms<br/>且 short 非空？（防饿死晋升）"}
+    C2 -->|是| T2["取 long 队头"]
+    C2 -->|否| C3{"short 有货？"}
+    C3 -->|是| T3["取 short"]
+    C3 -->|否| T4["取 long"]
+    style C2 fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="fig-caption">代码 B4 · 队列分类与弹取优先级</div>
+<pre><span class="fname">vllm_ascend/core/short_request_first_scheduler.py · ShortRequestFirstRequestQueue · L148-183（节选）</span><code class="language-python">    def _classify_queue(self, request: Request) -&gt; RequestQueue:
+        if self.immediate_predicate is not None and self.immediate_predicate(request):
+            return self._immediate_queue
+        if request.num_prompt_tokens &lt;= self.threshold:  # ⚡threshold=256：短请求判据
+            return self._short_queue
+        return self._long_queue
+
+    def _long_head_wait_ms(self) -&gt; float | None:
+        if self.long_max_wait_ms &lt;= 0 or not self._long_queue:
+            return None
+        head = self._long_queue.peek_request()
+        enqueued_at = self._long_enqueue_at.get(head.request_id)
+        if enqueued_at is None:
+            return None
+        return (time.monotonic() - enqueued_at) * 1000.0  # ↳ 长请求队头已等多久
+
+    def _select_schedulable_queue(self) -&gt; RequestQueue | None:
+        if self._immediate_queue:
+            return self._immediate_queue            # ⚡1. 插单最优先
+        if self._long_queue:
+            wait_ms = self._long_head_wait_ms()
+            if wait_ms is not None and wait_ms &gt;= self.long_max_wait_ms and self._short_queue:
+                return self._long_queue             # ⚡2. 防饿死：长请求等满时限，插队
+        if self._short_queue:
+            return self._short_queue                # ⚡3. 默认短先行
+        if self._long_queue:
+            return self._long_queue
+        return None
+</code></pre>
+
+<h3>5.4 profiling_chunk_config —— chunk 切多大？用真实计时说话</h3>
+<div class="card">
+<p><strong>病</strong>：长输入要切块（chunk）分步预填充。块太小→步数多、每步固定开销白掏；
+块太大→单步时延尖刺、在线请求被卡。切多大最好取决于具体模型和硬件——拍脑袋定一个数，
+换模型就失准。</p>
+<p><strong>治法</strong>：<code>ProfilingChunkScheduler</code> 在模型加载完成后，<strong>用真实的前向计算</strong>
+跑一遍不同 chunk 大小、采集时延样本、拟合出"chunk 大小 → 时延"的二次曲线；此后每次调度按曲线
+和 <code>smooth_factor</code>（平滑系数，防抖动）选当前最优 chunk，限制在
+<code>min_chunk</code>（4096）与 <code>max_fit_chunk</code>（30 块）之间。
+注意 <strong>它与 enable_balance_scheduling 互斥</strong>（两者都重写调度主流程，ascend_config.py:596 校验），二选一。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>chunk 大小为什么能"自动配"——实测→拟合→选用三步。</div>
+<div class="fig-caption">图 5-4 · 细节：chunk 尺寸实测闭环（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["模型就绪后<br/>run_profiling_chunk_init"] --> B["真实前向：多组 chunk 大小<br/>各采时延样本"]
+    B --> C["拟合 chunk大小→时延 二次曲线"]
+    C --> D["schedule() 按曲线+smooth_factor<br/>每步选 chunk ∈ [min_chunk, max_fit_chunk]"]
+    style B fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="fig-caption">代码 B5 · 用真实前向做 chunk 剖析</div>
+<pre><span class="fname">vllm_ascend/core/scheduler_profiling_chunk.py · ProfilingChunkScheduler.run_profiling_chunk_init · L127-135</span><code class="language-python">    def run_profiling_chunk_init(self, model_executor) -&gt; None:
+        &quot;&quot;&quot;Profile prefill latency using real model forward passes.
+
+        Called by EngineCore after model_executor is ready.  Collects latency
+        samples at different chunk sizes and fits the quadratic model.
+        &quot;&quot;&quot;                                    # ⚡不是估算，是真跑模型计时
+        if self._profiling_initialized:
+            return
+        self._profiling_initialized = True
+        if model_executor is None:
+            logger.warning(&quot;[ProfilingChunk] No model_executor provided, skipping profiling&quot;)
+            return
+</code></pre>
+
+<h3>5.5 recompute_scheduler_enable —— 抢占时，先想办法卸载，卸不动才重算</h3>
+<div class="card">
+<p><strong>病</strong>：显存预算不够时，调度器只能<strong>抢占（preempt）</strong>——把某些请求的 KV cache
+扔掉、把它们退回等待队列。上游的做法是之后重算这些 KV：长输入重算一次预填充非常贵，
+在 PD 分离（prefill/decode 分开部署）形态下更麻烦。</p>
+<p><strong>治法</strong>：<code>RecomputeScheduler</code> 改成"尽力而为"：被抢占请求的 KV
+<strong>能卸载就卸载（offload 到主机侧），实在卸不动才送回 P 节点重做 prefill（这就是名字里的 recompute）</strong>；
+顺带为投机解码固定图形状（给首个 decode 请求补位）。它还是 DyntraLB 的<strong>基座</strong>：
+留了两个钩子（<code>_apply_load_balance_modifications</code> 应用跨卡迁移、
+<code>_can_admit_waiting_request</code> 过滤准入），5.2 的迁移请求靠它安全落地。
+另一个身份是前置条件：<strong>细粒度 TP（finegrained_tp_config）的跨 DP HCCL 通信要求它开启</strong>
+（ascend_config.py:690 校验，不开直接报错）。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>抢占后的两条路——卸载优先、重算兜底。</div>
+<div class="fig-caption">图 5-5 · 细节：抢占的两条出路（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["显存不够，请求被抢占"] --> B{"KV 能卸载到主机侧吗？"}
+    B -->|能| C["offload 卸载保存<br/>（回来时恢复，不用重算）"]
+    B -->|不能| D["送回 P 节点<br/>重做 prefill（recompute）"]
+    C --> E["请求继续排队等预算"]
+    D --> E
+    style C fill:#dafbe1,stroke:#1a7f37
+    style D fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="fig-caption">代码 B6 · RecomputeScheduler：基座 + DyntraLB 钩子</div>
+<pre><span class="fname">vllm_ascend/core/recompute_scheduler.py · RecomputeScheduler · L85-103</span><code class="language-python">class RecomputeScheduler(Scheduler):
+    &quot;&quot;&quot;Use vLLM scheduling with best-effort decode-side preemption offload.
+
+    This keeps a local copy of vLLM's schedule() only to pad the first decode
+    request for stable Ascend speculative-decode graph shapes. Preempted KV is
+    offloaded when possible; otherwise the request is sent back to P to redo
+    prefill.                      ← ⚡卸载优先，重算兜底（名字的由来）
+    &quot;&quot;&quot;
+
+    prefill_capacity_bound: bool
+
+    def _apply_load_balance_modifications(self) -&gt; None:
+        &quot;&quot;&quot;Hook for DyntraLB to apply cross-rank scheduling decisions.&quot;&quot;&quot;  # ⚡5.2 的迁移在此落地
+
+    def _can_admit_waiting_request(self, request: Request) -&gt; bool:
+        &quot;&quot;&quot;Hook for DyntraLB to filter waiting-request admission.&quot;&quot;&quot;
+        return True
+</code></pre>
+
+<h3>5.6 batch_job_sched_config —— 在线流量与批量作业混部，给离线任务"记账"</h3>
+<div class="card">
+<p><strong>病</strong>：推理服务常要混跑两类流量：在线用户请求（要低延迟）和批量作业
+（batch job，比如强化学习训练的推理回滚、离线评测——要大吞吐，一个作业可能生成几万个 token，
+而且<strong>没人知道它会生成多长</strong>）。离线作业混在普通队列里，会悄悄吃光 KV 块预算，把在线请求饿死。</p>
+<p><strong>治法</strong>：<code>BatchJobAwareScheduler</code> 给离线作业建了一本"学习账"：
+从请求 ID 里解析出作业名（JobNameParser）→ <code>JobDecodeEstimator</code> 用
+<strong>EWMA（指数加权平均：最近的历史权重更大）</strong>在线学习"这个作业平均生成多长"
+（没见过的作业用冷启动默认值）→ <code>RunningBlockReserver</code> 按预测值给在跑作业
+<strong>预留</strong> KV 块（预留上限 reserve_max_blocks=8、余量 reserve_margin_blocks=2），
+可用块跌破 <code>low_available_tokens_threshold</code>（4096）时限制新作业进入。
+decode 很短（≤short_decode_token_threshold=32）的作业不占预留。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>"不知道多长"的作业怎么被预算管理——学习、预测、预留三步。</div>
+<div class="fig-caption">图 5-6 · 细节：作业解码长度预测与块预留（数据视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["请求 ID 解析出作业名"] --> B["EWMA 在线学习<br/>作业历史 decode 长度"]
+    B --> C["predict(作业名) → 预测长度"]
+    C --> D["按预测预留 KV 块<br/>（上限 reserve_max_blocks=8）"]
+    D --> E["作业结束后 observe(实际长度)<br/>反馈回账本，预测越来越准"]
+    style E fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B7 · EWMA 在线学习：预测与回填</div>
+<pre><span class="fname">vllm_ascend/core/batch_job_aware_scheduler.py · JobDecodeEstimator · L136-148</span><code class="language-python">    def predict(self, job_name: str) -&gt; int:
+        &quot;&quot;&quot;Return the predicted decode length for *job*.&quot;&quot;&quot;
+        job_stat = self._job_stats.get(job_name)
+        if job_stat is None:
+            return self._COLD_START_DEFAULT_DECODE   # ⚡没见过的新作业：冷启动默认值
+        return int(job_stat.ewma_average)            # ↳ 历史 EWMA 均值
+
+    def observe(self, job_name: str, decode_len: int) -&gt; None:
+        &quot;&quot;&quot;Record one decode‑length observation for *job*.
+
+        This method updates the job statistics using the EWMA (Exponentially
+        Weighted Moving Average) formula for online learning.
+        &quot;&quot;&quot;                                          # ⚡每结束一个请求就回填，越学越准
+</code></pre>
+
+<h3>5.7 mega_moe_max_tokens —— MoE 融合算子的"缓冲区容量申报"</h3>
+<div class="card">
+<p><strong>病</strong>：MoE 层每个 token 要发给若干专家、算完再收回来（dispatch/combine 两次全卡通信）。
+昇腾把"通信 + 大矩阵乘"融成了 <strong>mega MoE 算子</strong>：多卡直接读写一块
+<strong>对称缓冲（symmetric buffer：多卡都能寻址的共享显存）</strong>来交换 token——但缓冲区在分配时
+就要申报容量：最多接多少 token。</p>
+<p><strong>治法</strong>：<code>mega_moe_max_tokens</code>（默认 65536）就是 P 节点 / PD 混合节点上
+这块缓冲的<strong>容量申报值</strong>。代码里有个关键保护：申报值超过算子的绝对安全上限
+（<code>absolute_safe_max_recv_token_num</code>）会被夹住；反过来<strong>如果实际 dispatch 后
+单卡收到的 token 数超过申报值，官方注释原话是会发生精度劣化（precision degradation）</strong>——
+所以这不仅是性能参数，还是精度风险点： 专家数多 / batch 打得猛时要把申报值调大（在显存允许范围内）。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>申报值与实际收到的 token 数之间是什么关系，错了会怎样。</div>
+<div class="fig-caption">图 5-7 · 细节：对称缓冲容量（数据视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["MoE dispatch：token 发往各卡专家"] --> B["对称缓冲接收<br/>容量 = mega_moe_max_tokens（申报值）"]
+    B --> C{"实际单卡收到 token ≤ 申报值？"}
+    C -->|是| D["正常计算"]
+    C -->|否| E["溢出 → 精度劣化（官方警告）"]
+    B --> F["申报值 > 算子绝对上限时<br/>被夹到 absolute_safe_max"]
+    style E fill:#ffebe9,stroke:#cf222e
+</div>
+<div class="fig-caption">代码 B8 · mega_moe 加载与容量申报</div>
+<pre><span class="fname">vllm_ascend/ops/fused_moe/moe_comm_method.py · MoE 初始化与缓冲分配 · L270-275、L334-343</span><code class="language-python">        self.enable_fused_mc2 = get_ascend_config().enable_fused_mc2
+        if self.enable_fused_mc2 == 1 and is_mega_moe_supported():  # ⚡前置：融合 MC2 + 硬件支持
+            self.mega_moe_symm_buffer = None
+            self.get_symm_buffer_for_mega_moe, self.mega_moe = moe_utils.load_cann_mega_moe_ops()  # →NPU
+
+            # P nodes and PD-mixed nodes use the configured value. ...
+            max_recv_token_num = get_ascend_config().mega_moe_max_tokens  # ⚡你的申报值
+            # absolute_safe_max_recv_token_num is the max value required by mega moe api
+            if max_recv_token_num &gt; absolute_safe_max_recv_token_num:
+                max_recv_token_num = absolute_safe_max_recv_token_num   # ↳ 超上限被夹住
+            logger.warning_once(
+                &quot;MegaMoe symm buffer: max_recv_token_num is set from &quot;
+                &quot;mega_moe_max_tokens=%d ... If the actual per-rank received token count after &quot;
+                &quot;dispatch exceeds this value, precision degradation will ...&quot;)  # ⚡超发=精度风险
+</code></pre>
+
+<h3>5.8 enable_reduce_sample —— 采样阶段的"分片去重"</h3>
+<div class="card">
+<p><strong>病</strong>：模型算完注意力后，最后要把隐藏态投到词表上取下一个 token（采样，sampling）。
+TP（张量并行：一层矩阵切开多卡算）下每张卡只持有<strong>词表的一片</strong>（V_local），但上游采样流程里
+存在所有卡都要做的重复处理；词表十几万列时，这块开销不小。</p>
+<p><strong>治法</strong>：<code>enable_reduce_sample</code> 让每张卡只在自己的分片上做 top-k
+（k 取 <code>min(top_k, V_local)</code>），去掉重复计算。注意三点（都在校验代码里）：
+它是<strong>实验特性</strong>（启动会打 warning）；<strong>与细粒度 TP 互斥</strong>；
+<strong>PD 分离场景不支持</strong>。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>reduce_sample 到底"减"了什么——每个 rank 只管自己的词表分片。</div>
+<div class="fig-caption">图 5-8 · 细节：分片采样（数据视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["logits 形状 (B, V_local)<br/>每卡只有词表的一片"] --> B["k_for_topk = min(top_k, V_local)"]
+    B --> C["只在本分片内做 top-k"]
+    C --> D["跨卡汇总出最终 token"]
+    style C fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B9 · 分片 top-k 分支</div>
+<pre><span class="fname">vllm_ascend/sample/sampler.py · 采样分支 · L169-177</span><code class="language-python">    if get_ascend_config().enable_reduce_sample:  # ⚡实验特性开关
+        tp_group = get_tp_group()
+        B, V_local = logits.shape     # ↳ 本卡只持有词表分片 V_local
+        rank = tp_group.rank_in_group
+
+        if top_k is None or (p is None and k is None):
+            k_for_topk = V_local      # ↳ 不限 k 时，分片全量即是上限
+        else:
+            k_for_topk = min(top_k, V_local)  # ⚡去重：k 不会超过本分片宽度
+</code></pre>
+
+<h2 id="s6">⑥ 关键数据结构：调度器是一棵"可组合"的类树</h2>
+<div class="card">
+<p>读完 8 个参数再看全局，会发现一个漂亮的设计：vllm-ascend 没有写一个"万能调度器"，而是把每种增强写成
+<strong>可叠加的类</strong>，启动时按你打开的参数<strong>组装</strong>出最终的调度器。
+基座是 <code>RecomputeScheduler</code>（它留了给 DyntraLB 用的钩子），
+DyntraLB 以 Mixin（混入类：把一组能力"掺"进别的类）方式叠加，还有异步版本组合；
+balance 是独立的一支。理解这棵树，你就能看懂日志里"我的请求到底被哪个调度器处理了"。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>打开不同参数组合后，运行中的调度器到底是哪个类——继承树即组装表。</div>
+<div class="fig-caption">图 6-1 · 调度器继承树（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    U["vLLM 上游 Scheduler"] --> R["RecomputeScheduler<br/>（基座：抢占优先卸载 + 钩子）"]
+    R --> AR["AsyncRecomputeScheduler<br/>（+异步调度）"]
+    R --> DR["DyntraLBRecomputeScheduler<br/>（+DyntraLBPolicyMixin 动态负载均衡）"]
+    U --> B["BalanceScheduler<br/>（balance 均衡，独立一支）"]
+    U --> P["ProfilingChunkScheduler<br/>（与 balance 互斥）"]
+    U --> BJ["BatchJobAwareScheduler<br/>（批量作业记账）"]
+    style R fill:#dafbe1,stroke:#1a7f37
+    style DR fill:#eef3ff,stroke:#5b6ee1
+</div>
+<div class="card">
+<p>顺带认识四个核心数据对象（都已在代码里见过）：
+<code>SchedulerOutput</code>＝每步"算什么"的清单（5.5 有其子类 <code>RecomputeSchedulerOutput</code>，
+多带一个 <code>RecomputeReqInfo</code> 标记重算请求）；
+<code>_Modification</code>＝一张卡的迁移清单（<code>out_blk</code> 迁出块 / <code>in_blk</code> 迁入块 /
+<code>freeze</code> 冻结标志，DyntraLB 的产出物）；
+<code>_JobStat</code>＝批量作业的 EWMA 记账本；三队列（immediate/short/long）＝短请求优先的等待区。</p>
+</div>
+
+<h2 id="s7">⑦ 边界与异常：这些参数"不能一起吃"</h2>
+<div class="card">
+<p>参数互斥与前置校验都集中在 <code>AscendConfig.derive_and_validate()</code> 里，启动即报错（不会带病运行）。
+必记四条：<strong>① profiling_chunk × balance 互斥</strong>（都重写调度主流程）；
+<strong>② 细粒度 TP → 必须开 recompute_scheduler</strong>（跨 DP HCCL 通信依赖重算调度，否则直接报错）；
+<strong>③ enable_reduce_sample 是实验特性</strong>：与细粒度 TP 互斥、PD 分离不支持；
+<strong>④ mega_moe</strong>：前置 enable_fused_mc2=1 且硬件支持，且申报容量 < 实际单卡收到的 token 会精度劣化。
+另外两个运行期纪律：balance 的 all_gather 任何 rank 不得缺席（缺席=死锁）；dyntra 前 250 步（start_step）不搬移。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>组合参数前，哪些"红线"必须先查。</div>
+<div class="fig-caption">图 7-1 · 互斥与前置关系（结构视角，红=互斥，蓝=前置）</div>
+<div class="mermaid">
+flowchart LR
+    A["profiling_chunk_config"] <-.互斥.-> B["enable_balance_scheduling"]
+    C["finegrained_tp_config"] -.前置必须开启.-> D["recompute_scheduler_enable"]
+    E["enable_reduce_sample"] <-.互斥.-> C
+    F["mega_moe_max_tokens"] -.前置.-> G["enable_fused_mc2=1<br/>+ 硬件支持"]
+    style A fill:#ffebe9,stroke:#cf222e
+    style B fill:#ffebe9,stroke:#cf222e
+    style E fill:#ffebe9,stroke:#cf222e
+</div>
+<div class="fig-caption">代码 B10 · 校验长什么样：reduce_sample 三连检查</div>
+<pre><span class="fname">vllm_ascend/ascend_config.py · derive_and_validate · L807-820</span><code class="language-python">        if self.enable_reduce_sample:
+            logger.warning_once(
+                &quot;enable_reduce_sample is an experimental feature. Use with caution.&quot;)  # ⚡实验特性
+            if (...细粒度 TP 相关字段...):
+                raise ValueError(
+                    &quot;enable_reduce_sample is incompatible with &quot;
+                    ...                                     # ⚡红线一：与细粒度 TP 互斥
+            if (...PD 分离场景...):
+                ...raise ValueError(
+                    &quot;enable_reduce_sample is not supported on PD-disaggregated &quot;
+                    &quot;scenarios. Please disable enable_reduce_sample.&quot;)  # ⚡红线二：PD 不支持
+</code></pre>
+
+<h2 id="s8">⑧ 小结：一张图带走</h2>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>如果只记一张图——8 个参数、各自治什么病、背后是哪个类、生效前查什么。</div>
+<div class="fig-caption">图 8-1 · 全章收束（概览）</div>
+<div class="mermaid">
+flowchart TD
+    A["多实例忙闲不均"] --> B["enable_balance_scheduling → BalanceScheduler<br/>dyntra_lb_config → DyntraLB（基座 recompute）"]
+    C["长请求堵短请求"] --> D["short_request_first_config → 三队列 + 防饿死"]
+    E["chunk 大小拍脑袋"] --> F["profiling_chunk_config → 实测拟合（与 balance 互斥）"]
+    G["昇腾特有约束"] --> H["recompute（抢占卸载优先）· batch_job（EWMA 记账）·<br/>mega_moe_max_tokens（申报容量防精度劣化）· reduce_sample（分片采样）"]
+    style B fill:#eef3ff,stroke:#5b6ee1
+    style H fill:#eef3ff,stroke:#5b6ee1
+</div>
+<div class="card">
+<p><strong>复述自检</strong>：合上页面，试着回答四个问题——①调度器每步产出的"清单"叫什么、受哪两本预算约束？
+②balance 和 dyntra 的差别（数量 vs 块数）？③短请求优先怎么防长请求饿死？
+④细粒度 TP 为什么必须开 recompute_scheduler？四个都答得上来，这一篇就学会了。</p>
+</div>
+
+<h2 id="check">自检表</h2>
+<div class="card">
+<h3 style="margin-top:0;">表 A · 总览自检</h3>
+<table>
+<tr><th>章节</th><th>层次</th><th>小节标题</th><th>图数量</th><th>图编号+视角</th><th>单图最大节点数</th><th>代码块数</th><th>是否达标</th></tr>
+<tr><td>①干嘛的</td><td>概览</td><td>这段代码是干嘛的</td><td>1</td><td>图1-1 结构</td><td>4</td><td>0</td><td>✓</td></tr>
+<tr><td>②位置</td><td>概览</td><td>它在系统中的位置</td><td>1</td><td>图2-1 结构</td><td>4</td><td>0</td><td>✓</td></tr>
+<tr><td>③爬坡</td><td>概览</td><td>概念爬坡（4 级）+术语表</td><td>4</td><td>图3-1~3-4 问题/执行/数据视角（各单视角）</td><td>5</td><td>1（B1）</td><td>✓</td></tr>
+<tr><td>④主干</td><td>概览</td><td>参数生效链</td><td>1</td><td>图4-1 执行</td><td>5</td><td>1（B1 计入③）</td><td>✓</td></tr>
+<tr><td>⑤展开</td><td>细节</td><td>8 个参数小节</td><td>8</td><td>图5-1~5-8 执行/结构/数据（各单视角）</td><td>5</td><td>9（B2-B9，B10 在⑦）</td><td>✓</td></tr>
+<tr><td>⑥数据</td><td>细节</td><td>继承树与数据对象</td><td>1</td><td>图6-1 结构</td><td>6</td><td>0</td><td>✓</td></tr>
+<tr><td>⑦边界</td><td>细节</td><td>互斥与前置</td><td>1</td><td>图7-1 结构</td><td>4</td><td>1（B10）</td><td>✓</td></tr>
+<tr><td>⑧小结</td><td>概览</td><td>一张图带走</td><td>1</td><td>图8-1 结构</td><td>4</td><td>0</td><td>✓</td></tr>
+</table>
+<h3>表 B · 逐节配图检查</h3>
+<table>
+<tr><th>章节</th><th>h3 小节标题</th><th>是否配图</th><th>图编号</th><th>备注</th></tr>
+<tr><td>③</td><td>级1/级2/级3/级4（4 个小节）</td><td>✓</td><td>3-1/3-2/3-3/3-4</td><td>术语表在爬坡后，标"回头查阅用"</td></tr>
+<tr><td>⑤</td><td>5.1~5.8（8 个小节）</td><td>✓</td><td>5-1~5-8</td><td>每节一图一代码，无纯文字小节</td></tr>
+<tr><td>⑥</td><td>继承树与数据对象</td><td>✓</td><td>6-1</td><td>结构视角</td></tr>
+<tr><td>⑦</td><td>互斥与前置</td><td>✓</td><td>7-1</td><td>附 B10 校验代码</td></tr>
+<tr><td>⑧</td><td>小结 + 复述自检</td><td>✓</td><td>8-1</td><td>附 4 道复述题</td></tr>
+</table>
+<h3>表 C · 概念爬坡检查</h3>
+<table>
+<tr><th>级别</th><th>引入的概念</th><th>上一级是什么</th><th>怎么从上一级推出</th><th>图编号</th><th>是否空降</th></tr>
+<tr><td>L0</td><td>通用编程/系统常识</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>L1</td><td>逐 token 生成、前向计算</td><td>普通 Web 请求一次完成</td><td>回答是连续生成的，同一请求反复被计算</td><td>3-1</td><td>否</td></tr>
+<tr><td>L2</td><td>调度器/调度循环/SchedulerOutput</td><td>请求都是"半成品"</td><td>因为反复计算，所以每步都要重新决定算谁</td><td>3-2</td><td>否</td></tr>
+<tr><td>L3</td><td>KV cache 块预算、token 上限、抢占</td><td>每步重新组 batch</td><td>组 batch 需要依据，依据就是两本预算</td><td>3-3</td><td>否</td></tr>
+<tr><td>L4</td><td>DP 忙闲不均/长堵短/chunk/MoE 容量等昇腾特有问题</td><td>通用调度器+两本预算</td><td>上游没管集群与昇腾特有约束，参数按问题对号入座</td><td>3-4</td><td>否</td></tr>
+</table>
+</div>
+
+<footer>vLLM Ascend 参数源码教学 · 第一类（调度）· 基线 a71b766ce ·
+<a href="../index.html" style="color:#5b6ee1;">返回总览</a> ·
+下一篇：params-02 多流类（计划中）</footer>
+
+<div id="overlay" onclick="this.style.display='none'"><div class="inner" id="overlay-inner"></div></div>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#eef3ff', primaryTextColor:'#24292f', primaryBorderColor:'#6e7681', lineColor:'#57606a', fontSize:'15px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:50, mirrorActors:false, useMaxWidth:false } });
+</script>
+<script>
+// 把每个 h2 章节动态包装成可折叠容器（stage）
+var headings = document.querySelectorAll('h2[id]');
+headings.forEach(function(h){
+    var stage = document.createElement('div');
+    stage.className = 'stage'; stage.id = h.id + '-stage';
+    var head = document.createElement('div');
+    head.className = 'stage-head';
+    head.appendChild(h.cloneNode(true));
+    var arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '▼';
+    head.appendChild(arrow);
+    head.onclick = function(){ stage.classList.toggle('closed'); };
+    h.parentNode.insertBefore(stage, h);
+    stage.appendChild(head);
+    var body = document.createElement('div'); body.className = 'stage-body';
+    var next = head.nextSibling;
+    while (next && !(next.nodeType === 1 && next.tagName === 'H2')) {
+        var move = next; next = next.nextSibling; body.appendChild(move);
+    }
+    stage.appendChild(body);
+    h.remove();
+});
+// 细节层（⑤⑥⑦）等 mermaid 渲染完成后再收起（hidden 容器内渲染 SVG 宽度会算错）
+window.addEventListener('load', function(){
+    setTimeout(function(){
+        ['s5-stage','s6-stage','s7-stage'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el) el.classList.add('closed');
+        });
+    }, 2500);
+});
+// 一键全部展开
+var btn = document.createElement('button'); btn.id = 'allbtn'; btn.textContent = '全部展开';
+document.querySelector('.topnav').appendChild(btn);
+btn.onclick = function(){ document.querySelectorAll('.stage.closed').forEach(function(s){ s.classList.remove('closed'); }); };
+// 代码块一键复制
+document.querySelectorAll('pre').forEach(function(pre){
+    var bar = pre.querySelector('.fname'); if(!bar) return;
+    var b2 = document.createElement('button'); b2.className = 'copybtn'; b2.textContent = '复制';
+    b2.onclick = function(e){ e.stopPropagation();
+        navigator.clipboard.writeText(pre.querySelector('code').innerText).then(function(){ b2.textContent = '已复制 ✓'; setTimeout(function(){ b2.textContent = '复制'; }, 1500); }); };
+    bar.appendChild(b2);
+});
+// 图点击放大
+document.querySelectorAll('.mermaid').forEach(function(box){
+    box.addEventListener('click', function(){
+        var ov = document.getElementById('overlay');
+        var inner = document.getElementById('overlay-inner');
+        inner.innerHTML = ''; inner.appendChild(box.cloneNode(true));
+        inner.querySelector('.mermaid').style.cursor = 'default';
+        ov.style.display = 'block';
+    });
+});
+// 高亮
+try { document.querySelectorAll('pre code.language-python').forEach(function(el){ hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
