@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>专题 · DeepSeek V4.1-Flash 的 CED/CSA2 架构 × vllm-ascend 性能协助点 - vLLM Ascend</title>
+<link rel="stylesheet" href="../assets/highlight/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root { --accent:#667eea; --text:#333; }
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f5f7fa; color:var(--text); line-height:1.7; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.nav { background:#fff; border-radius:12px; padding:12px 24px; margin-bottom:24px; box-shadow:0 2px 10px rgba(0,0,0,.05); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; }
+.nav a { color:#666; text-decoration:none; padding:5px 12px; border-radius:8px; font-size:.88rem; }
+.nav a:hover { background:var(--accent); color:#fff; }
+h1 { font-size:1.55rem; margin:6px 0 4px; }
+h2 { font-size:1.25rem; margin:28px 0 12px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.05rem; margin:18px 0 8px; color:#4a5fc1; }
+.subtitle { color:#666; margin-bottom:20px; font-size:.95rem; }
+.card { background:#fff; border-radius:12px; padding:18px 22px; margin:14px 0; box-shadow:0 2px 10px rgba(0,0,0,.05); }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.8rem; font-weight:bold; margin-right:6px; }
+.b-purple { background:#f0e3ff; color:#8250df; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 6px; }
+.guide { background:#f0f4ff; border-left:4px solid #667eea; padding:10px 16px; border-radius:8px; margin:10px 0; font-size:.92rem; }
+.mermaid { overflow-x:auto; padding-bottom:4px; }
+pre { background:#f6f8fa; border-radius:8px; padding:14px 16px; overflow-x:auto; line-height:1.5; font-size:.85rem; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#eef1f5; color:#be5026; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; }
+th, td { border:1px solid #e3e8ef; padding:7px 10px; font-size:.88rem; text-align:left; vertical-align:top; }
+th { background:#f0f2fb; }
+td.gap { color:#cf222e; font-weight:bold; }
+td.ok { color:#1a7f37; font-weight:bold; }
+.opp { border-left:4px solid var(--accent); }
+.opp p { margin:6px 0; }
+.opp .tag-p { display:inline-block; background:#667eea; color:#fff; border-radius:6px; padding:1px 10px; font-size:.8rem; font-weight:bold; margin-right:8px; }
+.ref { color:#999; font-size:.82rem; margin-top:6px; }
+.ref a { color:#999; text-decoration:underline; }
+.note { background:#f0f4ff; border-left:4px solid #667eea; padding:12px 16px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+footer { text-align:center; color:#999; padding:26px; font-size:.82rem; }
+.linklist li { margin:6px 0; }
+.linklist a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="nav">
+    <a href="../index.html">← 架构总览</a>
+    <span style="color:#999;font-size:.85rem;">专题深度分析 · 新架构 × 昇腾性能机会</span>
+    <a href="compare.html">专题目录</a>
+</div>
+
+<h1>DeepSeek V4.1-Flash 的 CED/CSA2 架构 × vllm-ascend 性能协助点</h1>
+<p class="subtitle">
+<span class="badge b-purple">DeepSeek V4.1-Flash</span>
+<span class="badge b-green">性能机会点 ×7</span>
+基线 vllm-ascend <a href="https://github.com/vllm-project/vllm-ascend/commit/a71b766ce6fc0a9669a412e15a5cf53f7f827093" target="_blank" style="color:#667eea;">a71b766ce</a>（2026-09-23）· 模型 2026-09-10 发布</p>
+
+<div class="guide"><strong>接力棒</strong>：本文是需求故事
+<a href="../stories/feat-dsv41-flash.html" style="color:#667eea;">《DeepSeek V4.1-Flash 登陆昇腾（PR #16925）》的续篇</a>——
+那篇讲"改了什么"，本文讲"<strong>模型设计给了什么红利、昇腾兑现了多少、还差什么</strong>"。建议先读前篇。</div>
+<div class="card">
+<p><strong>本文回答两个问题</strong>：</p>
+<ol>
+<li><strong>CED / CSA2 到底新在哪？</strong>——第二、三节：每个机制配一张"模型说 / 昇腾做 / 差距"对照表，一眼看到哪些对齐了、哪些没兑现。</li>
+<li><strong>哪些"模型设计红利"还没被昇腾吃到？</strong>——第五节：7 个性能协助点（P1–P7），先给全局优化地图和总览表，再逐条展开。</li>
+</ol>
+</div>
+
+<h2>一、模型速览：890 B/token 是怎么来的</h2>
+<div class="guide"><strong>读图指引</strong>：这张图回答"890 B/token 的全局 KV 是怎么算出来的"——
+主链上三刀：<strong>CED 砍"谁产 KV"</strong>（解码器不自己产，从编码器投影），<strong>CSA2 砍"读多少"</strong>（三模式共享索引），<strong>FP4 砍"每份多大"</strong>；
+旁路三件（Engram / DSpark / SWA Replay）负责让 decode 维持在低 KV 压力下。</div>
+<div class="fig-caption">图1 · V4.1-Flash 架构总览（LR）</div>
+<div class="mermaid">
+graph LR
+    A[输入 文本/图像] --> B[CED 20层因果编码器]
+    B --> C[末端隐状态<br/>一次性投影]
+    C --> D[解码器全局KV<br/>FP4 · 890B/token]
+    B --> E[CED 20层解码器<br/>SWA + CSA2 稀疏]
+    E --> F[输出 hidden → logits]
+    G[Engram 记忆 196B] -. 命中注入 .-> E
+    H[DSpark 投机解码] -. 草稿/验证 .-> E
+    I[SWA Bounded Replay] -. 重建滑窗KV .-> E
+</div>
+<div class="card">
+<table>
+<tr><th>项</th><th>值 / 机制</th></tr>
+<tr><td>总参数 / 激活</td><td>552B MoE（1 共享 + 384 路由专家、激活 6）；每 token 激活 prefill 8B / decode 16B</td></tr>
+<tr><td>层结构（CED）</td><td>40 层 = <strong>20 层因果编码器 + 20 层解码器</strong>；解码器全局 KV 由<strong>编码器末端隐状态投影</strong>而来</td></tr>
+<tr><td>注意力（CSA2）</td><td>每层静态分配 <strong>Full / Reindex / Reuse</strong> 三模式；跨层共享主 KV 与索引 K、复用 Top-K 索引；解码器端<strong>分层稀疏索引器</strong>让深层索引成本与上下文长度解耦</td></tr>
+<tr><td>KV 缓存</td><td><strong>FP4（E2M1，每 16 通道一个 E4M3 scale）</strong>主 KV；全局 KV <strong>890 B/token</strong>（≈V4-Flash 的 1/4）；持久 KV ≈ V4-Flash 的 <strong>1/8</strong></td></tr>
+<tr><td>上下文</td><td>训练 64K 稀疏注意力，外推 <strong>1M</strong></td></tr>
+<tr><td>条件记忆 / 投机</td><td>Engram（196B 稀疏查表）；DSpark 半自回归草稿 + 置信度调度验证</td></tr>
+<tr><td>昇腾部署形态</td><td>A3 双机 16 卡 DP4×TP8+EP、<code>--block-size 128</code>、W8A8 ModelSlim（<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md" target="_blank">教程</a>）</td></tr>
+</table>
+</div>
+
+<h2>二、CED 拆解 × 昇腾现状：KV 的"出身"变了</h2>
+<div class="guide"><strong>读图指引</strong>：这张图回答"解码器的 KV 从哪来、为什么 prefill 决定一切"——
+编码器 20 层只在 prefill（含 chunked prefill）干活，末端隐状态一次性投影出全局 KV 写入缓存；
+decode 只消费。看清楚这条主链，第五节的 P1（融合压缩）和 P7（PD 分离）就都有了着力点。</div>
+<div class="fig-caption">图2 · CED 数据流（TD 时序）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant T as 输入 token
+    participant E as 编码器（20 层 causal）
+    participant P as KV 投影（末端隐状态）
+    participant D as 解码器（20 层）
+    T->>E: prefill（激活 8B/token）
+    E->>P: 最后一层隐状态
+    P->>D: 投影压缩全局KV（四槽页）
+    D->>D: decode：读压缩KV+SWA<br/>（激活 16B/token）
+    D->>D: 滑窗缺失按 Bounded Replay 重建
+    D-->>T: hidden → logits（chunked 循环）
+</div>
+<div class="card">
+<h3>模型说 / 昇腾做 / 差距</h3>
+<table>
+<tr><th style="width:34%;">模型说</th><th style="width:38%;">昇腾做（a71b766ce）</th><th>差距</th></tr>
+<tr><td>解码器全局 KV 由编码器末端投影，压缩比 1/2</td><td><code>compressor.py:14</code> 投影：ratio-2 走 Triton 环形池化（:53）+ 32 行状态环（<code>cache_config.py:22</code>）；四槽页打包见 <code>cache_config.py:47</code></td><td class="gap">ratio-1 还是 wkv+RMSNorm 两个小算子 → P1</td></tr>
+<tr><td>编码器 20 层只在 prefill 参与</td><td><code>model.py:494</code> build_layer_plan 静态拓扑：源层/消费者/候选源启动时定死</td><td class="gap">未映射到 PD 分离部署 → P7</td></tr>
+<tr><td>压缩状态逐源层维护</td><td>32 行 FP32 状态环（CircularBufferSpec）+ <code>dsa_v41.py:378</code> 仅源层写压缩缓存</td><td class="ok">已对齐 ✅</td></tr>
+</table>
+</div>
+<div class="fig-caption">代码 · ratio-1 压缩路径：目前就是两个小算子（compressor.py:67）</div>
+<div class="guide"><strong>看这段代码，只需抓一个点</strong>：这两步就是 <strong>P1</strong> 要融合掉的全部——
+V4 已有按架构选键的融合 Compressor 模板，V4.1 还没接上。</div>
+<pre><code class="language-python">def forward(self, x):
+    &quot;&quot;&quot;Project an uncompressed source; ratio-2 uses ``pool_projected``.&quot;&quot;&quot;
+    return self.norm(self.wkv(x))  # ⚡ratio-1：Linear + RMSNorm 两个小算子串行（见机会点 P1）
+</code></pre>
+
+<h2>三、CSA2 拆解 × 昇腾现状：40 层不用各算各的索引</h2>
+<div class="guide"><strong>读图指引</strong>：这张图回答"40 层注意力为什么不用各算各的索引"——
+<strong>首个 Full 层</strong>把候选池建好（无过滤位置 TopK + 候选块 ID），后面的层要么在池内<strong>重排</strong>（Reindex），
+要么<strong>直接复用</strong>共享 TopK（Reuse）。一次索引工作，全模型摊薄。</div>
+<div class="fig-caption">图3 · CSA2 三模式与分层索引器（LR）</div>
+<div class="mermaid">
+graph LR
+    A[首个 Full 模式层<br/>候选源] --> |候选块 INT32（-1 填充）| B[Reindex 模式层<br/>候选消费者]
+    B --> |共享 topk_indices 复用| C[Reuse 模式层<br/>普通位置 TopK]
+    A -. 主KV/索引K 共享 .-> B
+    A -. 同页打包 .-> C
+</div>
+<div class="card">
+<h3>模型说 / 昇腾做 / 差距</h3>
+<table>
+<tr><th style="width:34%;">模型说</th><th style="width:38%;">昇腾做（a71b766ce）</th><th>差距</th></tr>
+<tr><td>Full / Reindex / Reuse 三静态模式</td><td><code>model.py:494</code> 拓扑字段：<code>is_candidate_source</code> / <code>uses_candidate_filter</code> / 共享 <code>topk_indices</code>（<code>SharedAttentionState</code> model.py:476，定址稳定适配 ACL Graph）</td><td class="ok">已对齐 ✅</td></tr>
+<tr><td>分层稀疏索引器（候选池逐层收窄）</td><td>QLI V3 算子（QLI = Quantized Lightning Indexer，量化闪电索引器）：<code>npu_quant_lightning_indexer_v3</code>（<code>indexer.py:210</code>）候选三模式一个算子</td><td class="ok">已对齐 ✅</td></tr>
+<tr><td>FP4 主 KV（E2M1，每 16 通道一个 E4M3 scale）</td><td>SparseFlashMla 只编 BF16 的 TND/PA_BBND 调用（TND/PA_BBND = 查询按 token×头、键按分页块×头存放的两种张量布局）</td><td class="gap">未兑现 → P2（最大单项）</td></tr>
+<tr><td>单头 CSA 内核特化</td><td>A2/A3 编 6 键含单头 CSA 特化；A5 编 12 键仅 split-G 寻址</td><td class="gap">A5 缺口 → P3</td></tr>
+</table>
+<h3>算子契约速记（仓库 QLI 开发者指南 · A3 现状）</h3>
+<ul>
+<li>INT8 Q/K + FP16 头权重，per-head Q / per-token K scale，quant mode 2；32/64 复制索引头，head_dim 128。</li>
+<li>位置 TopK ∈ [1, 2048]；候选块为 64 的倍数 ∈ [64, 2048]，块大小固定 8 个压缩位。</li>
+<li>A2/A3 仅编译上述布局（其他布局被主机校验拒绝）；A5 保留 16 键全模板矩阵；索引器只返回索引与候选 ID，不返回分数。</li>
+</ul>
+</div>
+
+<h2>四、算子通道现状：本需求用到了哪三条通道</h2>
+<div class="card">
+<table>
+<tr><th style="width:22%;">通道</th><th>本需求用到的算子 / 内核</th><th>位置</th></tr>
+<tr><td><code>torch.ops._C_ascend</code><br/>（自研 AscendC）</td><td><code>npu_sparse_flash_mla</code>（SWA 滑窗 + 压缩全局 CSA 双阶段，带 sinks 与 mask mode）<br/><code>npu_quant_lightning_indexer_v3</code>（INT8 索引 + 候选三模式）<br/><code>inplace_partial_rotary_mul</code>（interleave 部分旋转，输入/输出两处原地）</td><td>dsa_v41.py:477 <code>_forward_attention</code><br/>models/deepseek_v41/indexer.py:210<br/>dsa_v41.py:270 <code>_project_kv</code> / :547（forward 内）</td></tr>
+<tr><td>triton-ascend</td><td><code>compressor_from_projected</code>（ratio-2 环形池化）<br/><code>prepare_indexer_indices</code> / <code>quantize_indexer_query</code><br/>Engram INT8 gather-dequant（设备/主机 UVA 两份 kernel）</td><td>compressor.py:54<br/>indexer.py:16-17<br/>models/deepseek_v41/engram/npu.py:64 / :235</td></tr>
+<tr><td>主机侧扩展<br/>（ctypes / UVA）</td><td><code>HostUvaBuffer</code>（UVA = Unified Virtual Addressing，主机钉住内存可被设备直接寻址）+ 主机库 <code>ctypes.CDLL</code>；<code>SharedUvaBuffer</code> 跨 DP 副本共享（#17134）</td><td>engram/npu.py:156 / :173 / :325</td></tr>
+</table>
+</div>
+
+<h2>五、性能协助机会点：7 个点打在链路哪一段</h2>
+<div class="guide"><strong>读图指引</strong>：这张图回答"7 个点分别打在执行链路哪一段"——
+P1/P2 打 <strong>prefill 与 KV 存取</strong>（模型红利兑现），P4/P5/P6 打 <strong>decode 路径</strong>（流水压榨），
+P7 是<strong>部署形态</strong>级红利，P3 是<strong>硬件模板</strong>补齐。看图定优先级，再看总览表，最后需要细节才往下读卡片。</div>
+<div class="fig-caption">图4 · 全局优化地图：7 个机会点的落位（TD）</div>
+<div class="mermaid">
+graph TD
+    A[Prefill：压缩与KV生成] --> P1[P1 融合Compressor]
+    A --> P2[P2 FP4 main KV]
+    B[Decode：稀疏注意力与投机] --> P4[P4 Engram 异步查表]
+    B --> P6[P6 decode 双流深化]
+    B --> P5[P5 DSpark 元数据复用]
+    C[部署形态] --> P7[P7 CED×PD 分离]
+    D[硬件内核模板] --> P3[P3 A5 CSA 特化]
+</div>
+<div class="card">
+<h3>总览表（按优先级排序）</h3>
+<table>
+<tr><th style="width:8%;">P#</th><th style="width:20%;">打在哪</th><th>一句话</th><th style="width:22%;">现状</th><th style="width:12%;">优先级</th></tr>
+<tr><td>P1</td><td>prefill KV 生成</td><td>融合 Compressor 模板扩展覆盖 V4.1 压缩比 1/2</td><td>V4.1 还在小算子（文档明说）</td><td>★★★</td></tr>
+<tr><td>P2</td><td>KV 存取带宽/容量</td><td>SparseFlashMla 增加压缩侧 FP4 cmp_kv 模板</td><td>只编 BF16；模型原生 FP4</td><td>★★★</td></tr>
+<tr><td>P7</td><td>部署形态</td><td>编码器锁 P 节点 + layerwise KV 传输压缩 KV</td><td>PD 能力已就绪，V4.1 未映射</td><td>★★（专项）</td></tr>
+<tr><td>P6</td><td>decode 流水</td><td>indexer/SWA 写入编入双流事件链</td><td>双流框架已有，覆盖面可扩</td><td>★★</td></tr>
+<tr><td>P4</td><td>decode 访存</td><td>Engram 查表挪辅助流 + lookback 预取</td><td>同步 UVA gather</td><td>★（需 profile）</td></tr>
+<tr><td>P5</td><td>decode 投机</td><td>元数据缓存移植 + draft/target 候选共享</td><td>DSA 路径已验证同款手法</td><td>★（需 profile）</td></tr>
+<tr><td>P3</td><td>A5 内核模板</td><td>补单头 CSA 特化或实测证伪缺口</td><td>该特化 A2/A3-only</td><td>★（低风险）</td></tr>
+</table>
+</div>
+<div class="note"><strong>声明</strong>：本机无 NPU 环境，以下均为<strong>代码 + 官方文档依据的推断</strong>，收益方向未实测，落地前需按机会点做基准对照。</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P1</span>融合 Compressor 算子扩展到 V4.1</h3>
+<p><strong>现状</strong>：ratio-1 就是 <code>wkv + RMSNorm</code> 两个小算子（第二节代码），ratio-2 靠 Triton 环形池化；而 V4 已有按架构选键的融合 Compressor 模板（四键/架构，coff 覆盖压缩比 128/4）。</p>
+<p><strong>建议</strong>：把融合模板的 coff 扩展覆盖压缩比 1/2（至少先融合 ratio-1 的投影+归一化）；评估把 ratio-2 的 Triton 环形池化下沉为 AscendC。</p>
+<p><strong>收益方向</strong>：CED 的"编码器→解码器 KV 投影"是本代模型的独有热点路径；prefill 每个源层减少 kernel 启动与中间张量，40 层规模化后收益放大。</p>
+<p class="ref">参考：仓库开发者指南 deepseek_v41_qli_candidate.md（"V4.1 currently uses small operators for compression"）· <a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/deepseek_v41_qli_candidate.md" target="_blank">链接</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P2</span>FP4 main KV 支持</h3>
+<p><strong>现状</strong>：模型卡明确全局 KV 为 FP4 890 B/token，但 SparseFlashMla 只编 BF16——FP4 的容量/带宽红利一分未得；QLI 的 A5 模板已注册 MXFP4 dtype，说明 FP4 数据通路在 A5 上存在。</p>
+<p><strong>建议</strong>：给 <code>npu_sparse_flash_mla</code> 增加压缩侧 FP4 cmp_kv 模板 + cache dtype 配置链（<code>kv_cache_dtype</code> → 四槽页容量重算 → prefix cache 兼容性验证）；A2/A3/A5 对 FP4 的硬件支持面先摸底。</p>
+<p><strong>收益方向</strong>：压缩 KV 体积 ≈×4 下降 → 同卡容纳更长上下文/更多并发；decode 全局注意力读 KV 的 HBM 带宽大幅下降。1M 上下文场景最大单项。</p>
+<p class="ref">参考：仓库开发者指南编译矩阵节 · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/deepseek_v41_qli_candidate.md" target="_blank">链接</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P7</span>CED × PD 分离映射（架构红利）</h3>
+<p><strong>现状</strong>：编码器 20 层只在 prefill 参与，解码器 KV 由末端一次投影——编码器算力天然可锁在 P 节点；仓库 PD 分离与 KV 传输能力已就绪（#16755 / #16910 / #17183 / #16498）。</p>
+<p><strong>建议</strong>：验证 V4.1 在 PD 分离下的组件归属——编码器+压缩源层驻 P，解码器+Engram+DSpark 驻 D；用 layerwise KV pool 传压缩后 KV（890 B/token，传输量比全量 MLA 小一个量级）。</p>
+<p><strong>收益方向</strong>：D 节点显存与 KV 压力大降 → decode 批容量上升；P/D 间迁移带宽成本极低。CED 给昇腾部署的独特红利。</p>
+<p class="ref">参考：<a href="https://github.com/vllm-project/vllm-ascend/pull/16755" target="_blank">#16755</a> · <a href="https://github.com/vllm-project/vllm-ascend/pull/16910" target="_blank">#16910</a> · <a href="https://github.com/vllm-project/vllm-ascend/pull/17183" target="_blank">#17183</a> · <a href="https://github.com/vllm-project/vllm-ascend/pull/16498" target="_blank">#16498</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P6</span>decode 双流重叠深化</h3>
+<p><strong>现状</strong>：<code>multistream_preprocess</code>（dsa_v41.py:310，docstring 即"Overlap Q Vector work with KV Cube work"）已覆盖 Q 投影与 KV 写入；同期 #16977 在 DCP 路径验证了 decode 流优化手法。</p>
+<p><strong>建议</strong>：把 QLI 索引选择（向量型）与 SWA scatter 写入编入同一事件链；对照 #16977 把 V-up 类投影下沉到 Cube 流。</p>
+<p><strong>收益方向</strong>：decode 每层 Vector/Cube 交替空隙收窄；对 1M 上下文 decode（CSA 读大 KV 占比高）尤其有效。</p>
+<p class="ref">参考：<a href="https://github.com/vllm-project/vllm-ascend/pull/16977" target="_blank">#16977</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P4</span>Engram 主机卸载异步化</h3>
+<p><strong>现状</strong>：<code>prepare_engram</code>（model.py:1049）在层循环前集中查表；主机卸载路径 <code>HostUvaBuffer</code> + <code>gather_dequantize_host_uva</code>（engram/npu.py:173/:275）是同步调用；#17134 已做跨 DP 头分片共享。</p>
+<p><strong>建议</strong>：查表-反量化挪入辅助流（仓库已有双流框架 <code>multistream_preprocess</code> 可参照）；对 lookback 窗口做逐步预取。</p>
+<p><strong>收益方向</strong>：decode 步内隐藏 host 内存访问延迟——Engram 196B 参数无法全驻 HBM，访存必经互连。</p>
+<p class="ref">参考：<a href="https://github.com/vllm-project/vllm-ascend/pull/17134" target="_blank">#17134</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P5</span>DSpark 投机解码 × CSA 元数据复用</h3>
+<p><strong>现状</strong>：草稿侧独立维护 SWA KV（dspark.py:212/:275）；同期主线已在 DSA 路径验证两类元数据优化（#17153 组不变元数据缓存、#15949 SAS 元数据优先），均未覆盖 V4.1 的 MetadataBuilder（dsa_v41.py:571/:718）。</p>
+<p><strong>建议</strong>：两个已验证手法移植到 V4.1 builder；评估 draft 与 target 共享候选索引/topk 缓冲（<code>SharedAttentionState</code> 已保证定址稳定）。</p>
+<p><strong>收益方向</strong>：每步元数据构建 CPU 开销下降；投机解码净收益（接受长度 × 步成本）上升。</p>
+<p class="ref">参考：<a href="https://github.com/vllm-project/vllm-ascend/pull/17153" target="_blank">#17153</a> · <a href="https://github.com/vllm-project/vllm-ascend/pull/15949" target="_blank">#15949</a></p>
+</div>
+
+<div class="card opp">
+<h3><span class="tag-p">P3</span>A5 上补 CSA 单头特化模板</h3>
+<p><strong>现状</strong>：开发者指南编译矩阵——"single-head CSA specialization is A2/A3-only and split-G/vectorized addressing is A5-only"（A2/A3 编 6 键、A5 编 12 键）。</p>
+<p><strong>建议</strong>：A5 模板矩阵验证/补齐单头 CSA 特化；若 split-G 实测无损，显式记录结论避免隐性缺口。</p>
+<p><strong>收益方向</strong>：950DT/A5 服务器上 CSA 层（解码器多数层）注意力延迟；与 P2 同属低风险模板类改动。</p>
+<p class="ref">参考：仓库开发者指南编译矩阵节 · <a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/deepseek_v41_qli_candidate.md" target="_blank">链接</a></p>
+</div>
+
+<h2>六、小结</h2>
+<div class="card">
+<p>对照图4 的地图念一遍：<strong>P1 / P2 兑现模型设计红利</strong>（压缩融合 + FP4 KV，收益最大）；<strong>P3 / P6 补齐模板与流水</strong>（低风险增量）；
+<strong>P4 / P5 需要 profile 数据确认瓶颈占比</strong>后再动手；<strong>P7 是部署形态级专项</strong>，值得单独立项验证。
+两页读完的完整链条：需求怎么来的（前篇）→ 代码怎么落的（前篇）→ 红利兑现了多少、下一步做什么（本篇）。</p>
+</div>
+
+<h2>七、相关链接</h2>
+<div class="card">
+<ul class="linklist">
+<li>前篇必读：<a href="../stories/feat-dsv41-flash.html" target="_blank">需求故事 #16925：DeepSeek V4.1-Flash 登陆昇腾（框架支持与 Engram 主机卸载）</a></li>
+<li>GitHub：<a href="https://github.com/vllm-project/vllm-ascend/pull/16925" target="_blank">PR #16925</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/commit/0deca318102a07f9d8e027047652a2a0baab4fbc" target="_blank">commit 0deca3181</a> ·
+代码基线 <a href="https://github.com/vllm-project/vllm-ascend/commit/a71b766ce6fc0a9669a412e15a5cf53f7f827093" target="_blank">a71b766ce</a></li>
+<li>开发者指南：<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/deepseek_v41_qli_candidate.md" target="_blank">DeepSeek V4.1 QLI V2/candidate（编译矩阵与算子契约）</a></li>
+<li>模型：<a href="https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash" target="_blank">HF 模型卡</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/tutorials/models/DeepSeek-V4.1-Flash.md" target="_blank">部署教程</a></li>
+<li>相关专题：<a href="kimi-k3-platform-compare.html" target="_blank">Kimi K3 三平台对比（三算子通道框架）</a> ·
+<a href="../detailed/attention.html" target="_blank">注意力模块详解</a> ·
+<a href="../detailed/spec-decode.html" target="_blank">投机解码详解</a></li>
+<li>流水线入口：<a href="https://github.com/vllm-project/vllm-ascend/actions/workflows/schedule_nightly_test_a3.yaml" target="_blank">Nightly-A3</a>（workflow id 228664976）</li>
+</ul>
+</div>
+
+<footer>vLLM Ascend 专题深度分析 · 依据 a71b766ce 代码树、QLI 开发者指南与 HF 模型卡撰写 · <a href="../index.html" style="color:#667eea;">返回总览</a></footer>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#f6f8fa', primaryTextColor:'#1f2328', primaryBorderColor:'#d0d7de', lineColor:'#656d76', noteBkgColor:'#eef2ff', noteTextColor:'#1f2328', noteBorderColor:'#d0d7de', fontSize:'16px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:36, mirrorActors:false, useMaxWidth:false, messageFontSize:15 } });
+</script>
+<script src="../assets/highlight/highlight.min.js"></script>
+<script>
+try { document.querySelectorAll("pre code.language-python").forEach(function(el) { hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
