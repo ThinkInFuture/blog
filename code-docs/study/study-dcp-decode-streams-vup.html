@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>学习材料 · MLA DCP decode 双流重叠与 V-up 融合（PR #16977）- vLLM Ascend</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root { --bg:#0d1117; --panel:#161b22; --border:#30363d; --text:#e6edf3; --muted:#8b949e; --accent:#58a6ff; --green:#7ee787; --orange:#ffa657; --red:#ff7b72; --purple:#d2a8ff; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:var(--bg); color:var(--text); line-height:1.8; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(22,27,34,.97); border:1px solid var(--border); border-radius:12px; padding:10px 20px; margin-bottom:20px; display:flex; align-items:center; gap:6px; flex-wrap:wrap; backdrop-filter:blur(4px); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 12px; border-radius:8px; font-size:.9rem; }
+.topnav a:hover { background:var(--accent); color:#0d1117; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:10px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.25rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); display:flex; align-items:center; gap:10px; }
+h3 { font-size:1.03rem; margin:16px 0 8px; color:var(--purple); }
+.subtitle { color:var(--muted); margin-bottom:16px; font-size:.93rem; }
+.card { background:var(--panel); border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin:12px 0; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#1f3a5f; color:#79c0ff; }
+.b-green { background:#123623; color:#7ee787; }
+.b-orange { background:#3d2e00; color:#ffa657; }
+.guide { background:#101c2c; border-left:4px solid var(--accent); padding:9px 14px; border-radius:8px; margin:8px 0 6px; font-size:.9rem; color:#a5d6ff; }
+.term { background:#1c1592b; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:16px 0 4px; }
+.q { color:var(--orange); font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#0d1117; border-radius:8px; cursor:zoom-in; }
+.mermaid:hover { outline:1px solid var(--accent); }
+pre { position:relative; background:#010409; border:1px solid var(--border); border-radius:8px; padding:38px 14px 14px; overflow-x:auto; line-height:1.55; font-size:.84rem; }
+pre .fname { position:absolute; top:0; left:0; right:0; padding:6px 12px; background:#0d1117; border-bottom:1px solid var(--border); color:var(--muted); font-size:.78rem; display:flex; justify-content:space-between; align-items:center; }
+.copybtn { background:#21262d; color:#c9d1d9; border:1px solid var(--border); border-radius:6px; padding:2px 10px; cursor:pointer; font-size:.75rem; }
+.copybtn:hover { background:var(--accent); color:#0d1117; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#21262d; color:#ffa657; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; }
+th, td { border:1px solid var(--border); padding:7px 10px; font-size:.88rem; text-align:left; vertical-align:top; }
+th { background:#1c2128; color:var(--accent); }
+tr.hl td { background:#242c1a; }
+.why { color:var(--green); }
+.pain { color:var(--red); font-weight:bold; }
+.stage { border:1px solid var(--border); border-radius:12px; margin:14px 0; overflow:hidden; }
+.stage-head { background:#1c2128; padding:12px 18px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; }
+.stage-head:hover { background:#21262d; }
+.stage-head .arrow { color:var(--accent); transition:transform .2s; }
+.stage.closed .arrow { transform:rotate(-90deg); }
+.stage-body { padding:6px 18px 16px; }
+.stage.closed .stage-body { display:none; }
+#overlay { display:none; position:fixed; inset:0; z-index:100; background:rgba(1,4,9,.94); overflow:auto; padding:30px; cursor:zoom-out; }
+#overlay .inner { max-width:1600px; margin:0 auto; background:#0d1117; border-radius:12px; padding:20px; }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="topnav">
+    <span class="brand">vLLM Ascend · 学习材料</span>
+    <a href="#pick">选题</a>
+    <a href="#terms">术语卡</a>
+    <a href="#stage1">阶段一 背景</a>
+    <a href="#stage2">阶段二 方案</a>
+    <a href="#stage3">阶段三 实现</a>
+    <a href="#check">自检表</a>
+</div>
+
+<h1>MLA DCP decode 双流重叠与 V-up 融合</h1>
+<p class="subtitle">
+<span class="badge b-blue">PR #16977</span>
+<span class="badge b-green">已合入 main · commit dee131a8c</span>
+<span class="badge b-orange">性能优化 · 4 文件 +94/-67</span><br>
+作者 weiguihua2 · 2026-09-22 合入 · 代码基线 a71b766ce ·
+上游对齐 vLLM main <a href="https://github.com/vllm-project/vllm/commit/84030bbe3d74d99bad477a3d2e37a973ccd8865c" target="_blank" style="color:#58a6ff;">84030bbe</a> ·
+涉及 <code>vllm_ascend/attention/mla_v1.py</code> + <code>attention/context_parallel/mla_cp.py</code></p>
+
+<div class="card" id="pick">
+<h3 style="margin-top:0;">为什么选这个需求来学</h3>
+<ul>
+<li><b>改动适中</b>：4 个文件、+94/-67 行——一个下午能读完，但三条优化每条都是一个独立套路；</li>
+<li><b>Ascend 味最正</b>：省 dtype 转换、stream/event 双流重叠、小算子融合 + 回退守卫，这三板斧是昇腾性能优化的通用范式；</li>
+<li><b>适配层关系清晰</b>：上游 vLLM 定义 MLA 注意力接口与 DCP（Decode Context Parallelism）切分逻辑，vllm-ascend 用昇腾 FIA 算子和集合通信算子落地——一眼看清"上游管语义、昇腾管执行"；</li>
+<li><b>覆盖关键模块</b>：attention backend（mla_v1）、上下文并行（context_parallel/mla_cp）、算子通道（torch.ops.vllm 自研算子 / torch_npu 融合算子）、KV cache 分片。</li>
+</ul>
+</div>
+
+<div class="card" id="terms">
+<h3 style="margin-top:0;">术语卡（中英对照）</h3>
+<table>
+<tr><th style="width:26%;">术语</th><th>含义</th></tr>
+<tr><td>MLA <br><span style="color:#8b949e;">Multi-head Latent Attention</span></td><td>多头潜在注意力：DeepSeek 系模型的注意力实现，把 KV 压缩到低秩 latent 向量再展开，注意力输出还要经过一次 <b>V-up 上投影</b>回到每头的 V 维度</td></tr>
+<tr><td>DCP <br><span style="color:#8b949e;">Decode Context Parallelism</span></td><td>解码上下文并行：超长上下文下把 KV cache 按 sequence 维分片到 dcp_size 个 rank（每 rank 只存 1/dcp_size），decode 时各 rank 算部分注意力再合并</td></tr>
+<tr><td>attention backend <br><span style="color:#8b949e;">注意力后端</span></td><td>vLLM 定义的注意力实现接口；上游语义（怎么切、怎么合并），后端管执行（用什么算子、怎么调度）</td></tr>
+<tr><td>FIA <br><span style="color:#8b949e;">Fusion Inference Attention</span></td><td>昇腾 CANN 的融合推理注意力算子，vllm-ascend 的 MLA/稀疏注意力在 NPU 上的实际执行者</td></tr>
+<tr><td>LSE <br><span style="color:#8b949e;">Log-Sum-Exp</span></td><td>每段 partial softmax 的对数和指数；两段注意力结果靠它做数学上正确的合并</td></tr>
+<tr><td>all-to-all <br><span style="color:#8b949e;">全交换集合通信</span></td><td>每个 rank 把自己的分片发给所有 rank、同时收齐别人的分片，用于拼回完整历史注意力</td></tr>
+<tr><td>stream / event <br><span style="color:#8b949e;">流 / 事件</span></td><td>NPU 上任务按 stream 排队执行；event 用来在流之间建立"谁等谁"的依赖</td></tr>
+<tr><td>record_stream <br><span style="color:#8b949e;">张量跨流生命周期声明</span></td><td>告诉分配器：这块张量还要在另一条流上用，别急着回收它的显存</td></tr>
+<tr><td>workspace <br><span style="color:#8b949e;">算子工作区</span></td><td>算子执行时临时借用的显存；图模式下地址必须固定，所以两次 FIA 共用一个预分配好的 workspace</td></tr>
+<tr><td>KV cache <br><span style="color:#8b949e;">键值缓存</span></td><td>注意力用的历史 Key/Value 缓存，decode 阶段的主要访存来源</td></tr>
+</table>
+</div>
+
+<div class="stage" id="stage1">
+<div class="stage-head" onclick="toggleStage(this)"><h2 style="margin:0;border:none;">阶段一 · 背景：DCP decode 现在怎么跑，卡在哪</h2><span class="arrow">▼</span></div>
+<div class="stage-body">
+<h3>1.1 这个需求在 vllm-ascend 里的定位</h3>
+<div class="card">
+<p>上游 vLLM 为 DeepSeek 系模型定义了 MLA 注意力接口（<code>MLAAttentionImpl</code>）和 DCP 的<b>切分语义</b>——把 KV cache 按 sequence 维分片、决定"谁算历史、谁算当前、怎么合并"。vllm-ascend 负责的是<b>执行</b>：
+<code>vllm_ascend/attention/mla_v1.py</code> 里的 <code>AscendMLAImpl</code>（mla_v1.py:795）是昇腾上的 MLA 注意力后端，真正干活的是昇腾 CANN 的 FIA 融合算子；
+<code>attention/context_parallel/mla_cp.py</code> 里的 <code>AscendMlaDCPImpl</code>（mla_cp.py:232）混入上游的 <code>DCPImplMixin</code>、继承 <code>AscendMLAImpl</code>——既遵守上游 DCP 的接口约定，又复用昇腾的 MLA 执行能力。这就是典型的 Ascend 适配层结构：<b>上游管语义，昇腾管执行</b>。</p>
+<p>DCP decode 一步要把注意力拆成两段：<b>HISTORY 段</b>（历史 token 的 KV，本 rank 只有 1/dcp_size 分片，算完要把 partial 结果经 all-to-all 交换拼回完整）和 <b>CURRENT 段</b>（当前 chunk 的 KV 各 rank 都有副本，本地直接算）。两段各自输出 partial 注意力和 LSE，最后用 LSE 合并（数学上等价于对全序列做一次 softmax）。合并后的输出是 batch-major 布局，还要做一次 V-up 投影才能交给下一层。</p>
+</div>
+<h3>1.2 现状与三个痛点</h3>
+<div class="card">
+<p>改造前这条链路能跑、数值也对，但藏着三处浪费：</p>
+<ul>
+<li><span class="pain">痛点① dtype 转换</span>：history 段的 partial 输出和 LSE 在送进 all-to-all 融合算子前被显式 <code>.float()</code> 转成 FP32——这是两次<b>全量张量拷贝 + 精度转换</b>，而下游合并其实直接支持 BF16/FP16，这次转换纯属保守写法的浪费；</li>
+<li><span class="pain">痛点② 计算排在主流</span>：current 段 FIA 排在主流上执行，主流同时还背负着后续的合并、本层收尾和下一层任务；而 all-to-all 的<b>打包阶段</b>（展平、组包）和通信占着另一条流——"计算"和"通信"没有各自站在最合适的那条流上；</li>
+<li><span class="pain">痛点③ V-up 多两次转置</span>：合并后的 batch-major 输出做 V-up 要 <code>transpose → bmm → transpose</code>，两次显存搬运只为凑布局。</li>
+</ul>
+<p>decode 阶段每秒要跑几十上百步、几十层，这三处每步都发生，累积起来就是可观的时延。</p>
+</div>
+<div class="guide"><span class="q">这张图回答什么问题：</span>为什么需要这个需求——一个 decode step 的数据从哪来、到哪去，三处浪费（红标）发生在流程的哪个位置。</div>
+<div class="fig-caption">图1 · 业务流程：MLA + DCP decode 一步的数据流（问题视角，红=卡点）</div>
+<div class="mermaid">
+flowchart TD
+    A["decode step：当前 chunk 到达"] --> B["Q/K/V 投影（MLA prolog）"]
+    B --> C{"KV 按两路拆分"}
+    C -->|"历史 KV：本 rank 只有 1/dcp_size 分片"| D["HISTORY 段注意力<br/>（FIA 算子，本分片）"]
+    C -->|"当前 chunk KV：各 rank 都有副本"| E["CURRENT 段注意力<br/>（FIA 算子，本地）"]
+    D --> F["all-to-all 交换<br/>拼回完整历史注意力<br/>入口前还有 .float() 两次全量拷贝"]
+    E -->|"计算排在主流串行队尾"| G["LSE 合并两段 partial"]
+    F --> G
+    G --> H["V-up 上投影<br/>transpose→bmm→transpose"]
+    H --> I["交给 MLP / 下一层"]
+    style F fill:#3d1518,stroke:#ff7b72,color:#ffb3ba
+    style E fill:#3d2e00,stroke:#ffa657,color:#ffd8a8
+    style H fill:#3d1518,stroke:#ff7b72,color:#ffb3ba
+</div>
+<div class="card">
+<p>把镜头再拉近到<b>代码层的现状</b>：history 段 FIA 和 current 段 FIA 是先后两次算子调用（<code>_run_dcp_mtp_split_attention_op</code> 只换 <code>attention_kind</code> 参数），两次调用<b>共用一个预分配好的 workspace</b>（图模式下地址必须固定）；all-to-all 走融合算子 <code>torch.ops.vllm.sfa_dcp_a2a_fused</code>，在一条专门的通信流上执行。改造前的流编排是：主流跑 history FIA → 通信流等事件后做 <code>.float() + a2a</code> → <b>主流继续跑 current FIA</b> → 主流等通信完成事件 → 合并。这个编排里 current FIA 看似与 a2a 并行，但它排在主流队列上，要和合并、本层收尾抢主流；而 .float() 的两次大拷贝反而插在通信流的最前面，白白推迟了通信的发出时刻。</p>
+</div>
+<div class="guide"><span class="q">这张图回答什么问题：</span>现状代码里，两个 FIA、一次 all-to-all 分别跑在哪条流上、以什么顺序执行——三个痛点各自"长在哪一行"。</div>
+<div class="fig-caption">图2 · 当前实现流程：改造前的双流时序（代码问题视角，与图5 形成新旧对照）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant M as 主流 main stream
+    participant C as 通信流 comm stream
+    Note over M: 改造前（mla_cp.py 旧版）
+    M->>M: ① history FIA<br/>_run_dcp_mtp_split_attention_op(HISTORY)
+    M->>M: ② record_event(history_ready)
+    M->>C: ③ .float() ×2 全量拷贝（痛点①）
+    C->>C: ④ sfa_dcp_a2a_fused
+    C-->>M: ⑤ record_event(history_comm_done)
+    M->>M: ⑥ current FIA 排主流（痛点②）
+    M->>M: ⑦ wait_event(⑤) 才能合并
+    M->>M: ⑧ combine → V-up 三算子（痛点③）
+</div>
+</div>
+</div>
+
+<div class="stage" id="stage2">
+<div class="stage-head" onclick="toggleStage(this)"><h2 style="margin:0;border:none;">阶段二 · 方案：三处浪费，三个拆法</h2><span class="arrow">▼</span></div>
+<div class="stage-body">
+<h3>2.1 设计思路总览</h3>
+<div class="card">
+<p>这个 PR 的方案可以概括成一句话：<b>把 dtype 转换删掉、把计算和通信在两条流上的分工对调、把 V-up 的三次算子融成一次</b>。三者互相独立，可以分别验证——这也体现在测试上：回归测试同时覆盖了"流顺序"和"BF16/FP16/FP32 三种 history 输出 dtype"两组场景。</p>
+<p><b>第一刀：dtype 直通。</b>all-to-all 融合算子 <code>sfa_dcp_a2a_fused</code> 与合并算子 <code>fused_sfa_dcp_lse_combine</code> 本身支持 BF16/FP16，中间那次 <code>.float()</code> 转换并不承担任何语义（合并的数学对 dtype 不敏感，精度由测试锁住），删掉后 history 的 partial 输出和 LSE <b>以原始 dtype 直接进通信</b>，省掉两次全量拷贝。</p>
+<p><b>第二刀：流职责对调（本 PR 的灵魂）。</b>原编排是"通信在侧流、计算在主流"；新编排把 current 段 FIA 整个搬到侧流（<code>attn_stream</code>），主流腾出来做 history 的打包与 all-to-all。为什么这样对调更优？三个理由：① <b>依赖更干净</b>——current 段的输入（current_q/current_k/attn_mask）与 history 段的输出没有数据依赖，唯一的约束是两次 FIA 共用 workspace、必须保持先后，用一个 <code>record_event / wait_event</code> 就能表达；② <b>主流归还给通信</b>——集合通信在主流发起是 HCCL 的常规用法，打包+发出一气呵成，不再被计算插队；③ <b>重叠窗口对等</b>——current FIA 的整个执行时长与主流"打包 + 通信"的时长重叠，decode 的当前 chunk 只有 1 个 token、计算很快，把它从主流队尾挪走后，主流干完通信只需等一个事件就能合并。</p>
+<p><b>跨流三纪律</b>（这是本方案最值得学的部分）：① <b>顺序靠事件</b>——<code>history_ready = main_stream.record_event()</code> 在 history FIA 之后打点，侧流 <code>wait_event(history_ready)</code> 后才动 workspace；② <b>生命周期靠 record_stream</b>——主流分配、侧流使用的输入张量要 <code>record_stream(attn_stream)</code>，防止分配器在侧流还在读时就回收；侧流产出、主流消费的结果反向 <code>record_stream(main_stream)</code>；③ <b>汇合靠 join</b>——主流 <code>wait_event(current_attn_done)</code> 之后才允许 combine 读侧流结果。</p>
+<p><b>第三刀：V-up 融合 + 回退守卫。</b><code>torch_npu.npu_transpose_batchmatmul</code> 允许用 <code>perm_x1 / perm_y</code> 声明两次置换，把"transpose → bmm → transpose"融成一次算子调用，省两次显存搬运。但该算子对 batch×K 维度有 <b>65536 的上限</b>（这里 batch 维是 num_heads、K 维是 kv_lora_rank），所以代码里留了守卫：范围内走融合算子，超限自动回退 <code>torch.bmm</code> 原路径——"融合 + 回退"是接入昇腾融合算子的标准姿势，值得记住。</p>
+<p><b>与老流程怎么接</b>：不改任何接口与配置（PR 明确 no user-facing change）；DCP 的切分语义仍归上游，本 PR 只重排昇腾侧的执行编排；两次 FIA 共享 workspace 的图捕获逻辑保持不变（注释同步更新了原因表述）。</p>
+<p>还有一条值得学的<b>反面决策</b>：这个 PR 没有顺手把 prefill 路径也切到新编排——prefill 的 current 段是整个 chunk、计算量大，与通信重叠的收益模型完全不同，硬套会引入更复杂的事件链却换不到收益。把方案克制在 decode 路径内，是「一次只改一个执行编排」的典型取舍，也让回归测试的爆炸半径可控。</p>
+</div>
+<div class="guide"><span class="q">这张图回答什么问题：</span>优化前的流程编排长什么样——三段任务（两段计算 + 一次通信）被安排在哪条流上、依赖箭头怎么连。</div>
+<div class="fig-caption">图3 · 当前方案流程：改造前的编排设计（设计视角，蓝=主流任务，橙=通信流任务，红=浪费）</div>
+<div class="mermaid">
+flowchart TD
+    A["主流：history FIA"] --> B["主流：current FIA 排队等主流"]
+    B --> C["主流：wait 通信完成事件"]
+    C --> D["主流：LSE 合并"]
+    D --> E["主流：V-up = transpose→bmm→transpose"]
+    F["通信流：.float() ×2 全量拷贝"] --> G["通信流：a2a 交换"]
+    A -. "history_ready 事件" .-> F
+    G -. "comm_done 事件" .-> C
+    style B fill:#3d2e00,stroke:#ffa657,color:#ffd8a8
+    style F fill:#3d1518,stroke:#ff7b72,color:#ffb3ba
+    style E fill:#3d1518,stroke:#ff7b72,color:#ffb3ba
+</div>
+<div class="card">
+<p>读图要点：主流纵贯<b>全部五步</b>——current FIA 虽然与 a2a 理论上并行，但它排在主流队列上；通信流的第一个任务不是通信本身，而是两次 <code>.float()</code> 拷贝（红），把通信的发出时刻往后推；V-up 的三次算子（红）也在主流上收尾。</p>
+</div>
+<div class="guide"><span class="q">这张图回答什么问题：</span>方案把流程从 A 变到哪——三条优化各自改动编排图的哪一块。</div>
+<div class="fig-caption">图4 · 目标方案流程：改造后的编排设计（设计视角，绿=新增侧流职责，红=被删掉的任务）</div>
+<div class="mermaid">
+flowchart TD
+    A["主流：history FIA"] --> B["主流：record_event(history_ready)"]
+    B --> C["主流：打包 + a2a 交换（不再 .float()）"]
+    C --> D["主流：wait_event(current_attn_done)"]
+    D --> E["主流：LSE 合并（直接读侧流结果）"]
+    E --> F["主流：V-up 融合单算子（含回退守卫）"]
+    G["侧流：wait_event(history_ready)<br/>保护共享 workspace 顺序"] --> H["侧流：current FIA<br/>（与主流打包+通信重叠）"]
+    H --> I["侧流：record_event(current_attn_done)"]
+    B -. "history_ready" .-> G
+    I -. "join" .-> D
+    J["已删除：.float() ×2"]:::gone
+    classDef gone fill:#161b22,stroke:#555,color:#666,text-decoration:line-through
+    style H fill:#123623,stroke:#7ee787,color:#c9ffd6
+</div>
+<div class="card">
+<p>对比图3 与图4：<b>主流从"五步全包"变成"通信为主"</b>——current FIA（绿）整段搬到侧流，与主流的打包+通信重叠；<code>.float()</code>（删除线）整个消失；V-up 从三个算子缩成一个（含守卫）。两条流之间的依赖只有两个事件：<code>history_ready</code> 向下保护 workspace 顺序，<code>current_attn_done</code> 向上供主流 join。</p>
+</div>
+</div>
+</div>
+
+<div class="stage" id="stage3">
+<div class="stage-head" onclick="toggleStage(this)"><h2 style="margin:0;border:none;">阶段三 · 实现：顺着调用链读代码</h2><span class="arrow">▼</span></div>
+<div class="stage-body">
+<h3>3.1 执行入口与两段输入的拆分</h3>
+<div class="card">
+<p>整个故事的舞台是 <code>AscendMlaDCPImpl</code>（<code>vllm_ascend/attention/context_parallel/mla_cp.py:232</code>）的 decode 路径。它继承 <code>AscendMLAImpl</code>（复用昇腾 MLA 的投影与 V-up）、混入上游 <code>DCPImplMixin</code>（遵守上游 DCP 接口）。进入 decode 前元数据已经把 sequence 维切成两份：<b>HISTORY 组</b>带 <code>block_table</code> 与 <code>cp_history_seq_len</code>（本 rank 分片上的分页 KV），<b>CURRENT 组</b>只有当前 chunk 的 K/V 加一个 <code>attn_mask</code>（<code>sparse_mode=3</code> 的当前窗口掩码）。两次注意力调用用的是<b>同一个方法</b> <code>_run_dcp_mtp_split_attention_op</code>（mla_cp.py:391），只换 <code>attention_kind</code> 枚举——这是理解本 PR 的钥匙：两段计算本身是对称的，不对称的是它们的<b>编排位置</b>。</p>
+<p>先看一个容易被忽略的前置步骤（本 PR 只更新了它的注释，mla_cp.py:530 附近）：进入 FIA 之前要为算子准备 <b>workspace（算子工作区）</b>。图模式（ACL Graph）下算子输入输出地址必须固定，所以代码按 <code>num_tokens</code> 预分配一块 workspace、取所有候选里最大的那个，两次 FIA <b>共用同一块</b>。这决定了后面事件顺序的语义：侧流上的 current FIA 必须等主流上的 history FIA 用完 workspace 才能动它——不是数据依赖，是<b>工作区复用的顺序依赖</b>。</p>
+</div>
+<h3>3.2 代码怎么落：四处关键改动</h3>
+<div class="card">
+<p><b>第一处：history FIA 照旧在主流（mla_cp.py:578-590）。</b>用 <code>MLASplitAttentionKind.HISTORY</code> 调 FIA，输入是分页的 history K/V 与 <code>block_table</code>，产出 partial 输出和 LSE。这一段没有改动，是后面所有编排的锚点。</p>
+<p><b>第二处：current FIA 搬进侧流（mla_cp.py:592-621）。</b>这是本 PR 的灵魂，三行一个节奏：<code>history_ready = main_stream.record_event()</code> 在 history FIA 之后打点；五个跨流输入张量（current 的 q_nope/q_pe/k_nope/k_pe 和 attn_mask）逐个 <code>record_stream(attn_stream)</code>，向分配器声明"这些张量还要在侧流上用"；进入 <code>with torch.npu.stream(attn_stream)</code> 后先 <code>wait_event(history_ready)</code>（保护 workspace 顺序），再跑 <code>CURRENT</code> FIA，最后 <code>record_event(current_attn_done)</code>。出了 with 块，结果两个张量反向 <code>record_stream(main_stream)</code>——侧流生产、主流消费，生命周期声明一个都不能少。</p>
+<p><b>第三处：主流直接做 all-to-all，去掉 .float()（mla_cp.py:622-630）。</b><code>sfa_dcp_a2a_fused</code> 现在在主流上执行，<b>直接吃 BF16/FP16 的 history 输出与 LSE</b>（旧版的 <code>.float()</code> 两次全量拷贝被整体删除），<code>defer_combine=True</code> 把合并推迟到本地一步做。随后 <code>main_stream.wait_event(current_attn_done)</code>——join 点，主流在此等侧流的 current FIA 收工。</p>
+<p><b>第四处：合并且不打包 current（mla_cp.py:632-640）+ V-up 融合（mla_v1.py:1000-1010）。</b><code>fused_sfa_dcp_lse_combine</code>（来自 <code>ops/triton/sfa_cp.py</code>）把 a2a 收齐的历史分片与<b>侧流直接产出的 current 结果</b>做 LSE 合并——旧版要把 current 也打包进合并输入，新版用 <code>local_output/local_lse</code> 参数直读，省一次打包。最后 <code>_v_up_proj_batch_major</code> 收尾：batch-major 输入不再转置，<code>npu_transpose_batchmatmul</code> 用 <code>perm_x1=(1,0,2), perm_y=(1,0,2)</code> 一次完成两个置换加批矩阵乘；<code>num_heads × kv_lora_rank</code> 在 [1, 65536) 内走融合算子，超限回退 <code>torch.bmm</code>（守卫常量在 mla_v1.py:73）。</p>
+<p><b>测试怎么锁住行为</b>：<code>tests/ut/attention/test_mla_cp.py</code> 扩到 27 个用例，新增流顺序断言（侧流结果必须晚于 history FIA）和 BF16/FP16/FP32 三种 history 输出的参数化；精度侧用 DeepSeek-V3.1-Terminus W4A8 TP8/DCP8 跑 100 条 GSM8K，evaluator 精度 95%——证明删掉的 <code>.float()</code> 确实不承担语义。</p>
+</div>
+<div class="guide"><span class="q">这张图回答什么问题：</span>代码里这一步到底是哪个函数干的、怎么走到下一步——每个节点都标了文件与行号，与下面四个代码块一一对应。</div>
+<div class="fig-caption">图5 · 目标实现流程：改造后的执行时序（执行视角，与图2 形成新旧对照）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant M as 主流 main stream
+    participant S as 侧流 attn_stream
+    Note over M,S: mla_cp.py decode 路径（行号为 a71b766ce 实际行号）
+    M->>M: ① history FIA<br/>_run_dcp_mtp_split_attention_op(HISTORY) :578-590
+    M->>M: ② history_ready = record_event() :597
+    M->>S: ③ 输入张量 record_stream(attn_stream) :598-600
+    S->>S: ④ wait_event(history_ready)<br/>保护共享 workspace :602
+    S->>S: ⑤ current FIA<br/>_run_dcp_mtp_split_attention_op(CURRENT) :605-617
+    S->>S: ⑥ current_attn_done = record_event() :618
+    S-->>M: ⑦ 结果 record_stream(main_stream) :619-620
+    M->>M: ⑧ sfa_dcp_a2a_fused<br/>（直接 BF16/FP16，无 .float()）:622-629
+    M->>M: ⑨ wait_event(current_attn_done) join :630
+    M->>M: ⑩ fused_sfa_dcp_lse_combine<br/>（local_output 直读侧流）:633-639
+    M->>M: ⑪ _v_up_proj_batch_major<br/>mla_v1.py:1000-1010
+</div>
+
+<div class="fig-caption">代码块 A · V-up 融合与回退守卫 —— 对应图5 第 ⑪ 步</div>
+<div class="card"><b>说明</b>：这段是三条优化里最独立的一条。<b>旧写法</b>要 <code>view → transpose → torch.bmm → transpose → reshape</code> 三次算子两次搬运；新写法用 <code>npu_transpose_batchmatmul</code> 的置换参数一次完成。守卫常量（mla_v1.py:73）注释写明这是"perm_x1=(1,0,2) 下融合算子的 batch×K 排他上限"。<b>对应方案</b>：第三刀（融合 + 回退）。</div>
+<pre><span class="fname">vllm_ascend/attention/mla_v1.py · AscendMLAImpl · L73、L1000-1010（改后）</span><code class="language-python"># Exclusive batch * K limit of the fused op with perm_x1=(1, 0, 2).
+TRANSPOSE_BMM_MAX_SUPPORTED_DIM = 65536  # ⚡融合算子上限：超出自动回退 torch.bmm
+
+    def _v_up_proj_batch_major(self, x: torch.Tensor) -&gt; torch.Tensor:
+        """Keep the DCP result batch-major and fuse both BMM permutations."""
+        x = x.view(-1, self.num_heads, self.kv_lora_rank)  # ↳ batch-major 输入，不再先转置
+        # The operator's batch dimension is num_heads, not the token count.
+        if 1 &lt;= self.num_heads * self.kv_lora_rank &lt; TRANSPOSE_BMM_MAX_SUPPORTED_DIM:
+            # ⚡两个置换 + 一次 bmm 融成单算子（→NPU torch_npu 融合算子通道）
+            x = torch_npu.npu_transpose_batchmatmul(x, self.W_UV, perm_x1=(1, 0, 2), perm_y=(1, 0, 2))
+        else:
+            x = torch.bmm(x.transpose(0, 1), self.W_UV).transpose(0, 1)  # ↳ 回退路径：与旧实现等价
+        return x.reshape(-1, self.num_heads * self.v_head_dim)
+</code></pre>
+
+<div class="fig-caption">代码块 B · history FIA：编排的锚点 —— 对应图5 第 ① 步</div>
+<div class="card"><b>说明</b>：本段无改动，但没有它读不懂编排——HISTORY 组带 <code>block_table</code>（分页 KV 定位）与 <code>cp_history_seq_len</code>，<code>sparse_mode=0</code> 全量因果；注意它产出 <code>history_output / history_lse</code> 两个 partial 张量，正是后面 a2a 的输入。<b>对应方案</b>：第二刀的"锚点"侧。</div>
+<pre><span class="fname">vllm_ascend/attention/context_parallel/mla_cp.py · AscendMlaDCPImpl · L578-590</span><code class="language-python">    history_output, history_lse = self._run_dcp_mtp_split_attention_op(
+        q_nope,
+        q_pe,
+        history_k_nope,
+        history_k_pe,
+        attn_mask=None,
+        sparse_mode=0,  # ↳ 全量因果掩码（历史段是完整序列注意力）
+        block_table=decode_meta.block_table,  # ⚡本 rank 分片 KV 的分页定位
+        block_size=block_size,
+        actual_seq_lengths=decode_meta.actual_seq_lengths_q,
+        actual_seq_lengths_kv=decode_meta.cp_history_seq_len,
+        attention_kind=MLASplitAttentionKind.HISTORY,  # ⚡与 current 段唯一差别：这个枚举
+    )
+</code></pre>
+
+<div class="fig-caption">代码块 C · current FIA 搬进侧流：事件 + 生命周期 —— 对应图5 第 ②~⑦ 步</div>
+<div class="card"><b>说明</b>：本 PR 的灵魂段落，跨流三纪律全部在这十几行里：<code>record_event</code> 打点、五个输入 <code>record_stream</code>、<code>wait_event</code> 保护 workspace、侧流计算、再 <code>record_event</code> + 结果 <code>record_stream(main_stream)</code>。<b>对应方案</b>：第二刀（流职责对调）。旧版这段位置是"通信流上 .float()+a2a"，新版位置互换。</div>
+<pre><span class="fname">vllm_ascend/attention/context_parallel/mla_cp.py · AscendMlaDCPImpl · L592-621（改后）</span><code class="language-python">        # Run current-token attention on the side stream while the main
+        # stream packs and exchanges history. The ready event also orders
+        # current attention after the history FIA's shared workspace use.
+        main_stream = torch.npu.current_stream()
+        attn_stream = _dcp_mtp_comm_stream()  # ⚡侧流（复用原通信流对象，职责已对调）
+        history_ready = main_stream.record_event()  # ⚡纪律一：history FIA 完成后打点
+        for tensor in (current_q_nope, current_q_pe, current_k_nope, current_k_pe, decode_meta.attn_mask):
+            if tensor is not None:
+                tensor.record_stream(attn_stream)  # ⚡纪律二：跨流输入声明生命周期，防提前回收
+        with torch.npu.stream(attn_stream):
+            attn_stream.wait_event(history_ready)  # ⚡纪律一：等 workspace 空闲（非数据依赖）
+            # Current K/V is replicated. Each rank computes its own Q heads
+            # and contributes the current chunk once during the local merge.
+            current_output, current_lse = self._run_dcp_mtp_split_attention_op(
+                current_q_nope,
+                current_q_pe,
+                current_k_nope,
+                current_k_pe,
+                attn_mask=decode_meta.attn_mask,
+                sparse_mode=3,  # ⚡当前窗口掩码：只算当前 chunk
+                block_table=None,  # ↳ 当前 KV 是副本，无分页表
+                block_size=0,
+                actual_seq_lengths=decode_meta.actual_seq_lengths_q,
+                actual_seq_lengths_kv=decode_meta.actual_seq_lengths_q,
+                attention_kind=MLASplitAttentionKind.CURRENT,
+            )
+            current_attn_done = attn_stream.record_event()  # ⚡侧流完工打点
+        current_output.record_stream(main_stream)  # ⚡纪律二：侧流产出、主流消费
+        current_lse.record_stream(main_stream)
+</code></pre>
+
+<div class="fig-caption">代码块 D · 主流 a2a + join + 合并 —— 对应图5 第 ⑧~⑩ 步</div>
+<div class="card"><b>说明</b>：与旧版逐行对照着看——旧版这里在通信流上且实参是 <code>history_output.float(), history_lse.float()</code>；新版主流直连、dtype 直通（痛点①消失）。<code>defer_combine=True</code> 把合并推迟到下一步；<code>wait_event(current_attn_done)</code> 是 join 点；<code>fused_sfa_dcp_lse_combine</code> 用 <code>local_output/local_lse</code> <b>直读侧流张量</b>，省掉 current 的打包。<b>对应方案</b>：第一刀 + 第二刀的汇合。</div>
+<pre><span class="fname">vllm_ascend/attention/context_parallel/mla_cp.py · AscendMlaDCPImpl · L622-640（改后）</span><code class="language-python">        history_recv = torch.ops.vllm.sfa_dcp_a2a_fused(
+            history_output,  # ⚡旧版这里是 history_output.float()——两次全量拷贝已删除
+            history_lse,     # ⚡同上，LSE 也保持原始 dtype 直通
+            self.dcp_size,
+            1,
+            self.dcp_group.unique_name if self.dcp_size &gt; 1 else &quot;&quot;,
+            defer_combine=True,  # ↳ 合并推迟到本地（下一步直读侧流结果）
+        )
+        main_stream.wait_event(current_attn_done)  # ⚡纪律三：join——主流等侧流 current FIA
+        # Reduce all history shards and the replicated current chunk exactly
+        # once, reading current FIA tensors directly without packing them.
+        attn_output = fused_sfa_dcp_lse_combine(
+            history_recv,
+            self.kv_lora_rank,
+            scatter_dim=1,
+            local_output=current_output,  # ⚡直接读侧流产出，current 不再打包
+            local_lse=current_lse,
+        )
+        return self._v_up_proj_batch_major(attn_output)  # →NPU 走代码块 A 的融合算子
+</code></pre>
+
+<div class="card">
+<h3 style="margin-top:0;">3.3 学完这个 PR，带走三个可复用的套路</h3>
+<ul>
+<li><b>dtype 直通审查</b>：链条上每个显式 <code>.float() / .to(dtype)</code> 都要问一句"下游真的需要吗"——由合并算子的 dtype 支持面和精度测试回答，而不是靠保守转换；</li>
+<li><b>跨流三纪律</b>：事件建顺序（含 workspace 这类非数据依赖）、<code>record_stream</code> 声明生命周期、join 点显式等待——三条缺一，错的是难复现的显存回收竞态或脏读；</li>
+<li><b>融合 + 回退</b>：接入 <code>torch_npu</code> 融合算子时查清维度上限，代码里留守卫回退到等价的朴素路径，上限以内吃性能、超限不崩。</li>
+</ul>
+</div>
+</div>
+</div>
+
+<div class="card" id="check"><h3 style="margin-top:0;">自检对照表</h3>
+<table>
+<tr><th>阶段</th><th>文字字数</th><th>图数量</th><th>图视角</th><th>代码块数</th><th>是否达标</th></tr>
+<tr><td>一、背景</td><td id="wc1">628 字（脚本统计中文正文，下限 600）</td><td>2（图1 业务流程 / 图2 当前实现时序）</td><td>问题视角 ✓</td><td>0（按模板不要求）</td><td class="why">达标</td></tr>
+<tr><td>二、方案</td><td id="wc2">894 字（下限 800）</td><td>2（图3 当前编排 / 图4 目标编排）</td><td>设计视角 ✓</td><td>0</td><td class="why">达标</td></tr>
+<tr><td>三、实现</td><td id="wc3">1058 字（下限 1000）</td><td>1（图5 执行时序，节点=函数+行号）</td><td>执行/代码视角 ✓</td><td>4（A/B/C/D，均含 文件+函数+行号+说明+行内注释，节点可对应）</td><td class="why">达标</td></tr>
+</table>
+<p style="color:#8b949e;font-size:.85rem;">字数为脚本按中文正文（不含图/代码块/指引框）实际统计，每张图上方均有蓝底「这张图回答什么问题」标注。</p>
+</div>
+
+<footer>vLLM Ascend 学习材料 · commit <a href="https://github.com/vllm-project/vllm-ascend/commit/dee131a8c6d280657fe48c811689715252fff18c" target="_blank">dee131a8c</a> · <a href="https://github.com/vllm-project/vllm-ascend/pull/16977" target="_blank">PR #16977</a> · 代码基线 a71b766ce</footer>
+
+<div id="overlay" onclick="this.style.display='none'"><div class="inner" id="overlay-inner"></div></div>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'dark', themeVariables:{ fontSize:'15px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:50, mirrorActors:false, useMaxWidth:false } });
+</script>
+<script>
+// 三阶段折叠
+function toggleStage(head){ head.parentElement.classList.toggle('closed'); }
+// 代码块一键复制
+document.querySelectorAll('pre').forEach(function(pre){
+    var bar = pre.querySelector('.fname'); if(!bar) return;
+    var btn = document.createElement('button'); btn.className='copybtn'; btn.textContent='复制';
+    btn.onclick = function(e){ e.stopPropagation();
+        navigator.clipboard.writeText(pre.querySelector('code').innerText).then(function(){ btn.textContent='已复制 ✓'; setTimeout(function(){ btn.textContent='复制'; },1500); }); };
+    bar.appendChild(btn);
+});
+// 流程图点击放大
+document.querySelectorAll('.mermaid').forEach(function(box){
+    box.addEventListener('click', function(){
+        var ov = document.getElementById('overlay');
+        var inner = document.getElementById('overlay-inner');
+        inner.innerHTML = ''; inner.appendChild(box.cloneNode(true));
+        inner.querySelector('.mermaid').style.cursor='default';
+        ov.style.display='block';
+    });
+});
+// 高亮
+try { document.querySelectorAll('pre code.language-python').forEach(function(el){ hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
