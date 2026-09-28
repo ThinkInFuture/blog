@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>半年计划 · 昇腾研发支撑个人目标建议书（推理性能导向）- vLLM Ascend</title>
+<style>
+  :root{
+    --bg:#f4f6fa;
+    --card:#ffffff;
+    --ink:#1c2434;
+    --ink-2:#4a5568;
+    --ink-3:#7b8794;
+    --line:#e3e8ef;
+    --brand:#1f5fd6;
+    --brand-soft:#eaf1fe;
+    --gold:#b7791f;
+    --gold-soft:#fdf6e3;
+    --good:#0f8a5f;
+    --good-soft:#e7f6ef;
+    --radius:14px;
+    --shadow:0 1px 2px rgba(16,24,40,.05),0 8px 24px -12px rgba(16,24,40,.18);
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(1100px 460px at 12% -8%, #e6efff 0%, rgba(230,239,255,0) 62%),
+      radial-gradient(900px 420px at 100% 0%, #eaf7f1 0%, rgba(234,247,241,0) 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans CJK SC",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    line-height:1.78;
+    padding:32px 18px 80px;
+  }
+  .wrap{max-width:1200px;margin:0 auto;}
+
+  /* 页头 */
+  .hero{
+    background:linear-gradient(135deg,#0e2f6e 0%, #1f5fd6 58%, #2f7be8 100%);
+    color:#fff;
+    border-radius:22px;
+    padding:40px 38px 34px;
+    box-shadow:0 18px 40px -18px rgba(20,60,150,.55);
+    position:relative;
+    overflow:hidden;
+  }
+  .hero::after{
+    content:"";
+    position:absolute;right:-80px;top:-100px;width:300px;height:300px;
+    background:radial-gradient(circle, rgba(255,255,255,.2), rgba(255,255,255,0) 68%);
+  }
+  .hero .tag{
+    display:inline-block;
+    font-size:12px;
+    letter-spacing:.14em;
+    text-transform:uppercase;
+    background:rgba(255,255,255,.16);
+    border:1px solid rgba(255,255,255,.3);
+    padding:5px 12px;
+    border-radius:999px;
+    margin-bottom:16px;
+  }
+  .hero h1{
+    margin:0 0 12px;
+    font-size:clamp(22px,3.4vw,31px);
+    line-height:1.32;
+    font-weight:700;
+  }
+  .hero .sub{
+    margin:0;
+    color:rgba(255,255,255,.86);
+    font-size:15px;
+  }
+  .hero .meta{
+    display:flex;flex-wrap:wrap;gap:10px 22px;
+    margin-top:20px;
+    font-size:13.5px;
+    color:rgba(255,255,255,.82);
+  }
+  .hero .meta span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:7px;height:7px;border-radius:50%;background:#7ef0b2;display:inline-block;}
+
+  /* 总纲 */
+  .creed{
+    margin-top:22px;
+    background:linear-gradient(135deg,#fffdf7,#fff9ec);
+    border:1px solid #f0e2c4;
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:26px 30px;
+    position:relative;
+  }
+  .creed::before{
+    content:"〇";
+    position:absolute;left:22px;top:20px;
+    width:36px;height:36px;border-radius:10px;
+    background:var(--gold-soft);
+    color:var(--gold);
+    font-size:15px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .creed h2{
+    margin:0 0 12px 52px;
+    font-size:18px;
+    color:var(--ink);
+  }
+  .creed .quote{
+    margin:0 0 0 52px;
+    padding:14px 18px;
+    background:#fff;
+    border-left:4px solid var(--gold);
+    border-radius:0 10px 10px 0;
+    font-size:15.5px;
+    color:var(--ink-2);
+    line-height:1.85;
+  }
+  .creed .quote b{color:var(--ink);}
+  .creed .note{
+    margin:10px 0 0 52px;
+    font-size:13px;
+    color:var(--ink-3);
+  }
+
+  /* 区块通用 */
+  section.block{
+    margin-top:26px;
+    background:var(--card);
+    border-radius:var(--radius);
+    border:1px solid var(--line);
+    box-shadow:var(--shadow);
+    overflow:hidden;
+  }
+  .block-head{
+    display:flex;align-items:center;gap:12px;
+    padding:20px 28px 16px;
+    border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,#fbfcfe,#ffffff);
+  }
+  .block-head .num{
+    flex:0 0 34px;height:34px;border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;
+    background:var(--brand-soft);color:var(--brand);
+  }
+  .block-head .num.gold{background:var(--gold-soft);color:var(--gold);}
+  .block-head .num.green{background:var(--good-soft);color:var(--good);}
+  .block-head h2{margin:0;font-size:17px;font-weight:700;letter-spacing:.01em;}
+  .block-head .desc{margin-left:auto;font-size:12.5px;color:var(--ink-3);}
+  .block-body{padding:22px 28px 28px;}
+
+  /* 目标 O 标题 */
+  .obj{
+    display:flex;align-items:flex-start;gap:10px;
+    background:var(--brand-soft);
+    border:1px solid #d6e4fb;
+    border-radius:12px;
+    padding:14px 18px;
+    margin-bottom:18px;
+  }
+  .obj .badge{
+    flex:0 0 auto;
+    background:var(--brand);
+    color:#fff;
+    font-weight:700;
+    font-size:12.5px;
+    padding:3px 10px;
+    border-radius:999px;
+    margin-top:3px;
+    white-space:nowrap;
+  }
+  .obj p{margin:0;font-size:15px;color:var(--ink-2);}
+  .obj b{color:var(--ink);}
+
+  /* KR 卡片 */
+  .kr{
+    position:relative;
+    padding:16px 18px 16px 22px;
+    border:1px solid #e9eef5;
+    background:#f9fbfe;
+    border-radius:12px;
+    margin-bottom:14px;
+  }
+  .kr::before{
+    content:"";
+    position:absolute;left:0;top:14px;bottom:14px;
+    width:4px;border-radius:0 4px 4px 0;
+    background:var(--brand);
+  }
+  .kr .kr-title{
+    font-weight:700;
+    font-size:15px;
+    color:var(--ink);
+    margin:0 0 8px;
+    display:flex;align-items:center;gap:8px;
+    flex-wrap:wrap;
+  }
+  .kr .kr-title .time{
+    font-size:12px;
+    font-weight:600;
+    color:var(--brand);
+    background:var(--brand-soft);
+    padding:2px 9px;
+    border-radius:999px;
+  }
+  .kr ul{
+    margin:0;
+    padding-left:18px;
+    color:var(--ink-2);
+    font-size:14.5px;
+  }
+  .kr ul li{margin:5px 0;}
+  .kr ul li b{color:var(--ink);}
+  .kr .out{
+    margin-top:10px;
+    padding:9px 13px;
+    background:#fff;
+    border:1px dashed #cddcf5;
+    border-radius:9px;
+    font-size:13.5px;
+    color:var(--brand);
+  }
+  .kr .out b{color:var(--ink);}
+  .kr .accept{
+    margin-top:8px;
+    padding:9px 13px;
+    background:var(--good-soft);
+    border-radius:9px;
+    font-size:13.5px;
+    color:var(--good);
+  }
+  .kr .accept b{color:var(--ink);}
+
+  /* 参数分组 */
+  .param-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(280px,1fr));
+    gap:12px;
+    margin-top:10px;
+  }
+  .param-card{
+    background:#fff;
+    border:1px solid #e6ecf5;
+    border-radius:11px;
+    padding:13px 15px;
+  }
+  .param-card .p-title{
+    font-weight:700;
+    font-size:14px;
+    color:var(--ink);
+    margin-bottom:6px;
+    display:flex;align-items:center;gap:7px;
+  }
+  .param-card .p-title .p-idx{
+    width:22px;height:22px;border-radius:6px;
+    background:var(--brand-soft);color:var(--brand);
+    font-size:12px;font-weight:700;
+    display:flex;align-items:center;justify-content:center;
+    flex:0 0 auto;
+  }
+  .param-card .p-body{
+    font-size:13.5px;
+    color:var(--ink-2);
+    line-height:1.75;
+  }
+  .param-card .p-body code{
+    background:#eef2f7;
+    border:1px solid #e0e6ef;
+    padding:1px 5px;
+    border-radius:5px;
+    font-size:12.5px;
+    color:#2d3a4e;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  }
+
+  /* 调研四段式 */
+  .flow{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+    gap:10px;
+    margin:12px 0 6px;
+  }
+  .flow .step{
+    background:#fff;
+    border:1px solid #e6ecf5;
+    border-radius:11px;
+    padding:12px 14px;
+    font-size:13.5px;
+    color:var(--ink-2);
+    position:relative;
+  }
+  .flow .step .s-num{
+    display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:50%;
+    background:var(--brand);color:#fff;
+    font-size:12px;font-weight:700;
+    margin-right:6px;
+  }
+  .flow .step b{color:var(--ink);}
+
+  /* 候选池 */
+  .pool{
+    display:flex;flex-wrap:wrap;gap:8px;
+    margin-top:10px;
+  }
+  .pool .chip{
+    background:#f0f5ff;
+    border:1px solid #d9e5fb;
+    color:#24467e;
+    font-size:13px;
+    padding:5px 12px;
+    border-radius:999px;
+  }
+
+  /* 里程碑 */
+  .milestone{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:14px;
+  }
+  .ms-card{
+    background:#f9fbfe;
+    border:1px solid #e8eef7;
+    border-radius:12px;
+    padding:15px 17px;
+    position:relative;
+  }
+  .ms-card .m-head{
+    display:flex;align-items:center;gap:9px;
+    margin-bottom:9px;
+  }
+  .ms-card .m-badge{
+    background:var(--brand);
+    color:#fff;
+    font-weight:700;
+    font-size:12.5px;
+    padding:3px 11px;
+    border-radius:999px;
+  }
+  .ms-card .m-body{
+    font-size:14px;
+    color:var(--ink-2);
+  }
+  .ms-card .m-body b{color:var(--ink);}
+
+  /* 注意 */
+  .notice{
+    display:flex;gap:14px;
+    padding:16px 18px;
+    border-radius:12px;
+    margin-bottom:14px;
+    font-size:14.5px;
+    color:var(--ink-2);
+  }
+  .notice.tip{
+    background:var(--good-soft);
+    border:1px solid #c9ead9;
+  }
+  .notice.warn{
+    background:#fff8ed;
+    border:1px solid #f3dfc2;
+  }
+  .notice .n-idx{
+    flex:0 0 28px;height:28px;border-radius:8px;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:13.5px;
+  }
+  .notice.tip .n-idx{background:var(--good);color:#fff;}
+  .notice.warn .n-idx{background:var(--gold);color:#fff;}
+  .notice b{color:var(--ink);}
+
+  /* 页脚 */
+  .foot{
+    margin-top:34px;
+    text-align:center;
+    color:var(--ink-3);
+    font-size:12.5px;
+  }
+
+  @media (max-width:640px){
+    body{padding:20px 12px 60px;}
+    .hero{padding:28px 22px 26px;border-radius:18px;}
+    .creed{padding:20px 18px;}
+    .creed h2,.creed .quote,.creed .note{margin-left:0;}
+    .creed::before{position:static;display:inline-flex;margin-bottom:10px;}
+    .block-head{padding:16px 18px 14px;flex-wrap:wrap;}
+    .block-head .desc{margin-left:0;width:100%;}
+    .block-body{padding:18px 18px 22px;}
+    .obj{flex-direction:column;gap:6px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 页头 -->
+  <header class="hero">
+    <span class="tag">Goal Plan · 半年计划索引</span>
+    <h1>昇腾研发支撑半年个人目标建议书</h1>
+    <p class="sub">推理性能导向 · 模型适配部 → 昇腾研发部门（vllm-ascend 组织，GLM 研发线）</p>
+    <div class="meta">
+      <span><i class="dot"></i>日期：2026-09-23</span>
+      <span><i class="dot"></i>支撑周期：半年</span>
+      <span><i class="dot"></i>依据：vllm-ascend main（a71b766ce）</span>
+    </div>
+  </header>
+
+  <!-- 锚点导航 -->
+  <nav class="pnav">
+    <a href="#creed-anchor">总纲</a>
+    <a href="#o1">方向一</a>
+    <a href="#o2">方向二</a>
+    <a href="#o3">方向三</a>
+    <a href="#o4">方向四</a>
+    <a href="#ms">里程碑</a>
+    <a href="#links">关联材料</a>
+    <a href="../index.html">← 文档总览</a>
+  </nav>
+  <style>
+  .pnav{margin-top:18px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px 16px;display:flex;flex-wrap:wrap;gap:4px;box-shadow:var(--shadow);position:sticky;top:8px;z-index:50;}
+  .pnav a{color:var(--ink-2);text-decoration:none;padding:4px 12px;border-radius:8px;font-size:13.5px;}
+  .pnav a:hover{background:var(--brand);color:#fff;}
+  html{scroll-behavior:smooth;scroll-padding-top:70px;}
+  section.block[id],.creed[id]{scroll-margin-top:70px;}
+  .linkgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px;}
+  .linkgrid a.lk{display:block;background:#f9fbfe;border:1px solid #e6ecf5;border-radius:11px;padding:12px 15px;text-decoration:none;}
+  .linkgrid a.lk:hover{border-color:var(--brand);background:var(--brand-soft);}
+  .linkgrid .lk .t{font-weight:700;font-size:14px;color:var(--ink);margin-bottom:4px;}
+  .linkgrid .lk .d{font-size:12.5px;color:var(--ink-3);line-height:1.6;}
+  </style>
+
+  <!-- 〇 总纲 -->
+  <div class="creed" id="creed-anchor">
+    <h2>〇、总纲（可直接改写进绩效系统的一句话目标）</h2>
+    <div class="quote">
+      半年内成为 <b>vllm-ascend 性能调优与问题定位的一线支撑力量</b>：交付 <b>1 本调优手册、1 套分析 playbook、1 套 GLM 系性能基线</b>；完成 <b>≥6 篇行业演进调研</b>并推动 <b>≥1 个性能优化点立项、≥1 个 PoC 出数</b>；个人合入 <b>≥2 个性能类 PR</b>——从“会调参”走到“能定位、能改码、能合入”。
+    </div>
+    <p class="note">依据：vllm-ascend main 代码（a71b766ce）、ascend_config.py 全量参数、GLM/DS 两案精度定位积累、近期 390 提交热点（PD 分离/层间 KV/双流/融合算子/投机解码/Engram）、SGLang 与 vLLM 上游公开演进。</p>
+  </div>
+
+  <!-- 一、方向一 -->
+  <section class="block" id="o1">
+    <div class="block-head">
+      <div class="num">一</div>
+      <h2>方向一细化：性能调优参数/配置策略 + 性能与精度问题分析手段</h2>
+      <span class="desc">O1 · KR1.1 - KR1.4</span>
+    </div>
+    <div class="block-body">
+
+      <div class="obj">
+        <span class="badge">目标 O1</span>
+        <p>独立支撑 GLM 系模型在 A3/A5 上的性能调优与达标，并具备性能/精度不达标的<b>系统化定位能力</b>。</p>
+      </div>
+
+      <!-- KR1.1 -->
+      <div class="kr">
+        <p class="kr-title">KR1.1 参数体系地图 <span class="time">M1-M2</span></p>
+        <ul>
+          <li>吃透 <code>ascend_config.py</code>（AscendConfig，L226 起）全量参数，按八组建立地图：</li>
+        </ul>
+        <div class="param-grid">
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">①</span>调度</div>
+            <div class="p-body"><code>enable_balance_scheduling</code>（调度均衡，GLM-5.1 prefix 案相关）、<code>recompute_scheduler_enable</code>、<code>short_request_first_config</code>（长短请求队列，threshold=256 / 防饿死 long_max_wait_ms）；<code>dyntra_lb_config</code> 内的 <code>bubble_threshold</code> / <code>long_req_block_threshold</code>（气泡控制）；顶层 <code>mega_moe_max_tokens</code>（MoE 融合算子缓冲容量申报）与 <code>enable_reduce_sample</code>（采样去重）。源码教学：<a href="../params/params-01-scheduling.html" style="color:#1f5fd6;">params-01 调度类</a></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">②</span>多流</div>
+            <div class="p-body"><code>ascend_scheduler_config</code>（多流调度）、<code>multistream_dsv4_dsa_overlap</code>、<code>multistream_overlap_shared_expert</code>、<code>enable_cpu_binding</code></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">③</span>算子融合</div>
+            <div class="p-body"><code>ascend_fusion_config</code>（<code>fuse_qknorm_rope</code> / <code>fuse_norm_quant</code> / <code>fuse_muls_add</code> / <code>fusion_ops_gmmswigluquant</code>）、<code>enable_mlapo</code> + <code>mlapo_keep_prefill_weights</code>（MLAPO 预填充算子融合）、<code>enable_fused_mc2</code> / <code>enable_mc2_hierarchy_comm</code> / <code>enable_prefill_mc2</code>（通信融合）</div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">④</span>KV 与稀疏</div>
+            <div class="p-body"><code>enable_sparse_sfa_c8</code> / <code>enable_sparse_li_c8</code>（稀疏注意力 C8 打包，GLM-5.1 198k 核心开关）、<code>c8_enable_reshape_optim</code>、<code>enable_kv_nz</code>、<code>enable_transpose_kv_cache_by_block</code>、<code>sparse_kv_offload_config</code> / <code>keep_device_kv_cache</code> / <code>reserve_margin_blocks</code> / <code>reserve_max_blocks</code></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">⑤</span>并行与负载均衡</div>
+            <div class="p-body"><code>finegrained_tp_config</code>（mlp/qkv/oproj/lmhead/embedding 细粒度分张量，注意与 <code>reduce_sample</code> 的互斥校验）、<code>enable_shared_expert_dp</code>、<code>eplb_config</code>（<code>dynamic_eplb</code>、<code>expert_heat_collection</code> 系列）、<code>dyntra_lb_config</code></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">⑥</span>图模式</div>
+            <div class="p-body"><code>ascend_compilation_config</code>（<code>enable_npugraph_ex</code>、<code>xlite_graph_config</code>、<code>pa_shape_list</code>、<code>full_mode</code>）、<code>enable_static_kernel</code></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">⑦</span>投机解码</div>
+            <div class="p-body"><code>rejection_sampler_config</code>、<code>enable_block_verify</code>、<code>enable_entropy_verify</code>、<code>dynamic_spec_config</code>、<code>draft_window_size</code>、<code>posterior_alpha</code>/<code>threshold</code></div>
+          </div>
+          <div class="param-card">
+            <div class="p-title"><span class="p-idx">⑧</span>精度一致性</div>
+            <div class="p-body"><code>enable_training_consistency</code>、<code>enable_batch_invariant</code></div>
+          </div>
+        </div>
+        <div class="out"><b>产出：</b>《vllm-ascend 性能调优手册》v1（每参数五要素：机制 + 代码位置 + 默认值 + 调优场景 + 精度关联与生效前提；已有 59 张参数讲解卡打底，升级为可发放部门的手册）</div>
+        <div class="accept"><b>验收：</b>手册覆盖 ≥59 参数；部门内评审一次；GLM 组实际使用反馈 ≥2 条并修订</div>
+      </div>
+
+      <!-- KR1.2 -->
+      <div class="kr">
+        <p class="kr-title">KR1.2 对照实验矩阵 <span class="time">M2-M3</span></p>
+        <ul>
+          <li><b>固定基准：</b>GLM-5.3-Flash（KDA 注意力）/ GLM-5.1-198k（sfa_c8）/ DeepSeek-V4.1-Flash，A3 组网（教程启动参数），aisbench 固定数据集与判分</li>
+          <li><b>对关键开关做 A/B：</b>多流调度、balance_scheduling、mlapo、prefix cache、图模式、fusion_config、sfa_c8（×c8_enable_reshape_optim）、细粒度 TP——≥12 组对照</li>
+        </ul>
+        <div class="out"><b>产出：</b>每组吞吐/TPOT/TTFT 数据 + 结论（哪个场景开哪个），进手册“调优场景”栏</div>
+      </div>
+
+      <!-- KR1.3 -->
+      <div class="kr">
+        <p class="kr-title">KR1.3 分析手段工具化 <span class="time">M1-M3 滚动</span></p>
+        <ul>
+          <li><b>性能侧闭环：</b>torch_npu profiler / msprof / MindStudio Insight 采 Timeline → Cube/Vector/通信占比分解 → 定位 top 算子与流间隙 → 对照代码（attention/ops/distributed）→ 给出调参或改码建议</li>
+          <li><b>精度侧闭环（方法论已沉淀，内化即可）：</b>CI 取证链（jobs API→job 日志 curl 取证→工件解包→判分行）；先全局对照矩阵（组网×日期）、再双变量对照（开关×版本 2×2 表）；得分形态判读：全零=系统性机制、中间分=渐进/波动机制；phenomena/analysis/suspects 三页分离写报告；每结论必须带日志入口链接</li>
+        </ul>
+        <div class="out"><b>产出：</b>《性能/精度问题定位 playbook》（checklist + 脚本工具包）+ 内化 GLM-5.1 sfa_c8 回归案作为样板（三页报告已有）</div>
+      </div>
+
+      <!-- KR1.4 -->
+      <div class="kr">
+        <p class="kr-title">KR1.4 实战闭环 <span class="time">全程</span></p>
+        <ul>
+          <li>支撑 ≥4 次真实问题（CI 回归/现网/客户适配）并出复盘；性能回归 24-48h 内给归因或排除项清单</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 二、方向二 -->
+  <section class="block" id="o2">
+    <div class="block-head">
+      <div class="num">二</div>
+      <h2>方向二细化：行业性能加速演进调研 → 可落地优化点</h2>
+      <span class="desc">O2 · KR2.1 - KR2.4</span>
+    </div>
+    <div class="block-body">
+
+      <div class="obj">
+        <span class="badge">目标 O2</span>
+        <p>建立行业推理性能演进的持续跟踪机制，识别可在昇腾落地的优化点，推动 <b>≥1 个立项 + ≥1 个 PoC 出数</b>。</p>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR2.1 调研矩阵 <span class="time">M2-M4，双周一篇</span></p>
+        <ul>
+          <li>六条线，每项输出四段式：</li>
+        </ul>
+        <div class="flow">
+          <div class="step"><span class="s-num">1</span><b>机制</b></div>
+          <div class="step"><span class="s-num">2</span><b>昇腾适配性</b>（算子/通信/图模式缺口）</div>
+          <div class="step"><span class="s-num">3</span><b>收益预估</b></div>
+          <div class="step"><span class="s-num">4</span><b>落地代价</b></div>
+        </div>
+        <ul>
+          <li><b>调度与执行：</b>SGLang zero-overhead scheduler、TBO 双批重叠（two-batch overlap）、vLLM v1 异步调度；图模式深度（对照我们 ACL Graph 与 UpdatableGraph #16798 的 host 侧参数更新设计）</li>
+          <li><b>注意力稀疏化：</b>NSA/DSA/CSA2（DeepSeek V4.1 三模式共享索引）、FlashMLA 类内核、GLM KDA 门控线性注意力——对照 vllm-ascend 的 DSA/SFA/QLI 现状</li>
+          <li><b>KV 工程：</b>Mooncake/3FS 式分层 KV 与传输引擎、FP8/FP4 KV（对照 SparseFlashMla 现状仅 BF16）、prefix 全局命中（D2RH #15912、层间 KV pool #16320）</li>
+          <li><b>投机解码：</b>EAGLE-3 / MTP / DSpark 多草稿链路、块验证与熵验证（参数已有）——草稿-目标协同的昇腾优化空间</li>
+          <li><b>MoE：</b>大 EP 与低时延 all-to-all（DeepEP 风格）、EPLB 动态均衡（参数已有 dynamic_eplb）</li>
+          <li><b>编译与算子：</b>torch.compile/TorchAir/AOT、Super Kernel（#16885）、融合算子覆盖面（对照 QLI 开发者指南的编译矩阵裁剪经验）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR2.2 候选池 <span class="time">滚动维护</span></p>
+        <ul>
+          <li>初始池即 DeepSeek V4.1 CED/CSA2 七条协助点：</li>
+        </ul>
+        <div class="pool">
+          <span class="chip">融合 Compressor 扩展 V4.1</span>
+          <span class="chip">FP4 main KV</span>
+          <span class="chip">A5 CSA 单头特化</span>
+          <span class="chip">Engram 异步查表</span>
+          <span class="chip">DSpark 元数据复用</span>
+          <span class="chip">decode 双流深化</span>
+          <span class="chip">CED×PD 分离</span>
+        </div>
+        <ul style="margin-top:10px;">
+          <li>排序维度：收益 × 落地代价 × GLM 相关度，维护 top5 滚动清单，M4 完成一次评审</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR2.3 推动落地 <span class="time">M4-M6</span></p>
+        <ul>
+          <li>≥1 个候选与算子团队/GLM 团队评审并立项（写清验收指标）</li>
+          <li>≥1 个完成 PoC 对照数据（允许单机小规模原型，证明方向即可）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR2.4 输出与影响</p>
+        <ul>
+          <li>调研报告 ≥6 篇 + 部门分享 ≥2 次；与 GLM 研发对齐下一代模型路线，把调研绑定到“新架构特性的性能风险预研”上（让调研有人等、有人用）</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 三、方向三 -->
+  <section class="block" id="o3">
+    <div class="block-head">
+      <div class="num green">三</div>
+      <h2>建议补充方向三：GLM 系性能基线与对标体系</h2>
+      <span class="desc">O3 · 让“新版本→性能就绪”成为流程</span>
+    </div>
+    <div class="block-body">
+
+      <div class="obj">
+        <span class="badge">目标 O3</span>
+        <p>GLM 系模型在昇腾上的性能基线标准化，<b>新版本适配的性能风险提前暴露</b>。</p>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR3.1 标准化 benchmark 套件</p>
+        <ul>
+          <li>固定数据集/判分/组网参数，GLM-5.3-Flash / GLM-5.1 常用组网一键复测（脚本化，杜绝手抄矩阵错位）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR3.2 对标分解</p>
+        <ul>
+          <li>与 NVIDIA 参考实现做 profile 级差距分解（算子/通信/调度三段），输出“差距地图”，明确哪些是算子缺口、哪些是编排问题</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR3.3 每周消费 nightly/weekly 流水线性能数据</p>
+        <ul>
+          <li>异常波动限时归因（涨跌都要解释，方法沿用精度案的矩阵法）</li>
+        </ul>
+      </div>
+
+      <div class="out" style="margin-top:12px;"><b>定位理由：</b>你在 GLM 研发线，这条最贴组织诉求——GLM 新版本发布的昇腾性能就绪是确定性需求，且与方向一的参数/分析能力共用同一套肌肉。</div>
+
+    </div>
+  </section>
+
+  <!-- 四、方向四 -->
+  <section class="block" id="o4">
+    <div class="block-head">
+      <div class="num green">四</div>
+      <h2>建议补充方向四：从调参到改代码（以合入 PR 为验收）</h2>
+      <span class="desc">O4 · 能定位 → 能改 → 能合入</span>
+    </div>
+    <div class="block-body">
+
+      <div class="obj">
+        <span class="badge">目标 O4</span>
+        <p>形成“能定位→能改→能合入”的完整闭环，半年合入 <b>≥2 个性能类 PR</b>。</p>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR4.1 首个小改动 <span class="time">M2 前</span></p>
+        <ul>
+          <li>合入首个小改动（熟悉 CI/评审流程）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR4.2 首个性能 PR <span class="time">M4 前</span></p>
+        <ul>
+          <li>三个已验证套路任选：</li>
+          <li>① 元数据缓存类（仿 #17153 build_req_metadata 组不变缓存）</li>
+          <li>② 小算子融合类（仿 #14428 RoPE gather：4 ops→2 ops，-14%）</li>
+          <li>③ workspace/双流重叠类（仿 #15416 KDA 门控投影融合、#16977 DCP 双流）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR4.3 算子评价能力</p>
+        <ul>
+          <li>能读 AscendC/Triton kernel 的 profile 热点、判断瓶颈在 Cube/Vector/访存/同步，能提出融合或替代建议（不要求手写 kernel，要求会判断）</li>
+        </ul>
+      </div>
+
+      <div class="kr">
+        <p class="kr-title">KR4.4 沉淀</p>
+        <ul>
+          <li>2 篇 PR 级复盘（找热点→定位→改法→数据，套路化可复制）</li>
+        </ul>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 五、月度里程碑 -->
+  <section class="block" id="ms">
+    <div class="block-head">
+      <div class="num gold">五</div>
+      <h2>月度里程碑</h2>
+      <span class="desc">M1 = 第一个月</span>
+    </div>
+    <div class="block-body">
+      <div class="milestone">
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M1</span></div>
+          <div class="m-body">环境与流水线全通（本地构建 + nightly 数据消费）；参数地图初稿；精读 worker/scheduler</div>
+        </div>
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M2</span></div>
+          <div class="m-body">调优手册 v1 + 首批对照实验 ≥6 组 + 首个小 PR 合入；playbook 框架</div>
+        </div>
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M3</span></div>
+          <div class="m-body">对照实验补齐 ≥12 组；playbook v1（含 1 个实战案例）；调研矩阵完成 50%；性能 PR 提交</div>
+        </div>
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M4</span></div>
+          <div class="m-body">性能 PR 合入；调研矩阵完成；候选池 top5 评审会；对齐 GLM 下一代路线</div>
+        </div>
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M5</span></div>
+          <div class="m-body">立项推进 ≥1 个；PoC 出数 ≥1 个；对标差距地图 v1</div>
+        </div>
+        <div class="ms-card">
+          <div class="m-head"><span class="m-badge">M6</span></div>
+          <div class="m-body">复盘；手册/playbook 定稿发放；部门分享 ≥2 次完成</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 六、写目标的两个注意 -->
+  <section class="block">
+    <div class="block-head">
+      <div class="num gold">六</div>
+      <h2>写目标的两个注意</h2>
+      <span class="desc">可验收 · 可合并</span>
+    </div>
+    <div class="block-body">
+      <div class="notice tip">
+        <span class="n-idx">1</span>
+        <div><b>避免不可验收词：</b>把“掌握/熟悉/了解”全部换成可交付物——手册、playbook、对照矩阵、PoC 数据、合入 PR 数、分享次数。半年后用什么证明“掌握了”，现在就把它写进 KR。</div>
+      </div>
+      <div class="notice warn">
+        <span class="n-idx">2</span>
+        <div><b>方向三/四不必并列写四个 O：</b>若绩效系统只收 2-3 个目标，建议合并为「性能调优与问题定位能力（O1+O3）」「行业调研与优化点落地（O2）」「性能优化实战（O4）」，O3 的基线工作并入 O1 的对照实验矩阵即可。</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 七、关联材料 -->
+  <section class="block" id="links">
+    <div class="block-head">
+      <div class="num gold">七</div>
+      <h2>关联材料（各方向已有产物，从这里跳过去）</h2>
+      <span class="desc">持续补充</span>
+    </div>
+    <div class="block-body">
+      <div class="linkgrid">
+        <a class="lk" href="../params/params-01-scheduling.html">
+          <div class="t">① 参数源码教学 · 调度类（O1）</div>
+          <div class="d">8 个调度参数的八节源码教学：概念爬坡 + 18 图 + 10 代码块，对应 KR1.1 参数地图</div>
+        </a>
+        <a class="lk" href="../compare/dsv41-ced-csa2-ascend.html">
+          <div class="t">② CED/CSA2 × 性能协助点（O2）</div>
+          <div class="d">DeepSeek V4.1-Flash 架构拆解与 7 条优化机会——调研候选池的初始来源</div>
+        </a>
+        <a class="lk" href="../compare/kimi-k3-platform-compare.html">
+          <div class="t">③ Kimi K3 三平台对比（O2）</div>
+          <div class="d">平台间实现差异与三算子通道框架，调研矩阵的方法论参照</div>
+        </a>
+        <a class="lk" href="../stories/stories.html">
+          <div class="t">④ 需求故事目录（O4）</div>
+          <div class="d">三个已验证性能 PR 套路：KDA 门控融合 / RoPE gather / PA workspace 复用</div>
+        </a>
+        <a class="lk" href="../study/study-dcp-decode-streams-vup.html">
+          <div class="t">⑤ 学习材料 · DCP 双流 + V-up（O4）</div>
+          <div class="d">PR #16977 三阶段深读——套路③（双流重叠）的完整案例</div>
+        </a>
+        <a class="lk" href="../../precision-rca/index.html">
+          <div class="t">⑥ 精度定位案件总览（O1）</div>
+          <div class="d">GLM-5.1 / DSV3.2 两案现象·分析·可疑点三页报告——KR1.3 方法论样板</div>
+        </a>
+        <a class="lk" href="../../mail/review/20260923_H1_goal_plan.md">
+          <div class="t">⑦ 本建议书 markdown 源文件</div>
+          <div class="d">可编辑版（绩效系统复制用），与本页内容同步</div>
+        </a>
+        <a class="lk" href="../index.html">
+          <div class="t">⑧ 文档站总览</div>
+          <div class="d">vLLM-Ascend 中文文档站首页：detailed / panorama / compare / stories / params</div>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">
+    昇腾研发支撑半年个人目标建议书（推理性能导向）· 2026-09-23 · 内部参考 ·
+    <a href="../index.html" style="color:#1f5fd6;">返回文档总览</a>
+  </div>
+
+</div>
+</body>
+</html>
