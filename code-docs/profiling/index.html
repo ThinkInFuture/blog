@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>联动分析 · 昇腾性能数据采集全流程（vLLM × vllm-ascend）</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; }
+pre { position:relative; background:#f6f8fa; border:1px solid #d0d7de; border-radius:8px; padding:36px 14px 12px; overflow-x:auto; line-height:1.55; font-size:.84rem; }
+pre .fname { position:absolute; top:0; left:0; right:0; padding:5px 12px; background:#eaeef2; border-bottom:1px solid #d0d7de; color:#57606a; font-size:.78px; font-size:.78rem; display:flex; justify-content:space-between; align-items:center; border-radius:8px 8px 0 0; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 10px; font-size:.87rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+tr.hl td { background:#fffbe6; }
+.warn { color:#cf222e; font-weight:bold; }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+.linklist li { margin:5px 0; }
+.linklist a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="topnav">
+    <span class="brand">vLLM × vllm-ascend · 联动分析</span>
+    <a href="#s1">①全景</a><a href="#s2">②线一 算子级</a><a href="#s3">③线二 服务级</a>
+    <a href="#s4">④版本演进与坑</a><a href="#s5">⑤怎么选</a><a href="#s6">⑥链接</a>
+</div>
+
+<h1>昇腾性能数据采集全流程：上游 vLLM 与 vllm-ascend 联动分析</h1>
+<p class="subtitle">
+<span class="badge b-blue">vLLM main bbd7c24（2026-09-24 克隆）</span>
+<span class="badge b-green">vllm-ascend a71b766ce（2026-09-23）</span>
+采集工具两条线：Ascend PyTorch Profiler（算子级）· MS Service Profiler（服务级）</p>
+
+<h2 id="s1">① 全景：两条采集线，一套上游骨架</h2>
+<div class="card">
+<p>推理服务的性能采集要回答两类问题：<strong>"哪个算子慢"</strong>（算子/内核级）和
+<strong>"服务流程哪一段慢"</strong>（调度、批处理、KV 管理的函数级）。昇腾官方指南给出两条对应的采集线：</p>
+<table>
+<tr><th>特性</th><th>线一：Ascend PyTorch Profiler</th><th>线二：MS Service Profiler</th></tr>
+<tr><td>安装</td><td>内置，命令行即开</td><td>需从源码构建 msserviceprofiler（CANN Toolkit 预装）</td></tr>
+<tr><td>采集粒度</td><td>PyTorch 算子级</td><td>服务框架函数级（也可含算子）</td></tr>
+<tr><td>控制方式</td><td class="hl">API 请求控制（/start_profile、/stop_profile）</td><td>配置文件控制（enable 0→1）</td></tr>
+<tr><td>数据格式</td><td>ascend_pt 格式</td><td>Chrome Tracing + CSV</td></tr>
+<tr><td>适用场景</td><td>模型算子性能分析</td><td>服务框架工作流分析</td></tr>
+</table>
+<p>两条线共用上游 vLLM 的<strong>骨架</strong>：<code>ProfilerConfig</code>（参数）、
+<code>Worker.profile()</code>（入口）、<code>WorkerProfiler</code>（生命周期状态机）。
+vllm-ascend 做两件事：把线一的执行器<strong>换成 <code>torch_npu.profiler</code></strong>；
+给线二<strong>生成昇腾专用的符号打点表</strong>。这就是本页的两条主线。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>两条采集线各自的上游骨架与昇腾替换点在哪——全景一张图。</div>
+<div class="fig-caption">图 1 · 全景：两条采集线与联动点（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["上游 vLLM 骨架<br/>ProfilerConfig · Worker.profile · WorkerProfiler 状态机"] --> B["线一：Ascend PyTorch Profiler（算子级）"]
+    A --> C["线二：MS Service Profiler（服务级）"]
+    B --> B1["vllm-ascend 替换：<br/>TorchNPUProfilerWrapper<br/>（torch_npu.profiler）"]
+    C --> C1["vllm-ascend 供表：<br/>profiling_config.py 生成<br/>service_profiling_symbols.yaml"]
+    B1 --> D1["ascend_pt 数据 → MindStudio Insight"]
+    C1 --> D2["Chrome Tracing + CSV<br/>request/batch/kvcache"]
+    style B1 fill:#eef3ff,stroke:#5b6ee1
+    style C1 fill:#eef3ff,stroke:#5b6ee1
+</div>
+
+<h2 id="s2">② 线一：Ascend PyTorch Profiler（算子级）</h2>
+<h3>2.1 使用流程：五步拿数据</h3>
+<div class="card">
+<p>启动服务时带 <code>--profiler-config</code>（只设了它，/start_profile 端点才会注册，否则 404）；
+稳定后 curl 开采集 → 跑业务请求 → curl 停采集 → 离线 analyse → 用 MindStudio Insight 看。
+注意 <strong>2026-01-19 起上游废弃了 VLLM_TORCH_PROFILER_DIR 环境变量</strong>（vllm-ascend PR #5928），统一用
+<code>--profiler-config '{"profiler":"torch","torch_profiler_dir":"./vllm_profile","torch_profiler_with_stack":false}'</code>。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>从启动到看到数据，五步怎么走。</div>
+<div class="fig-caption">图 2 · 线一五步流程（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["① 启动服务<br/>--profiler-config JSON"] --> B["② curl /start_profile<br/>（未配置时端点不存在→404）"]
+    B --> C["③ 发业务请求<br/>（稳定业务数据后采几秒即可）"]
+    C --> D["④ curl /stop_profile<br/>数据自动落盘 torch_profiler_dir"]
+    D --> E["⑤ analyse() 解析<br/>→ ASCEND_PROFILER_OUTPUT → Insight"]
+    style E fill:#dafbe1,stroke:#1a7f37
+</div>
+<h3>2.2 联动机制：上游骨架四件套，昇腾只换执行器</h3>
+<div class="card">
+<p><strong>上游侧</strong>（vLLM main）：<code>ProfilerConfig</code> 定义参数；
+<code>gpu_worker.profile(is_start)</code>（vllm/v1/worker/gpu_worker.py:1297）是入口；
+<code>WorkerProfiler</code>（vllm/profiler/wrapper.py）是生命周期状态机——管理
+<code>delay_iterations</code>（启动后延迟几步再采）、<code>max_iterations</code>（最多采几步），
+每步 worker 循环调一次 <code>step()</code> 推进状态；
+工厂 <code>create_worker_profiler</code>（wrapper.py:675）按 profiler 类型发
+<code>TorchProfilerWrapper</code> / <code>CudaProfilerWrapper</code> / <code>ProtonProfilerWrapper</code>
+——<strong>只有 CUDA 三分支，没有 NPU</strong>。</p>
+<p><strong>昇腾侧</strong>（vllm-ascend）：NPU 的 <code>NPUWorker.profile()</code>
+（vllm_ascend/worker/worker.py:1170）<strong>不走上游工厂</strong>，直接实例化
+<code>TorchNPUProfilerWrapper</code>（worker/worker.py:1177）——
+它继承上游 <code>WorkerProfiler</code>（状态机、延迟/步数限制全部复用），
+只把底下的执行器从 <code>torch.profiler</code> 换成 <code>torch_npu.profiler</code>。
+"继承骨架、替换执行器"就是这条线的全部联动设计。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>一次 /start_profile 从 API 到 torch_npu.profiler 要经过谁，上游和 ascend 各管哪段。</div>
+<div class="fig-caption">图 3 · 联动调用链（执行视角，节点含文件与行号）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant API as /start_profile
+    participant W as NPUWorker<br/>worker.py:1170
+    participant WP as NPU Wrapper<br/>torch_npu_profiler.py:29
+    participant UP as WorkerProfiler<br/>wrapper.py:33
+    API->>W: profile(True)
+    W->>WP: 首次创建并 start（:1177）
+    WP->>UP: 复用基类 start/step/stop
+    WP->>WP: _start → torch_npu.profiler（:79）
+    Note over WP,UP: 每步 step()：延迟启动/到量自停
+    API->>W: profile(False)
+    W->>WP: stop → trace 落盘
+</div>
+<div class="fig-caption">代码 A1 · 昇腾执行器：把 torch.profiler 换成 torch_npu.profiler</div>
+<pre><span class="fname">vllm_ascend/profiler/torch_npu_profiler.py · TorchNPUProfilerWrapper · L29-86</span><code class="language-python">class TorchNPUProfilerWrapper(WorkerProfiler):
+    &quot;&quot;&quot;Subclass of vLLM ``WorkerProfiler`` that wires in ``torch_npu.profiler``.&quot;&quot;&quot;
+
+    @staticmethod
+    def _create_profiler(profiler_config, trace_name):
+        ...
+        msmonitor_use_daemon = get_ascend_config().msmonitor_use_daemon  # ↳昇腾侧配置
+        if msmonitor_use_daemon:
+            raise RuntimeError(&quot;msmonitor_use_daemon and torch profiler 不能同开&quot;)  # ⚡互斥红线
+
+        experimental_config = torch_npu.profiler._ExperimentalConfig(
+            export_type=torch_npu.profiler.ExportType.Text,      # ↳导出文本型产物
+            profiler_level=torch_npu.profiler.ProfilerLevel.Level1,
+            aic_metrics=torch_npu.profiler.AiCMetrics.PipeUtilization,  # ⚡AI Core 各流水线利用率
+            data_simplification=True,                            # ↳数据精简，控制体积
+        )
+        return torch_npu.profiler.profile(
+            activities=[CPU, NPU],            # ⚡与 CUDA 版的关键差异：NPU activity
+            with_stack=False,
+            profile_memory=profiler_config.torch_profiler_with_memory,
+            # NOTE: torch_npu 的 with_modules 等价于 torch.profiler.with_stack，
+            # with_stack 在 torch_npu 上开销显著 → 用 with_modules 替代（⚡昇腾特有取舍）
+            with_modules=profiler_config.torch_profiler_with_stack,
+            on_trace_ready=torch_npu.profiler.tensorboard_trace_handler(
+                profiler_config.torch_profiler_dir, worker_name=trace_name),
+        )
+
+    def _start(self): self.profiler.start()
+    def _stop(self): self.profiler.stop()
+    def _profiler_step(self): return True
+</code></pre>
+<div class="fig-caption">代码 A2 · 昇腾入口：不走上游工厂，直接建 wrapper</div>
+<pre><span class="fname">vllm_ascend/worker/worker.py · NPUWorker.profile · L1170-1184</span><code class="language-python">        if is_start:
+            rank_suffix = get_worker_rank_suffix(global_rank=self.rank)
+            trace_name = f&quot;{profile_prefix}_{rank_suffix}&quot; if profile_prefix else rank_suffix
+
+            if self.profiler is None:
+                # ⚡上游 create_worker_profiler 只有 torch/cuda/proton 三分支（无 NPU），
+                #   因此 NPUWorker 在这里直接实例化昇腾 wrapper（联动替换点）
+                self.profiler = TorchNPUProfilerWrapper(self.profiler_config, trace_name)
+                self.profiler.start()
+            else:
+                # 已初始化：重启采集但保留首次的 trace 名
+                self.profiler.start()
+</code></pre>
+<h3>2.3 产物与 PD 分离注意</h3>
+<div class="card">
+<p>停采集后 <code>torch_profiler_dir</code> 下出现 <code>*_ascend_pt</code> 目录，先调
+<code>torch_npu.profiler.profiler.analyse()</code> 解析，再看 <code>ASCEND_PROFILER_OUTPUT</code>：
+<code>kernel_details.csv</code>（内核级）、<code>operator_details.csv</code>（算子级）、
+<code>op_statistic.csv</code>（算子利用率）、<code>step_trace_time.csv</code>（步调度）、
+<code>trace_view.json</code>（Chrome tracing，用 <strong>MindStudio Insight</strong> 打开）——
+这正是半年目标 KR1.3 里"profile 分解 Cube/Vector/通信"的数据来源。</p>
+<p><strong>PD 分离</strong>下 P/D 是两个独立实例：<strong>两边都要带 --profiler-config（目录错开）</strong>，
+负载均衡代理<strong>不转发</strong> /start_profile、/stop_profile——必须分别 curl 各节点；
+EPD 代理（layerwise）则支持向全部 E/P/D 实例广播。</p>
+</div>
+
+<h2 id="s3">③ 线二：MS Service Profiler（服务级）</h2>
+<h3>3.1 使用流程：配置驱动，不用 curl</h3>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>服务级采集的闭环——两个环境变量、一个开关、一条 parse 命令。</div>
+<div class="fig-caption">图 4 · 线二流程（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["构建 msserviceprofiler<br/>（CANN 预装/源码升级）"] --> B["服务启动前设两个环境变量<br/>SERVICE_PROF_CONFIG_PATH + PROFILING_SYMBOLS_PATH"]
+    B --> C["sed 把 enable 0→1<br/>（配置文件控制采集开关）"]
+    C --> D["正常发业务请求<br/>数据落 ~/.ms_server_profiler"]
+    D --> E["msserviceprofiler parse<br/>→ chrome_tracing.json + request/batch/kvcache.csv"]
+    style E fill:#dafbe1,stroke:#1a7f37
+</div>
+<h3>3.2 符号表机制：vllm-ascend 把"打点清单"生成好</h3>
+<div class="card">
+<p>线二的核心配置是一份<strong>符号表 YAML</strong>：声明"哪些函数要打点、用什么 handler 记录"。
+<code>vllm_ascend/profiling_config.py</code> 在 vLLM 启动时自动生成
+<code>~/.config/vllm_ascend/service_profiling_symbols.&lt;版本&gt;.yaml</code>
+（文件名带 vLLM 版本号，<code>generate_service_profiling_config</code> L538 原子写入）。
+清单覆盖服务全链路，且每条可带 <strong>min_version/max_version</strong>——上游接口一变，
+换一条符号声明即可，这是它对齐上游快速演进的关键手段：</p>
+<ul>
+<li>OpenAI 入口：<code>OpenAIServingChat.create_chat_completion</code>、<code>AsyncLLM.generate</code></li>
+<li>调度批处理：<code>Scheduler.schedule / add_request</code>（上游类 + 昇腾 AscendScheduler 各一条）</li>
+<li>KV Cache：<code>KVCacheManager.free / get_computed_blocks</code></li>
+<li>模型执行：<code>Executor.execute_model</code>、<code>NPUModelRunner.execute_model / _update_states / _prepare_inputs</code>、logits、sampler</li>
+<li>投机/MTP：<code>propose_draft_token_ids</code> 等专用 handler</li>
+</ul>
+</div>
+<div class="fig-caption">代码 A3 · 符号表长什么样：按版本条件的打点声明</div>
+<pre><span class="fname">vllm_ascend/profiling_config.py · SERVICE_PROFILING_SYMBOLS_YAML · 节选（L27-157）</span><code class="language-python">- symbol: vllm.v1.core.sched.scheduler:Scheduler.schedule   # ↳上游调度入口
+  min_version: &quot;0.9.1&quot;
+  handler: ms_service_profiler.patcher.vllm.handlers.v1.batch_handlers:schedule
+  name: batchFrameworkProcessing
+
+- symbol: vllm_ascend.worker.model_runner_v1:NPUModelRunner.execute_model  # ⚡昇腾自己的执行器
+  name: modelRunnerExec
+  handler: ...v1.model_handlers:execute_model_runner
+  domain: Execute
+
+# ⚡执行时长采集的版本演进：旧 API 只到 0.14.0rc1，0.15.0rc1 起换上游新接口
+- symbol: vllm_ascend.utils:ProfileExecuteDuration.capture_async
+  min_version: &quot;0.9.1&quot;
+  max_version: &quot;0.14.0rc1&quot;
+  handler: ...v1.model_handlers:capture_async
+
+- symbol: vllm.v1.utils:record_function_or_nullcontext
+  min_version: &quot;0.15.0rc1&quot;
+  handler: ...v1.model_handlers:record_function_or_nullcontext
+</code></pre>
+<div class="card">
+<p>配置文件（ms_service_profiler_config.json）常用字段：<code>enable</code>（0/1 总开关）、
+<code>prof_dir</code>（默认 ~/.ms_server_profiler）、<code>acl_task_time</code>（算子下发/执行时延，
+0/1/2/3 四档，3=Torch Profiler dump）、<code>timelimit</code>（进程自动停止时长，0-7200 秒）、
+<code>domain</code>（限定 Request/KVCache/ModelExecute/BatchSchedule/Communication 域，减数据量）。
+产物四件：<code>chrome_tracing.json</code>（Insight 打开）、<code>request.csv</code>、
+<code>kvcache.csv</code>、<code>batch.csv</code>——服务级"请求→批→KV"全链路即可视化。</p>
+</div>
+
+<h2 id="s4">④ 版本演进与坑（联动风险清单）</h2>
+<div class="card">
+<ul>
+<li><span class="warn">环境变量废弃</span>：<code>VLLM_TORCH_PROFILER_DIR</code> 2026-01-19 起废弃（PR #5928），改用 <code>--profiler-config</code>（在线）/ <code>profiler_config</code>（离线）；老文档/脚本里的旧用法要迁。</li>
+<li><span class="warn">端点 404</span>：/start_profile、/stop_profile <strong>只在启动带 --profiler-config 时注册</strong>——curl 404 先查启动参数。</li>
+<li><span class="warn">互斥</span>：<code>msmonitor_use_daemon</code> 与 torch profiler 不能同开（TorchNPUProfilerWrapper 启动即抛错）。</li>
+<li><span class="warn">stack 开销</span>：torch_npu 的 <code>with_stack</code> 开销显著，wrapper 用 <code>with_modules</code> 等价替代；指南建议默认关 python stack（<code>torch_profiler_with_stack=false</code>）。</li>
+<li><span class="warn">接口换代</span>：执行时长打点 <code>ProfileExecuteDuration.capture_async</code> 只支持到 vLLM 0.14.0rc1，0.15.0rc1 起上游换 <code>record_function_or_nullcontext</code>——符号表用双条目按版本分流（升级 vLLM 后符号表自动跟着版本号切换）。</li>
+<li><span class="warn">PD 分离</span>：P/D 各自配 --profiler-config（目录错开）、各自 curl；普通 LB 代理不转发 profile 端点。</li>
+</ul>
+</div>
+
+<h2 id="s5">⑤ 怎么选：一张决策图</h2>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>拿到一个性能问题，先走哪条线。</div>
+<div class="fig-caption">图 5 · 选型决策（LR）</div>
+<div class="mermaid">
+flowchart LR
+    A["性能问题"] --> B{"瓶颈在算子/内核？<br/>（Cube/Vector/通信占比）"}
+    B -->|是| C["线一 Ascend PyTorch Profiler<br/>kernel_details / op_statistic"]
+    B -->|否| D{"瓶颈在服务流程？<br/>（调度/批/KV/请求时延）"}
+    D -->|是| E["线二 MS Service Profiler<br/>batch.csv / kvcache.csv / request.csv"]
+    D -->|不确定| F["先线二看全链路<br/>再线一钻算子"]
+    style C fill:#eef3ff,stroke:#5b6ee1
+    style E fill:#eef3ff,stroke:#5b6ee1
+</div>
+<div class="card">
+<p>与半年目标的衔接：线一产出（kernel/operator/step_trace 三张 csv）正是 KR1.3 的
+"profile 分解 Cube/Vector/通信占比"的输入；线二的 batch/kvcache/request 三张 csv
+正好覆盖调度与 KV 工程的问题定位；两线数据在 MindStudio Insight 里同源查看。</p>
+</div>
+
+<h2 id="s6">⑥ 链接</h2>
+<div class="card">
+<ul class="linklist">
+<li>官方指南：<a href="https://github.com/vllm-project/vllm-ascend/blob/main/docs/source/developer_guide/performance_and_debug/service_profiling_guide.md" target="_blank">Service Profiling Guide（vllm-ascend 仓库内）</a></li>
+<li>vllm-ascend 源码：<a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/profiler/torch_npu_profiler.py" target="_blank">torch_npu_profiler.py</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/profiling_config.py" target="_blank">profiling_config.py</a> ·
+<a href="https://github.com/vllm-project/vllm-ascend/blob/main/vllm_ascend/worker/worker.py" target="_blank">worker/worker.py</a></li>
+<li>上游 vLLM 源码：<a href="https://github.com/vllm-project/vllm/blob/main/vllm/profiler/wrapper.py" target="_blank">vllm/profiler/wrapper.py（WorkerProfiler）</a> ·
+<a href="https://github.com/vllm-project/vllm/blob/main/vllm/v1/worker/gpu_worker.py" target="_blank">vllm/v1/worker/gpu_worker.py</a></li>
+<li>工具：<a href="https://www.hiascend.com/document/detail/zh/mindstudio/81RC1/GUI_baseddevelopmenttool/msascendinsightug/Insight_userguide_0002.html" target="_blank">MindStudio Insight</a> ·
+<a href="https://gitcode.com/Ascend/msserviceprofiler" target="_blank">msserviceprofiler 源码</a></li>
+<li>本站：<a href="../index.html">返回文档总览</a> · <a href="../params/params-01-scheduling.html">参数源码教学①调度</a> ·
+<a href="../plan/index.html">半年计划</a></li>
+</ul>
+</div>
+
+<footer>vLLM（bbd7c24）× vllm-ascend（a71b766ce）联动分析 · 2026-09-24 ·
+<a href="../index.html" style="color:#5b6ee1;">返回总览</a></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#eef3ff', primaryTextColor:'#24292f', primaryBorderColor:'#6e7681', lineColor:'#57606a', fontSize:'15px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:50, mirrorActors:false, useMaxWidth:false } });
+try { document.querySelectorAll('pre code.language-python').forEach(function(el){ hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
