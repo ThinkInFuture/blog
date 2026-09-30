@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>源码教学 · 多流类参数（params-02）- vLLM Ascend</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; white-space:nowrap; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:24px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.legend { background:#fafafa; border:1px dashed #d0d7de; padding:8px 14px; border-radius:8px; margin:10px 0; font-size:.88rem; color:#555; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; cursor:zoom-in; }
+.mermaid:hover { outline:1px solid var(--accent); }
+pre { position:relative; background:#f6f8fa; border:1px solid #d0d7de; border-radius:8px; padding:36px 14px 12px; overflow-x:auto; line-height:1.55; font-size:.84rem; }
+pre .fname { position:absolute; top:0; left:0; right:0; padding:5px 12px; background:#eaeef2; border-bottom:1px solid #d0d7de; color:#57606a; font-size:.78rem; display:flex; justify-content:space-between; align-items:center; border-radius:8px 8px 0 0; }
+.copybtn { background:#fff; color:#57606a; border:1px solid #d0d7de; border-radius:6px; padding:1px 10px; cursor:pointer; font-size:.75rem; }
+.copybtn:hover { background:var(--accent); color:#fff; }
+code { font-family:Consolas,monospace; }
+pre code { background:transparent; padding:0; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 10px; font-size:.87rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+.stage { border:1px solid #d0d7de; border-radius:12px; margin:14px 0; overflow:hidden; background:#fff; }
+.stage-head { background:#eef1f6; padding:11px 18px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; user-select:none; }
+.stage-head:hover { background:#e6eaf0; }
+.stage-head h2 { margin:0; border:none; padding:0; font-size:1.1rem; }
+.stage-head .arrow { color:var(--accent); transition:transform .2s; }
+.stage.closed .arrow { transform:rotate(-90deg); }
+.stage.closed .stage-body { display:none; }
+.stage-body { padding:4px 18px 14px; }
+#allbtn { background:var(--accent); color:#fff; border:none; border-radius:8px; padding:6px 16px; cursor:pointer; margin-left:auto; }
+#overlay { display:none; position:fixed; inset:0; z-index:100; background:rgba(255,255,255,.96); overflow:auto; padding:30px; cursor:zoom-out; }
+#overlay .inner { max-width:1600px; margin:0 auto; background:#fff; border-radius:12px; padding:20px; border:1px solid #d0d7de; }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="topnav">
+    <span class="brand">vLLM Ascend · 参数源码教学</span>
+    <a href="index.html">八类总览</a>
+    <a href="#s1">①干嘛的</a><a href="#s2">②位置</a><a href="#s3">③概念爬坡</a><a href="#s4">④主干流程</a>
+    <a href="#s5">⑤关键节点</a><a href="#s6">⑥流工具</a><a href="#s7">⑦边界异常</a><a href="#s8">⑧小结</a>
+    <a href="#check">自检表</a>
+</div>
+
+<h1>多流类参数：绑核与双流重叠</h1>
+<p class="subtitle">
+<span class="badge b-blue">参数组 2/8 · 多流</span>
+<span class="badge b-green">代码基线 a71b766ce（2026-09-23）</span><br>
+讲解范围：<code>vllm_ascend/ascend_config.py</code> 顶层三参数
+<code>enable_cpu_binding</code>（L458，默认 true）、<code>multistream_dsv4_dsa_overlap</code>（L459，默认 true）、
+<code>multistream_overlap_shared_expert</code>（L461，默认 false），及三个实现位置：
+<code>worker/worker.py</code> + <code>cpu_binding.py</code>（绑核）、
+<code>attention/dsa_v1.py</code>（DSA prolog 双流）、<code>ops/fused_moe/shared_experts.py</code>（共享专家双流）。</p>
+
+<h2 id="s1">① 这段代码是干嘛的</h2>
+<div class="card">
+<p>一句话：<strong>这三个参数管"并发度"——一个管 host 侧稳不稳，两个管 device 侧挤不挤。</strong>
+推理一步的耗时 = host 准备（组 batch、填元数据、启动算子）+ device 执行。host 准备的节奏不稳，
+芯片就会"饿"；device 侧如果所有算子排一条队，不同硬件单元也会互相干等。这三个参数各堵一个漏：</p>
+<ul>
+<li><code>enable_cpu_binding</code>（CPU 绑核）：把每个 worker 进程<strong>钉在</strong>它那块 NPU 对应的 CPU 核上，
+防止操作系统把进程挪来挪去造成喂卡节奏抖动；</li>
+<li><code>multistream_dsv4_dsa_overlap</code>（DSA prolog 双流）：DeepSeek 系注意力的 prolog（前处理）里
+投影/量化/归一化在 <strong>Cube、Vector 两类硬件单元间交替</strong>，单流排队时互相干等——拆两条流流水起来；</li>
+<li><code>multistream_overlap_shared_expert</code>（共享专家双流）：MoE 里每个 token 都要过的
+<strong>共享专家</strong>，把它的输入准备/计算挪到独立流，与路由专家路径<strong>同时</strong>跑。</li>
+</ul>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>三个参数分别站在 host/device 的哪个位置、堵的哪个漏。</div>
+<div class="fig-caption">图 1-1 · 全景：host 一漏 + device 两漏（概览）</div>
+<div class="mermaid">
+flowchart TD
+    H["host 侧：组 batch/填元数据/启动算子<br/>进程被 OS 挪来挪去 → 喂卡节奏抖"] --> P1["enable_cpu_binding<br/>绑核：进程钉在专属 CPU 核"]
+    D1["device 侧：注意力 prolog<br/>Cube/Vector 算子单流排队互相干等"] --> P2["multistream_dsv4_dsa_overlap<br/>prolog 拆双流流水"]
+    D2["device 侧：MoE<br/>共享专家与路由专家串行"] --> P3["multistream_overlap_shared_expert<br/>共享专家挪独立流并行"]
+    style P1 fill:#eef3ff,stroke:#5b6ee1
+    style P2 fill:#eef3ff,stroke:#5b6ee1
+    style P3 fill:#eef3ff,stroke:#5b6ee1
+</div>
+
+<h2 id="s2">② 它们在系统中的位置</h2>
+<div class="card">
+<p>三个参数的生效位置分布很散，这也是它们被归成"一类"的唯一共同点——都关于<strong>并发</strong>：
+绑核发生在 <strong>worker 进程初始化</strong>（vllm_ascend/worker/worker.py，
+每个 worker 进程对应一块 NPU）；两个双流开关发生在<strong>模型层的执行热路径</strong>——
+DSA prolog 在注意力前处理（attention/dsa_v1.py，DeepSeek 系 MLA 注意力），共享专家在 MoE 层
+（ops/fused_moe/shared_experts.py）。读代码时按"启动一次"和"每层每步"两个频率去找。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>三个参数各自挂在执行框架的哪个位置、以什么频率生效。</div>
+<div class="fig-caption">图 2-1 · 系统位置（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["服务启动"] --> B["NPUWorker 初始化（每进程一次）<br/>worker.py:931 → cpu_binding.py"]
+    B --> C["enable_cpu_binding 生效<br/>（频率：启动一次）"]
+    A --> D["每层每步执行"]
+    D --> E["注意力 prolog<br/>dsa_v1.py:1577 读开关"]
+    E --> F["multistream_dsv4_dsa_overlap 生效<br/>（频率：每层每步）"]
+    D --> G["MoE 层<br/>shared_experts.py:92 读开关"]
+    G --> H["multistream_overlap_shared_expert 生效<br/>（频率：每层每步）"]
+    style C fill:#dafbe1,stroke:#1a7f37
+    style F fill:#dafbe1,stroke:#1a7f37
+    style H fill:#dafbe1,stroke:#1a7f37
+</div>
+
+<h2 id="s3">③ 概念爬坡：从"排队"走到"三个开关"</h2>
+<div class="card">
+<p><strong>级 1 · NPU 的任务不是"立刻执行"，是"提交进队列"。</strong>你写 <code>c = a + b</code> 这样的
+张量运算，程序并没当场算完——它只是把一条"做一次加法"的指令<strong>提交</strong>到了芯片的任务队列里，
+真正的执行由芯片异步完成。这个队列在昇腾/英伟达的编程模型里叫 <strong>stream（流）</strong>：
+同一流里的任务<strong>严格按提交顺序串行</strong>执行；不同流之间<strong>不保证顺序，可以并行</strong>。
+默认情况下所有任务都提交到同一条"默认流"。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>流是什么——为什么"同流串行、跨流并行"。</div>
+<div class="fig-caption">图 3-1 · 爬坡级 1：流 = 任务队列</div>
+<div class="mermaid">
+flowchart LR
+    A["程序提交任务<br/>T1 → T2 → T3"] --> B["默认流（一条队列）<br/>T1 → T2 → T3 严格串行"]
+    B --> C["第二条流<br/>T4 与 T1/T2 可以同时跑"]
+    style B fill:#eef3ff,stroke:#5b6ee1
+    style C fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="card">
+<p><strong>级 2 · 单流的问题：芯片单元之间的"空转隙"。</strong>昇腾芯片里干活的单元分两类：
+<strong>Cube</strong>（矩阵乘法专用单元，干大 GEMM）和 <strong>Vector</strong>（向量运算单元，干归一化/量化/逐元素）。
+它们是<strong>两套独立硬件</strong>。但单流队列是串行的：前面的 Vector 算子（比如量化）没跑完，
+后面的 Cube 算子（矩阵乘）只能干等——哪怕 Cube 单元此刻完全空闲。这种交替越频繁，空转隙越多。
+注意力 prolog 恰好就是"Vector、Cube 交替"的重灾区。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>为什么单流会让两套硬件单元互相干等。</div>
+<div class="fig-caption">图 3-2 · 爬坡级 2：单流时间线上的空转隙（数据视角）</div>
+<div class="mermaid">
+flowchart LR
+    A["单流串行：<br/>q量化V → q投影C → kv量化V → kv矩阵乘C → kv_normV"] --> B["时间线：<br/>Cube 单元在 V 算子执行期间空闲，反之亦然"]
+    style B fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="card">
+<p><strong>级 3 · 双流 + 事件：把"无依赖"的活挪过去，依赖用事件声明。</strong>解法是把互不依赖的任务
+提交到第二条流（辅助流）并行跑。但"无依赖"必须<strong>精确声明</strong>：如果辅助流上的任务 X 需要主流上
+任务 Y 的产出，就要用 <strong>event（事件）</strong>——主流在 Y 完成处"记录事件"，辅助流"等待该事件"后才跑 X。
+事件就是跨流的"哨兵"。等两条流的活都干完，再汇合（主流等辅助流）继续。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>双流怎么配合——事件如何充当跨流的依赖哨兵。</div>
+<div class="fig-caption">图 3-3 · 爬坡级 3：双流 + 事件接力（执行视角）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant M as 主流
+    participant A as 辅助流
+    M->>M: 任务 Y
+    M->>A: record_event(Y 完成)
+    A->>A: wait_event(Y) 后跑 X
+    Note over M,A: Y 与 X 无数据依赖即可并行
+    M->>M: wait 辅助流（汇合）
+</div>
+<div class="card">
+<p><strong>级 4 · 昇腾上的三个落点。</strong>有了"流+事件"这套工具，回看推理链路上哪里在浪费并发：
+<strong>host 侧</strong>，worker 进程被操作系统在 CPU 核间搬家，喂卡节奏时快时慢——把它钉到专属核（绑核）；
+<strong>device 侧</strong>，注意力 prolog 的 V/C 交替（图 3-2）用双流流水化解；MoE 的共享专家与路由专家
+互不依赖却排一条队——也用双流并行。这就是三个参数的全部由来。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>三个参数是怎么从"哪里浪费了并发"推出来的。</div>
+<div class="fig-caption">图 3-4 · 爬坡级 4：并发浪费点 → 三个参数（概览）</div>
+<div class="mermaid">
+flowchart TD
+    W1["host：进程漂移<br/>喂卡节奏抖"] --> S1["enable_cpu_binding<br/>绑核"]
+    W2["device：prolog 的<br/>Cube/Vector 交替空隙"] --> S2["multistream_dsv4_dsa_overlap<br/>三段流水"]
+    W3["device：共享专家与<br/>路由专家串行"] --> S3["multistream_overlap_shared_expert<br/>独立流并行"]
+    style S1 fill:#eef3ff,stroke:#5b6ee1
+    style S2 fill:#eef3ff,stroke:#5b6ee1
+    style S3 fill:#eef3ff,stroke:#5b6ee1
+</div>
+
+<div class="card">
+<p><strong>术语表（回头查阅用）</strong>：stream＝流，任务队列；event＝事件，跨流依赖哨兵；
+Cube/Vector＝昇腾的两类执行单元（矩阵乘 / 向量运算）；prolog＝注意力前处理（投影、量化、归一化）；
+MoE＝专家混合；shared expert＝共享专家（每个 token 必经）与 routed expert＝路由专家（按门控选择）；
+affinity＝CPU 亲和性（进程允许落在哪些核上）；TP/SP/EP＝张量/序列/专家并行；
+HCCL＝华为集合通信库；GEMM＝通用矩阵乘。</p>
+</div>
+
+<h2 id="s4">④ 主干流程：从启动参数到生效位置</h2>
+<div class="card">
+<p>三个参数都在 <code>--additional-config</code> 顶层（不在 <code>scheduler_config</code> 里），注意<strong>默认值不同</strong>：
+绑核与 DSA 双流默认<strong>开</strong>（成熟稳定），共享专家双流默认<strong>关</strong>（较新，且有互斥约束，见⑦）。
+生效路径分叉：绑核在 worker 初始化时一次性执行；两个双流开关在每层的执行热路径上被读取。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>三个参数各自的生效时机与位置。</div>
+<div class="fig-caption">图 4-1 · 生效链（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["--additional-config 顶层 JSON"] --> B["AscendConfig<br/>L458-461 三个 bool 字段"]
+    B --> C["enable_cpu_binding=true<br/>→ NPUWorker 初始化时绑核（一次）"]
+    B --> D["multistream_dsv4_dsa_overlap=true<br/>→ dsa_v1.py:1577 每层读"]
+    B --> E["multistream_overlap_shared_expert=false<br/>→ shared_experts.py:92 每层读"]
+    style C fill:#dafbe1,stroke:#1a7f37
+    style D fill:#dafbe1,stroke:#1a7f37
+    style E fill:#fff8e1,stroke:#9a6700
+</div>
+<div class="fig-caption">代码 B1 · 三个参数的定义与默认值</div>
+<pre><span class="fname">vllm_ascend/ascend_config.py · AscendConfig 字段 · L458-461</span><code class="language-python">    # ---- user-input switches: bool/int/list/str, auto type validation ----
+    enable_cpu_binding: bool = True                  # ⚡默认开：绑核成熟稳定
+    multistream_dsv4_dsa_overlap: bool = True        # ⚡默认开：DSA prolog 双流
+    enable_prefill_mc2: bool = False
+    multistream_overlap_shared_expert: bool = False  # ⚡默认关：较新特性（见⑦互斥）
+</code></pre>
+
+<h2 id="s5">⑤ 关键节点逐个展开：三个参数</h2>
+
+<h3>5.1 enable_cpu_binding —— 把 worker 进程"钉"在专属 CPU 核上</h3>
+<div class="card">
+<p><strong>病</strong>：decode 每步都要 host 侧先干活（组 batch、算元数据、提交算子）。如果操作系统
+看哪个核空闲就把 worker 进程搬过去，进程会遭遇缓存失效、跨 NUMA 访问、与其它进程争抢——
+喂卡节奏从稳定的 5ms 偶尔抖到 20ms，芯片跟着饿肚子。多卡服务器上问题更明显：几十个 worker
+进程若无约束，可能挤到同几个核上。</p>
+<p><strong>治法</strong>：<code>cpu_binding.py</code> 在初始化时用 <code>npu-smi</code> 拓扑信息解析出
+<strong>每块 NPU 亲和的 CPU 核列表</strong>（哪个核离哪块芯片近、属于哪个 NUMA 域），worker 按
+<code>local_rank</code> 选出自己的核集合，写进进程的 CPU 亲和性掩码——从此 OS 只能把它调度在这些核上。
+注意容错：绑核失败（权限/拓扑解析失败）只打 warning 不阻断启动。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>绑核的映射关系——每块 NPU 的 worker 被钉到哪组核。</div>
+<div class="fig-caption">图 5-1 · 细节：NPU → CPU 核亲和映射（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["npu-smi 拓扑<br/>NPU0↔CPU0-7 · NPU1↔CPU8-15 ..."] --> B["DeviceInfo 解析<br/>npu_affinity 字典"]
+    B --> C["worker(local_rank=0) → NPU0 的核集合"]
+    B --> D["worker(local_rank=1) → NPU1 的核集合"]
+    C --> E["设置进程亲和掩码<br/>OS 不再搬动它"]
+    style E fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B2 · 绑核入口：失败只降级不阻断</div>
+<pre><span class="fname">vllm_ascend/worker/worker.py · NPUWorker 初始化 · L931-939</span><code class="language-python">        if get_ascend_config().enable_cpu_binding:      # ⚡参数读取
+            try:
+                bind_cpus(                               # →NPU 见 cpu_binding.py
+                    self.local_rank,
+                    npu_id=current_platform.device_id_to_physical_device_id(self.local_rank),
+                )
+            except Exception as e:
+                logger.warning(&quot;Bind cpus failed in rank%s: %s Skip binding cpu.&quot;,
+                               self.local_rank, e)       # ⚡降级：绑核失败不影响服务启动
+</code></pre>
+<div class="card">
+<p><code>cpu_binding.py</code> 里的 <code>DeviceInfo</code>（L59-66）负责脏活：调 <code>npu-smi</code> 解析
+板卡拓扑（<code>npu_map_info</code>）、找出本进程可见的逻辑 NPU 列表、从拓扑算出
+<code>npu_affinity: dict[NPU, list[CPU]]</code> 亲和字典；<code>bind_cpus</code> 按亲和字典设置掩码
+（掩码按 32 位一组处理，<code>MASK_BIT = 32</code>，L20）。</p>
+</div>
+
+<h3>5.2 multistream_dsv4_dsa_overlap —— 注意力 prolog 的三段流水</h3>
+<div class="card">
+<p><strong>病</strong>：DeepSeek 系 MLA 注意力的 prolog（前处理）序列是典型的 V/C 交替：
+q 路量化（V）→ q 投影（C）→ kv 路量化（V）→ kv 矩阵乘（C）→ kv 归一化（V）……单流串行时
+两套硬件单元轮流空转。</p>
+<p><strong>治法</strong>：<code>_mla_prolog_multistream</code>（dsa_v1.py:1919）把它拆成<strong>三段两流的流水</strong>：
+主流与辅助流（<code>dsv4_dsa_overlap_stream()</code>，dsa_v1.py:179 的单例流）交替推进，用
+<strong>事件</strong>接力保证依赖。最值得学的是源码注释里点出的硬件约束：
+<strong>让 Vector 型的 kv_norm 排在 Cube 型的 kv_matmul 之后于辅助流执行，是为了避免两者争抢 Cube 单元</strong>——
+双流不是"随便并行"，要按硬件单元分派任务。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>三段流水怎么排、事件在哪些节点接力。</div>
+<div class="fig-caption">图 5-2 · 细节：prolog 三段两流流水（执行视角，V=Vector C=Cube）</div>
+<div class="mermaid">
+sequenceDiagram
+    participant M as 主流
+    participant A as 辅助流
+    M->>M: 段1：q 投影 + q 量化（C/V）
+    M->>A: e_q_quant_done
+    A->>A: 段2：kv 量化（V）→ wait 后 kv_matmul（C）
+    A->>M: e_kv_quant_done / e_kv_matmul_done
+    M->>M: 段3：part3（wait e_kv_matmul_done）
+    M->>A: e_part3_start
+    A->>A: kv_norm（V）← 故意排后避免争抢 Cube
+    M->>M: wait_stream(aux) 汇合
+</div>
+<div class="fig-caption">代码 B3 · 三段流水：事件接力与单元分派</div>
+<pre><span class="fname">vllm_ascend/attention/dsa_v1.py · _mla_prolog_multistream · L1919-2010（节选）</span><code class="language-python">    def _mla_prolog_multistream(...):
+        aux_stream = dsv4_dsa_overlap_stream()      # ⚡单例辅助流（L179）
+        ...
+            e_q_quant_done = main_stream.record_event()      # ⚡事件接力：q 量化完成
+            with npu_stream_switch(aux_stream, enabled=True):
+                torch.npu.current_stream().wait_event(e_q_quant_done)
+                ...
+                e_kv_quant_done = torch.npu.current_stream().record_event()
+        e_part2_start = main_stream.record_event()
+        ...
+            main_stream.wait_event(e_kv_quant_done)
+        ...
+        with npu_stream_switch(aux_stream, enabled=True):
+            torch.npu.current_stream().wait_event(e_part3_start)
+            ...
+            e_kv_matmul_done = torch.npu.current_stream().record_event()
+        ...
+        # aux_stream) completes before q_b_matmul starts so they do not contend for
+        # the Cube units. kv_norm (Vector) follows kv_matmul on aux_stream and is
+        # ...                        ← ⚡原注释：按 Cube/Vector 单元排布，避免争抢
+        main_stream.wait_event(e_kv_matmul_done)
+        ...
+        main_stream.wait_stream(aux_stream)          # ⚡终局汇合
+</code></pre>
+<div class="card">
+<p>开关在 <code>dsa_v1.py:1577</code> 读入（<code>self.multistream_dsv4_dsa_overlap = ...</code>），
+关闭时退回全串行的 prolog 路径——所以这个开关也是<strong>问题排查的退路</strong>：怀疑双流引入问题时关掉对照。</p>
+</div>
+
+<h3>5.3 multistream_overlap_shared_expert —— 共享专家与路由路径并行</h3>
+<div class="card">
+<p><strong>病</strong>：MoE 层里专家分两种：<strong>路由专家</strong>（每个 token 按门控分发给少数几个）和
+<strong>共享专家</strong>（每个 token 都必须过，承担"公共知识"）。两者逻辑上互不依赖，
+但默认排同一条流：共享专家的输入聚合（all-gather）与计算，把路由路径的启动往后顶。</p>
+<p><strong>治法</strong>：<code>shared_experts.py</code> 给共享专家单独一条流
+（<code>shared_experts_calculation_stream()</code>）：<code>prepare_input_async</code>（L246）把
+SP 模式下的输入 all-gather 挪到共享专家流，与路由侧的输入变换（如 Kimi-K3 的 latent 投影）<strong>重叠</strong>；
+计算入口再按开关切换（L565 的 <code>enabled=self.multistream_overlap</code>）。
+开关读取在 <code>AscendSharedExperts.__init__</code>（L92）。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>共享专家挪独立流后，哪两段活重叠了。</div>
+<div class="fig-caption">图 5-3 · 细节：共享专家与路由路径重叠（执行视角）</div>
+<div class="mermaid">
+flowchart TD
+    A["主流：路由路径<br/>输入变换 → dispatch → 路由专家 → combine"] --> C["汇合：合并两路输出"]
+    B["共享专家流：<br/>all-gather 输入 → 共享 MLP"] --> C
+    A -. input_ready 事件 .-> B
+    B -. all_gather_done 事件 .-> C
+    style B fill:#fff8e1,stroke:#9a6700
+    style C fill:#dafbe1,stroke:#1a7f37
+</div>
+<div class="fig-caption">代码 B4 · 共享专家输入的异步准备</div>
+<pre><span class="fname">vllm_ascend/ops/fused_moe/shared_experts.py · prepare_input_async · L246-266</span><code class="language-python">    def prepare_input_async(self, hidden_states: torch.Tensor) -&gt; PreparedSharedExpertInput:
+        &quot;&quot;&quot;Start the SP-only input all-gather on the shared-expert stream.
+
+        The caller must wait for ``ready_event`` before enqueueing routed-path
+        collectives.  This method is intended to overlap the gather only with
+        a routed input transform such as Kimi-K3's latent projection.
+        &quot;&quot;&quot;                          # ⚡重叠对象：路由侧的输入变换
+        if not (self.multistream_overlap and ...):
+            return PreparedSharedExpertInput(hidden_states=hidden_states)
+
+        input_ready = torch.npu.current_stream().record_event()   # ⚡事件 1：输入就绪
+        with npu_stream_switch(shared_experts_calculation_stream(), enabled=True):
+            torch.npu.current_stream().wait_event(input_ready)
+            hidden_states = tensor_model_parallel_all_gather(hidden_states, dim=0)
+            all_gather_done = torch.npu.current_stream().record_event()  # ⚡事件 2：聚合完成
+        return PreparedSharedExpertInput(hidden_states=..., ready_event=all_gather_done)
+</code></pre>
+
+<h2 id="s6">⑥ 流工具：npu_stream_switch 与两个单例流</h2>
+<div class="card">
+<p>读完三处实现会发现它们用的是<strong>同一套流工具</strong>，这是 vllm-ascend 封装好的"双流姿势"：
+<code>npu_stream_switch(stream, enabled=开关)</code> 是一个上下文管理器——进入时把"当前流"切到目标流
+（开关关闭时什么都不做，代码写一遍即可同时支持开/关两种模式），退出时切回；
+<code>dsv4_dsa_overlap_stream()</code>（dsa_v1.py:179）和 <code>shared_experts_calculation_stream()</code>
+都是<strong>单例获取函数</strong>——首次调用创建流，之后复用同一实例，避免反复建流的开销。
+三处实现的代码形状因此完全一致：<code>record_event → with switch: wait_event → 干活 → record_event</code>。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>为什么三处双流代码长得一模一样——都站在同一套工具上。</div>
+<div class="fig-caption">图 6-1 · 流工具的复用（结构视角）</div>
+<div class="mermaid">
+flowchart TD
+    T["npu_stream_switch(stream, enabled)<br/>上下文管理器：进入切流/退出切回"] --> U1["dsa_v1 prolog<br/>dsv4_dsa_overlap_stream()"]
+    T --> U2["shared_experts<br/>shared_experts_calculation_stream()"]
+    T --> U3["dsa_cp 等其它调用点"]
+    U1 & U2 & U3 --> P["统一姿势：<br/>record_event → with switch → wait_event → 干活"]
+    style P fill:#dafbe1,stroke:#1a7f37
+</div>
+
+<h2 id="s7">⑦ 边界与异常：互斥、死锁坑与降级</h2>
+<div class="card">
+<ul>
+<li><span class="warn">静默互斥</span>：<code>enable_fused_mc2=1</code> 时
+<code>multistream_overlap_shared_expert</code> 被<strong>强制改回 false</strong>（ascend_config.py:705-706）——
+你配了也白配，日志无 error。排查"共享专家重叠为什么没生效"先查 mc2。</li>
+<li><span class="warn">HCCL 死锁坑</span>：shared_experts 注释原话——TP 的 all-gather
+<strong>必须留在默认流</strong>；若挪到共享专家流而 routed 侧 EP 集合通信在默认流，
+两个进程组进度不一致可能<strong>死锁 HCCL</strong>。双流与集合通信混排时要问一句"这个集合操作在哪个进程组、哪条流"。</li>
+<li><span class="warn">绑核失败降级</span>：bind_cpus 抛异常只 warning、服务照常启动（worker.py:937-938）——
+排查性能抖动时确认日志里有没有这条 warning（绑核可能根本没生效）。</li>
+<li><span class="warn">默认值即态度</span>：dsv4 双流默认开（成熟），共享专家双流默认关（较新+有互斥）——
+升级配置时别想当然。</li>
+</ul>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>开这些开关前，哪些组合与坑要先核对。</div>
+<div class="fig-caption">图 7-1 · 互斥与降级关系（结构视角）</div>
+<div class="mermaid">
+flowchart LR
+    A["enable_fused_mc2=1"] -. "强制置 false（静默）" .-> B["multistream_overlap_shared_expert"]
+    C["TP all-gather 挪共享专家流"] -. "跨进程组进度不一致 → HCCL 死锁" .-> D["红线：集合通信留默认流"]
+    E["bind_cpus 失败"] -. "warning 降级，服务照常" .-> F["绑核可能未生效（查日志）"]
+    style B fill:#ffebe9,stroke:#cf222e
+    style D fill:#ffebe9,stroke:#cf222e
+</div>
+<div class="fig-caption">代码 B5 · 静默互斥：mc2 开启时共享专家双流被强制关</div>
+<pre><span class="fname">vllm_ascend/ascend_config.py · derive_and_validate · L705-706</span><code class="language-python">        if self.enable_fused_mc2 == 1 and self.multistream_overlap_shared_expert:
+            self.multistream_overlap_shared_expert = False  # ⚡静默改写：无 error，配置时极易踩
+</code></pre>
+
+<h2 id="s8">⑧ 小结：一张图带走</h2>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>如果只记一张图——三个参数、各自堵哪个漏、生效在哪、注意什么。</div>
+<div class="fig-caption">图 8-1 · 全章收束（概览）</div>
+<div class="mermaid">
+flowchart TD
+    A["host：进程漂移喂卡抖"] --> B["enable_cpu_binding（默认开）<br/>worker 初始化绑核 · 失败仅告警"]
+    C["device：prolog V/C 交替空隙"] --> D["multistream_dsv4_dsa_overlap（默认开）<br/>三段两流流水 + 事件接力"]
+    E["device：共享专家串行干等"] --> F["multistream_overlap_shared_expert（默认关）<br/>独立流与路由并行 · mc2 时静默关"]
+    style B fill:#eef3ff,stroke:#5b6ee1
+    style D fill:#eef3ff,stroke:#5b6ee1
+    style F fill:#eef3ff,stroke:#5b6ee1
+</div>
+<div class="card">
+<p><strong>复述自检</strong>：①流是什么，"同流串行、跨流并行"怎么理解？②Cube/Vector 为什么要分派到不同流而不是随便并行？
+③共享专家双流的死锁坑是什么（哪个操作必须留默认流）？④"配了共享专家双流却没生效"的第一排查动作是什么？四个都答上来就学会了。</p>
+</div>
+
+<h2 id="check">自检表</h2>
+<div class="card">
+<h3 style="margin-top:0;">表 A · 总览自检</h3>
+<table>
+<tr><th>章节</th><th>层次</th><th>小节标题</th><th>图数量</th><th>图编号+视角</th><th>单图最大节点数</th><th>代码块数</th><th>是否达标</th></tr>
+<tr><td>①干嘛的</td><td>概览</td><td>这段代码是干嘛的</td><td>1</td><td>图1-1 结构</td><td>6</td><td>0</td><td>✓</td></tr>
+<tr><td>②位置</td><td>概览</td><td>系统位置</td><td>1</td><td>图2-1 结构</td><td>8（跨三处实现的位置图）</td><td>1（B1 计入④）</td><td>✓</td></tr>
+<tr><td>③爬坡</td><td>概览</td><td>概念爬坡（4 级）+术语表</td><td>4</td><td>图3-1~3-4 结构/数据/执行（各单视角）</td><td>3</td><td>1（B1）</td><td>✓</td></tr>
+<tr><td>④主干</td><td>概览</td><td>生效链</td><td>1</td><td>图4-1 执行</td><td>5</td><td>1（B1）</td><td>✓</td></tr>
+<tr><td>⑤展开</td><td>细节</td><td>三个参数小节</td><td>3</td><td>图5-1 结构 / 5-2 执行 / 5-3 执行</td><td>5</td><td>3（B2-B4）</td><td>✓</td></tr>
+<tr><td>⑥流工具</td><td>细节</td><td>npu_stream_switch 复用</td><td>1</td><td>图6-1 结构</td><td>4</td><td>0</td><td>✓</td></tr>
+<tr><td>⑦边界</td><td>细节</td><td>互斥/死锁/降级</td><td>1</td><td>图7-1 结构</td><td>6</td><td>1（B5）</td><td>✓</td></tr>
+<tr><td>⑧小结</td><td>概览</td><td>一张图带走</td><td>1</td><td>图8-1 结构</td><td>6</td><td>0</td><td>✓</td></tr>
+</table>
+<h3>表 B · 逐节配图检查</h3>
+<table>
+<tr><th>章节</th><th>h3 小节标题</th><th>是否配图</th><th>图编号</th><th>备注</th></tr>
+<tr><td>③</td><td>级1/级2/级3/级4</td><td>✓</td><td>3-1/3-2/3-3/3-4</td><td>术语表在爬坡后</td></tr>
+<tr><td>⑤</td><td>5.1 / 5.2 / 5.3</td><td>✓</td><td>5-1 / 5-2 / 5-3</td><td>每节一图一代码</td></tr>
+<tr><td>⑥</td><td>流工具复用</td><td>✓</td><td>6-1</td><td>结构视角</td></tr>
+<tr><td>⑦</td><td>互斥/死锁/降级</td><td>✓</td><td>7-1</td><td>附 B5 校验代码</td></tr>
+<tr><td>⑧</td><td>小结 + 复述自检</td><td>✓</td><td>8-1</td><td>附 4 道复述题</td></tr>
+</table>
+<h3>表 C · 概念爬坡检查</h3>
+<table>
+<tr><th>级别</th><th>引入的概念</th><th>上一级是什么</th><th>怎么从上一级推出</th><th>图编号</th><th>是否空降</th></tr>
+<tr><td>L0</td><td>通用编程/系统常识</td><td>—</td><td>—</td><td>—</td><td>—</td></tr>
+<tr><td>L1</td><td>任务提交、stream 流</td><td>程序逐行执行</td><td>张量运算是异步提交进队列的，队列即流</td><td>3-1</td><td>否</td></tr>
+<tr><td>L2</td><td>Cube/Vector 单元、单流空转隙</td><td>单流串行</td><td>两套硬件单元交替排队，互相干等</td><td>3-2</td><td>否</td></tr>
+<tr><td>L3</td><td>双流、event 事件、汇合</td><td>单流有空隙</td><td>无依赖任务挪第二条流，依赖用事件声明</td><td>3-3</td><td>否</td></tr>
+<tr><td>L4</td><td>绑核 / prolog 流水 / 共享专家并行</td><td>流+事件工具</td><td>按"哪里浪费了并发"对号入座三个落点</td><td>3-4</td><td>否</td></tr>
+</table>
+</div>
+
+<footer>vLLM Ascend 参数源码教学 · 第二类（多流）· 基线 a71b766ce ·
+<a href="index.html" style="color:#5b6ee1;">八类总览</a> ·
+<a href="params-01-scheduling.html" style="color:#5b6ee1;">上一篇：调度类</a></footer>
+
+<div id="overlay" onclick="this.style.display='none'"><div class="inner" id="overlay-inner"></div></div>
+
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#eef3ff', primaryTextColor:'#1f2328', primaryBorderColor:'#8250df', lineColor:'#656d76', noteBkgColor:'#eef2ff', noteTextColor:'#1f2328', noteBorderColor:'#d0d7de', fontSize:'16px' }, flowchart:{ useMaxWidth:false }, sequence:{ actorMargin:36, mirrorActors:false, useMaxWidth:false, messageFontSize:15 } });
+</script>
+<script>
+// 把每个 h2 章节动态包装成可折叠容器
+var headings = document.querySelectorAll('h2[id]');
+headings.forEach(function(h){
+    var stage = document.createElement('div');
+    stage.className = 'stage'; stage.id = h.id + '-stage';
+    var head = document.createElement('div');
+    head.className = 'stage-head';
+    head.appendChild(h.cloneNode(true));
+    var arrow = document.createElement('span'); arrow.className = 'arrow'; arrow.textContent = '▼';
+    head.appendChild(arrow);
+    head.onclick = function(){ stage.classList.toggle('closed'); };
+    h.parentNode.insertBefore(stage, h);
+    stage.appendChild(head);
+    var body = document.createElement('div'); body.className = 'stage-body';
+    var next = head.nextSibling;
+    while (next && !(next.nodeType === 1 && next.tagName === 'H2')) {
+        var move = next; next = next.nextSibling; body.appendChild(move);
+    }
+    stage.appendChild(body);
+    h.remove();
+});
+// 细节层等 mermaid 渲染完成后再收起
+window.addEventListener('load', function(){
+    setTimeout(function(){
+        ['s5-stage','s6-stage','s7-stage'].forEach(function(id){
+            var el = document.getElementById(id);
+            if (el) el.classList.add('closed');
+        });
+    }, 2500);
+});
+// 一键全部展开
+var btn = document.createElement('button'); btn.id = 'allbtn'; btn.textContent = '全部展开';
+document.querySelector('.topnav').appendChild(btn);
+btn.onclick = function(){ document.querySelectorAll('.stage.closed').forEach(function(s){ s.classList.remove('closed'); }); };
+// 代码块一键复制
+document.querySelectorAll('pre').forEach(function(pre){
+    var bar = pre.querySelector('.fname'); if(!bar) return;
+    var b2 = document.createElement('button'); b2.className = 'copybtn'; b2.textContent = '复制';
+    b2.onclick = function(e){ e.stopPropagation();
+        navigator.clipboard.writeText(pre.querySelector('code').innerText).then(function(){ b2.textContent = '已复制 ✓'; setTimeout(function(){ b2.textContent = '复制'; }, 1500); }); };
+    bar.appendChild(b2);
+});
+// 图点击放大
+document.querySelectorAll('.mermaid').forEach(function(box){
+    box.addEventListener('click', function(){
+        var ov = document.getElementById('overlay');
+        var inner = document.getElementById('overlay-inner');
+        inner.innerHTML = ''; inner.appendChild(box.cloneNode(true));
+        inner.querySelector('.mermaid').style.cursor = 'default';
+        ov.style.display = 'block';
+    });
+});
+// 高亮
+try { document.querySelectorAll('pre code.language-python').forEach(function(el){ hljs.highlightElement(el); }); } catch(e) {}
+</script>
+</body>
+</html>
