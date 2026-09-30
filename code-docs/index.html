@@ -19,35 +19,59 @@
         
         .navbar {
             background: white;
-            border-radius: 12px;
-            padding: 15px 25px;
+            border-radius: 14px;
+            padding: 10px 20px;
             margin-bottom: 30px;
             box-shadow: 0 2px 10px rgba(0,0,0,0.05);
             display: flex;
-            justify-content: space-between;
+            justify-content: flex-start;
             align-items: center;
+            gap: 10px;
+            flex-wrap: nowrap;
         }
-        
+
         .navbar-brand {
-            font-size: 1.2rem;
+            font-size: 1.05rem;
             font-weight: bold;
             color: #667eea;
             text-decoration: none;
+            white-space: nowrap;
+            flex: 0 0 auto;
+            padding-right: 14px;
+            border-right: 1px solid #e8ebf2;
         }
-        
+
         .navbar-nav {
             display: flex;
-            gap: 12px;
+            flex-wrap: wrap;
+            gap: 2px;
+            row-gap: 6px;
             list-style: none;
+            margin: 0;
+            padding: 0;
+            flex: 1;
+            justify-content: flex-end;
+            align-items: center;
         }
-        
+
+        .navbar-nav li { display: flex; }
+
+        .navbar-nav li.sep {
+            width: 1px;
+            height: 18px;
+            background: #e3e8ef;
+            margin: 0 5px;
+        }
+
         .navbar-nav a {
-            color: #666;
+            color: #4a5568;
             text-decoration: none;
-            padding: 8px 14px;
+            padding: 5px 9px;
             border-radius: 8px;
             transition: all 0.2s;
-            font-size: 0.9rem;
+            font-size: 0.86rem;
+            white-space: nowrap;
+            line-height: 1.4;
         }
         
         .navbar-nav a:hover,
@@ -256,10 +280,11 @@
             <li><a href="detailed/core.html">核心模块</a></li>
             <li><a href="detailed/usage.html">使用说明</a></li>
       <li><a href="parameters.html">参数说明</a></li>
+            <li class="sep" title="专题系列"></li>
             <li><a href="compare/compare.html">专题对比</a></li>
             <li><a href="stories/stories.html">需求故事</a></li>
             <li><a href="study/study-dcp-decode-streams-vup.html">学习材料</a></li>
-            <li><a href="params/params-01-scheduling.html">参数教学</a></li>
+            <li><a href="params/index.html">参数教学</a></li>
             <li><a href="plan/index.html">半年计划</a></li>
             <li><a href="profiling/index.html">性能采集</a></li>
         </ul>
