@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>参数源码教学 · 八类总览（AscendConfig 参数地图）- vLLM Ascend</title>
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.8; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.nav { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.nav a { color:var(--muted); text-decoration:none; padding:4px 12px; border-radius:8px; font-size:.88rem; white-space:nowrap; }
+.nav a:hover { background:var(--accent); color:#fff; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+.subtitle { color:var(--muted); margin-bottom:16px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.b-gray { background:#eaeef2; color:#57606a; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:16px 20px; margin:12px 0; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(360px, 1fr)); gap:14px; margin-top:12px; }
+.cat { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 18px; border-top:4px solid #d0d7de; }
+.cat.done { border-top-color:#1a7f37; }
+.cat.wip { border-top-color:var(--accent); }
+.cat h3 { font-size:1.02rem; margin:0 0 6px; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.cat h3 .idx { width:26px; height:26px; border-radius:8px; background:#eef3ff; color:var(--accent); font-size:.85rem; font-weight:bold; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+.cat p { font-size:.88rem; color:#4a5568; margin:4px 0; }
+.cat .params { margin:8px 0 0; }
+.pill { display:inline-block; background:#eef1f5; border:1px solid #d7dde5; color:#953800; border-radius:5px; padding:1px 7px; font-size:.78rem; font-family:Consolas,monospace; margin:2px 3px 2px 0; }
+.status { display:inline-block; border-radius:999px; padding:1px 10px; font-size:.75rem; font-weight:bold; margin-left:auto; }
+.s-done { background:#dafbe1; color:#1a7f37; }
+.s-wip { background:#ddf4ff; color:#0969da; }
+.s-plan { background:#eaeef2; color:#57606a; }
+.cat a.golink { color:var(--accent); font-size:.85rem; text-decoration:none; font-weight:bold; }
+.cat a.golink:hover { text-decoration:underline; }
+code { font-family:Consolas,monospace; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="nav">
+    <a href="../index.html">← 文档总览</a>
+    <span style="color:#999;font-size:.85rem;">参数源码教学 · AscendConfig 参数地图 · 按类成篇</span>
+    <a href="params-01-scheduling.html">①调度</a>
+    <a href="params-02-multistream.html">②多流</a>
+</div>
+
+<h1>参数源码教学 · 八类总览</h1>
+<p class="subtitle">
+<span class="badge b-blue">代码基线 a71b766ce</span>
+<span class="badge b-green">已完成 2 / 8 篇</span>
+每类一篇浅色源码教学（概念爬坡 · 逐节配图 · 真实行号），规范见设计文档 7d 节</p>
+
+<div class="card">
+<p>这系列把 <code>vllm_ascend/ascend_config.py</code>（AscendConfig，L226 起）里的调优参数按<strong>八类</strong>逐类讲透。
+分类口径以参数<strong>解决什么问题</strong>为准（而非 YAML 缩进层级）：例如 <code>bubble_threshold</code> 物理上写在
+<code>dyntra_lb_config</code> 里，但它的作用是调度气泡控制，所以归入"调度类"。每篇面向
+<strong>懂通用编程但没接触过这块代码</strong>的读者，从常识开始概念爬坡。</p>
+</div>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>AscendConfig 的参数地图——八类各覆盖哪片问题域，教到哪一篇了。</div>
+<div class="fig-caption">图 1 · 八类参数地图与教学进度（LR，结构视角）</div>
+<div class="mermaid">
+flowchart LR
+    A["AscendConfig<br/>ascend_config.py:226"] --> C1["① 调度<br/>已教学 ✓"]
+    A --> C2["② 多流<br/>已教学 ✓"]
+    A --> C3["③ 算子融合<br/>待教学"]
+    A --> C4["④ KV 与稀疏<br/>待教学"]
+    A --> C5["⑤ 并行与均衡<br/>待教学"]
+    A --> C6["⑥ 图模式<br/>待教学"]
+    A --> C7["⑦ 投机解码<br/>待教学"]
+    A --> C8["⑧ 精度一致性<br/>待教学"]
+    style C1 fill:#dafbe1,stroke:#1a7f37
+    style C2 fill:#dafbe1,stroke:#1a7f37
+</div>
+
+<div class="grid">
+    <div class="cat done">
+        <h3><span class="idx">①</span>调度类 <span class="status s-done">已上线</span></h3>
+        <p><strong>治什么病</strong>：多实例忙闲不均、长请求堵短请求、chunk 大小拍脑袋、抢占重算贵、批量作业挤占、MoE 融合算子容量、采样重复计算。</p>
+        <div class="params">
+            <span class="pill">enable_balance_scheduling</span><span class="pill">recompute_scheduler_enable</span><span class="pill">short_request_first_config</span><span class="pill">profiling_chunk_config</span><span class="pill">batch_job_sched_config</span><span class="pill">dyntra_lb_config</span><span class="pill">mega_moe_max_tokens</span><span class="pill">enable_reduce_sample</span>
+        </div>
+        <p style="margin-top:8px;"><a class="golink" href="params-01-scheduling.html">→ params-01（8 参数 · 18 图 · 10 代码块）</a></p>
+    </div>
+
+    <div class="cat done">
+        <h3><span class="idx">②</span>多流类 <span class="status s-done">已上线</span></h3>
+        <p><strong>治什么病</strong>：host 侧线程调度漂移让喂卡节奏抖（绑核）；device 侧单流执行时 Cube/Vector 交替有空隙、共享专家与路由专家串行干等（双流重叠）。</p>
+        <div class="params">
+            <span class="pill">enable_cpu_binding</span><span class="pill">multistream_dsv4_dsa_overlap</span><span class="pill">multistream_overlap_shared_expert</span>
+        </div>
+        <p style="margin-top:8px;"><a class="golink" href="params-02-multistream.html">→ params-02（3 参数 · 绑核 + 双处双流）</a></p>
+    </div>
+
+    <div class="cat wip">
+        <h3><span class="idx">③</span>算子融合 <span class="status s-wip">编写中</span></h3>
+        <p><strong>治什么病</strong>：Norm/RoPE/量化等相邻小算子逐个启动的开销——按架构选键融合成单算子。</p>
+        <div class="params">
+            <span class="pill">ascend_fusion_config</span><span class="pill">fuse_qknorm_rope</span><span class="pill">fuse_norm_quant</span><span class="pill">fuse_muls_add</span><span class="pill">fusion_ops_gmmswigluquant</span><span class="pill">enable_mlapo</span><span class="pill">mlapo_keep_prefill_weights</span>
+        </div>
+        <p style="margin-top:8px;color:#57606a;font-size:.85rem;">params-03 规划中，敬请期待</p>
+    </div>
+
+    <div class="cat">
+        <h3><span class="idx">④</span>KV 与稀疏 <span class="status s-plan">计划</span></h3>
+        <p><strong>治什么病</strong>：稀疏注意力的 KV 打包布局（C8）、KV 转置/NZ 布局、卸载与预留——KV 这本"预算"怎么花。</p>
+        <div class="params">
+            <span class="pill">enable_sparse_sfa_c8</span><span class="pill">enable_sparse_li_c8</span><span class="pill">c8_enable_reshape_optim</span><span class="pill">enable_kv_nz</span><span class="pill">enable_transpose_kv_cache_by_block</span><span class="pill">sparse_kv_offload_config</span><span class="pill">keep_device_kv_cache</span>
+        </div>
+    </div>
+
+    <div class="cat">
+        <h3><span class="idx">⑤</span>并行与负载均衡 <span class="status s-plan">计划</span></h3>
+        <p><strong>治什么病</strong>：把一层切到多卡的方式（细粒度分张量）、共享专家 DP、专家热点漂移（动态 EPLB）。</p>
+        <div class="params">
+            <span class="pill">finegrained_tp_config</span><span class="pill">enable_shared_expert_dp</span><span class="pill">eplb_config</span><span class="pill">dynamic_eplb</span><span class="pill">expert_heat_collection</span>
+        </div>
+    </div>
+
+    <div class="cat">
+        <h3><span class="idx">⑥</span>图模式 <span class="status s-plan">计划</span></h3>
+        <p><strong>治什么病</strong>：decode 全图捕获/回放的路径选择（NpuGraphEx、xlite）、PA 形状列表、静态 kernel。</p>
+        <div class="params">
+            <span class="pill">ascend_compilation_config</span><span class="pill">enable_npugraph_ex</span><span class="pill">xlite_graph_config</span><span class="pill">pa_shape_list</span><span class="pill">enable_static_kernel</span>
+        </div>
+    </div>
+
+    <div class="cat">
+        <h3><span class="idx">⑦</span>投机解码 <span class="status s-plan">计划</span></h3>
+        <p><strong>治什么病</strong>：草稿 token 怎么验证——拒绝采样、块验证、熵验证与动态投机配置。</p>
+        <div class="params">
+            <span class="pill">rejection_sampler_config</span><span class="pill">enable_block_verify</span><span class="pill">enable_entropy_verify</span><span class="pill">dynamic_spec_config</span><span class="pill">draft_window_size</span><span class="pill">posterior_alpha</span>
+        </div>
+    </div>
+
+    <div class="cat">
+        <h3><span class="idx">⑧</span>精度一致性 <span class="status s-plan">计划</span></h3>
+        <p><strong>治什么病</strong>：训练/推理一致性与批不变——精度回归排查时的"保底开关面"。</p>
+        <div class="params">
+            <span class="pill">enable_training_consistency</span><span class="pill">enable_batch_invariant</span>
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+<h3 style="margin-top:0;">勘误与口径说明</h3>
+<ul style="font-size:.9rem;color:#4a5568;">
+<li><strong>多流类参数名单勘误</strong>：此前目标建议书里写的 <code>ascend_scheduler_config</code> 在当前代码树中<strong>不存在</strong>（ascend_config.py 全量核对）。多流类实际为三参数：
+<code>enable_cpu_binding</code> / <code>multistream_dsv4_dsa_overlap</code>（默认均 true）/ <code>multistream_overlap_shared_expert</code>（默认 false）。md 版建议书已同步修正。</li>
+<li><strong>分类口径</strong>：按"解决什么问题"而非 YAML 层级——<code>dyntra_lb_config</code> 的 <code>bubble_threshold</code> 归调度类；<code>mega_moe_max_tokens</code> / <code>enable_reduce_sample</code> 是顶层字段但按作用归调度类。</li>
+</ul>
+</div>
+
+<footer>vLLM Ascend 参数源码教学系列 · 基线 a71b766ce ·
+<a href="../index.html" style="color:#5b6ee1;">返回总览</a> · 设计规范：docs/documentation-design.md 7d</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({ startOnLoad:true, theme:'base', themeVariables:{ background:'#ffffff', primaryColor:'#eef3ff', primaryTextColor:'#24292f', primaryBorderColor:'#6e7681', lineColor:'#57606a', fontSize:'15px' }, flowchart:{ useMaxWidth:false } });
+</script>
+</body>
+</html>
