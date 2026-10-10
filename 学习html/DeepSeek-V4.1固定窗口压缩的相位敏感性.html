@@ -114,22 +114,46 @@ footer.end{margin-top:56px;padding-top:18px;border-top:1px dashed var(--border);
 <h3>再往深走一步：为什么 128 个一组、组与组不重叠，就会丢信息</h3>
 <p>前面玩具例子里 W=8，真正的 HCA 是<strong>每 128 个 token 压成 1 条</strong>。数字大了，丢信息的机制反而更清楚——拿 6 个 token 的密码「482915」走一遍：</p>
 <p><strong>delta=0（训练时见过的排布）：</strong>密码的 6 个 token 恰好整段落在某一块里，比如块 2（位置 256–383）。块内均值池化时，密码在这 128 个"合影者"里占 6 席——占比约 4.7%。信号已经偏淡，但这条压缩记录好歹带着一份<strong>完整的密码轮廓</strong>，模型拿查询来匹配，还能对上。</p>
-<p><strong>delta=1（开头多打一个字）：</strong>所有 token 整体后移 1 位，但块的边界纹丝不动（还是 0、128、256……）。于是密码被块边界<strong>切成两半</strong>：前 2 个 token 掉在块 2 的最尾巴，后 4 个 token 掉在块 3 的最开头。均值池化是"合影"——块 2 的合影里密码只占 2/128 ≈ 1.6%，另外 126 个位置全是无关内容；块 3 的合影里密码占 4/128 ≈ 3.1%，混着 124 个无关 token。<strong>两张合影里都没有一份完整的密码</strong>，模型拿"482915"去匹配哪张都对不上——召回归零。</p>
+<p><strong>换个 delta（开头多打几个字）：</strong>所有 token 整体后移，但块的边界纹丝不动（还是 0、128、256……）。总有一些 delta 会让密码<strong>恰好骑在块边界上</strong>——比如 delta=3 时，密码落在 381–386，被 383/384 的边界<strong>切成两半</strong>：前 3 个 token 留在块 2 的最尾巴，后 3 个 token 落在块 3 的最开头。均值池化是"合影"——块 2 的合影里密码只占 3/128 ≈ 2.3%，块 3 的合影里也只占 3/128 ≈ 2.3%，各自混着 125 个无关 token。<strong>两张合影里都没有一份完整的密码</strong>，模型拿"482915"去匹配哪张都对不上——召回归零。</p>
 <p><strong>对照 Full Attention：</strong>它根本不压缩，6 个 token 的原始 K/V 一份不少地躺在缓存里，文档挪到哪里它们就在哪里——这就是它 gap 只有 0.031 的原因。</p>
 <p>一句话：<strong>丢信息不是丢在"密码变了"，而是丢在"密码被迫和不同的邻居合了影"</strong>。均值池化就是合影——合影的人一换，照片就不是原来那张。组与组不重叠，意味着每个 token 只有一次"入镜机会"，位移必然改合影名单；128:1 的极端比例，又把每次换名单的代价放大到整个块。</p>
+<p><strong>【示意 A】delta=0：切分完整——密码整段落在块 2 内部</strong>（每个格子是一个 token 位置，黄格是密码的 6 个 token）：</p>
 <div class="mermaid-wrap"><div class="mermaid">
 flowchart LR
-    subgraph D0["delta=0：密码完整落在一块"]
+    subgraph BK2["块 2（token 256–383，共 128 格，只画密码附近）"]
         direction LR
-        A0["块 2 的合影（128 个位置）<br/>密码占 6/128 ≈ 4.7%<br/>轮廓完整 ✓"]
+        a258["258"]:::n --> a259["259"]:::n --> a260["260·4"]:::p --> a261["261·8"]:::p --> a262["262·2"]:::p --> a263["263·9"]:::p --> a264["264·1"]:::p --> a265["265·5"]:::p --> a266["266"]:::n --> a267["267"]:::n
     end
-    subgraph D1["delta=1：密码被块边界切成两半"]
-        direction LR
-        B0["块 2 尾部：密码前 2 个 token<br/>合影占 2/128 ≈ 1.6%"] --> B1["块 3 开头：密码后 4 个 token<br/>合影占 4/128 ≈ 3.1%"]
-    end
-    style D0 fill:#e6f3ff,color:#000000
-    style D1 fill:#ffe6e6,color:#000000
+    BK2 --> BARA["均值池化 → 压缩条 C2<br/>密码占 6/128 ≈ 4.7%<br/>轮廓完整 ✓"]:::ok
+    style BK2 fill:#e6f3ff,color:#000000
+    style BARA fill:#ccffcc,color:#000000
+    classDef n fill:#f6f8fa,stroke:#8b949e,color:#1f2937
+    classDef p fill:#fff3d6,stroke:#b45309,color:#7c3e08,stroke-width:2px
+    classDef ok fill:#ccffcc,stroke:#1a7f4b,color:#155c38
 </div></div>
+<p><strong>【示意 B】delta=3：切分不完整——密码骑在 383/384 的块边界上，被切成 3+3</strong>：</p>
+<div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+    subgraph BK2b["块 2（token 256–383）的尾部"]
+        direction LR
+        b381["381·4"]:::p --> b382["382·8"]:::p --> b383["383·2"]:::p
+    end
+    subgraph BK3["块 3（token 384–511）的开头"]
+        direction LR
+        b384["384·9"]:::p --> b385["385·1"]:::p --> b386["386·5"]:::p
+    end
+    BK2b --> BAR2["均值池化 → 压缩条 C2<br/>密码只占 3/128 ≈ 2.3% ✗ 半截"]:::bad
+    BK3 --> BAR3["均值池化 → 压缩条 C3<br/>密码只占 3/128 ≈ 2.3% ✗ 半截"]:::bad
+    BAR2 --> RES["两条压缩条里都没有完整密码<br/>→ 都匹配不上 → 召回 0"]:::bad
+    BAR3 --> RES
+    style BK2b fill:#ffe6e6,color:#000000
+    style BK3 fill:#ffe6e6,color:#000000
+    style RES fill:#ffcccc,stroke:#cc0000,color:#7a1f1f
+    classDef n fill:#f6f8fa,stroke:#8b949e,color:#1f2937
+    classDef p fill:#fff3d6,stroke:#b45309,color:#7c3e08,stroke-width:2px
+    classDef bad fill:#ffcccc,stroke:#cc0000,color:#7a1f1f
+</div></div>
+<p>对照着看：<strong>同样的密码、同样的文档，唯一变的是它和 128 边界的相对位置</strong>——整段在块内就是"完整合影"（示意 A），骑上边界就是"两张半截合影"（示意 B）。delta 扫过 0–127，密码总会轮流经历这两种状态，召回率因此周期波动。</p>
 
 <h3>这和 DeepSeek V4 的 HCA 有什么关系？</h3>
 <p>这要从 DeepSeek V4 的注意力设计说起。V4 采用了一套混合注意力架构，由两个模块交替使用：</p>
@@ -344,6 +368,44 @@ flowchart LR
 </tbody>
 </table>
 <p>一句话：<strong>V4.1 不是放弃压缩，而是把"固定边界的极端压缩"换成"跟着内容滑的窗口 + 温和的压缩 + 挑重点的索引"</strong>。同一个 1 token 位移，再也踩不出那个 50 个百分点的坑。</p>
+<p><strong>【示意 C】SWA：窗口跟着内容一起滑，密码的"相对位置"永远不变</strong>：</p>
+<div class="mermaid-wrap"><div class="mermaid">
+flowchart TD
+    subgraph SA["delta=0"]
+        direction LR
+        w0["SWA 窗口起点 a"]:::n --> s0["… 前文 …"]:::n --> k0["密码（相对窗口起点恒为第 k 格）"]:::p --> e0["… 后文 …"]:::n
+    end
+    subgraph SB["delta=1：整个文档 +1，窗口起点也 +1"]
+        direction LR
+        w1["SWA 窗口起点 a+1"]:::n --> s1["… 前文 …"]:::n --> k1["密码（相对窗口起点仍是第 k 格）"]:::p --> e1["… 后文 …"]:::n
+    end
+    SB --> R["相对位置不变 → 原始 KV 零压缩保留 → 怎么挪都查得到 ✓"]:::ok
+    style SA fill:#e6f3ff,color:#000000
+    style SB fill:#e6ffe6,color:#000000
+    style R fill:#ccffcc,stroke:#1a7f4b,color:#155c38
+    classDef n fill:#f6f8fa,stroke:#8b949e,color:#1f2937
+    classDef p fill:#fff3d6,stroke:#b45309,color:#7c3e08,stroke-width:2px
+    classDef ok fill:#ccffcc,stroke:#1a7f4b,color:#155c38
+</div></div>
+<p><strong>【示意 D】CSA2 4:1：就算密码骑在边界被切成两半，每条压缩里也占一半，而且 Top-K 两都会挑</strong>（对比 HCA：切一半只剩 3/128 ≈ 2.3%）：</p>
+<div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+    subgraph E1["压缩条 E1（只代表 4 个 token）"]
+        direction LR
+        x0["4"]:::p --> x1["8"]:::p --> x2["无"]:::n --> x3["关"]:::n
+    end
+    subgraph E2["压缩条 E2（只代表 4 个 token）"]
+        direction LR
+        y0["2"]:::p --> y1["9"]:::p --> y2["1"]:::p --> y3["5"]:::p
+    end
+    E1 --> T["Top-K 索引：两条都相关 → 都进注意力<br/>密码在每条里占比 ≥ 1/2（对照 HCA 的 3/128 ≈ 2.3%）✓"]:::ok
+    E2 --> T
+    style T fill:#ccffcc,stroke:#1a7f4b,color:#155c38
+    classDef n fill:#f6f8fa,stroke:#8b949e,color:#1f2937
+    classDef p fill:#fff3d6,stroke:#b45309,color:#7c3e08,stroke-width:2px
+    classDef ok fill:#ccffcc,stroke:#1a7f4b,color:#155c38
+</div></div>
+
 <div class="mermaid-wrap"><div class="mermaid">
 flowchart TD
     Q["同一个考题：开头多打一个字，找 482915"]:::io
