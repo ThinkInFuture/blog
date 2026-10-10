@@ -1,0 +1,1472 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>mlx-lora-finetune · 训练项目代码检视 2026-09-19（第 1 轮）</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/styles/atom-one-light.min.css">
+<script src="https://cdn.jsdelivr.net/npm/@highlightjs/cdn-assets@11.9.0/highlight.min.js"></script>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    background: #f7f8fa;
+    color: #1f2328;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei", sans-serif;
+    line-height: 1.75;
+    margin: 0;
+    padding: 36px 20px 90px;
+    font-size: 15px;
+  }
+  .wrap { max-width: 1100px; margin: 0 auto; }
+  header.page-head {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    padding: 26px 30px;
+    margin-bottom: 12px;
+  }
+  header.page-head h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: .3px; }
+  header.page-head .sub { color: #6b7280; font-size: 13.5px; }
+  header.page-head .sub code { background: #f3f4f6; padding: 1px 6px; border-radius: 4px; }
+  h2 {
+    font-size: 21px;
+    margin: 52px 0 14px;
+    padding-left: 13px;
+    border-left: 5px solid #3b82f6;
+    line-height: 1.3;
+  }
+  h3 { font-size: 16.5px; margin: 26px 0 10px; }
+  p { margin: 10px 0; }
+  ul, ol { padding-left: 24px; margin: 10px 0; }
+  li { margin: 5px 0; }
+  .card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 20px 26px;
+    margin: 16px 0;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 800px) { .grid2 { grid-template-columns: 1fr; } }
+
+  /* ---- 标签 ---- */
+  .tag {
+    display: inline-block;
+    font-size: 11.5px;
+    padding: 2px 9px;
+    border-radius: 5px;
+    margin-right: 6px;
+    font-weight: 700;
+    letter-spacing: .4px;
+    vertical-align: middle;
+  }
+  .tag-py  { background: #dbeafe; color: #1e40af; }
+  .tag-sh  { background: #dcfce7; color: #166534; }
+  .tag-md  { background: #fef3c7; color: #92400e; }
+  .tag-mod { background: #ede9fe; color: #5b21b6; }
+  .tag-new { background: #fee2e2; color: #b91c1c; }
+
+  /* ---- 提示块 ---- */
+  .tip {
+    border-radius: 8px;
+    padding: 12px 16px 12px 18px;
+    margin: 12px 0;
+    font-size: 14px;
+    border-left: 4px solid;
+  }
+  .tip .tip-title { font-weight: 700; display: block; margin-bottom: 4px; font-size: 13.5px; }
+  .tip-use   { background: #eff6ff; border-color: #3b82f6; color: #1e3a5f; }
+  .tip-param { background: #f0fdf4; border-color: #22c55e; color: #14532d; }
+  .tip-warn  { background: #fff7ed; border-color: #f97316; color: #7c2d12; }
+  .tip code, .tip-use code, .tip-param code { background: rgba(0,0,0,.06); padding: 1px 5px; border-radius: 3px; }
+
+  /* ---- 代码块 ---- */
+  .file-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-bottom: none;
+    border-radius: 8px 8px 0 0;
+    padding: 10px 14px;
+    font-size: 13px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    color: #374151;
+  }
+  .file-head .path { font-weight: 700; color: #111827; }
+  .file-head .meta { margin-left: auto; color: #9ca3af; font-size: 12px; }
+  pre {
+    margin: 0 0 22px;
+    background: #fbfbfd;
+    border: 1px solid #e5e7eb;
+    border-radius: 0 0 8px 8px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  pre code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace; }
+  .hljs { background: transparent !important; padding: 0 !important; }
+
+  /* ---- 表格 ---- */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 14px 0;
+    font-size: 13.5px;
+    background: #fff;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #e5e7eb;
+  }
+  th, td { padding: 9px 13px; text-align: left; border-bottom: 1px solid #eef0f3; vertical-align: top; }
+  th { background: #f3f4f6; font-weight: 700; color: #374151; font-size: 13px; }
+  tr:last-child td { border-bottom: none; }
+  td code, th code, li code, p code { background: #f1f5f9; color: #0f172a; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; }
+
+  /* ---- Mermaid ---- */
+  .mermaid-wrap {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 10px;
+    padding: 48px 20px 30px;
+    overflow: visible;
+  }
+  .mermaid { text-align: center; overflow: visible; padding-top: 10px; }
+  .mermaid svg { overflow: visible; max-width: 100%; }
+  .mermaid svg text { font-size: 20px !important; }
+  .mermaid .cluster-label foreignObject { overflow: visible; white-space: nowrap; }
+  .fig-cap { text-align: center; color: #6b7280; font-size: 13px; margin-top: 12px; }
+
+  /* 状态徽章 */
+  .badge { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:20px; margin-right:6px;}
+  .badge-ok   { background:#dcfce7; color:#15803d; }
+  .badge-doing{ background:#dbeafe; color:#1d4ed8; }
+  .badge-todo { background:#fef3c7; color:#b45309; }
+  .badge-risk { background:#fee2e2; color:#b91c1c; }
+  hr.sep { border: none; border-top: 1px dashed #dfe3e8; margin: 34px 0; }
+  .note { font-size: 13px; color: #6b7280; }
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<div class="wrap">
+
+<a href="../index.html" style="display:inline-block;font-size:13px;color:var(--muted,#6b7280);text-decoration:none;margin-bottom:14px">&larr; 返回首页</a>
+<header class="page-head">
+  <h1>mlx-lora-finetune · 训练项目代码检视 2026-09-19（第 1 轮）</h1>
+  <div style="font-size:12px;margin-bottom:8px"><span style="color:var(--brand,#4f46e5);font-weight:600">代码检视</span> · 2026-09-19 发布 · 第 1 轮</div>
+  <div class="sub">
+    项目目录 <code>/Users/hua/open code/mlx-lora-finetune</code> · Apple M4 16GB · MLX ·
+    代码基线 <code>完整源码评审包 v2 (2026-09-19)</code>
+  </div>
+</header>
+
+<!-- ============================================================= -->
+<!-- ① 项目目标与预期                                              -->
+<!-- ============================================================= -->
+<h2>① 项目目标与预期</h2>
+
+<div class="card">
+  <h3>1.1 训练目的</h3>
+  <p>
+    在 <strong>Apple M4 16GB 单机、无 CUDA</strong> 的条件下，走通「端侧大模型从微调到从零预训练」的完整链路，
+    并横向对比 <strong>纯 Attention 架构</strong> 与 <strong>Mamba(SSM)+Attention 混合架构</strong> 在
+    相同数据、相同参数量级下的收敛速度、显存占用与长上下文能力。
+    项目本身是<strong>架构与工程可行性验证</strong>，不是产出通用大模型。
+  </p>
+
+  <h3>1.2 要解决的具体问题</h3>
+  <ul>
+    <li><strong>显存墙</strong>：248K 词表的 logits 在 16GB 统一内存上直接算交叉熵会 OOM —— 用「分块 CE + fp16 + clip」拆解。</li>
+    <li><strong>无 CUDA 的并行限制</strong>：MLX 的 <code>mx.compile</code> / <code>mx.checkpoint</code> 行为与 PyTorch 不同，需实测验证梯度与显存。</li>
+    <li><strong>两套训练抢算力</strong>：需要 50/50 轮班调度，且必须支持 SIGTERM 优雅保存 + 断点自动恢复，否则每次切换都丢进度。</li>
+    <li><strong>长时无人值守</strong>：训练周期以天计，需要看门狗自愈 + 邮件告警，避免静默死亡。</li>
+    <li><strong>评估闭环</strong>：MLX 权重无法直接喂给 <code>lm-eval-harness</code>，需要 MLX→HF 的格式转换（含 RoPE 置换）。</li>
+  </ul>
+
+  <h3>1.3 短期落地目标</h3>
+  <table>
+    <tr><th>目标</th><th>指标</th><th>状态</th></tr>
+    <tr><td>A 线 TinyStories 预训练跑完</td><td>MAX_STEPS 56570，loss 12.4 → 1.835，held-out PPL 20.73 → 12.50</td><td><span class="badge badge-ok">已达成</span></td></tr>
+    <tr><td>B 线 Mamba 混合架构可训练</td><td>MAX_STEPS 30000，当前 step 6800，loss 12.9 → 1.943</td><td><span class="badge badge-doing">进行中</span></td></tr>
+    <tr><td>轮班调度 + 看门狗 7×24 稳定</td><td>连续运行 ≥ 72h，无人工干预，事故自愈</td><td><span class="badge badge-ok">已达成</span></td></tr>
+    <tr><td>MLX→HF 转换可用于评测</td><td>logits 与 MLX 侧逐元素等价</td><td><span class="badge badge-ok">已验证</span></td></tr>
+    <tr><td>8M tokens 里程碑对比评测</td><td>同数据量下 Mamba 混合 vs Attention 的 loss / 采样质量</td><td><span class="badge badge-todo">待执行</span></td></tr>
+    <tr><td>长上下文外推验证</td><td>训练 256/512 → 推理 2048，观察 PPL 衰减曲线</td><td><span class="badge badge-todo">待执行</span></td></tr>
+  </table>
+
+  <h3>1.4 实验预期效果</h3>
+  <ul>
+    <li><strong>收敛速度</strong>：Mamba 混合架构在同等 token 数下，loss 应与同规模 Attention 架构持平或略优（预期差距 ±0.15 以内）。</li>
+    <li><strong>显存</strong>：混合架构因 SSM 无 KV Cache，长序列下显存增长应显著慢于纯 Attention。</li>
+    <li><strong>长上下文</strong>：SSM 层理论上具备 O(T) 线性复杂度，外推时衰减应缓于 RoPE Attention 层。</li>
+    <li><strong>能力上限</strong>：受限于 M 级 token 预算（严重欠训），预期模型只能拟合 TinyStories 分布，<strong>不具备通用知识</strong>。</li>
+  </ul>
+
+  <div class="grid2">
+    <div class="card" style="margin:0">
+      <h3 style="color:#15803d">1.5 已实现能力</h3>
+      <ul>
+        <li>LoRA 微调（Qwen3.5-4B，SQL 任务，78 tok/s，12% 精确匹配）</li>
+        <li>GRPO 强化学习（0.8B 数学推理，split-tape 显存 13GB→3GB）</li>
+        <li>从零预训练 0.46B Llama 架构（58M + 9.5M tokens 已完成）</li>
+        <li>分块交叉熵，248K 词表在 16GB 内存下可训练</li>
+        <li>SIGTERM 优雅保存 + auto 断点恢复 + 坏档降级</li>
+        <li>轮班调度器单例锁 / marker 完成态感知 / TERM→KILL 兜底</li>
+        <li>看门狗巡检 + 冷却告警 + 自愈拉起</li>
+        <li>MLX→HF 权重转换（RoPE 置换已验证等价）</li>
+      </ul>
+    </div>
+    <div class="card" style="margin:0">
+      <h3 style="color:#b45309">1.6 待验证假设</h3>
+      <ul>
+        <li><span class="badge badge-risk">高风险</span><code>dt_proj.bias</code> 初始化符号与注释相反，dt 实际落在 [2.26, 6.9] 而非 [1e-3, 1e-1]，SSM 记忆长度可能被压到接近 1 token，<strong>长上下文优势尚未真正验证</strong>。</li>
+        <li><span class="badge badge-risk">高风险</span>MLX 优化器 <code>opt.state</code> 直接赋值是否生效未做单测；若不生效，每 2h 切片 Adam 动量归零。</li>
+        <li><span class="badge badge-todo">待验证</span>Mamba 混合架构是否真的优于同规模 Attention（8M 里程碑对比尚未执行）。</li>
+        <li><span class="badge badge-todo">待验证</span>SSM 层在 256 长度训练后能否外推到 2048。</li>
+        <li><span class="badge badge-todo">待验证</span>M 级 token 预算下，loss 下降是「学到结构」还是「记住 TinyStories 分布」。</li>
+        <li><span class="badge badge-todo">待验证</span>rng 每切片重置导致的数据重复，是否污染「同数据量对比」结论。</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================= -->
+<!-- ② 项目简介                                                    -->
+<!-- ============================================================= -->
+<h2>② 项目简介</h2>
+
+<div class="card">
+  <table>
+    <tr><th style="width:150px">项目名称</th><td>mlx-lora-finetune</td></tr>
+    <tr><th>项目定位</th><td>Apple Silicon 端侧大模型全流程探索：LoRA 微调 → GRPO 强化学习 → 从零预训练 → Mamba+Attention 混合新架构</td></tr>
+    <tr><th>硬件环境</th><td>Apple M4 / 16GB 统一内存 / macOS / 无 CUDA</td></tr>
+    <tr><th>训练框架</th><td>MLX（Apple 官方数组框架）+ <code>mlx.nn</code> + <code>mlx.optimizers</code></td></tr>
+    <tr><th>基座模型 / 分词器</th><td>分词器复用 <code>models/Qwen3.5-0.8B-4bit</code>（Qwen tokenizer，词表 248077）；从零预训练模型为自建 Llama 架构</td></tr>
+    <tr><th>模型规模</th><td>
+      A 线（C线）Llama：0.46B，18 层，hidden 1024，16 heads / 4 KV heads（GQA），head_dim 64，FFN 2816，RoPE θ=10000<br>
+      B 线（D线）Mamba 混合：0.38B，18 层 = 16 Mamba(SSM) + 2 Attention（第 8/16 层），d_inner 2048，d_state 16，dt_rank 64，conv_kernel 4
+    </td></tr>
+    <tr><th>训练方案</th><td>
+      50/50 算力轮班：<code>alternator.sh</code> 每 2 小时在两线之间切换（SIGTERM 优雅保存 + auto 断点恢复）<br>
+      优化器：AdamW，weight_decay 0.1，grad clip 1.0<br>
+      LR 调度：200 步 warmup + cosine 衰减到 3e-5
+    </td></tr>
+    <tr><th>数据</th><td>
+      A 线：TinyStories v2（<code>/tmp/tinystories_v2.txt</code>）+ 混合语料，合计 ~67.5M tokens<br>
+      B 线：<code>data_corpus/tokens_200m.npy</code>（uint32 memmap，200M 容量）
+    </td></tr>
+    <tr><th>关键约束</th><td>
+      ① 16GB 统一内存 → 分块 CE + fp16 + clip；seq 降到 256 以换取移除 checkpoint 后的显存<br>
+      ② 无 CUDA → 单卡串行，必须轮班<br>
+      ③ M 级 token 预算 → 模型处于严重欠训区（token/参数 &lt; 1，Chinchilla 参考为 20）<br>
+      ④ SIGTERM 后需在 180s 内完成检查点落盘（含优化器状态约 4.6GB）
+    </td></tr>
+  </table>
+</div>
+
+<!-- ============================================================= -->
+<!-- ③ Mermaid 训练流程图                                          -->
+<!-- ============================================================= -->
+<h2>③ 训练流程图（模块编号 ↔ 代码文件映射）</h2>
+
+<div class="mermaid-wrap">
+  <div class="mermaid">
+flowchart TD
+    START(["系统启动"]) --> WATCH["【M2】watchdog.py<br/>电子狗 · 300s 巡检"]
+    WATCH -.->|"监控 / 自愈"| ALT["【M1】alternator.sh<br/>轮班调度器 · 2h 切片"]
+    ALT --> CHKA{"A 线<br/>.done_56570 ?"}
+    CHKA -->|否| TRAINA["【M3】pretrain.py<br/>A线 TinyStories 0.46B"]
+    CHKA -->|是| SKIPA["A 线已完成<br/>跳过不空转"]
+    TRAINA -->|"SIGTERM 优雅保存"| CKPTA[("pretrain_ckpt/<br/>weights_N.safetensors")]
+    SKIPA --> CHKB{"B 线<br/>.done_30000 ?"}
+    CKPTA --> CHKB
+    CHKB -->|否| TRAINB["【M4】mamba_hybrid.py<br/>B线 Mamba+Attn 0.38B"]
+    CHKB -->|是| FIN(["训练完成"])
+    TRAINB -->|"SIGTERM 优雅保存"| CKPTB[("mamba_ckpt/<br/>weights_N.safetensors")]
+    CKPTB --> WAIT["sleep 5"]
+    WAIT --> ALT
+    TRAINA -.->|"完成 / 异常"| MAIL["【M5】send_progress.py<br/>SMTP 邮件通知"]
+    TRAINB -.->|"完成 / 异常"| MAIL
+    WATCH -.->|"告警"| MAIL
+    CKPTA -.->|"评估"| CONV["【M6】convert_to_hf.py<br/>MLX→HF 权重转换"]
+    CKPTB -.->|"评估"| CONV
+    CONV -.-> EVAL["lm-eval-harness<br/>PPL / 长上下文外推"]
+  </div>
+  <div class="fig-cap">
+    图 1 · 训练系统总流程图（实线 = 主控制流，虚线 = 通知 / 评估旁路）
+  </div>
+</div>
+
+<div class="card">
+  <table>
+    <tr><th>编号</th><th>文件</th><th>职责</th><th>在流程中的位置</th></tr>
+    <tr><td><span class="tag tag-mod">M1</span></td><td><code>alternator.sh</code></td><td>轮班调度器：单例锁、marker 完成态感知、SIGTERM 宽限 + SIGKILL 兜底</td><td>主控制流顶层循环</td></tr>
+    <tr><td><span class="tag tag-mod">M2</span></td><td><code>watchdog.py</code></td><td>电子狗：300s 巡检调度器 / 训练进程存活 + 日志新鲜度，冷却告警 + 自愈</td><td>旁路监控，作用于 M1</td></tr>
+    <tr><td><span class="tag tag-mod">M3</span></td><td><code>pretrain.py</code></td><td>A 线：TinyStories 0.46B Llama 预训练（分块 CE / 断点恢复 / SIGTERM 保存）</td><td>轮班 A 片段</td></tr>
+    <tr><td><span class="tag tag-mod">M4</span></td><td><code>mamba_hybrid.py</code></td><td>B 线：Mamba+Attention 混合架构 0.38B 预训练</td><td>轮班 B 片段</td></tr>
+    <tr><td><span class="tag tag-mod">M5</span></td><td><code>send_progress.py</code></td><td>邮件通知技能：STARTTLS on 25 端口，支持 HTML 正文与附件</td><td>完成 / 异常 / 告警旁路</td></tr>
+    <tr><td><span class="tag tag-mod">M6</span></td><td><code>convert_to_hf.py</code></td><td>MLX 权重 → HF Llama 格式（含 RoPE 交错→半分配对置换）</td><td>评估前置</td></tr>
+  </table>
+</div>
+
+<!-- ============================================================= -->
+<!-- ④ 分模块核心代码                                              -->
+<!-- ============================================================= -->
+<h2>④ 分模块核心代码</h2>
+
+<!-- ---------------- M1 ---------------- -->
+<h3><span class="tag tag-mod">M1</span> alternator.sh <span class="tag tag-sh">Shell</span></h3>
+
+<div class="file-head">
+  <span class="path">alternator.sh</span>
+  <span class="tag tag-sh">Shell</span>
+  <span class="meta">63 行 · 2190 字节 · md5=cb78d4ba411dd805c0fee6ca0f0bc648</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  50/50 算力轮班调度器。让 A 线（TinyStories 0.46B）与 B 线（Mamba 混合架构 0.38B）各占 2 小时轮替训练。
+  通过 PID 单例锁防止双实例并发；通过 marker 文件感知完成态，已完成线直接跳过不空转；
+  切片到时先发 SIGTERM 让训练脚本优雅保存检查点，最多宽限 180s，仍不退出则 SIGKILL 兜底。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li><code>SLICE=7200</code> — 每片段最长秒数（2 小时）</li>
+    <li><code>LOCK=/tmp/mlx_alternator.lock</code> — 单例锁文件，内容为调度器 PID</li>
+    <li><code>run_slice $1 $2...$N</code> — 第 1 个参数为日志文件路径，其余为「环境变量 + 命令」形式，全部交给 <code>env</code> 执行</li>
+    <li>环境变量透传：<code>START_STEP=auto</code>（自动找最新检查点）、<code>MAX_STEPS</code>、<code>PEAK_LR</code></li>
+  </ul>
+</div>
+<pre><code class="language-bash">#!/bin/bash
+# 轮班调度器 v3: 单例锁 + 完成态跳过 + 日志正确重定向
+# 用法: nohup bash alternator.sh > alternator.log 2>&1 &
+cd "$(dirname "$0")"
+PY=.venv/bin/python
+SLICE=7200        # 每片段最长 2 小时
+LOCK=/tmp/mlx_alternator.lock
+
+# ---- 单例锁: 已有活着的实例则拒绝启动 ----
+if [ -f "$LOCK" ] && kill -0 "$(cat $LOCK)" 2>/dev/null; then
+  echo "调度器已在运行 (PID $(cat $LOCK)), 拒绝重复启动"
+  exit 1
+fi
+echo $$ > "$LOCK"
+trap 'rm -f "$LOCK"; exit 0' EXIT INT TERM
+
+run_slice () {
+  # $1=日志文件  其余=环境变量与命令; 真正重定向 stdout/stderr 到日志
+  local log="$1"; shift
+  env "$@" >> "$log" 2>&1 &
+  local pid=$!
+  local waited=0
+  # 等训练退出(完成/异常提前退出立即返回), 最长 SLICE 秒强制切换
+  while kill -0 "$pid" 2>/dev/null && [ "$waited" -lt "$SLICE" ]; do
+    sleep 5
+    waited=$((waited + 5))
+  done
+  kill -TERM "$pid" 2>/dev/null     # 训练脚本有 SIGTERM 优雅保存
+  # 等待优雅退出最多 180s (保存 4.6GB 检查点需要时间); 卡死则 SIGKILL 兜底
+  local grace=0
+  while kill -0 "$pid" 2>/dev/null && [ "$grace" -lt 180 ]; do
+    sleep 5
+    grace=$((grace + 5))
+  done
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "[KILL] 训练未响应 SIGTERM(${grace}s), 强制 SIGKILL"
+    kill -KILL "$pid" 2>/dev/null
+  fi
+  wait "$pid" 2>/dev/null
+}
+
+while true; do
+  # A 线: TinyStories; marker 存在=已完成, 直接跳过不启动进程
+  if [ -f pretrain_ckpt/.done_56570 ]; then
+    echo "=== [A] TinyStories 已完成(.done_56570), 跳过 $(date '+%m-%d %H:%M') ==="
+  else
+    echo "=== [A] TinyStories $(date '+%m-%d %H:%M') ==="
+    run_slice pretrain_60m.log \
+      START_STEP=auto MAX_STEPS=56570 PEAK_LR=8e-5 \
+      $PY -u pretrain.py train
+  fi
+  sleep 5
+  # B 线: Mamba 混合架构
+  if [ -f mamba_ckpt/.done_30000 ]; then
+    echo "=== [B] Mamba 已完成(.done_30000), 跳过 $(date '+%m-%d %H:%M') ==="
+  else
+    echo "=== [B] Mamba $(date '+%m-%d %H:%M') ==="
+    run_slice mamba_train.log \
+      START_STEP=auto MAX_STEPS=30000 PEAK_LR=1.2e-4 \
+      $PY -u mamba_hybrid.py train
+  fi
+  sleep 5
+done
+</code></pre>
+
+<!-- ---------------- M2 ---------------- -->
+<h3><span class="tag tag-mod">M2</span> watchdog.py <span class="tag tag-py">Python</span></h3>
+
+<div class="file-head">
+  <span class="path">watchdog.py</span>
+  <span class="tag tag-py">Python</span>
+  <span class="meta">127 行 · 5072 字节 · md5=1707f84934d120066be0c4ee61bcb437</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  电子狗 v2。每 300 秒巡检一次：调度器进程是否存活、锁文件与 PID 是否一致、训练子进程是否存在、活跃日志是否新鲜。
+  同类告警 30 分钟冷却防轰炸；检测到调度器死亡时自动重新拉起。
+  主循环整体包 try/except，保证看门狗自身不因 SMTP 网络抖动而退出。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li>无命令行参数，直接 <code>nohup .venv/bin/python -u watchdog.py &gt; watchdog.log 2&gt;&amp;1 &amp;</code> 启动</li>
+    <li><code>BASE</code> — 脚本所在目录，作为所有相对路径基准</li>
+    <li><code>LOCK</code> — <code>/tmp/mlx_alternator.lock</code>，与 M1 共享</li>
+    <li><code>COOLDOWN=1800</code> — 同类告警冷却秒数</li>
+    <li>依赖 <code>send_progress.send(subject, html_body)</code> 发信</li>
+  </ul>
+</div>
+<pre><code class="language-python">"""电子狗 v2: 锁感知 + 告警冷却 (同事故 30 分钟内不重复发)
+用法: nohup .venv/bin/python -u watchdog.py > watchdog.log 2>&1 &
+巡检 300s; 规则:
+  1. 锁文件存在但 PID 死亡        -> 告警"调度器异常退出" + 清锁重启 (一次性)
+  2. 无锁且无 alternator 进程     -> 视为调度器未运行, 静默拉起 (不算事故)
+  3. 调度器活着但连续 2 轮无训练进程 -> 告警"训练异常" + 重启调度器 (带 30min 冷却)
+  4. 训练进程在但日志静默 >30min  -> 告警"疑似卡死" (带 30min 冷却, 不自动杀)
+"""
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+BASE = os.path.dirname(os.path.abspath(__file__))
+LOCK = '/tmp/mlx_alternator.lock'
+COOLDOWN = 1800  # 同类告警冷却 30 分钟
+
+_last_alert = {}
+
+
+def procs():
+    return subprocess.run(['ps', 'aux'], capture_output=True, text=True).stdout
+
+
+def alert(key, title, body):
+    now = time.time()
+    if now - _last_alert.get(key, 0) < COOLDOWN:
+        print(f'[告警冷却中] {title}', flush=True)
+        return
+    _last_alert[key] = now
+    try:
+        import send_progress
+        send_progress.send(title, f'<p>{body}</p>')
+        print(f'[告警] {title}', flush=True)
+    except Exception as e:
+        print(f'[告警失败] {e}', flush=True)
+
+
+def alternator_alive():
+    if not os.path.exists(LOCK):
+        return False
+    try:
+        pid = int(open(LOCK).read().strip())
+        os.kill(pid, 0)
+        return True
+    except (ValueError, ProcessLookupError, PermissionError):
+        return False
+
+
+def training_alive():
+    ps = procs()
+    return ('pretrain.py train' in ps) or ('mamba_hybrid.py train' in ps)
+
+
+def restart_alternator():
+    subprocess.Popen(['nohup', 'bash', 'alternator.sh'],
+                     cwd=BASE,
+                     stdout=open(f'{BASE}/alternator.log', 'a'),
+                     stderr=subprocess.STDOUT)
+
+
+def main():
+    print('电子狗 v2 启动: 300s 巡检, 告警冷却 30min', flush=True)
+    no_training_rounds = 0
+    while True:
+        time.sleep(300)
+        try:                                   # 主循环保护: 任何异常不能杀死看门狗
+            ps = procs()
+            alt_bash = 'alternator.sh' in ps
+            lock_ok = alternator_alive()
+            training = training_alive()
+
+            if not alt_bash and not lock_ok:
+                # 调度器没在跑: 静默拉起 (锁文件不存在不算事故)
+                restart_alternator()
+                print('[自愈] 调度器未运行, 已拉起', flush=True)
+                no_training_rounds = 0
+                continue
+
+            if alt_bash and not lock_ok:
+                alert('lock', '【mlx-lora-finetune】调度器异常退出',
+                      'alternator.sh 进程消失(锁残留), 已自动重启。请检查 alternator.log。')
+                restart_alternator()
+                no_training_rounds = 0
+                continue
+
+            if lock_ok and not alt_bash:
+                # 有锁但进程没了: 说明启动中崩溃, 清锁重启
+                os.remove(LOCK)
+                restart_alternator()
+                print('[自愈] 调度器带死锁运行, 已重启', flush=True)
+                continue
+
+            # 调度器健康, 检查训练进程
+            if not training:
+                no_training_rounds += 1
+                if no_training_rounds >= 2:  # 10 分钟无训练 (排除 5s 切换间隙)
+                    alert('training', '【mlx-lora-finetune】训练异常告警',
+                          '调度器存活但连续 10 分钟无训练进程(两片段均异常退出), 已自动重启调度器。'
+                          '请检查 alternator.log 与 pretrain/mamba 日志。')
+                    restart_alternator()
+                    no_training_rounds = 0
+            else:
+                no_training_rounds = 0
+
+            # 日志新鲜度: 只检查未完成线的活跃日志 (A 完成 marker 存在则只看 mamba)
+            import glob
+            logs = []
+            if not os.path.exists(f'{BASE}/pretrain_ckpt/.done_56570'):
+                logs += glob.glob(f'{BASE}/pretrain_60m.log')
+            if not os.path.exists(f'{BASE}/mamba_ckpt/.done_30000'):
+                logs += glob.glob(f'{BASE}/mamba_train.log')
+            if training and logs:
+                stale = max(time.time() - os.path.getmtime(l) for l in logs)
+                if stale > 1800:
+                    alert('stale', '【mlx-lora-finetune】训练疑似卡死',
+                          f'训练进程存在但日志静默 {stale/60:.0f} 分钟。'
+                          f'请人工 sample <PID> 检查(看门狗不自动杀进程)。')
+        except Exception as e:
+            # 看门狗自身异常: 打印并存活 (send 走 SMTP 可能网络抖动)
+            import traceback
+            print(f'[看门狗巡检异常, 已存活] {e}\n{traceback.format_exc()[-500:]}', flush=True)
+
+
+if __name__ == '__main__':
+    main()
+</code></pre>
+
+<!-- ---------------- M3 ---------------- -->
+<h3><span class="tag tag-mod">M3</span> pretrain.py <span class="tag tag-py">Python</span></h3>
+
+<div class="file-head">
+  <span class="path">pretrain.py</span>
+  <span class="tag tag-py">Python</span>
+  <span class="meta">307 行 · 11230 字节 · md5=6a6ae2ea9d4018e527228deb04c0db0e</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  A 线（C 线）从零预训练：0.46B Llama 架构（18 层 / hidden 1024 / GQA 16:4 / FFN 2816），绑定 embedding。
+  包含三个关键工程手段：① 行级退化过滤 + 词表越界过滤的数据清洗；② 分块交叉熵（128 token 一片 + fp16 + clip）解决
+  248K 词表在 16GB 内存下的 logits 爆炸；③ SIGTERM 优雅保存 + auto 断点恢复 + 完成态 marker 防崩溃循环。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li>命令行：<code>python pretrain.py pretokenize</code> 或 <code>python pretrain.py train</code>（默认 train）</li>
+    <li>环境变量 <code>CORPUS</code> — 原始文本路径，默认 <code>/tmp/tinystories_v2.txt</code></li>
+    <li>环境变量 <code>TOKENS_BIN</code> — token memmap 输出路径，默认 <code>data_corpus/tokens_200m.npy</code>（uint32）</li>
+    <li>环境变量 <code>PRETOK_N</code> — pretokenize 目标 token 数，默认 30,000,000</li>
+    <li>环境变量 <code>START_STEP</code> — <code>auto</code> 或整数，auto 时取最新检查点 step</li>
+    <li>环境变量 <code>MAX_STEPS</code> — 总步数，默认 52500（调度器传 56570）</li>
+    <li>环境变量 <code>PEAK_LR</code> — 峰值学习率，默认 1.2e-4（调度器传 8e-5）</li>
+    <li><code>CONF</code> 字典：vocab_size 248077 / hidden 1024 / layers 18 / heads 16 / kv_heads 4 / head_dim 64 / ffn 2816 / rope_theta 10000.0</li>
+    <li>训练超参：<code>bs=2</code>，<code>sl=512</code>，<code>clip=1.0</code>，AdamW weight_decay 0.1</li>
+  </ul>
+</div>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">数据管线：退化过滤 + 预分词</h4>
+<pre><code class="language-python"># ---------- 数据 ----------
+
+def line_is_junk(line):
+    """行级退化过滤: 全行扫描, 同字符连跑>30 或 多样性过低"""
+    if len(set(line)) < max(6, len(line) // 25):
+        return True
+    run, best = 1, 1
+    for a, b in zip(line, line[1:]):
+        run = run + 1 if a == b else 1
+        best = max(best, run)
+        if best > 30:
+            return True
+    return False
+
+def pretokenize(max_tokens=None):
+    if max_tokens is None:
+        max_tokens = int(os.environ.get('PRETOK_N', '30000000'))
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_DIR)
+    arr = np.memmap(TOKENS_BIN, dtype=np.uint32, mode='w+', shape=(max_tokens,))
+    pos = 0
+    buf = []
+    with open(DATA_TXT) as f:
+        for line in f:
+            if line_is_junk(line):
+                continue
+            ids = tok(line, add_special_tokens=False)['input_ids'] + [tok.eos_token_id]
+            vs = c['vocab_size'] if (c := CONF) else 151936
+            ids = [i for i in ids if i < vs]   # 词表越界过滤, 防 NaN
+            if ids and ids[-1] == tok.eos_token_id:
+                pass
+            else:
+                ids.append(tok.eos_token_id)
+            buf.extend(ids)
+            if len(buf) >= 200_000:
+                take = min(len(buf), max_tokens - pos)
+                arr[pos:pos + take] = buf[:take]
+                pos += take
+                buf = buf[take:]
+                if pos >= max_tokens:
+                    break
+                print(f'  {pos/1e6:.1f}M tokens', flush=True)
+    print(f'pretokenize 完成: {pos} tokens', flush=True)
+
+
+def get_batch(arr, bs, sl, rng):
+    """从 memmap 随机采样 bs 条长度 sl 的序列, y 为右移一位的标签"""
+    ix = rng.integers(0, len(arr) - sl - 1, size=bs)
+    x = mx.array(np.stack([arr[i:i + sl] for i in ix]).astype(np.int32))
+    y = mx.array(np.stack([arr[i + 1:i + sl + 1] for i in ix]).astype(np.int32))
+    return x, y
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">分块交叉熵：248K 词表在 16GB 内存下的核心手段</h4>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  248K 词表 × 512 序列 × batch 2 的完整 logits 张量约 4.7GB（fp32），加上反向会直接打爆 16GB。
+  把序列按 128 token 切块，逐块计算 logits 并立即转 fp16，clip 到 ±30 防止 fp16 溢出，再算交叉熵。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li><code>model</code> — 实现了 <code>hidden(tokens)</code> 的模型对象，返回 [B, S, hidden]</li>
+    <li><code>x</code> — 输入 token，形状 [B, S]，dtype int32</li>
+    <li><code>y</code> — 目标 token（x 右移一位），形状 [B, S]，dtype int32</li>
+    <li>返回：标量 loss，已按 <code>B * S</code> 归一化</li>
+  </ul>
+</div>
+<pre><code class="language-python">    def loss_fn(model, x, y):
+        h = model.hidden(x)                          # [B,S,1024] 仅 17MB
+        B, S, _ = h.shape
+        w = model.embed.weight.T                     # 绑定 embedding, 不再额外存 lm_head
+        total = mx.zeros(())
+        chunk = 128
+        for i in range(0, S, chunk):                 # 分块: 每 128 token 一片
+            logits = (h[:, i:i + chunk] @ w).astype(mx.float16)
+            logits = mx.clip(logits, -30.0, 30.0).astype(mx.float32)  # fp16 溢出保险丝
+            total = total + nn.losses.cross_entropy(logits, y[:, i:i + chunk]).sum()
+        return total / (B * S)
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">训练主循环：断点恢复 / 完成态 / 优雅保存</h4>
+<pre><code class="language-python">def train():
+    os.makedirs(CKPT_DIR, exist_ok=True)
+    c = CONF
+    model = Model(c)
+    mx.eval(model.parameters())
+    nparams = sum(p.size for _, p in tree_flatten(model.parameters()))
+    print(f'模型参数: {nparams/1e6:.1f}M', flush=True)
+
+    arr = np.memmap(TOKENS_BIN, dtype=np.uint32, mode='r')
+    rng = np.random.default_rng(0)
+
+    max_steps = int(os.environ.get('MAX_STEPS', '52500'))
+    start_step = os.environ.get('START_STEP', '30000')
+    if start_step == 'auto':                    # 自动找最新检查点
+        import glob
+        fs = glob.glob(f'{CKPT_DIR}/weights_*.safetensors')
+        start_step = max((int(x.split('_')[-1].split('.')[0]) for x in fs), default=0)
+    else:
+        start_step = int(start_step)
+    if start_step >= max_steps:                 # 已完成目标: 干净退出防崩溃循环
+        marker = f'{CKPT_DIR}/.done_{max_steps}'
+        if not os.path.exists(marker):          # 完成通知只发一次, 防轮班邮件轰炸
+            notify('【mlx-lora-finetune】TinyStories 训练已完成目标, 无需恢复',
+                   f'auto 恢复到 step {start_step} >= MAX_STEPS {max_steps}。要继续请调大 MAX_STEPS。')
+            open(marker, 'w').write('done')
+        print('已达标, 干净退出', flush=True)
+        return
+    peak_lr = float(os.environ.get('PEAK_LR', '1.2e-4'))
+    ckpt = f'{CKPT_DIR}/weights_{start_step}.safetensors'
+    if os.path.exists(ckpt):
+        loaded = mx.load(ckpt)
+        model.load_weights(list(loaded.items()))
+        mx.eval(model.parameters())
+        print(f'从 {ckpt} 恢复权重', flush=True)
+    remaining = max_steps - start_step
+    warmup = lambda it: min((it + 1) / 200, 1.0)
+    base = cosine_decay(peak_lr, remaining, 3e-5)
+    lr_schedule = lambda it: warmup(it) * base(it)
+    opt = AdamW(learning_rate=lr_schedule, weight_decay=0.1)
+
+    bs, sl = 2, 512
+    clip = 1.0  # max grad norm
+
+    loss_and_grad = nn.value_and_grad(model, loss_fn)
+
+    os.makedirs(CKPT_DIR, exist_ok=True)
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(TOKENIZER_DIR)
+
+    cur = {'step': start_step, 'model': model}
+    def on_term(signum, frame):
+        """SIGTERM 优雅保存: 调度器切片到时发信号, 先落盘再退出"""
+        mx.save_safetensors(f'{CKPT_DIR}/weights_{cur["step"]}.safetensors',
+                            dict(tree_flatten(cur['model'].parameters())))
+        print(f'[SIGTERM] 已保存 step {cur["step"]}, 退出', flush=True)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, on_term)
+
+    t0 = time.time()
+    tokens_done = 0
+    for step in range(start_step + 1, max_steps + 1):
+        x, y = get_batch(arr, bs, sl, rng)
+        (l, grads) = loss_and_grad(model, x, y)
+        if not mx.isfinite(l).item():           # NaN 跳批防护
+            print(f'step {step}: loss 非有限, 跳过', flush=True)
+            continue
+        grads, gnorm = clip_grad_norm(grads, clip)
+        opt.update(model, grads)
+        state = [model.state, opt.state]
+        mx.eval(state, l, gnorm)                # 惰性求值: 此处才真正执行计算
+        cur['step'] = step
+        tokens_done += bs * sl
+        if step % 20 == 0:
+            tps = tokens_done / (time.time() - t0)
+            print(f'step {step}: loss {l.item():.3f}, gnorm {float(gnorm.item()):.2f}, '
+                  f'{tps:.0f} tok/s, 累计 {tokens_done/1e6:.2f}M tokens', flush=True)
+        if step % 1500 == 0 or step == max_steps:
+            mx.save_safetensors(
+                f'{CKPT_DIR}/weights_{step}.safetensors',
+                dict(tree_flatten(model.parameters())),
+            )
+            import glob
+            olds = sorted(glob.glob(f'{CKPT_DIR}/weights_*.safetensors'),
+                          key=lambda x: int(x.split("_")[-1].split(".")[0]))
+            for old in olds[:-2]:               # 滚动保留最近 2 个
+                os.remove(old)
+            sample(model, tok, f'--- step {step} 采样 ---')
+    print('训练完成', flush=True)
+    notify('【mlx-lora-finetune】TinyStories 预训练完成',
+           f'累计 {tokens_done/1e6:.1f}M tokens, step {max_steps}, 检查点见 pretrain_ckpt/。日志: pretrain_60m.log')
+
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'train'
+    if cmd == 'pretokenize':
+        pretokenize()
+    elif cmd == 'train':
+        try:
+            train()
+        except SystemExit:
+            raise
+        except Exception as e:                  # 异常邮件钩子: 含 traceback 尾部
+            import traceback
+            notify('【mlx-lora-finetune】TinyStories 预训练异常告警',
+                   f'异常: {e}\n\n{traceback.format_exc()[-2000:]}\n\n日志: pretrain_60m.log')
+            raise
+</code></pre>
+
+<!-- ---------------- M4 ---------------- -->
+<h3><span class="tag tag-mod">M4</span> mamba_hybrid.py <span class="tag tag-py">Python</span></h3>
+
+<div class="file-head">
+  <span class="path">mamba_hybrid.py</span>
+  <span class="tag tag-py">Python</span>
+  <span class="meta">413 行 · 16546 字节 · md5=e9d5ac6e317a980e9eb2de583caa4660</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  B 线（D 线）核心：Mamba + Attention 混合架构从零预训练，18 层 = 16 个 Mamba(SSM) 块 + 2 个 GQA Attention 块（第 8、16 层）。
+  SSM 提供 O(T) 线性复杂度的长程建模，Attention 层负责精确检索。
+  相比 v1 修复了三个自审问题：<code>x_proj</code> 死参数接入标准 Mamba 路径、conv 改恒等初始化、移除导致梯度恒零的 <code>mx.checkpoint</code>。
+  同时新增模型 + 优化器状态一体化保存、坏档自动降级、磁盘水位防线。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li>命令行：<code>python mamba_hybrid.py pretokenize</code> 或 <code>python mamba_hybrid.py train</code>（默认 train）</li>
+    <li>环境变量 <code>START_STEP</code> — <code>auto</code> 或整数；auto 时经 <code>valid_ckpts()</code> 严格匹配 <code>weights_&lt;数字&gt;.safetensors</code></li>
+    <li>环境变量 <code>MAX_STEPS</code> — 默认 30000</li>
+    <li>环境变量 <code>PEAK_LR</code> — 默认 1.2e-4</li>
+    <li><code>CONF</code> 字典：vocab_size 248077 / hidden 1024 / layers 18 / heads 16 / kv_heads 4 / head_dim 64 / ffn 2816 / <strong>d_inner 2048 / d_state 16 / dt_rank 64 / conv_kernel 4</strong> / rope_theta 10000.0</li>
+    <li>训练超参：<code>bs=2</code>，<code>sl=256</code>（移除 checkpoint 后控内存），<code>clip=1.0</code>，AdamW weight_decay 0.1</li>
+    <li>数据：<code>data_corpus/tokens_200m.npy</code>（uint32 memmap）</li>
+    <li><code>save_all(path, model, opt, step)</code> — 原子写模型 + 优化器状态 + step</li>
+    <li><code>load_all(path, model, opt)</code> — 配套恢复，返回恢复的模型 tensor 数</li>
+  </ul>
+</div>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">SSM 单步递推 + 深度可分离因果卷积</h4>
+<div class="tip tip-warn">
+  <span class="tip-title">【注意】</span>
+  <code>dt_proj.bias</code> 当前写为 <code>-np.log(np.exp(lin) - 1)</code>。目标是让 <code>softplus(bias) ∈ [1e-3, 1e-1]</code>，
+  正确解应为 <code>+np.log(np.expm1(lin))</code>（约 [-6.9, -2.25]）。当前符号取反后 <code>softplus(bias) ∈ [2.26, 6.9]</code>，
+  dt 被放大 10~100 倍，离散化 A 会迅速归零，SSM 记忆长度可能被压到接近 1 token。此点已列入「待验证假设」。
+</div>
+<pre><code class="language-python"># ---------------- Mamba SSM ----------------
+def _ssm_step(h, xt, Bt, Ct, dt, negA, Dv):
+    """单步递推: A_bar=exp(dt·A), B_bar=dt·B; y=C·h+D·x (D 项仅此处一次)
+    negA/Dv 作为显式参数传入 -> mx.compile 全局一次编译, 所有层复用"""
+    d = mx.exp(dt[..., None] * negA)                   # [B,Di,DS] 离散化 A
+    new = d * h + dt[..., None] * Bt[:, None, :] * xt[..., None]
+    y = (new * Ct[:, None, :]).sum(-1) + Dv * xt       # [B,Di]
+    return new, y
+
+
+_SSM_STEP = mx.compile(_ssm_step)      # 模块级: 避免每层每步重复编译
+
+
+def ssm_scan(x, B_s, C_s, delta, A, Dv):
+    """选择性 SSM 逐token递推
+    x: [B,T,Di]  B/C: [B,T,DS]  delta: [B,T,Di]
+    A: [Di,DS] 已为负值(调用方传 -exp(A_log), 本函数不再取 exp —— 修复双重exp)
+    返回: [B,T,Di]
+    """
+    Bb, T, Di = x.shape
+    h = mx.zeros((Bb, Di, B_s.shape[-1]), dtype=x.dtype)
+    ys = []
+    for t in range(T):
+        h, y = _SSM_STEP(h, x[:, t], B_s[:, t], C_s[:, t], delta[:, t], A, Dv)
+        ys.append(y)
+    return mx.stack(ys, axis=1)
+
+
+def causal_conv1d(x, weight, bias):
+    """深度可分离因果卷积 k=4: x[B,L,C], weight[C,K]"""
+    B, L, C = x.shape
+    K = weight.shape[-1]
+    pad = mx.concatenate([mx.zeros((B, K - 1, C), x.dtype), x], axis=1)
+    y = mx.zeros((B, L, C), x.dtype)
+    for k in range(K):
+        y = y + pad[:, k:L + k, :] * weight[None, None, :, k]
+    return y + bias
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">MambaBlock：标准 Mamba 路径（x_proj 产生 dt/B/C）</h4>
+<pre><code class="language-python">class MambaBlock(nn.Module):
+    """选择性 SSM 块: 线性复杂度 O(T), 推理时 O(1) 显存/token"""
+
+    def __init__(self, c):
+        super().__init__()
+        d, di, ds, r = c['hidden'], c['d_inner'], c['d_state'], c['dt_rank']
+        K = c['conv_kernel']
+        # in_proj 输出: [x(di) | z(di) | B(ds) | C(ds) | dt(r)]
+        self.in_proj = nn.Linear(d, 2 * di + 2 * ds + r, bias=False)
+        # 恒等初始化: 只有最后一个 tap=1, 初始时 conv=恒等映射 (原来0.5*4会放大2倍)
+        w = np.zeros((di, K)); w[:, -1] = 1.0
+        self.conv_weight = mx.array(w)
+        self.conv_bias = mx.zeros(di)
+        self.x_proj = nn.Linear(di, r + 2 * ds, bias=False)
+        self.dt_proj = nn.Linear(r, di, bias=True)
+        # S4D-real 初始化: A = -arange(1..ds)
+        self.A_log = mx.log(mx.tile(mx.arange(1, ds + 1, dtype=mx.float32), (di, 1)))
+        self.D = mx.ones(di)
+        self.out_proj = nn.Linear(di, d, bias=False)
+        # dt_bias 初始化: 使 softplus 后分布于 [1e-3, 1e-1]
+        lin = np.linspace(1e-3, 1e-1, di)
+        self.dt_proj.bias = mx.array(-np.log(np.exp(lin) - 1))
+        self.c = {'di': di, 'ds': ds, 'r': r}   # 维度存dict: MLX Module的int实例属性会被串写!
+
+    def __call__(self, x):
+        di, ds = self.c['di'], self.c['ds']
+        # 标准 Mamba: in_proj 产生 [x, z]; x 经 conv+silu; B/C/dt 由 x_proj(x_conv) 产生
+        # (自审修复: 原 x_proj 是死参数, B/C 直接来自 in_proj 尾部切片偏离选择性设计)
+        zx = self.in_proj(x)
+        xv, z = zx[..., :di], zx[..., di:2 * di]
+        xv = nn.silu(causal_conv1d(xv, self.conv_weight, self.conv_bias))
+        dtr, Bq, Cq = mx.split(self.x_proj(xv), [self.c['r'], self.c['r'] + ds], axis=-1)
+        dt = nn.softplus(self.dt_proj(dtr))            # [B,T,Di]
+        # A = -exp(A_log) 此处取一次即可 (ssm_scan 内不再 exp); D 项在 ssm_scan 内加, 此处不重复
+        y = ssm_scan(xv, Bq, Cq, dt, -mx.exp(self.A_log), self.D)
+        return self.out_proj(y * nn.silu(z))
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">块外壳与层堆叠</h4>
+<pre><code class="language-python">class MambaBlock_(nn.Module):
+    """Mamba 块外壳: PreNorm + 残差
+    自审发现: mx.checkpoint 对闭包捕获参数 (a)梯度恒为零 (b)前向值错误
+    -> 此前 16 个 Mamba 层实际从未被训练! 已移除 checkpoint, 用 seq=256 控内存"""
+    def __init__(self, c):
+        super().__init__()
+        self.mixer = MambaBlock(c)
+        self.norm = nn.RMSNorm(c['hidden'])
+
+    def __call__(self, x):
+        return x + self.mixer(self.norm(x))
+
+
+def build_layers(c):
+    """16 Mamba + 2 Attention 交错 (第 8/16 层为 Attention)"""
+    layers = []
+    for i in range(c['layers']):
+        if (i + 1) % 8 == 0:
+            layers.append(AttnBlock(c))
+        else:
+            layers.append(MambaBlock_(c))
+    return layers
+
+
+class Model(nn.Module):
+    def __init__(self, c):
+        super().__init__()
+        self.embed = nn.Embedding(c['vocab_size'], c['hidden'])
+        self.layers = build_layers(c)
+        self.norm = nn.RMSNorm(c['hidden'])
+        self.c = c
+
+    def hidden(self, tokens):
+        x = self.embed(tokens)
+        for l in self.layers:
+            x = l(x)
+        return self.norm(x)
+
+    def __call__(self, tokens):
+        return self.hidden(tokens) @ self.embed.weight.T
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">检查点：模型 + 优化器状态 + 步数，原子写</h4>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  把模型参数（前缀 <code>m.</code>）、优化器动量/二阶矩（前缀 <code>o.</code>）和全局 step 一起落盘。
+  采用「临时文件 + <code>os.replace</code>」实现原子替换，保证任何时刻磁盘上只有完整的旧档或新档，不会出现半截文件。
+  <code>valid_ckpts()</code> 用正则严格匹配 <code>weights_&lt;数字&gt;.safetensors</code>，自动排除 <code>_tmp</code> 与 <code>.corrupt</code>。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li><code>save_all(path, model, opt, step)</code> — path 必须以 <code>.safetensors</code> 结尾；同时写 <code>CKPT_DIR/last_step.txt</code></li>
+    <li><code>load_all(path, model, opt)</code> — 返回恢复的模型 tensor 数；若加载失败，调用方会把坏档重命名为 <code>.corrupt</code> 并降级到次新档</li>
+    <li><code>valid_ckpts()</code> — 返回 <code>[(step, filepath), ...]</code>，按 step 升序</li>
+    <li><code>latest_ckpt_step()</code> — 返回最新 step，无档返回 0</li>
+  </ul>
+</div>
+<pre><code class="language-python">def save_all(path, model, opt, step):
+    """模型+优化器状态+步数 一起存; 原子写: 临时文件+rename, 不留半截档"""
+    d = {}
+    for k, v in tree_flatten(model.parameters()):
+        d['m.' + k] = v
+    for k, v in tree_flatten(opt.state):
+        d['o.' + k] = v if hasattr(v, 'astype') else mx.array(v)
+    tmp = path.replace('.safetensors', '_tmp.safetensors')
+    mx.save_safetensors(tmp, d)
+    os.replace(tmp, path)                # 原子替换: 要么旧档要么新档, 无中间态
+    with open(f'{CKPT_DIR}/last_step.txt', 'w') as f:
+        f.write(str(step))
+
+
+def load_all(path, model, opt):
+    """配套恢复: 模型权重 + 优化器动量/二阶矩"""
+    from mlx.utils import tree_unflatten
+    w = dict(mx.load(path).items())
+    model.load_weights([(k[2:], v) for k, v in w.items() if k.startswith('m.')])
+    o_items = [(k[2:], v) for k, v in w.items() if k.startswith('o.')]
+    if o_items:
+        opt.state = tree_unflatten(o_items)
+    mx.eval(model.parameters())
+    return len([k for k in w if k.startswith('m.')])
+
+
+def valid_ckpts():
+    """严格匹配 weights_<数字>.safetensors, 排除 _tmp/.corrupt, 按 step 升序"""
+    import glob, re
+    out = []
+    for f in glob.glob(f'{CKPT_DIR}/weights_*.safetensors'):
+        m = re.fullmatch(r'weights_(\d+)\.safetensors', os.path.basename(f))
+        if m:
+            out.append((int(m.group(1)), f))
+    return sorted(out)
+</code></pre>
+
+<h4 style="font-size:14px;color:#4b5563;margin:18px 0 6px">训练主循环：坏档降级 / 全局 LR / 磁盘水位防线</h4>
+<pre><code class="language-python">def train():
+    os.makedirs(CKPT_DIR, exist_ok=True)
+    c = CONF
+    model = Model(c)
+    start_step = os.environ.get('START_STEP', '0')
+    max_steps = int(os.environ.get('MAX_STEPS', '30000'))
+    if start_step == 'auto':                    # 自动找最新检查点
+        start_step = latest_ckpt_step()
+    else:
+        start_step = int(start_step)
+    if start_step >= max_steps:                 # 已完成目标: 干净退出防崩溃循环
+        marker = f'{CKPT_DIR}/.done_{max_steps}'
+        if not os.path.exists(marker):          # 通知只发一次, 防轮班邮件轰炸
+            notify('【mlx-lora-finetune】Mamba 混合架构训练已完成目标, 无需恢复',
+                   f'auto 恢复到 step {start_step} >= MAX_STEPS {max_steps}。要继续请调大 MAX_STEPS。')
+            open(marker, 'w').write('done')
+        print('已达标, 干净退出', flush=True)
+        return
+    peak_lr = float(os.environ.get('PEAK_LR', '1.2e-4'))
+    # LR 调度: 以"全局步"计算, warmup 只在真正前200步生效,
+    # cosine 覆盖 0->max_steps 全程, 不因切片恢复重置
+    def lr_at(g):
+        warm = min((g + 1) / 200, 1.0)
+        progress = min(g / max(max_steps - 1, 1), 1.0)
+        cos = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return mx.array(warm * (3e-5 + (peak_lr - 3e-5) * cos))   # 必须mx.array
+    lr_schedule = lr_at
+    opt = AdamW(learning_rate=lr_schedule, weight_decay=0.1)
+
+    # 按步数降序逐个尝试加载, 坏档自动降级到次新档, 全坏从头训
+    if start_step > 0:
+        cands = [f for _, f in reversed(valid_ckpts())]
+        restored = False
+        for cand in cands:
+            try:
+                n = load_all(cand, model, opt)
+                start_step = int(cand.split('_')[-1].split('.')[0])
+                print(f'从 {cand} 恢复 ({n} tensors, 含优化器状态)', flush=True)
+                restored = True
+                break
+            except Exception as e:
+                print(f'[坏档降级] {cand}: {e}', flush=True)
+                os.rename(cand, cand + '.corrupt')
+        if not restored:
+            start_step = 0
+            print('所有检查点损坏, 从头训练', flush=True)
+    mx.eval(model.parameters())
+    nparams = sum(p.size for _, p in tree_flatten(model.parameters()))
+    print(f'MambaHybrid 参数: {nparams/1e6:.1f}M', flush=True)
+
+    arr = np.memmap('data_corpus/tokens_200m.npy', dtype=np.uint32, mode='r')
+    rng = np.random.default_rng(0)
+
+    bs, sl = 2, 256    # seq 256: 无 checkpoint 后控内存 (512 时 ~13.6GB)
+    loss_and_grad = nn.value_and_grad(model, loss_fn)
+    from transformers import AutoTokenizer
+    tok = AutoTokenizer.from_pretrained(D.TOKENIZER_DIR)
+
+    cur = {'step': start_step}
+
+    def on_term(signum, frame):
+        """SIGTERM 优雅保存: 模型 + 优化器状态 + step 一并落盘"""
+        save_all(f'{CKPT_DIR}/weights_{cur["step"]}.safetensors',
+                 model, opt, cur['step'])
+        print(f'[SIGTERM] 已保存 step {cur["step"]} (含优化器), 退出', flush=True)
+        sys.exit(0)
+    signal.signal(signal.SIGTERM, on_term)
+
+    t0, tokens_done = time.time(), 0
+    for step in range(start_step + 1, max_steps + 1):
+        x, y = D.get_batch(arr, bs, sl, rng)
+        (l, grads) = loss_and_grad(model, x, y)
+        if not mx.isfinite(l).item():           # NaN 跳批
+            print(f'step {step}: 非有限, 跳过', flush=True)
+            continue
+        grads, gnorm = clip_grad_norm(grads, 1.0)
+        opt.update(model, grads)
+        state = [model.state, opt.state]
+        mx.eval(state, l, gnorm)                # 惰性求值: 此处才真正执行
+        tokens_done += bs * sl
+        cur['step'] = step
+        if step % 20 == 0:
+            print(f'step {step}: loss {l.item():.3f}, lr {lr_at(step):.2e}, '
+                  f'{tokens_done / (time.time() - t0):.0f} tok/s', flush=True)
+        if step % 250 == 0 or step == max_steps:
+            # 磁盘水位防线: 4.6GB/档, 剩余<15GB先删最老档腾位, <8GB跳过保存(不崩溃)
+            import shutil
+            free_gb = shutil.disk_usage(CKPT_DIR).free / 1024**3
+            if free_gb < 15:
+                olds = valid_ckpts()
+                for _, f in olds[:-1]:        # 保留最新一个, 删其余最老
+                    os.remove(f)
+                    free_gb = shutil.disk_usage(CKPT_DIR).free / 1024**3
+                    if free_gb >= 15:
+                        break
+            if free_gb < 8:
+                print(f'[磁盘不足] 剩{free_gb:.1f}GB, 跳过本档保存', flush=True)
+            else:
+                save_all(f'{CKPT_DIR}/weights_{step}.safetensors', model, opt, step)
+                # 滚动保留最近 3 个 (严格枚举)
+                olds = valid_ckpts()
+                for _, f in olds[:-3]:
+                    os.remove(f)
+                sample(model, tok, f'--- step {step} 采样 ---')
+    print('训练完成', flush=True)
+    notify('【mlx-lora-finetune】Mamba 混合架构训练完成',
+           f'step {max_steps}, 检查点见 mamba_ckpt/。日志: mamba_train.log')
+
+
+if __name__ == '__main__':
+    cmd = sys.argv[1] if len(sys.argv) > 1 else 'train'
+    if cmd == 'pretokenize':
+        D.pretokenize()
+    else:
+        try:
+            train()
+        except SystemExit:
+            raise
+        except Exception as e:                  # 异常邮件钩子: 含 traceback
+            import traceback
+            notify('【mlx-lora-finetune】Mamba 混合架构训练异常告警',
+                   f'异常: {e}\n\n{traceback.format_exc()[-2000:]}\n\n日志: mamba_train.log')
+            raise
+</code></pre>
+
+<!-- ---------------- M5 ---------------- -->
+<h3><span class="tag tag-mod">M5</span> send_progress.py <span class="tag tag-py">Python</span></h3>
+
+<div class="file-head">
+  <span class="path">send_progress.py</span>
+  <span class="tag tag-py">Python</span>
+  <span class="meta">邮件通知技能 · 被 M2 / M3 / M4 共同调用</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  统一邮件通知出口，供训练脚本的完成/异常钩子和看门狗的告警调用。
+  使用 163 邮箱 SMTP 25 端口 + STARTTLS，支持 HTML 正文与可选附件。
+  各调用方负责「冷却」逻辑（M3/M4 用 300s 内存冷却，M2 用 1800s 冷却），本模块只负责发信。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li><code>subject</code> — 邮件标题字符串</li>
+    <li><code>html_body</code> — HTML 正文；M2 调用时会包一层 <code>&lt;p&gt;...&lt;/p&gt;</code></li>
+    <li><code>attachment_path</code> — 可选，附件绝对路径；为 <code>None</code> 时不带附件</li>
+    <li>模块级常量：<code>FROM_ADDR</code> / <code>TO_ADDR</code> / <code>SMTP_USER</code> / <code>SMTP_PASS</code></li>
+  </ul>
+</div>
+<pre><code class="language-python">def send(subject, html_body, attachment_path=None):
+    msg = MIMEMultipart("mixed")
+    msg["Subject"], msg["From"], msg["To"] = subject, FROM_ADDR, TO_ADDR
+    alt = MIMEMultipart("alternative")
+    alt.attach(MIMEText(html_body, "html", "utf-8"))
+    msg.attach(alt)
+    if attachment_path:
+        with open(attachment_path, "rb") as f:
+            att = MIMEApplication(f.read())
+        att.add_header("Content-Disposition", "attachment",
+                       filename=("utf-8", "", attachment_path.split("/")[-1]))
+        msg.attach(att)
+    ctx = ssl.create_default_context()
+    with smtplib.SMTP("smtp.163.com", 25, timeout=30) as s:  # 25端口 STARTTLS
+        s.ehlo(); s.starttls(context=ctx); s.ehlo()
+        s.login(SMTP_USER, SMTP_PASS)
+        s.sendmail(FROM_ADDR, [TO_ADDR], msg.as_string())
+</code></pre>
+
+<!-- ---------------- M6 ---------------- -->
+<h3><span class="tag tag-mod">M6</span> convert_to_hf.py <span class="tag tag-py">Python</span></h3>
+
+<div class="file-head">
+  <span class="path">convert_to_hf.py</span>
+  <span class="tag tag-py">Python</span>
+  <span class="meta">MLX 权重 → HF Llama 格式 · 供 lm-eval-harness 评估</span>
+</div>
+<div class="tip tip-use">
+  <span class="tip-title">【用途】</span>
+  把 MLX 自训权重转成 HuggingFace Llama 格式，使 <code>lm-eval-harness</code> 可以直接加载评估。
+  核心是 RoPE 的坐标置换：MLX 侧用交错配对 <code>(2i, 2i+1)</code>，HF 侧用半分配对 <code>(i, i+D/2)</code>，
+  对 q_proj / k_proj 的权重按 head 维度重排即可。转换后已实测 logits 与 MLX 侧等价。
+  同时写出 config.json / generation_config.json，并从 Qwen 目录拷贝 tokenizer 文件。
+</div>
+<div class="tip tip-param">
+  <span class="tip-title">【入参说明】</span>
+  <ul style="margin:6px 0">
+    <li>命令行：<code>python convert_to_hf.py &lt;mlx_safetensors&gt; &lt;out_dir&gt;</code></li>
+    <li><code>mlx_safetensors</code> — 例如 <code>pretrain_ckpt/weights_8000.safetensors</code></li>
+    <li><code>out_dir</code> — 输出目录，例如 <code>models/hf_46b_8k</code>，不存在会自动创建</li>
+    <li><code>MX_CONF</code> — 与 pretrain.py 的 <code>CONF</code> 必须一致（vocab_size 248077 / hidden 1024 / layers 18 / heads 16 / kv_heads 4 / head_dim 64 / ffn 2816 / rope_theta 10000.0）</li>
+    <li><code>TOKENIZER_SRC</code> — <code>models/Qwen3.5-0.8B-4bit</code></li>
+    <li><code>permute_rope(wt, heads, head_dim)</code> — 对单层 q/k 权重做交错→半分配对重排</li>
+  </ul>
+</div>
+<div class="tip tip-warn">
+  <span class="tip-title">【注意】</span>
+  当前 <code>config.json</code> 写入 <code>eos_token_id: 2</code>，但 <code>generation_config.json</code> 与 tokenizer 的 eos 是 <code>248046</code>。
+  两者不一致会导致 HF 生成时提前停止或停不下来，评估前需要对齐。
+</div>
+<pre><code class="language-python">MX_CONF = dict(vocab_size=248077, hidden=1024, layers=18, heads=16,
+               kv_heads=4, head_dim=64, ffn=2816, rope_theta=10000.0)
+TOKENIZER_SRC = 'models/Qwen3.5-0.8B-4bit'
+
+
+def convert(mlx_safetensors, out_dir):
+    os.makedirs(out_dir, exist_ok=True)
+    w = dict(mx.load(mlx_safetensors).items())
+    out = {}
+    out['model.embed_tokens.weight'] = w['embed.weight']
+    out['model.norm.weight'] = w['norm.weight']
+
+    def permute_rope(wt, heads, head_dim):
+        # 交错配对 (2i, 2i+1) -> 半分配对 (i, i+D/2): Llama->HF 经典置换
+        import numpy as np
+        wa = wt.reshape(heads, head_dim, -1)
+        idx = list(range(0, head_dim, 2)) + list(range(1, head_dim, 2))
+        wa = wa[:, idx, :]
+        return mx.array(wa.reshape(heads * head_dim, -1))
+
+    for i in range(MX_CONF['layers']):
+        p = f'layers.{i}.'
+        h = f'model.layers.{i}.'
+        out[h + 'self_attn.q_proj.weight'] = permute_rope(
+            w[p + 'attn.q_proj.weight'], MX_CONF['heads'], MX_CONF['head_dim'])
+        out[h + 'self_attn.k_proj.weight'] = permute_rope(
+            w[p + 'attn.k_proj.weight'], MX_CONF['kv_heads'], MX_CONF['head_dim'])
+        out[h + 'self_attn.v_proj.weight'] = w[p + 'attn.v_proj.weight']
+        out[h + 'self_attn.o_proj.weight'] = w[p + 'attn.o_proj.weight']
+        out[h + 'mlp.gate_proj.weight'] = w[p + 'ffn.gate_proj.weight']
+        out[h + 'mlp.up_proj.weight'] = w[p + 'ffn.up_proj.weight']
+        out[h + 'mlp.down_proj.weight'] = w[p + 'ffn.down_proj.weight']
+        out[h + 'input_layernorm.weight'] = w[p + 'n1.weight']
+        out[h + 'post_attention_layernorm.weight'] = w[p + 'n2.weight']
+    # lm_head 单独存 (Hermes/llama 支持 tie; 显式写出更稳)
+    out['lm_head.weight'] = w['embed.weight']
+    out = {k: v.astype(mx.bfloat16) for k, v in out.items()}
+    mx.save_safetensors(f'{out_dir}/model.safetensors', out)
+
+    conf = {
+        'architectures': ['LlamaForCausalLM'],
+        'model_type': 'llama',
+        'vocab_size': 248077,
+        'hidden_size': 1024,
+        'intermediate_size': 2816,
+        'num_hidden_layers': 18,
+        'num_attention_heads': 16,
+        'num_key_value_heads': 4,
+        'head_dim': 64,
+        'rms_norm_eps': 1e-5,
+        'rope_theta': 10000.0,
+        'rope_scaling': None,
+        'max_position_embeddings': 1024,
+        'tie_word_embeddings': False,
+        'bos_token_id': 1, 'eos_token_id': 2,
+        'torch_dtype': 'bfloat16',
+    }
+    with open(f'{out_dir}/config.json', 'w') as f:
+        json.dump(conf, f, indent=1)
+
+    # tokenizer 文件 (从 Qwen 目录拷贝)
+    for fn in ['tokenizer.json', 'tokenizer_config.json', 'chat_template.jinja']:
+        src = os.path.join(TOKENIZER_SRC, fn)
+        if os.path.exists(src):
+            shutil.copy(src, os.path.join(out_dir, fn))
+    # generation_config: eos 对齐 tokenizer (248046)
+    with open(f'{out_dir}/generation_config.json', 'w') as f:
+        json.dump({'eos_token_id': 248046, 'bos_token_id': 1, 'pad_token_id': 248044}, f)
+
+    total = sum(v.size for v in out.values())
+    print(f'转换完成: {out_dir} | {len(out)} tensors | {total/1e6:.0f}M params (bf16)')
+
+
+if __name__ == '__main__':
+    convert(sys.argv[1], sys.argv[2])
+</code></pre>
+
+<!-- ============================================================= -->
+<!-- ⑤ 核心超参配置表                                              -->
+<!-- ============================================================= -->
+<h2>⑤ 核心超参配置表</h2>
+
+<div class="card">
+  <h3>5.1 模型结构超参</h3>
+  <table>
+    <tr><th>参数</th><th>A 线（C 线）Llama 0.46B</th><th>B 线（D 线）Mamba 混合 0.38B</th><th>说明</th></tr>
+    <tr><td><code>vocab_size</code></td><td>248077</td><td>248077</td><td>复用 Qwen3.5-0.8B-4bit tokenizer</td></tr>
+    <tr><td><code>hidden</code></td><td>1024</td><td>1024</td><td>统一宽度</td></tr>
+    <tr><td><code>layers</code></td><td>18（全 Attention）</td><td>18（16 Mamba + 2 Attention，第 8/16 层）</td><td>混合比例 8:1</td></tr>
+    <tr><td><code>heads</code> / <code>kv_heads</code></td><td>16 / 4</td><td>16 / 4（仅 Attention 层）</td><td>GQA 4:1</td></tr>
+    <tr><td><code>head_dim</code></td><td>64</td><td>64</td><td>—</td></tr>
+    <tr><td><code>ffn</code></td><td>2816</td><td>2816（Attention 层 FFN）</td><td>SwiGLU</td></tr>
+    <tr><td><code>d_inner</code></td><td>—</td><td>2048</td><td>SSM 内部通道数（hidden 的 2 倍）</td></tr>
+    <tr><td><code>d_state</code></td><td>—</td><td>16</td><td>SSM 状态维度</td></tr>
+    <tr><td><code>dt_rank</code></td><td>—</td><td>64</td><td>Δt 低秩投影秩</td></tr>
+    <tr><td><code>conv_kernel</code></td><td>—</td><td>4</td><td>深度可分离因果卷积核宽</td></tr>
+    <tr><td><code>rope_theta</code></td><td>10000.0</td><td>10000.0</td><td>仅 Attention 层使用</td></tr>
+    <tr><td>绑定 embedding</td><td>是（<code>h @ embed.weight.T</code>）</td><td>是（同左）</td><td>省 248077×1024 参数</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>5.2 训练超参</h3>
+  <table>
+    <tr><th>参数</th><th>A 线 pretrain.py</th><th>B 线 mamba_hybrid.py</th><th>说明</th></tr>
+    <tr><td><code>MAX_STEPS</code></td><td>56570（调度器传入）</td><td>30000（调度器传入）</td><td>默认值分别为 52500 / 30000</td></tr>
+    <tr><td><code>PEAK_LR</code></td><td>8e-5</td><td>1.2e-4</td><td>调度器传入，脚本默认均为 1.2e-4</td></tr>
+    <tr><td>LR 调度</td><td>200 步 warmup × cosine → 3e-5</td><td>全局步 warmup × cosine → 3e-5</td><td>B 线用 <code>lr_at(g)</code> 基于全局步，抗切片恢复</td></tr>
+    <tr><td>优化器</td><td>AdamW</td><td>AdamW</td><td>—</td></tr>
+    <tr><td><code>weight_decay</code></td><td>0.1</td><td>0.1</td><td>—</td></tr>
+    <tr><td>梯度裁剪</td><td><code>clip_grad_norm(grads, 1.0)</code></td><td><code>clip_grad_norm(grads, 1.0)</code></td><td>返回 (grads, norm) 元组</td></tr>
+    <tr><td><code>bs</code>（batch size）</td><td>2</td><td>2</td><td>—</td></tr>
+    <tr><td><code>sl</code>（序列长度）</td><td>512</td><td>256</td><td>B 线移除 checkpoint 后为控内存降到 256</td></tr>
+    <tr><td>每步 token 数</td><td>1024</td><td>512</td><td><code>bs × sl</code></td></tr>
+    <tr><td>检查点间隔</td><td>1500 步</td><td>250 步</td><td>B 线更密，因切片约 720 步</td></tr>
+    <tr><td>滚动保留</td><td>最近 2 个</td><td>最近 3 个 + 磁盘水位防线</td><td>B 线单档约 4.6GB</td></tr>
+    <tr><td>分块 CE</td><td>chunk=128，fp16，clip ±30</td><td>同左</td><td>复用同一实现</td></tr>
+    <tr><td>NaN 防护</td><td><code>mx.isfinite(l)</code> 跳批</td><td><code>mx.isfinite(l)</code> 跳批</td><td>—</td></tr>
+    <tr><td>SIGTERM 保存</td><td>仅模型权重</td><td>模型 + 优化器状态 + step</td><td>A 线已完结不再训练</td></tr>
+  </table>
+</div>
+
+<div class="card">
+  <h3>5.3 调度与运维参数</h3>
+  <table>
+    <tr><th>参数</th><th>值</th><th>所属模块</th><th>说明</th></tr>
+    <tr><td><code>SLICE</code></td><td>7200 秒</td><td>M1</td><td>每线单次最长训练时长（2 小时）</td></tr>
+    <tr><td>切换间隙 <code>sleep</code></td><td>5 秒</td><td>M1</td><td>两线之间与循环末尾</td></tr>
+    <tr><td>SIGTERM 宽限</td><td>180 秒</td><td>M1</td><td>超时后 SIGKILL 兜底</td></tr>
+    <tr><td><code>LOCK</code></td><td><code>/tmp/mlx_alternator.lock</code></td><td>M1 / M2</td><td>单例锁，内容为调度器 PID</td></tr>
+    <tr><td>巡检间隔</td><td>300 秒</td><td>M2</td><td>看门狗主循环</td></tr>
+    <tr><td><code>COOLDOWN</code></td><td>1800 秒</td><td>M2</td><td>同类告警冷却</td></tr>
+    <tr><td>日志新鲜度阈值</td><td>1800 秒</td><td>M2</td><td>超过则告警「疑似卡死」，不自动杀</td></tr>
+    <tr><td>无训练进程容忍</td><td>连续 2 轮（10 分钟）</td><td>M2</td><td>超限则重启调度器</td></tr>
+    <tr><td>通知冷却</td><td>300 秒</td><td>M3 / M4</td><td><code>notify()</code> 内按标题去重</td></tr>
+    <tr><td>磁盘水位防线</td><td>&lt;15GB 清老档 / &lt;8GB 跳过保存</td><td>M4</td><td>防止磁盘写满崩溃</td></tr>
+    <tr><td>SMTP</td><td>smtp.163.com:25 STARTTLS</td><td>M5</td><td>超时 30s</td></tr>
+  </table>
+</div>
+
+<!-- ============================================================= -->
+<!-- ⑥ 项目依赖清单                                                -->
+<!-- ============================================================= -->
+<h2>⑥ 项目依赖清单</h2>
+
+<div class="card">
+  <h3>6.1 Python 依赖</h3>
+  <table>
+    <tr><th>包名</th><th>用途</th><th>使用位置</th></tr>
+    <tr><td><code>mlx</code></td><td>核心数组框架与自动微分（<code>mx.compile</code> / <code>mx.checkpoint</code> / <code>mx.fast.scaled_dot_product_attention</code>）</td><td>M3 / M4 / M6</td></tr>
+    <tr><td><code>mlx.nn</code></td><td>网络层（Linear / Embedding / RMSNorm / silu / losses / value_and_grad）</td><td>M3 / M4</td></tr>
+    <tr><td><code>mlx.optimizers</code></td><td>AdamW / clip_grad_norm / cosine_decay</td><td>M3 / M4</td></tr>
+    <tr><td><code>mlx.utils</code></td><td>tree_flatten / tree_unflatten / tree_map</td><td>M3 / M4</td></tr>
+    <tr><td><code>numpy</code></td><td>memmap 数据存储、随机采样、初始化数组</td><td>M3 / M4 / M6</td></tr>
+    <tr><td><code>transformers</code></td><td>AutoTokenizer（Qwen3.5-0.8B-4bit 分词器）</td><td>M3 / M4</td></tr>
+    <tr><td><code>safetensors</code></td><td>权重序列化（经 mlx 间接调用）</td><td>M3 / M4 / M6</td></tr>
+  </table>
+
+  <h3>6.2 标准库依赖</h3>
+  <table>
+    <tr><th>模块</th><th>用途</th><th>使用位置</th></tr>
+    <tr><td><code>signal</code></td><td>注册 SIGTERM 优雅保存钩子</td><td>M3 / M4</td></tr>
+    <tr><td><code>glob</code> / <code>re</code></td><td>检查点枚举与严格匹配</td><td>M3 / M4</td></tr>
+    <tr><td><code>shutil</code></td><td>磁盘空间查询、tokenizer 文件拷贝</td><td>M4 / M6</td></tr>
+    <tr><td><code>subprocess</code></td><td><code>ps aux</code> 进程探测、拉起调度器</td><td>M2</td></tr>
+    <tr><td><code>smtplib</code> / <code>ssl</code> / <code>email.*</code></td><td>邮件发送（STARTTLS + MIME 附件）</td><td>M5</td></tr>
+    <tr><td><code>json</code> / <code>os</code> / <code>sys</code> / <code>time</code> / <code>math</code> / <code>traceback</code></td><td>配置读写、路径、时间、cosine 计算、异常栈</td><td>M3 / M4 / M5 / M6</td></tr>
+  </table>
+
+  <h3>6.3 外部工具与资源</h3>
+  <table>
+    <tr><th>名称</th><th>用途</th><th>备注</th></tr>
+    <tr><td>Bash 4+</td><td>调度器脚本运行</td><td>M1，需支持 <code>kill -0</code> / <code>trap</code></td></tr>
+    <tr><td><code>nohup</code></td><td>后台常驻（调度器 / 看门狗）</td><td>M1 / M2</td></tr>
+    <tr><td><code>ps</code></td><td>进程列表探测</td><td>M2</td></tr>
+    <tr><td>Qwen3.5-0.8B-4bit</td><td>分词器来源（<code>models/Qwen3.5-0.8B-4bit</code>）</td><td>M3 / M4 / M6</td></tr>
+    <tr><td>TinyStories v2</td><td>A 线训练语料</td><td>M3，路径经 <code>CORPUS</code> 指定</td></tr>
+    <tr><td><code>data_corpus/tokens_200m.npy</code></td><td>B 线 token memmap（uint32）</td><td>M4</td></tr>
+    <tr><td>lm-eval-harness</td><td>HF 格式模型评测</td><td>M6 输出下游</td></tr>
+  </table>
+
+  <h3>6.4 目录结构约定</h3>
+  <pre><code class="language-bash">mlx-lora-finetune/
+├── alternator.sh                 # M1 轮班调度器
+├── watchdog.py                   # M2 电子狗
+├── pretrain.py                   # M3 A线预训练
+├── mamba_hybrid.py               # M4 B线混合架构
+├── send_progress.py              # M5 邮件通知
+├── convert_to_hf.py              # M6 MLX→HF 转换
+├── pretrain_60m.log              # A 线训练日志（调度器重定向）
+├── mamba_train.log               # B 线训练日志（调度器重定向）
+├── alternator.log                # 调度器自身日志
+├── watchdog.log                  # 看门狗自身日志
+├── pretrain_ckpt/                # A 线检查点
+│   ├── weights_&lt;step&gt;.safetensors
+│   └── .done_56570               # 完成态 marker
+├── mamba_ckpt/                   # B 线检查点
+│   ├── weights_&lt;step&gt;.safetensors
+│   ├── last_step.txt             # 最近保存的 step
+│   └── .done_30000               # 完成态 marker
+├── data_corpus/
+│   └── tokens_200m.npy           # uint32 token memmap
+├── models/
+│   ├── Qwen3.5-0.8B-4bit/        # 分词器来源
+│   └── hf_46b_step30k/           # M6 输出（HF 格式）
+└── .venv/                        # Python 虚拟环境
+</code></pre>
+</div>
+
+<hr class="sep">
+<p class="note" style="text-align:center">
+  本文档由训练项目代码汇总生成 · 代码基线：完整源码评审包 v2（2026-09-19）·
+  高亮：highlight.js 11.9.0 · 流程图：mermaid 11.4.1（neutral 主题 / curve:basis）
+</p>
+
+</div>
+
+<script>
+  // ---- Mermaid 初始化 ----
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'neutral',
+    securityLevel: 'loose',
+    flowchart: {
+      curve: 'basis',
+      nodePadding: 14,
+      padding: 18,
+      useMaxWidth: true,
+      htmlLabels: true
+    },
+    themeVariables: {
+      fontSize: '22px',
+      fontFamily: '-apple-system, "PingFang SC", "Microsoft YaHei", sans-serif',
+      primaryColor: '#dbeafe',
+      primaryBorderColor: '#3b82f6',
+      primaryTextColor: '#1e3a8a',
+      secondaryColor: '#f1f5f9',
+      tertiaryColor: '#fafafa',
+      lineColor: '#64748b',
+      textColor: '#1f2328'
+    }
+  });
+
+  // ---- 渲染后微调：cluster 标题上移（防被节点框遮挡）----
+  window.addEventListener('load', function () {
+    setTimeout(function () {
+      document.querySelectorAll('.mermaid').forEach(function (el) {
+        var svg = el.querySelector('svg');
+        if (!svg) return;
+        // cluster 标题上移约 30px
+        svg.querySelectorAll('.cluster-label').forEach(function (lab) {
+          var tr = lab.getAttribute('transform') || '';
+          var m = tr.match(/translate\(\s*([-\d.]+)\s*[,\s]\s*([-\d.]+)\s*\)/);
+          if (m) {
+            var x = parseFloat(m[1]);
+            var y = parseFloat(m[2]) - 30;
+            lab.setAttribute('transform', 'translate(' + x + ',' + y + ')');
+          }
+        });
+      });
+    }, 600);
+  });
+
+  // ---- 代码高亮（等待 hljs 加载完成）----
+  (function waitHljs(n) {
+    if (window.hljs) {
+      document.querySelectorAll('pre code').forEach(function (block) {
+        hljs.highlightElement(block);
+      });
+    } else if (n < 60) {
+      setTimeout(function () { waitHljs(n + 1); }, 500);
+    }
+  })(0);
+</script>
+<div style="max-width:1180px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid var(--border,#e5e7eb);font-size:13px;color:var(--muted,#6b7280)"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
