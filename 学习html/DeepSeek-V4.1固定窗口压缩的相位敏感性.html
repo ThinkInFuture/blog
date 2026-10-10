@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek V4.1 为何回退 V4 的固定窗口压缩？一个 token 位移，召回从 50% 掉到 0</title>
+<style>
+:root{--bg:#f7f9fc;--panel:#ffffff;--border:#dfe6ef;--border-soft:#e8eef6;--text:#1c2733;--muted:#5b6b7c;--accent:#2f6feb}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.85}
+.wrap{max-width:920px;margin:0 auto;padding:32px 24px 80px}
+.back{display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin-bottom:14px}
+.back:hover{color:var(--accent)}
+.meta{font-size:12px;color:#8a94a3;margin-bottom:8px}
+.meta .tag{color:var(--accent);font-weight:700;margin-right:10px}
+h1{font-size:25px;font-weight:700;color:#15315c;margin-bottom:6px;letter-spacing:.2px}
+.subtitle{color:var(--muted);font-size:14px;margin-bottom:24px}
+h2{font-size:20px;margin:42px 0 14px;padding:0 0 10px 12px;border-left:5px solid var(--accent);color:#15315c}
+h3{font-size:16px;margin:22px 0 10px;color:#1c3a68}
+p{margin:10px 0;color:#26384d}
+strong{color:#15315c}
+ul{margin:8px 0 12px;padding-left:22px}
+li{margin:5px 0;color:#26384d}
+code{font-family:"SF Mono",Consolas,Monaco,monospace;background:#eef2f7;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;font-size:13px;color:#1a4ea8;white-space:normal;overflow-wrap:anywhere;word-break:break-all}
+table{width:100%;border-collapse:collapse;margin:14px 0 20px;font-size:13.5px;background:#fff;border-radius:10px;overflow:hidden;box-shadow:0 1px 2px rgba(20,40,80,.04)}
+th{background:#eef3fb;text-align:left;padding:9px 12px;color:#15315c;font-weight:700;border-bottom:1px solid var(--border)}
+td{padding:8px 12px;border-bottom:1px solid var(--border-soft);color:#26384d;vertical-align:top}
+tr:last-child td{border-bottom:none}
+td.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;color:#1a4ea8}
+.fig-title{font-size:13px;font-weight:700;color:#1a4ea8;background:#eef3fb;border:1px solid #d4e2f7;border-radius:12px;display:inline-block;padding:3px 12px;margin:16px 0 8px}
+.mermaid-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:44px 18px 16px;overflow:visible;margin:14px 0 24px}
+.mermaid{display:flex;justify-content:center;overflow:visible}
+.mermaid svg{overflow:visible !important;max-width:100%;height:auto}
+.mermaid svg text{font-size:16px !important}
+.mermaid .cluster-label foreignObject{overflow:visible !important;white-space:nowrap}
+.mermaid .cluster-label span,.mermaid .cluster-label div{white-space:nowrap !important;overflow:visible !important}
+.mermaid .cluster-label{translate:0 -30px}
+footer.end{margin-top:56px;padding-top:18px;border-top:1px dashed var(--border);text-align:center;color:var(--muted);font-size:13px}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="../index.html">&larr; 返回首页</a>
+<div class="meta"><span class="tag">推理加速</span>2026-10-10 发布 · 字节 Seed 团队 arXiv 论文（2026-09）解读</div>
+<h1>DeepSeek V4.1 为何回退 V4 的固定窗口压缩？</h1>
+<p class="subtitle">一个 token 位移，召回从 50% 掉到 0：分块 KV 压缩的"相位敏感性"，以及 V4.1 用 CSA2 + SWA 的解法</p>
+<h2>一、先看一个例子：多打一个字，模型就找不到密码了</h2>
+<p>想象一下：你让模型在一篇长文档里找一串 6 位密码。文档内容没变，问题没变，答案也没变，你只是在最前面多打了一个无关紧要的字。结果模型就彻底找不到那串密码了。</p>
+<p>具体来说，实验里的两个文档长这样：</p>
+<p><strong>文档 A（开头不加东西）：</strong></p>
+<p>```</p>
+<p>The access code for AX31 is 482915.</p>
+<p>The access code for BX72 is 193407.</p>
+<p>...（中间还有 190 组类似的 KV 对）...</p>
+<p>Question: What is the access code for AX31?</p>
+<p>Answer:</p>
+<p>```</p>
+<p><strong>文档 B（开头只多打一个 "Okay"）：</strong></p>
+<p>```</p>
+<p>Okay The access code for AX31 is 482915.</p>
+<p>The access code for BX72 is 193407.</p>
+<p>...（中间还有 190 组类似的 KV 对）...</p>
+<p>Question: What is the access code for AX31?</p>
+<p>Answer:</p>
+<p>```</p>
+<p>两篇文档的正文一模一样，问题一模一样，答案 "482915" 出现的位置也一模一样。唯一的差别，就是文档 B 开头多了 <strong>一个 token</strong>（"Okay"）。</p>
+<div class="fig-title">图 1：文档 A 与文档 B 的对比</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TB
+    subgraph A["文档 A：开头无额外 token"]
+        direction TB
+        A1["The access code for AX31 is 482915."]
+        A2["Question: What is the access code for AX31?"]
+        A1 --> A2
+        A2 --> A3["模型回答：482915<br/>✓ 正确"]
+    end
+
+    subgraph B["文档 B：开头多打一个 'Okay'"]
+        direction TB
+        B0["Okay"]
+        B1["The access code for AX31 is 482915."]
+        B2["Question: What is the access code for AX31?"]
+        B0 --> B1 --> B2
+        B2 --> B3["模型回答：???<br/>✗ 错误"]
+    end
+
+    A3 --> C["召回率 50%"]
+    B3 --> D["召回率 0%"]
+
+    style A fill:#e6f3ff,stroke:#333,color:#000000
+    style B fill:#ffe6e6,stroke:#333,color:#000000
+    style A3 fill:#ccffcc,color:#000000
+    style B3 fill:#ffcccc,color:#000000
+    style C fill:#ccffcc,color:#000000
+    style D fill:#ffcccc,color:#000000,stroke:#cc0000
+</div></div>
+<h3>先解释两个词：召回率和 gap</h3>
+<p><strong>召回率</strong>：我们给模型 16 个不同密码的问题，它答对几个，召回率就是几除以 16。答对 8 个，召回率就是 0.500；答对 0 个，召回率就是 0.000。</p>
+<p><strong>gap</strong>：我们把文档开头分别插入 0 个、1 个、2 个……一直到 7 个 token，得到 8 个召回率。这 8 个数里，<strong>最高分减去最低分，就是 gap</strong>。</p>
+<p>- gap = 0：不管文档怎么挪，召回率都一样，模型完全不挑位置。</p>
+<p>- gap = 0.500：最好情况下能答对一半，最差情况下全错，模型非常挑位置。</p>
+<p>现在再看 Full Attention（普通注意力）和 8:1 压缩的对比：</p>
+<div class="fig-title">图 2：Full Attention 与 8:1 固定窗口压缩的 gap 对比</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    A["同一篇文档<br/>AX31 = 482915"] --> B["开头插入 0~7 个 token<br/>得到 8 个召回率"]
+    B --> C["Full Attention<br/>最高 0.969，最低 0.938<br/>gap = 0.031<br/>只差 3.1 个百分点，几乎不波动"]
+    B --> D["8:1 固定窗口压缩<br/>最高 0.500，最低 0.000<br/>gap = 0.500<br/>差 50 个百分点，断崖"]
+    style C fill:#ccffcc,color:#000000
+    style D fill:#ffcccc,color:#000000,stroke:#cc0000
+</div></div>
+<p>也就是说，Full Attention 的 gap 只有 <strong>0.031</strong>，意思是：最好情况召回率约 96.9%，最差约 93.8%，只差 <strong>3.1 个百分点</strong>，几乎是一条平线。而 8:1 压缩的 gap 是 <strong>0.500</strong>，意思是：最好能答对一半，最差全错，差了 <strong>50 个百分点</strong>。前者是后者的 <strong>16 倍</strong>。</p>
+<h3>再往深走一步：为什么 128 个一组、组与组不重叠，就会丢信息</h3>
+<p>前面玩具例子里 W=8，真正的 HCA 是<strong>每 128 个 token 压成 1 条</strong>。数字大了，丢信息的机制反而更清楚——拿 6 个 token 的密码「482915」走一遍：</p>
+<p><strong>delta=0（训练时见过的排布）：</strong>密码的 6 个 token 恰好整段落在某一块里，比如块 2（位置 256–383）。块内均值池化时，密码在这 128 个"合影者"里占 6 席——占比约 4.7%。信号已经偏淡，但这条压缩记录好歹带着一份<strong>完整的密码轮廓</strong>，模型拿查询来匹配，还能对上。</p>
+<p><strong>delta=1（开头多打一个字）：</strong>所有 token 整体后移 1 位，但块的边界纹丝不动（还是 0、128、256……）。于是密码被块边界<strong>切成两半</strong>：前 2 个 token 掉在块 2 的最尾巴，后 4 个 token 掉在块 3 的最开头。均值池化是"合影"——块 2 的合影里密码只占 2/128 ≈ 1.6%，另外 126 个位置全是无关内容；块 3 的合影里密码占 4/128 ≈ 3.1%，混着 124 个无关 token。<strong>两张合影里都没有一份完整的密码</strong>，模型拿"482915"去匹配哪张都对不上——召回归零。</p>
+<p><strong>对照 Full Attention：</strong>它根本不压缩，6 个 token 的原始 K/V 一份不少地躺在缓存里，文档挪到哪里它们就在哪里——这就是它 gap 只有 0.031 的原因。</p>
+<p>一句话：<strong>丢信息不是丢在"密码变了"，而是丢在"密码被迫和不同的邻居合了影"</strong>。均值池化就是合影——合影的人一换，照片就不是原来那张。组与组不重叠，意味着每个 token 只有一次"入镜机会"，位移必然改合影名单；128:1 的极端比例，又把每次换名单的代价放大到整个块。</p>
+<div class="mermaid-wrap"><div class="mermaid">
+flowchart LR
+    subgraph D0["delta=0：密码完整落在一块"]
+        direction LR
+        A0["块 2 的合影（128 个位置）<br/>密码占 6/128 ≈ 4.7%<br/>轮廓完整 ✓"]
+    end
+    subgraph D1["delta=1：密码被块边界切成两半"]
+        direction LR
+        B0["块 2 尾部：密码前 2 个 token<br/>合影占 2/128 ≈ 1.6%"] --> B1["块 3 开头：密码后 4 个 token<br/>合影占 4/128 ≈ 3.1%"]
+    end
+    style D0 fill:#e6f3ff,color:#000000
+    style D1 fill:#ffe6e6,color:#000000
+</div></div>
+
+<h3>这和 DeepSeek V4 的 HCA 有什么关系？</h3>
+<p>这要从 DeepSeek V4 的注意力设计说起。V4 采用了一套混合注意力架构，由两个模块交替使用：</p>
+<p>- <strong>CSA</strong>（Compressed Sparse Attention，压缩稀疏注意力）：每 4 个 token 的 KV 缓存压成 1 个条目，再用 Top-K 索引器挑出最相关的压缩块做注意力；</p>
+<p>- <strong>HCA</strong>（Heavily Compressed Attention，重度压缩注意力）：<strong>直接把每 128 个 token 压成 1 个条目</strong>，但保持稠密注意力，也就是不挑选、每个查询都看到所有压缩条目。</p>
+<p>HCA 的设计目标很明确：用极高的压缩率（128:1）换取超长上下文的全局视野覆盖。它像是一个“速记员”——把 128 个 token 浓缩成一条记录，虽然信息粒度粗了，但胜在覆盖范围广。</p>
+<div class="fig-title">图 3：DeepSeek V4 的 CSA + HCA 混合架构</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A0["DeepSeek V4 混合注意力"] --> A1["CSA<br/>4:1 压缩 + Top-K 稀疏"]
+    A0 --> A2["HCA<br/>128:1 压缩 + 稠密注意力"]
+    A2 --> A3["固定窗口、非重叠<br/>块边界固定在 0, 128, 256..."]
+    A3 --> A4["文档平移 1 token<br/>→ 相位敏感性<br/>→ 检索准确率波动 40pp"]
+    style A0 fill:#e6f3ff,color:#000000
+    style A1 fill:#e6f3ff,color:#000000
+    style A2 fill:#ffcccc,color:#000000
+    style A3 fill:#ffe6e6,color:#000000
+    style A4 fill:#ffcccc,color:#000000,stroke:#cc0000
+</div></div>
+<p>但问题在于：<strong>HCA 采用的是固定窗口、非重叠压缩</strong>。每 128 个 token 一块，块边界固定在位置 0、128、256、384……这些整数倍位置。一旦文档整体平移 1 个 token，所有关键信息在压缩块内的位置全部偏移，块内组合完全改变。这就是“相位敏感性”的根源——研究团队发现，同一信息仅因物理位置不同，DeepSeek-V4 系列的检索准确率最高能拉开 <strong>40 个百分点</strong>。</p>
+<p>V4.1 的做法很直接：<strong>弃用 HCA，用 CSA2 取代 CSA 与 HCA 的混合架构</strong>。CSA2 沿三个维度同时压缩缓存——条目大小、序列维度和层维度——并通过跨层 KV 共享和 Top-K 索引复用，在不需要 HCA 那种极端压缩率的情况下，同样把 KV Cache 压到了 V4-Flash 的 1/4。同时，V4.1 前两层使用滑动窗口注意力（SWA），保留最近 128 个 token 的未压缩原始 KV。<strong>用滑动窗口保住“近处看得清”，用 CSA2 的跨层共享和 FP4 量化保住“远处压得狠”，两条腿走路，不再依赖单一极端压缩率。</strong></p>
+<div class="fig-title">图 4：DeepSeek V4.1 的 CSA2 + SWA 架构</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    B0["DeepSeek V4.1 注意力"] --> B1["CSA2<br/>跨层 KV 共享 + Top-K 索引复用"]
+    B0 --> B2["SWA<br/>前两层保留 128 token 原始 KV"]
+    B1 --> B3["条目大小 / 序列维度 / 层维度<br/>三维同时压缩 + FP4 量化"]
+    B2 --> B3
+    B3 --> B4["不再依赖单一极端压缩率<br/>KV Cache 降至 V4 的 1/4"]
+    style B0 fill:#e6f3ff,color:#000000
+    style B1 fill:#ccffcc,color:#000000
+    style B2 fill:#ccffcc,color:#000000
+    style B3 fill:#e6ffe6,color:#000000
+    style B4 fill:#ccffcc,color:#000000
+</div></div>
+<p>这恰恰解释了 DeepSeek V4 被大量用户长期诟病的“抽风”问题——同一个问题，有时精准找到答案，有时死活检索不到关键内容，仿佛换了个大脑。字节 Seed 团队今年 9 月底在 arXiv 提交的论文，直接点明了这一现象的根源：分块 KV 缓存压缩带来的<strong>相位敏感性</strong>。多数用户曾将这种不稳定归因于服务器压力或网络波动，但技术研究揭示，模型架构本身的设计选择才是核心原因。在 128K 长上下文检索测试中，同一信息仅因物理位置不同，DeepSeek-V4 系列的检索准确率最高能拉开 <strong>40.2 个百分点</strong>。这正是 V4.1 要回退 V4 激进固定窗口压缩设计的核心原因之一：省显存的代价，是把“位置相位”变成了系统性风险。</p>
+<div class="fig-title">图 5：用户反馈、社区归因与论文揭示的根源</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A["DeepSeek V4 用户反馈<br/>同一问题有时精准有时失效"] --> B["社区归因：<br/>服务器压力 / 网络波动"]
+    A --> C["字节 Seed 论文揭示：<br/>分块 KV 缓存压缩的相位敏感性"]
+    C --> D["128K 检索准确率<br/>不同相位相差 40.2 个百分点"]
+    D --> E["V4.1 回退激进压缩设计"]
+    style A fill:#e6f3ff,color:#000000
+    style B fill:#ffe6e6,color:#000000
+    style C fill:#ffcccc,color:#000000,stroke:#cc0000
+    style D fill:#ffcccc,color:#000000,stroke:#cc0000
+    style E fill:#ccffcc,color:#000000
+</div></div>
+<h2>二、实验数据：翻译一下，这是什么意思</h2>
+<p>刚才你已经看到了那个“多打一个字就找不到密码”的例子。现在来看完整的实验数据——但这次我们换个方式说。</p>
+<h3>先看一张“体检报告”</h3>
+<p>我们把模型对 16 个不同密码的检索能力，在 8 种“文档开头插入几个字”的情况下各测了一遍。结果像一张体检报告：</p>
+<table><thead><tr><th>条件</th><th>通俗解释</th><th>gap（最差和最好的差距）</th></tr></thead><tbody><tr><td><strong>Full Attention</strong></td><td>不压缩，原汁原味。挪不挪位置都一样，最高 96.9%，最低 93.8%</td><td><strong>0.031</strong>（只差 3.1 个百分点，几乎没波动）</td></tr><tr><td><strong>8:1 压缩 + 随机相位训练</strong></td><td>压缩了，但训练时见过各种偏移位置。每次考 50 分，稳定但平庸</td><td>≈0（不波动，但也不高）</td></tr><tr><td><strong>8:1 压缩 + 弱训练（60 步）</strong></td><td>压缩了，但没学好。几乎全考 0 分</td><td>≈0（全崩）</td></tr><tr><td><strong>8:1 压缩 + 仅 delta=0 对齐训练</strong></td><td>压缩了，只见过“开头不加字”的情况。不加字考 50 分，<strong>加一个字直接 0 分</strong></td><td><strong>0.500</strong>（差 50 个百分点，断崖）</td></tr></tbody></table>
+<p>最刺眼的是最后一行：<strong>同一个密码，同样的文档，开头不加字能答对一半，加一个字就全错。</strong> 波动周期严格等于压缩窗口 <strong>W=8</strong>，跨数据种子完全确定。</p>
+<div class="fig-title">图 6：召回率随 delta 的变化</div>
+<div class="mermaid-wrap"><div class="mermaid">xychart-beta
+    title "召回率随 delta 的变化"
+    x-axis "delta (token)" [0, 1, 2, 3, 4, 5, 6, 7]
+    y-axis "召回率" 0 --> 1
+    line "Full Attention" [0.97, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97]
+    line "压缩+对齐训练" [0.50, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00]
+    line "压缩+随机相位训练" [0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50, 0.50]
+</div></div>
+<h3>为什么？用一个“翻译”来理解</h3>
+<p>把这件事想象成<strong>把中文翻译成英文</strong>：</p>
+<p>- <strong>压缩窗口</strong> = 一个翻译员。你给他 8 个中文词，他翻成一个英文短语。</p>
+<p>- <strong>均值池化</strong> = 他只能翻出“大概意思”，不能逐字对应。</p>
+<p>- <strong>关键 token</strong> = 密码 “482915” 这串数字。</p>
+<p>- <strong>文档平移</strong> = 你把整篇文章往后挪了一个字。</p>
+<p>现在翻译员的工作规则是：<strong>每 8 个字一组，固定分组。</strong> 他每组只翻一个“概括”。</p>
+<p>- <strong>delta=0 时</strong>：“482915” 这组里可能还有 “is” 和句号，翻译员翻出来的概括里“482915”占的比重还行，模型能认出来。</p>
+<p>- <strong>delta=1 时</strong>：整篇文章往后挪了一个字。“482915” 被挤到了另一组，和更多无关的字混在一起。翻译员翻出来的概括里，“482915” 被稀释了，模型就认不出来了。</p>
+<p><strong>问题不在于密码本身变了，而在于分组的方式变了。</strong> 密码没动，是它旁边的“邻居”换了。</p>
+<div class="fig-title">图 7：密码在块中央与块边缘的对比</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    subgraph delta0["delta=0：密码在块中央"]
+        direction LR
+        A1["...is"] --> A2["482915"] --> A3["."] --> A4["The"]
+        A2 --> A5["压缩条：482915 信号强 ✓"]
+    end
+    subgraph delta1["delta=1：密码被挤到块边缘"]
+        direction LR
+        B1["Okay"] --> B2["...is"] --> B3["482915"] --> B4["."]
+        B3 --> B5["压缩条：被无关内容稀释 ✗"]
+    end
+    style delta0 fill:#e6f3ff,color:#000000
+    style delta1 fill:#ffe6e6,color:#000000
+    style A5 fill:#ccffcc,color:#000000
+    style B5 fill:#ffcccc,color:#000000
+</div></div>
+<h3>训练相位覆盖度：决定“坑”有多深</h3>
+<p>压缩器是训练出来的。它学的是“块内内容分布”长什么样。</p>
+<p>- <strong>只训练 delta=0</strong> → 只见过“密码在块中央”的分组方式。一旦文档平移，分组方式超出训练分布，解码能力断崖，gap=0.500。</p>
+<p>- <strong>随机相位训练</strong> → 见过所有偏移情况。周期坑被填平了，但平均性能变成恒 0.500 的“中庸”——什么位置都能应付一点，但都没有特别好。</p>
+<p>- <strong>训练不足</strong> → 压缩器没学会恢复，直接全崩。</p>
+<p>这解释了一条完整光谱：<strong>训练相位覆盖越窄，周期坑越深；覆盖越全，坑越平，但平均分未必更高。</strong></p>
+<p>对应到 DeepSeek V4 系列的实际数字：V4-Flash-Base 的 gap 达到 <strong>40.2 个百分点</strong>，经过后训练之后 V4-Flash-0731 缩小到 <strong>19.1</strong>，但后训练可以缓解、不能消除固定窗口切割本身的信息瓶颈。所以 V4.1 选择弃用 HCA，用 CSA2 沿三个维度同时压缩缓存（条目大小、序列维度、层维度），并通过跨层 KV 共享和 Top-K 索引复用，在不需要极端压缩率的情况下同样实现了高效的 KV Cache 压缩——这不是“退步”，而是在为周期性最差 case 买单。</p>
+<div class="fig-title">图 8：训练相位覆盖度决定 gap 大小</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    A["训练相位覆盖度"] --> B["仅 delta=0"]
+    A --> C["随机相位全覆盖"]
+    A --> D["训练不足"]
+    B --> E["gap = 0.500<br/>周期坑最深"]
+    C --> F["gap ≈ 0<br/>周期坑填平<br/>平均恒 0.500"]
+    D --> G["全崩<br/>召回 0.000"]
+    E --> H["V4-Flash-Base：gap 40.2pp"]
+    F --> I["V4.1：弃用 HCA<br/>改用 CSA2 + SWA"]
+    G --> J["不可用"]
+    style A fill:#e6f3ff,color:#000000
+    style E fill:#ffcccc,color:#000000
+    style F fill:#ccffcc,color:#000000
+    style H fill:#ffcccc,color:#000000
+    style I fill:#ccffcc,color:#000000
+</div></div>
+<h2>三、原理：固定窗口压缩如何制造周期性弱点</h2>
+<h3>1. 窗口边界是固定的</h3>
+<p>固定窗口分块压缩的规则很简单：每 W 个 token 一块，块内 KV 做均值池化，压成一条压缩 KV。窗口边界固定在位置 0、8、16、24……这些整数倍位置。问题在于：<strong>文本不会永远按你训练时的相位排列。</strong></p>
+<div class="fig-title">图 9：窗口边界固定在整数倍位置，文档平移后块内容改变</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    subgraph 文档A["文档 A（delta=0）"]
+        direction LR
+        A1["块0<br/>token 0-7"] --> A2["块1<br/>token 8-15"] --> A3["块2<br/>token 16-23"]
+    end
+    subgraph 文档B["文档 B（delta=1）"]
+        direction LR
+        B0["填充 token"] --> B1["块0<br/>token 1-8"] --> B2["块1<br/>token 9-16"] --> B3["块2<br/>token 17-24"]
+    end
+    A1 -.->|"窗口边界固定"| B1
+    style 文档A fill:#e6f3ff,color:#000000
+    style 文档B fill:#ffe6e6,color:#000000
+    style A1 fill:#cce6ff,color:#000000
+    style B1 fill:#ffcccc,color:#000000
+</div></div>
+<h3>2. 文档平移改变的是“相位”，不是内容</h3>
+<p>当文档整体平移 delta 个 token 时，每个 token 的绝对位置都加了 delta，但压缩窗口边界没有动。于是，关键 token 在块内的位置变了，和它同块的邻居也变了。召回率因此随 <strong>delta mod W</strong> 周期波动。</p>
+<div class="fig-title">图 10：文档平移如何改变关键 token 的相位</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A["文档整体平移 delta"] --> B["每个 token 绝对位置 +delta"]
+    B --> C["压缩窗口边界不变<br/>仍固定在 0, W, 2W, ..."]
+    C --> D["关键 token 在块内的位置改变"]
+    D --> E["同块邻居改变"]
+    E --> F["块内均值池化结果改变"]
+    F --> G["压缩 KV 与 query 的匹配变差或变好"]
+    G --> H["召回率随 delta mod W 周期波动"]
+    style A fill:#e6f3ff,color:#000000
+    style H fill:#ffcccc,color:#000000
+</div></div>
+<h3>3. 均值池化会稀释关键信号</h3>
+<p>块内均值池化把 8 个 token 的 K/V 平均成 1 条。如果关键 token 和大量无关填充混在同一块，它的信号会被稀释。压缩条与 query 的匹配变差，数字就抄不出来。</p>
+<div class="fig-title">图 11：纯净块与混合块的均值池化对比</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    subgraph 纯净块["纯净块（关键 token 信号强）"]
+        P1["关键 token<br/>访问码 482915"] --> P2["均值池化"]
+        P3["无关填充"] --> P2
+        P2 --> P4["压缩 KV 清晰<br/>匹配成功"]
+    end
+    subgraph 混合块["混合块（关键 token 被稀释）"]
+        M1["关键 token<br/>访问码 482915"] --> M2["均值池化"]
+        M3["大量无关填充"] --> M2
+        M4["更多无关填充"] --> M2
+        M2 --> M5["压缩 KV 模糊<br/>匹配失败"]
+    end
+    style 纯净块 fill:#e6ffe6,color:#000000
+    style 混合块 fill:#ffe6e6,color:#000000
+    style P4 fill:#ccffcc,color:#000000
+    style M5 fill:#ffcccc,color:#000000
+</div></div>
+<h3>4. RoPE 让压缩必须“先去旋转，再平均”</h3>
+<p>K 向量带着 RoPE 位置旋转。直接对烘焙后的 K 做块均值，位置语义会混乱，实验会全崩。正确做法是：逐 token 把 K 旋转到 0 参考位，去掉 RoPE；在去 RoPE 域做块内均值；再把均值烘焙到块中心位置。这一步不做对，压缩条件会直接 0% 召回。</p>
+<div class="fig-title">图 12：RoPE 域压缩的正确流程与错误做法</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A["原始 K 向量<br/>带 RoPE 旋转"] --> B["逐 token 旋转到 0 参考位<br/>去掉 RoPE"]
+    B --> C["在去 RoPE 域做块内均值"]
+    C --> D["得到块均值向量"]
+    D --> E["烘焙到块中心位置<br/>重新加 RoPE"]
+    E --> F["压缩 KV"]
+    G["错误做法：直接平均烘焙后的 K"] --> H["位置语义混乱"]
+    H --> I["实验全崩，0% 召回"]
+    style A fill:#e6f3ff,color:#000000
+    style F fill:#ccffcc,color:#000000
+    style G fill:#ffcccc,color:#000000
+    style I fill:#ffcccc,color:#000000
+</div></div>
+<h3>5. 训练相位覆盖度决定 gap 大小</h3>
+<div class="fig-title">图 13：训练相位覆盖度与 gap 的关系</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    A["训练相位覆盖度"] --> B["仅 delta=0"]
+    A --> C["随机相位全覆盖"]
+    A --> D["训练不足"]
+    B --> E["gap = 0.500<br/>周期坑最深"]
+    C --> F["gap ≈ 0<br/>周期坑填平<br/>平均恒 0.500"]
+    D --> G["全崩<br/>召回 0.000"]
+    style A fill:#e6f3ff,color:#000000
+    style E fill:#ffcccc,color:#000000
+    style F fill:#ccffcc,color:#000000
+</div></div>
+
+<h2>四、拿同一个例子，看 V4.1 为什么能解决</h2>
+<p>还是那条 6 个 token 的密码「482915」、还是开头多打一个字。V4.1 的方案拆开是三招，每一招都在这个例子上起作用：</p>
+<h3>第一招：前两层 SWA（滑动窗口）——窗口跟着内容一起滑</h3>
+<p>固定窗口的病根是"边界钉死在 0、128、256，内容动了边界不动"。SWA 反过来：<strong>窗口边界跟着文档一起平移</strong>。文档 B 比文档 A 多 1 个 token，滑动窗口的起点也整体后移 1 位——窗口内每个 token 的"相对位置"一个都没变。于是最近 128 个 token 的原始 KV <strong>原封不动、零压缩</strong>地保住了：只要密码落在这个范围内，无论开头多打几个字，它的 K/V 和训练时一模一样，怎么挪都查得到。本例里密码就在文档前部，SWA 直接覆盖。</p>
+<h3>第二招：CSA2 把 128:1 改成 4:1 + Top-K——就算被稀释也稀释得轻，还能挑</h3>
+<p>远处的块仍要压缩，但压缩比从 128:1 退到 <strong>4:1</strong>：一条压缩记录只代表 4 个 token。同样是"被切开"的最坏情况，密码 token 在一条记录里的占比最多是 <strong>1/4</strong>，而 HCA 是 6/128 ≈ 1/21——<strong>信号密度是原来的 30 多倍</strong>。更关键的是 Top-K 索引器：注意力不再平等地看所有压缩条，而是<strong>只挑和查询最相关的那几条</strong>。无关内容的"糊照"根本不参与注意力，被稀释的影响被隔离在挑中的少数条目里。</p>
+<h3>第三招：跨层 KV 共享 + FP4 量化——省显存的活儿换个方式干</h3>
+<p>HCA 的存在理由是"压得狠、省显存"。V4.1 把省显存的任务拆给了跨层 KV 共享（多个层复用同一份 KV）和 FP4 量化（每个数字存得更省），<strong>不再依赖单一维度的极端压缩</strong>。压缩温和了，相位的坑自然就浅了。</p>
+<p>同一个例子下的对照：</p>
+<table>
+<thead><tr><th>维度</th><th>V4 · HCA（128:1 固定窗口）</th><th>V4.1 · CSA2 + SWA</th></tr></thead>
+<tbody>
+<tr><td>压缩比</td><td class="mono">128:1（均值池化）</td><td class="mono">4:1（CSA2）+ 最近 128 原始 KV（SWA）</td></tr>
+<tr><td>块边界</td><td class="mono">钉死在 0 / 128 / 256</td><td class="mono">SWA 窗口随内容滑动；CSA2 压缩比温和</td></tr>
+<tr><td>delta=1 时密码</td><td class="mono">被切成两半，各占 1.6% / 3.1%，两块都对不上</td><td class="mono">近处原始 KV 完整保留；远处每条记录占比约 1/4，Top-K 只挑相关的</td></tr>
+<tr><td>召回表现</td><td class="mono">gap 40.2pp，最差归零</td><td class="mono">不依赖相位，坑被填平</td></tr>
+</tbody>
+</table>
+<p>一句话：<strong>V4.1 不是放弃压缩，而是把"固定边界的极端压缩"换成"跟着内容滑的窗口 + 温和的压缩 + 挑重点的索引"</strong>。同一个 1 token 位移，再也踩不出那个 50 个百分点的坑。</p>
+<div class="mermaid-wrap"><div class="mermaid">
+flowchart TD
+    Q["同一个考题：开头多打一个字，找 482915"]:::io
+    Q --> A["近处（最近 128 token）<br/>SWA 保留原始 KV、窗口随内容滑动<br/>相位不变 → 密码原样可查"]:::good
+    Q --> B["远处（更早上下文）<br/>CSA2 4:1 温和压缩<br/>密码信号占比 ≈1/4，稀释轻"]:::good
+    B --> C["Top-K 索引只挑相关压缩条<br/>无关糊照不参与注意力"]:::good
+    A --> D["找得到 ✓<br/>1 token 位移不再触发断崖"]:::io
+    C --> D
+    style Q fill:#e6f3ff,color:#000000
+    style A fill:#ccffcc,color:#000000
+    style B fill:#ccffcc,color:#000000
+    style C fill:#ccffcc,color:#000000
+    style D fill:#ccffcc,color:#000000
+</div></div>
+<h2>五、为什么普通 benchmark 测不出来</h2>
+<p>普通 benchmark 通常固定一种数据布局。如果只测 delta=0，相位对齐的压缩条件能拿到 0.500 的“及格分”，看起来能用。但它完全暴露不了：<strong>把文档平移 1 个 token，召回就归零。</strong></p>
+<p>平均分掩盖了最差 case。长上下文压缩模型的评测，如果只测固定布局，就像只测一条相位曲线上的一个点，然后宣称整条曲线都安全。</p>
+<div class="fig-title">图 14：固定布局评测（只测 delta=0）</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A1["文档 + 提问"] --> A2["召回 0.500"]
+    A2 --> A3["结论：可用"]
+    style A1 fill:#e6f3ff,color:#000000
+    style A2 fill:#ccffcc,color:#000000
+    style A3 fill:#ccffcc,color:#000000
+</div></div>
+<p>必须做<strong>相位扫描</strong>：同一篇文档，前缀插入 1 到 W-1 个无关 token，分别测召回。只有逐 delta 扫描，才能看到周期坑。</p>
+<div class="fig-title">图 15：相位扫描评测（delta=0..7）</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    B1["delta=0"] --> B2["召回 0.500"]
+    B3["delta=1"] --> B4["召回 0.000"]
+    B5["delta=2..7"] --> B6["召回 0.000"]
+    B2 --> B7["发现周期坑"]
+    B4 --> B7
+    B6 --> B7
+    style B1 fill:#e6f3ff,color:#000000
+    style B2 fill:#ccffcc,color:#000000
+    style B3 fill:#ffe6e6,color:#000000
+    style B4 fill:#ffcccc,color:#000000
+    style B5 fill:#ffe6e6,color:#000000
+    style B6 fill:#ffcccc,color:#000000
+    style B7 fill:#ffcccc,color:#000000,stroke:#cc0000
+</div></div>
+<h2>六、对长上下文系统的启示</h2>
+<p>1. <strong>评测必须做相位扫描</strong>：固定布局的平均分没有意义。同文档 + 前缀插入 1..W-1 个无关 token，是最小压测集。</p>
+<p>2. <strong>训练必须覆盖压缩窗口相位</strong>：随机平移增广可以填平周期坑。但代价是平均性能可能变得平庸——恒 0.5 的条件就是证明。</p>
+<p>3. <strong>生产压测要包含最差 case</strong>：不是测“平均文档”，而是测“同文档 + 一个 token 位移”的变体。一个 token 就足以触发断崖。</p>
+<p>4. <strong>固定窗口压缩不是免费的</strong>：它省显存、省算力，但把位置相位变成了系统性风险。V4.1 弃用 HCA、改用 CSA2（跨层 KV 共享 + Top-K 索引复用）并保留前两层 SWA 原始 KV，正是在不牺牲稳定性的前提下继续推进 KV Cache 压缩。</p>
+<div class="fig-title">图 16：固定窗口压缩的代价与 V4.1 的应对</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    A["固定窗口压缩<br/>CSA + HCA"] --> B["省显存、省算力"]
+    A --> C["引入位置相位风险"]
+    C --> D["周期坑：gap 巨大"]
+    D --> E["评测：必须做相位扫描"]
+    D --> F["训练：必须覆盖全相位"]
+    D --> G["生产：必须压测最差 case"]
+    E --> H["V4.1 弃用 HCA<br/>改用 CSA2 + SWA"]
+    F --> H
+    G --> H
+    style A fill:#e6f3ff,color:#000000
+    style B fill:#ccffcc,color:#000000
+    style C fill:#ffcccc,color:#000000
+    style D fill:#ffcccc,color:#000000
+    style H fill:#ccffcc,color:#000000
+</div></div>
+<h2>结语</h2>
+<p>固定窗口分块 KV 压缩的周期性弱点，不是 DeepSeek 独有，也不是某个实现 bug。只要窗口边界固定，只要文档可能整体平移，只要压缩器训练相位覆盖不全，周期坑就会出现。</p>
+<p>一个 token 的位移，足以让 50% 变 0。这就是 V4.1 弃用 HCA、改用 CSA2 的根本原因之一：<strong>省下来的显存，可能要用最差 case 的稳定性来还。</strong></p>
+<div class="fig-title">图 17：从 V4 的 HCA 到 V4.1 的 CSA2 + SWA</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart TD
+    A["V4：CSA + HCA 混合"] --> B["HCA 128:1 固定窗口压缩"]
+    B --> C["文档平移改变相位"]
+    C --> D["均值池化稀释关键信号"]
+    D --> E["召回率周期波动"]
+    E --> F["gap 远大于 Full Attention"]
+    F --> G["V4.1：弃用 HCA<br/>改用 CSA2 + SWA"]
+    G --> H["用稳定性换显存"]
+    style A fill:#e6f3ff,color:#000000
+    style B fill:#ffe6e6,color:#000000
+    style C fill:#ffcccc,color:#000000
+    style D fill:#ffcccc,color:#000000
+    style E fill:#ffcccc,color:#000000
+    style F fill:#ffcccc,color:#000000
+    style G fill:#ccffcc,color:#000000
+    style H fill:#ccffcc,color:#000000
+</div></div>
+<footer class="end">DeepSeek V4 / V4.1 注意力架构 · 相位敏感性 · 2026-10-10</footer>
+</div>
+<script>
+mermaid.initialize({ startOnLoad: true, theme: 'base', securityLevel: 'loose',
+  themeVariables: { fontFamily: '-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '15px', primaryColor: '#eff6ff', primaryTextColor: '#1f2937', primaryBorderColor: '#3b82f6', lineColor: '#9ca3af' },
+  flowchart: { curve: 'basis', useMaxWidth: true, htmlLabels: true, nodeSpacing: 36, rankSpacing: 44, padding: 12 },
+  xyChart: { width: 760, height: 420, titleColor: '#15315c', xAxisLabelColor: '#5b6b7c', yAxisLabelColor: '#5b6b7c' }
+});
+window.addEventListener('load', () => { setTimeout(() => { document.querySelectorAll('.mermaid .cluster-label').forEach(el => { el.style.translate = '0 -30px'; }); }, 800); });
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+<div style="max-width:920px;margin:44px auto 28px;padding:16px 24px 0;border-top:1px solid #eee;font-size:13px;color:#999"><a href="../index.html" style="color:#999;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:#999;text-decoration:none">苏ICP备2026063680号-1</a></div>
+</body>
+</html>
