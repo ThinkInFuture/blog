@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>vLLM-Ascend 特性地图解读：L0/L1/L2 划分 × 源码对照</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; white-space:nowrap; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; text-align:center; }
+.mermaid svg { margin:0 auto; }
+.arch { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:16px; margin:12px 0; }
+.arch-title { text-align:center; font-weight:bold; font-size:1.02rem; margin-bottom:12px; }
+.arch-row { display:flex; gap:14px; align-items:stretch; }
+.arch-block { border-radius:10px; padding:12px; flex:1; }
+.arch-block.model { background:#f5f7ff; border:1.5px solid #5b6ee1; flex:.82; }
+.arch-block.frame { background:#fffdf3; border:1.5px solid #9a6700; flex:1.18; }
+.arch-head { border-radius:8px; padding:7px 10px; margin-bottom:10px; font-size:.92rem; }
+.model .arch-head { background:#eef3ff; color:#3a4aa8; }
+.frame .arch-head { background:#fff4d5; color:#7a5800; }
+.arch-head span { display:block; font-size:.78rem; color:var(--muted); margin-top:2px; font-weight:normal; }
+.arch-grid5 { display:flex; flex-direction:column; gap:8px; }
+.cell { background:#fff; border:1px solid #d0d7de; border-radius:7px; padding:6px 8px; font-size:.86rem; font-weight:600; text-align:center; }
+.model .cell { border-color:#91a7ee; }
+.frame .cell { border-color:#d8c289; }
+.cell .csub { display:block; font-weight:normal; font-size:.7rem; color:var(--muted); margin-top:3px; line-height:1.45; }
+.arch-stages { display:flex; gap:8px; }
+.stage { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.stage-name { text-align:center; font-size:.8rem; font-weight:bold; color:#7a5800; background:#fff4d5; border-radius:6px; padding:3px 4px; }
+.stage-cells { display:flex; flex-direction:column; gap:6px; flex:1; }
+.arch-l2 { margin-top:12px; background:#f6f8fa; border:1px dashed #9ea7b3; border-radius:8px; padding:8px 12px; font-size:.82rem; color:#4b5563; }
+.l2tag { font-weight:bold; color:#3a4aa8; margin-right:8px; }
+.steps { margin:8px 0 4px; padding-left:22px; }
+.steps li { margin:3px 0; font-size:.92rem; }
+.flow2 { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:18px 20px; margin:12px 0; }
+.flow2-title { text-align:center; font-weight:bold; margin-bottom:18px; font-size:1rem; }
+.flow2-grid { display:grid; grid-template-columns:5fr 64px 6fr; row-gap:30px; align-items:center; }
+.fnode { position:relative; background:#f7f8fa; border:1.5px solid #aab3bf; border-radius:12px; padding:10px 14px; text-align:center; font-weight:bold; font-size:.95rem; }
+.fnode.adapt { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnode .fsub, .fnote .fsub { font-weight:normal; font-size:.8rem; color:var(--muted); margin-top:3px; line-height:1.5; }
+.fnode:not(.last)::after { content:''; position:absolute; left:50%; bottom:-24px; transform:translateX(-50%); width:2px; height:16px; background:#3b82f6; }
+.fnode:not(.last)::before { content:''; position:absolute; left:50%; bottom:-25px; transform:translateX(-50%); border:5px solid transparent; border-top:7px solid #3b82f6; }
+.fmid { position:relative; height:100%; display:flex; align-items:center; justify-content:center; }
+.fmid::before { content:''; position:absolute; left:-2px; right:-2px; top:50%; border-top:2px dashed #14b8a6; }
+.fnum { position:relative; z-index:1; width:30px; height:30px; border-radius:50%; border:2.5px solid #3b82f6; background:#fff; color:#1d4ed8; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+.fnote { border-radius:12px; padding:10px 14px; font-weight:bold; text-align:center; font-size:.9rem; line-height:1.5; }
+.fnote.glm { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnote.cap { background:#fff8e1; border:1.5px dashed #d97706; color:#7a5800; }
+.fnote.start { background:#f7f8fa; border:1.5px solid #aab3bf; color:#4b5563; }
+code { font-family:Consolas,monospace; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 9px; font-size:.84rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+td.l0 { font-weight:bold; color:#0969da; white-space:nowrap; }
+td.l1 { font-weight:600; color:#3a4aa8; }
+td.ok { color:#1a7f37; }
+.warn { color:#cf222e; font-weight:bold; }
+.note { background:#f0f4ff; border-left:4px solid #667eea; padding:12px 16px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+.linklist li { margin:5px 0; }
+.linklist a { color:var(--accent); }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style>
+</head>
+<body>
+<div class="topnav">
+    <span class="brand">vLLM-Ascend · 特性地图</span>
+    <a href="#s1">①分层全景</a>
+    <a href="#s2">②功能点分解</a>
+    <a href="#s3">③全表映射</a>
+    <a href="#s4">④缩写直答</a>
+    <a href="#s5">⑤与params对照</a>
+    <a href="#s6">⑥GLM 重点格</a>
+    <a href="../index.html">← 返回首页</a>
+</div>
+
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:0 0 6px">&larr; 返回首页</a>
+<h1>vLLM-Ascend 特性地图解读：L0/L1/L2 划分 × 源码对照</h1>
+<p class="subtitle">
+<span class="badge b-blue">vllm-ascend a71b766ce</span>
+<span class="badge b-green">逐项映射到代码目录 / 参数 / 教学页</span>
+2026-10-15 发布 · 对照基线 a71b766ce / bbd7c24</p>
+
+<div class="card">
+<p><strong>怎么读</strong>：vllm-ascend 的特性全景表按 L0 分为两条线——<strong>模型特性</strong>由 GLM
+模型结构升级驱动、随模型走；<strong>框架特性</strong>由 vLLM 上游演进驱动、对所有模型生效。
+①全景架构图给出三层结构与两条线的职责边界；②以三个真实特性为例，对照两条线的功能链与归属判断；
+③~⑥为查表区（逐格映射、缩写、params 对照、GLM 重点格）。代码落点均按 a71b766ce 核对。</p>
+</div>
+
+<h2 id="s1">① 全景架构图：L0 职责划分 → L1 特性族 → L2 具体特性项</h2>
+<div class="guide"><span class="qa">这张图回答什么问题：</span>特性表的三层结构、两条线的职责边界，以及 20 个特性族各自的位置。</div>
+<div class="fig-caption">图 1 · 特性表全景架构图（L0 / L1 / L2）</div>
+<div class="arch">
+<div class="arch-title">特性表全景：L0 职责划分 → L1 特性族 → L2 具体特性项</div>
+<div class="arch-row">
+  <div class="arch-block model">
+    <div class="arch-head"><b>L0 · 模型特性（5 族）</b><span>变更驱动：GLM 模型结构升级<br/>验收：精度 + 单步时延 ｜ 线：模型特性线</span></div>
+    <div class="arch-grid5">
+      <div class="cell">并行切分<span class="csub">TP · EP · SP · PCP+DCP<br/>细粒度切分 FinegrainedTPConfig</span></div>
+      <div class="cell">量化加速<span class="csub">SFA×C8 · MoE W8A8<br/>cache_dtype 派生 sfa_c8 / li_c8</span></div>
+      <div class="cell">multi stream<span class="csub">共享专家双流 · prolog 三段流水<br/>事件编排（record / wait ×6）</span></div>
+      <div class="cell">weight NZ<span class="csub">weight_nz_mode<br/>权重转 Cube 友好 NZ 布局</span></div>
+      <div class="cell">融合算子<span class="csub">MLAPO 前处理融合 · qknorm_rope<br/>gmmswigluquant · Triton 下沉</span></div>
+    </div>
+  </div>
+  <div class="arch-block frame">
+    <div class="arch-head"><b>L0 · 框架特性（15 族）</b><span>变更驱动：vLLM 上游演进 ｜ 验收：端到端吞吐 / TTFT / 显存 ｜ 线：框架特性线</span></div>
+    <div class="arch-stages">
+      <div class="stage"><div class="stage-name">加载</div><div class="stage-cells"><div class="cell">权重加载<span class="csub">多线程 · lazy<br/>NZ 转换</span></div></div></div>
+      <div class="stage"><div class="stage-name">调度</div><div class="stage-cells"><div class="cell">chunkPrefill<span class="csub">长输入切块<br/>块大小可调</span></div><div class="cell">异步调度<span class="csub">调度/执行<br/>两步流水</span></div><div class="cell">DPLB<span class="csub">实例均衡<br/>气泡迁移</span></div></div></div>
+      <div class="stage"><div class="stage-name">缓存</div><div class="stage-cells"><div class="cell">prefixcache<span class="csub">前缀 KV<br/>块复用</span></div><div class="cell">kv offload<span class="csub">下沉 DRAM<br/>topk 常驻</span></div><div class="cell">池化<span class="csub">层间/远端<br/>KV 池</span></div><div class="cell">kv cache<br/>管理<span class="csub">四槽层外置<br/>分配器</span></div></div></div>
+      <div class="stage"><div class="stage-name">执行</div><div class="stage-cells"><div class="cell">CPU 侧<br/>优化<span class="csub">绑核<br/>FastToken</span></div><div class="cell">图优化<span class="csub">ACL Graph<br/>静态内核</span></div><div class="cell"><span style="font-size:.8rem;">model_runner</span><br/>v2<span class="csub">新执行<br/>底座</span></div></div></div>
+      <div class="stage"><div class="stage-name">解码部署</div><div class="stage-cells"><div class="cell">投机解码<span class="csub">mtp · dspark<br/>dflash<br/>拒绝采样</span></div><div class="cell">Sample<span class="csub">reduce_sample<br/>分片去重</span></div><div class="cell">PD 分离<span class="csub">kv_role<br/>mooncake<br/>RD2H</span></div></div></div>
+      <div class="stage"><div class="stage-name">横切</div><div class="stage-cells"><div class="cell">EPLB<span class="csub">600 步热度<br/>FlashLB 重排</span></div></div></div>
+    </div>
+  </div>
+</div>
+<div class="arch-l2"><span class="l2tag">L2 · 具体特性项</span>族内按对象/子能力拆分，可独立交付；无 L2 的族为单一特性。
+例：并行切分族 → DP+TP+EP+SP ｜ 细粒度TP（LmHead / WdEb / O_proj）｜ PCP+DCP ｜ PP+CPP ｜ kv pp</div>
+</div>
+<h3>各特性族职责速览</h3>
+<table>
+<tr><th style="width:16%;">特性族</th><th style="width:56%;">职责（一句话）</th><th>主要代码落点</th></tr>
+<tr><td class="l1">并行切分</td><td>制定切分方案，保证通信组语义与数值正确</td><td><code>distributed/parallel_state.py</code>、<code>attention/context_parallel/</code></td></tr>
+<tr><td class="l1">量化加速</td><td>将 ModelSlim 量化方案在昇腾算子上实现并完成数值对齐</td><td><code>cache_config.py</code>、<code>sfa_v1.py</code>、<code>quantization/methods/w8a8/</code></td></tr>
+<tr><td class="l1">multi stream</td><td>设计事件流水，重叠 Cube/Vector 计算空隙</td><td><code>ops/fused_moe/shared_experts.py</code>、<code>attention/dsa_v1.py</code></td></tr>
+<tr><td class="l1">weight NZ</td><td>将权重转换为矩阵单元友好的 NZ 布局</td><td><code>weight_nz_mode</code> 消费方（权重加载 / 层初始化）</td></tr>
+<tr><td class="l1">融合算子</td><td>合并固定算子组合，并完成等价性验证</td><td><code>attention/mla_v1.py</code>、<code>compilation/passes/</code>、<code>ops/triton/</code></td></tr>
+</table>
+<table>
+<tr><th style="width:16%;">阶段（框架特性）</th><th style="width:56%;">职责（一句话）</th><th>主要代码落点</th></tr>
+<tr><td class="l1">加载</td><td>高效载入权重：多线程 / lazy / NZ 转换</td><td><code>model_loader/</code></td></tr>
+<tr><td class="l1">调度</td><td>请求切块、调度与执行流水、DP 实例均衡</td><td><code>core/scheduler*</code>、<code>patch_dyntra_lb_core.py</code></td></tr>
+<tr><td class="l1">缓存</td><td>KV 前缀复用、分层卸载、池化与块管理</td><td><code>distributed/kv_transfer/</code>、<code>core/kv_cache_interface.py</code></td></tr>
+<tr><td class="l1">执行</td><td>绑核、图捕获回放、静态内核与新执行底座</td><td><code>compilation/</code>、<code>worker/v2/model_runner.py</code></td></tr>
+<tr><td class="l1">解码部署</td><td>草稿解码、采样优化、PD 分离与 KV 传输</td><td><code>spec_decode/</code>、<code>sample/</code>、<code>kv_transfer/kv_p2p/</code></td></tr>
+<tr><td class="l1">横切</td><td>MoE 专家摆放均衡（后台循环驱动）</td><td><code>eplb/</code></td></tr>
+</table>
+<p><strong>两条线的划分依据是代码变更的驱动方</strong>：模型特性的变更由 GLM 模型结构升级驱动
+（如 SFA 相关文件位于平台层，但由 GLM 稀疏注意力结构驱动，仍属模型特性线）；
+框架特性的变更由 vLLM 上游演进驱动（如 <code>cache_config.py</code> 的 C8 派生逻辑对所有模型生效，
+属框架特性线）。投机解码等跨界特性按子项拆分：方法框架属框架特性线，GLM 的 MTP 头适配属模型特性线。</p>
+
+<h2 id="s2">② 典型特性功能分解：为什么归模型特性线，为什么归框架特性线</h2>
+<div class="guide"><span class="qa">这三张图回答什么问题：</span>把一个特性的功能链逐点拆开——蓝框★ = GLM 适配点（必须按 GLM 结构实现，换模型即失效），灰框 = GLM 无需适配的功能点（右列逐点给出不需要适配的原因）。链上有没有适配点，就是 L0 归属的判断依据。</div>
+<div class="fig-caption">图 2 · DP（并行切分族）的功能点分解 —— 链上有 GLM 适配点，归模型特性线</div>
+<div class="flow2">
+<div class="flow2-title">左 = DP 推理的功能点链　右 = 各功能点归属判断（★ = GLM 适配点）</div>
+<div class="flow2-grid">
+  <div class="fnode">请求分发<div class="fsub">DPLB：实例间均衡调度<br/><code>patch_balance_schedule.py</code></div></div>
+  <div class="fmid"><span class="fnum">1</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub"><code>patch_dyntra_lb_core.py</code>：气泡超 bubble_threshold=5.0% 才触发块级迁移；只算各实例排队块数，与模型无关</div></div>
+  <div class="fnode">实例独立调度<div class="fsub">各 DP rank 独立组 batch<br/>沿用 vLLM 调度语义</div></div>
+  <div class="fmid"><span class="fnum">2</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">DP=4 即 4 个 scheduler 各自组 batch、各自管 KV pool；沿用上游 data_parallel_size 语义</div></div>
+  <div class="fnode adapt">★ 层内切分执行<div class="fsub">QKV / O 投影按 tp_size 切分<br/>细切项 O_proj_tp（FinegrainedTPConfig）</div></div>
+  <div class="fmid"><span class="fnum">3</span></div>
+  <div class="fnote glm">GLM 适配点<div class="fsub">GLM-5.1 细切组合：lmhead_tp / embedding_tp / oproj_tp 各自设份，切法由 GLM 各层权重形状决定</div></div>
+  <div class="fnode adapt">★ 词表切分<div class="fsub">LmHeadTP / WdEbTP：128k 词表<br/>投影切分组合，仅大词表模型需要</div></div>
+  <div class="fmid"><span class="fnum">4</span></div>
+  <div class="fnote glm">GLM 适配点<div class="fsub">128k×8192 的 lm_head 巨矩阵：词表侧与嵌入侧显存压力不同，两处切数按 GLM 词表规模单独定</div></div>
+  <div class="fnode adapt">★ 通信插入<div class="fsub">SP 切片下每层插 AllGather /<br/>ReduceScatter，插入点随切分方案变</div></div>
+  <div class="fmid"><span class="fnum">5</span></div>
+  <div class="fnote glm">GLM 适配点<div class="fsub">例：SP 切片 TP=16，每卡 3500/16≈219 token；每层 LayerNorm 后 AllGather [1,219,8192]→[1,3504,8192]，O 投影后 ReduceScatter 切回本地段</div></div>
+  <div class="fnode last">通信执行<div class="fsub">HCCL 通信库统一执行<br/>通信域由 <code>parallel_state.py</code> 管理</div></div>
+  <div class="fmid"><span class="fnum">6</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">AllGather / ReduceScatter 走 HCCL 同一实现，TP 通信域由 parallel_state.py 建组，模型不感知</div></div>
+</div>
+</div>
+<p>结论：六个功能点中 3、4、5 三个是 GLM 适配点——它们决定 DP 在 GLM 上能否切对、跑快，更换模型即失效，
+因此该特性归<strong>模型特性线</strong>。链路中的请求分发（功能点 1，DPLB）虽在同一条链上，
+但为通用机制，单独归<strong>框架特性线</strong>——同一条链上两类功能点各归各线。</p>
+<div class="fig-caption">图 3 · EPLB（专家负载均衡）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
+<div class="flow2">
+<div class="flow2-title">左 = EPLB 运行链　右 = GLM 无需适配的原因</div>
+<div class="flow2-grid">
+  <div class="fnode">热度收集<div class="fsub"><code>eplb_updator</code> 每 600 步统计<br/>各专家 token 路由计数</div></div>
+  <div class="fmid"><span class="fnum">1</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub"><code>eplb_updator</code> 每 600 步读一次各专家路由计数（[num_experts] 一维向量），只读统计值</div></div>
+  <div class="fnode">重排计算<div class="fsub"><code>policy_flashlb.py</code>：以 μ+z·σ 判据<br/>生成冗余副本重排方案</div></div>
+  <div class="fmid"><span class="fnum">2</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub"><code>policy_flashlb.py</code> 按 μ+z·σ 定各专家冗余份数（受 max/min_replica 约束），输出「专家→卡」摆放表</div></div>
+  <div class="fnode">权重搬移<div class="fsub">专家权重 D2D 搬移<br/>NPU 间直接拷贝，不落 host</div></div>
+  <div class="fmid"><span class="fnum">3</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">只搬摆放表变化的专家权重：D2D 直接拷贝不落 host，整张量按量化层布局拷贝</div></div>
+  <div class="fnode last">透明生效<div class="fsub">对上层模型接口零改动<br/>MoE 模型统一覆盖</div></div>
+  <div class="fmid"><span class="fnum">4</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">GLM MoE 上线即被覆盖：对外只有 eplb_config 一个入口，仓库内无 GLM 专用分支</div></div>
+</div>
+</div>
+<p>结论：EPLB 全链路没有任何 GLM 适配点——专家均衡只看负载统计，不看模型结构，
+因此归<strong>框架特性线</strong>：由框架特性线负责开发，GLM 侧只做配置与问题反馈。</p>
+<div class="fig-caption">图 4 · chunkPrefill（长输入切块预填充）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
+<div class="flow2">
+<div class="flow2-title">左 = chunkPrefill 功能链　右 = GLM 无需适配的原因</div>
+<div class="flow2-grid">
+  <div class="fnode">长请求进入调度器<div class="fsub">例：3500 token prompt<br/>进入 prefill 等待队列</div></div>
+  <div class="fmid"><span class="fnum">1</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">例：3500 token prompt，ids [1,3500]——调度器只见长度 3500，不感知请求属于 GLM</div></div>
+  <div class="fnode">按块大小切块<div class="fsub"><code>profiling_chunk_config</code>：<br/>块大小为服务侧配置（如 1024 / 2048）</div></div>
+  <div class="fmid"><span class="fnum">2</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">chunk_size=1024 → 切 4 块 [1024, 1024, 1024, 428]；块大小由 profiling_chunk_config 配置，不含模型信息</div></div>
+  <div class="fnode">逐块排队执行<div class="fsub">块作为独立调度单元<br/>与其他请求混排，每块一次前向</div></div>
+  <div class="fmid"><span class="fnum">3</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">4 个块与其他请求统一排队；每块一次 prefill 前向，调度比较的只有块数与显存</div></div>
+  <div class="fnode">KV 逐块累积<div class="fsub">块 N 的 KV 写入 cache<br/>块 N+1 携历史 KV 续算，注意力跨块连续</div></div>
+  <div class="fmid"><span class="fnum">4</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">块1 KV [1,1024,8192] 落 cache；块2 以 Q[1,1024] 对累计 KV[1,2048] 续算，读写全走统一 cache 接口</div></div>
+  <div class="fnode last">全模型透明生效<div class="fsub">GLM 1M 长文本按同一规则切分<br/>无模型侧改动</div></div>
+  <div class="fmid"><span class="fnum">5</span></div>
+  <div class="fnote start">GLM 无需适配<div class="fsub">GLM 1M 上下文按同一规则切分；GLM 侧唯一动作是按长文本场景改 profiling_chunk_config</div></div>
+</div>
+</div>
+<p>结论：chunkPrefill 的每个功能点都只处理「请求与块」，不接触模型结构——GLM 在链上没有任何
+需要按自身结构实现的内容，因此归<strong>框架特性线</strong>；GLM 侧唯一的动作是按长文本场景
+调整块大小参数（profiling_chunk_config，params-01）。</p>
+
+<h2 id="s3">③ 全表映射：每一格的代码落点与解释</h2>
+<div class="note">下表 = 原特性表逐行保留（前三列），后四列是本次核对的映射：
+<strong>是什么 / 代码落点 / 关键参数 / 教学页</strong>。标 ★ 的与已发布教学页直接对应。</div>
+
+<h3>3.1 L0 模型特性（五族）</h3>
+<table>
+<tr><th style="width:7%;">L1</th><th style="width:17%;">L2</th><th style="width:24%;">是什么</th><th style="width:24%;">代码落点</th><th style="width:14%;">关键参数</th><th>教学页</th></tr>
+<tr><td class="l1" rowspan="6">并行切分</td><td>DP+TP+EP+SP</td><td>四种基础并行维度：数据/张量/专家/序列并行</td><td>vLLM <code>parallel_config</code> + <code>distributed/parallel_state.py</code></td><td><code>parallel_config.*</code></td><td class="ok">params-05</td></tr>
+<tr><td>LmHeadTP + WdEbTP</td><td>词表投影/词嵌入的<strong>细粒度切分</strong>（大词表模型单独选份数）</td><td><code>ascend_config.py</code> FinegrainedTPConfig</td><td><code>lmhead/embedding_tensor_parallel_size</code></td><td class="ok">params-05</td></tr>
+<tr><td>O_proj_tp</td><td>注意力输出投影细切</td><td>同上</td><td><code>oproj_tensor_parallel_size</code></td><td class="ok">params-05</td></tr>
+<tr><td>PCP + DCP</td><td><strong>预填充</strong>上下文并行 / <strong>解码</strong>上下文并行（KV 按 sequence 维切分，PCP 切长输入、DCP 切解码历史）</td><td><code>attention/context_parallel/</code>（common_cp/dsa_cp/dsa_v41_cp）</td><td><code>prefill/decode_context_parallel_size</code>、<code>enable_dsa_cp</code></td><td class="ok">DCP 学习材料</td></tr>
+<tr><td>PP + CPP</td><td>流水线并行（按层切）+ CP×PP 组合形态（CPP 全称仓库内无定义，待确认）</td><td><code>pipeline_parallel_size</code></td><td><code>pp</code></td><td>—</td></tr>
+<tr><td>kv pp</td><td>KV 传输支持流水线（mooncake 层间池过 PP）</td><td><code>kv_transfer/kv_p2p/mooncake/pull_worker.py</code></td><td>—</td><td>—</td></tr>
+<tr><td class="l1" rowspan="3">量化加速</td><td>attention + indexer</td><td>★ SFA 主 KV / Lightning Indexer K 的 <strong>C8 打包量化</strong></td><td><code>attention/sfa_v1.py</code>、<code>indexer.py</code></td><td><code>cache_dtype</code> / <code>indexer_kv_dtype</code>（派生 sfa_c8/li_c8）</td><td class="ok">params-04</td></tr>
+<tr><td>moe</td><td>MoE 权重/激活 W8A8 量化路径</td><td><code>quantization/methods/w8a8/</code></td><td>ModelSlim 量化配置</td><td>—</td></tr>
+<tr><td>kvcache</td><td>KV cache 量化（cache_dtype）</td><td>vllm cache_config + sfa 打包</td><td><code>cache_dtype</code></td><td class="ok">params-04</td></tr>
+<tr><td class="l1">multi stream</td><td>moe 双流</td><td>★ 共享专家双流 / DSV4 DSA prolog 双流（Vector/Cube 交替空隙填满）</td><td><code>ops/fused_moe/shared_experts.py</code>、<code>attention/dsa_v1.py:1919</code></td><td><code>multistream_overlap_shared_expert</code>、<code>multistream_dsv4_dsa_overlap</code></td><td class="ok">params-02</td></tr>
+<tr><td class="l1" rowspan="2">weight NZ</td><td>moe</td><td>MoE 权重 NZ 布局（矩阵单元原生格式）</td><td rowspan="2"><code>weight_nz_mode</code> 消费方（权重加载/层初始化）</td><td rowspan="2"><code>weight_nz_mode</code></td><td rowspan="2">—</td></tr>
+<tr><td>attention</td><td>注意力权重 NZ 布局</td></tr>
+<tr><td class="l1" rowspan="3">融合算子</td><td>moe</td><td>★ 分组矩阵乘+SwiGLU+量化融合（gmmswigluquant）</td><td><code>quantization/methods/w8a8/w8a8_dynamic.py</code>、<code>ops/fused_moe/</code></td><td><code>ascend_fusion_config.fusion_ops_gmmswigluquant</code></td><td class="ok">params-03</td></tr>
+<tr><td>attention</td><td>★ MLAPO 全前处理融合 + 图 pass（qknorm_rope / norm_quant）</td><td><code>attention/mla_v1.py</code>、<code>compilation/passes/</code></td><td><code>enable_mlapo</code>、<code>fuse_qknorm_rope</code>、<code>fuse_norm_quant</code></td><td class="ok">params-03</td></tr>
+<tr><td>triton 优化</td><td>Triton kernel 层的优化（批不变、indexer 辅助、卸载 gather 等）</td><td><code>ops/triton/</code></td><td>—</td><td>—</td></tr>
+</table>
+
+<h3>3.2 L0 框架特性（十五族）</h3>
+<table>
+<tr><th style="width:7%;">L1</th><th style="width:17%;">L2</th><th style="width:24%;">是什么</th><th style="width:24%;">代码落点</th><th style="width:14%;">关键参数</th><th>教学页</th></tr>
+<tr><td class="l1">权重加载</td><td>—</td><td>多线程加载 / lazy 加载 / NZ 转换</td><td><code>model_loader/</code></td><td><code>enable_multithread_load</code>、<code>safetensors_load_strategy</code></td><td>—</td></tr>
+<tr><td class="l1">prefixcache</td><td>—</td><td>前缀缓存命中（相同前缀复用 KV）</td><td>vLLM KVCacheManager + ascend patch</td><td><code>enable_prefix_cache</code></td><td>—</td></tr>
+<tr><td class="l1">chunkPrefill</td><td>—</td><td>长输入切块分步预填充（Ascend 增强：实测调 chunk 大小）</td><td><code>core/scheduler_profiling_chunk.py</code></td><td><code>profiling_chunk_config</code></td><td class="ok">params-01</td></tr>
+<tr><td class="l1">kv offload</td><td>—</td><td>★ 稀疏 KV 分层卸载（全量下沉 DRAM + topk 常驻缓冲）</td><td><code>attention/sfa_kv_offload.py</code>、<code>kv_transfer/sparse_kv_offload/</code></td><td><code>sparse_kv_offload_config</code></td><td class="ok">params-04</td></tr>
+<tr><td class="l1">池化</td><td>—</td><td>KV Cache Pool（层间/远端池化存储，配合 PD 传输）</td><td><code>kv_transfer/kv_pool/</code>、<code>attention/indexer_kpool.py</code></td><td>—</td><td>—</td></tr>
+<tr><td class="l1">DPLB</td><td>—</td><td>★ DP 实例负载均衡（数量均衡 + 块级气泡迁移）</td><td><code>patch/platform/patch_balance_schedule.py</code>、<code>patch_dyntra_lb_core.py</code></td><td><code>enable_balance_scheduling</code>、<code>dyntra_lb_config</code></td><td class="ok">params-01</td></tr>
+<tr><td class="l1">EPLB</td><td>—</td><td>★ 专家负载均衡（热度收集 → FlashLB 重排 → D2D 搬权重）</td><td><code>eplb/</code>（eplb_updator、policy_flashlb）</td><td><code>eplb_config</code></td><td class="ok">params-05</td></tr>
+<tr><td class="l1">异步调度</td><td>—</td><td>异步调度器（调度与执行两步流水，减少 CPU 等待）</td><td><code>core/recompute_scheduler.py</code>（AsyncRecomputeScheduler）</td><td>—</td><td class="ok">params-01 提及</td></tr>
+<tr><td class="l1" rowspan="2">cpu 侧优化</td><td>FastToken</td><td>CPU 侧 token 处理加速（<span class="warn">不在 vllm-ascend 仓库内</span>，外部/配套库）</td><td>—（外部库）</td><td>—</td><td>—</td></tr>
+<tr><td>CPU bind</td><td>★ worker 进程绑核（防 OS 漂移抖动）</td><td><code>cpu_binding.py</code>、<code>worker/worker.py:931</code></td><td><code>enable_cpu_binding</code></td><td class="ok">params-02</td></tr>
+<tr><td class="l1" rowspan="4">图优化</td><td>图基础功能</td><td>ACL Graph 捕获/回放基础链路</td><td><code>compilation/compiler_interface.py</code>、<code>worker/worker.py</code></td><td>—</td><td class="ok">params-06</td></tr>
+<tr><td>static_kernel</td><td>MoE 静态内核（形状预编译）</td><td><code>ops/fused_moe/routed_experts.py:376</code></td><td><code>enable_static_kernel</code></td><td class="ok">params-06</td></tr>
+<tr><td>supper_kernel（sic）</td><td>Super Kernel（#16885；原表拼写为 supper）——与 static_kernel 是 validator 别名关系</td><td>同上</td><td><code>enable_super_kernel</code></td><td class="ok">params-06</td></tr>
+<tr><td>fusion_pass</td><td>★ 图融合 pass ×3（norm_quant / qknorm_rope / muls_add）</td><td><code>compilation/graph_fusion_pass_manager.py</code>、<code>compilation/passes/</code></td><td><code>fuse_norm_quant</code> 等</td><td class="ok">params-03</td></tr>
+<tr><td class="l1" rowspan="5">投机解码</td><td>mtp</td><td>Multi-Token Prediction 草投头（DeepSeek/GLM 自带）</td><td><code>models/deepseek_mtp.py</code> 等</td><td><code>speculative_config</code></td><td class="ok">params-07</td></tr>
+<tr><td>dspark</td><td>★ 置信头 + 动态验证预算步数（无图模式）</td><td><code>spec_decode/dspark_proposer.py</code>、<code>models/deepseek_v41/dspark.py</code></td><td><code>dynamic_spec_config.method=dspark</code></td><td class="ok">params-07</td></tr>
+<tr><td>eagle</td><td>EAGLE 系草稿</td><td><code>spec_decode/eagle_proposer.py</code></td><td>—</td><td>—</td></tr>
+<tr><td>dflash</td><td>DFlash 草稿（动态步数另一方法）</td><td><code>spec_decode/dflash_proposer.py</code></td><td><code>dynamic_spec_config.method=dflash</code></td><td class="ok">params-07</td></tr>
+<tr><td>拒绝采样</td><td>验证 kernel（块验证/熵验证 + 两旋钮）</td><td><code>sample/rejection_sampler.py</code></td><td><code>rejection_sampler_config</code></td><td class="ok">params-07</td></tr>
+<tr><td class="l1">kv cache 管理</td><td>—</td><td>★ 四槽层外置分配器 / 块管理 / KV 管理器（V4.1 的 KV+索引K+scale 同页打包）</td><td><code>core/kv_cache_interface.py</code>、<code>models/deepseek_v41/cache_config.py</code></td><td>—</td><td class="ok">params-04</td></tr>
+<tr><td class="l1" rowspan="2">PD 分离</td><td>PD 配比寻优</td><td>P/D 实例数与配比的性能寻优</td><td>部署层（kv_transfer 配置 + 基准）</td><td><code>kv_role</code></td><td>—</td></tr>
+<tr><td>kv_connector</td><td>KV 传输连接器（mooncake / RD2H / 层间池）</td><td><code>distributed/kv_transfer/kv_p2p/</code>、<code>kv_pool/</code></td><td><code>kv_transfer_config</code></td><td class="ok">params-04</td></tr>
+<tr><td class="l1">Sample</td><td>—</td><td>采样器（分片去重 reduce_sample 等）</td><td><code>sample/sampler.py</code></td><td><code>enable_reduce_sample</code></td><td class="ok">params-01/07</td></tr>
+<tr><td class="l1">model_runner_v2</td><td>—</td><td>新一代模型运行器（MRV2：与 MRV1 并行的新执行底座，近期大量特性优先落 MRV2）</td><td><code>worker/v2/model_runner.py</code></td><td><code>use_v2_model_runner</code></td><td>—</td></tr>
+</table>
+<div class="note"><strong>标 ★ 的格子</strong>是已发布教学页直接覆盖的内容（params 系列 8 篇 + DCP 学习材料），
+点击教学页列可跳转。<strong>特性表与教学系列的覆盖关系</strong>：模型特性五族 ≈ params-02/03/04/05；
+框架特性十五族中 DPLB/EPLB/图优化/投机解码/kv offload/kv cache 管理/chunkPrefill/Sample ≈ params-01/03/04/05/06/07。</div>
+
+<h2 id="s4">④ 缩写直答：容易卡住的几个名字</h2>
+<div class="card">
+<table>
+<tr><th style="width:18%;">缩写</th><th>全称 / 含义（已按仓库核对）</th></tr>
+<tr><td>PCP</td><td>Prefill Context Parallelism——<strong>预填充侧</strong>上下文并行（切长输入）；上游字段 <code>prefill_context_parallel_size</code>；配套 <code>enable_pcp_o_proj_weight_sharding</code></td></tr>
+<tr><td>DCP</td><td>Decode Context Parallelism——<strong>解码侧</strong>上下文并行（切解码历史 KV）；<code>decode_context_parallel_size</code>；vllm-ascend 实现 <code>dsa_v41_cp.py</code></td></tr>
+<tr><td class="warn">CPP</td><td><span class="warn">两个仓库的并行配置里均无此字段</span>。按上下文推断为 CP（上下文并行）叠加 PP（流水线）的组合形态——全称待确认</td></tr>
+<tr><td>WdEbTP</td><td>Word Embedding TP＝词嵌入的张量并行切分（= <code>embedding_tensor_parallel_size</code>）</td></tr>
+<tr><td class="warn">FastToken</td><td><span class="warn">不在 vllm-ascend 仓库内</span>——CPU 侧 token 处理加速的外部/配套库（与 tokenizer/detokenize 链路相关）</td></tr>
+<tr><td>池化</td><td>KV Cache Pool＝KV 的池化存储（层间池 layerwise / 远端池 ascend_store，配合 PD 传输）；<code>distributed/kv_transfer/kv_pool/</code></td></tr>
+<tr><td>DPLB</td><td>DP Load Balancer＝DP 实例负载均衡（balance 调度 + dyntra 气泡迁移）</td></tr>
+<tr><td>supper_kernel</td><td>原表拼写，代码里是 <strong>Super Kernel</strong>（PR #16885）；与 static_kernel 是 validator 别名</td></tr>
+<tr><td>MRV2</td><td>Model Runner V2＝新一代模型运行器（<code>worker/v2/model_runner.py</code>）</td></tr>
+</table>
+</div>
+
+<h2 id="s5">⑤ 与参数教学系列（8 篇）的对照</h2>
+<div class="card">
+<p>已完结的 params 系列（八类总览）正好是特性表
+<strong>带参数视角的子集</strong>——特性表按"特性交付"分格，params 按"配置开关"成篇，两种视角互查：</p>
+<table>
+<tr><th>params 篇</th><th>覆盖特性表的格子</th></tr>
+<tr><td>params-01 调度</td><td>框架：chunkPrefill（profiling_chunk）/ DPLB / 异步调度（提及）/ Sample（reduce_sample）/ kv cache 管理（mega_moe 容量申报）</td></tr>
+<tr><td>params-02 多流</td><td>模型：multi stream（moe 双流）；框架：cpu 侧优化（CPU bind）</td></tr>
+<tr><td>params-03 算子融合</td><td>模型：融合算子（moe / attention）；框架：图优化（fusion_pass）</td></tr>
+<tr><td>params-04 KV 与稀疏</td><td>模型：量化加速（attention+indexer / kvcache）；框架：kv offload / kv cache 管理 / PD 分离（kv_connector）</td></tr>
+<tr><td>params-05 并行与均衡</td><td>模型：并行切分（LmHeadTP/WdEbTP/O_proj_tp）；框架：EPLB</td></tr>
+<tr><td>params-06 图模式</td><td>框架：图优化（图基础功能 / static_kernel / super_kernel；fusion_pass 见 params-03）</td></tr>
+<tr><td>params-07 投机解码</td><td>框架：投机解码（mtp / dspark / dflash / 拒绝采样）</td></tr>
+<tr><td>params-08 精度一致性</td><td>（特性表外延伸）：RL 训练场景的批不变与跨框架一致</td></tr>
+</table>
+<p><strong>特性表里本系列还没讲的格子</strong>（后续选题）：PCP+CPP（上下文并行流水线）、
+kv pp、weight NZ（moe/attention）、triton 优化、权重加载、prefix cache、池化、FastToken、
+PD 配比寻优、model_runner_v2。</p>
+</div>
+
+<h2 id="s6">⑥ GLM 视角：重点关注的格子</h2>
+<div class="card">
+<p>结合 GLM 系模型的结构特性（KDA 注意力 / 稀疏索引 / MLA / MoE / 1M 上下文），特性表里
+与 GLM 强相关的重点格（也是精度与性能问题的高发区域）：</p>
+<ul>
+<li><strong>量化加速 → attention+indexer</strong>（GLM-5.1 的 sfa_c8/li_c8——精度案核心开关，params-04/precision-rca）；</li>
+<li><strong>融合算子 → attention</strong>（MLAPO/qknorm_rope——GLM 前处理热点，params-03）；</li>
+<li><strong>multi stream → moe 双流</strong>（GLM MoE 的共享专家与路由并行，params-02）；</li>
+<li><strong>并行切分 → 细粒度 TP</strong>（GLM-5.1-198k 的 lmhead/oproj 切分组合，params-05）；</li>
+<li><strong>投机解码 → mtp/dspark</strong>（GLM 下一代配合 DSpark 的动态步数，params-07）；</li>
+<li><strong>精度一致性</strong>（RL 训练一致性开关——GLM RL 阶段的保底工具，params-08）。</li>
+</ul>
+</div>
+
+<div class="card">
+<h3 style="margin-top:0;">链接与基线</h3>
+<ul class="linklist">
+<li>本页代码基线：vllm-ascend <a href="https://github.com/vllm-project/vllm-ascend/commit/a71b766ce6fc0a9669a412e15a5cf53f7f827093" target="_blank">a71b766ce</a> ·
+上游 vLLM <a href="https://github.com/vllm-project/vllm/commit/bbd7c24" target="_blank">bbd7c24</a></li>
+<li>文中 params-01~08 指配套的《vLLM-Ascend 参数源码教学》系列（后续发布）；表内「教学页」列为对应篇章</li>
+</ul>
+</div>
+
+<div style="max-width:1200px;margin:30px auto 20px;padding:16px 24px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#9ca3af;text-align:center"><a href="../index.html" style="color:#9ca3af;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:#9ca3af;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+</body>
+</html>
