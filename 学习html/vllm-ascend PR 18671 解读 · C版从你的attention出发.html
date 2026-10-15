@@ -542,8 +542,21 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 </div>
 <div class="figcap">vllm-ascend 模块地图 × 你的十行：worker/ 喂料 → models/ 调用 → ops/ 把门 → attention/ 干活（context_parallel/ 是它的 DSA-CP 特化）</div>
 
+<p>上图是这条链上的四个主角。但 vllm-ascend 不止这四个目录——既然要了解整个 vllm-ascend，先把整个 <code>vllm_ascend/</code> 的目录分工摆全。每个目录的存在理由都是同一句话：<b>上游 vLLM 是给 NVIDIA 写的，昇腾差异总得有地方放，一个差异类别对应一个目录</b>：</p>
+<table>
+<tr><th style="width:190px">目录 / 文件</th><th>里面有什么</th><th>管什么（定位）｜为什么需要有它</th></tr>
+<tr><td><code>vllm_ascend/worker/</code></td><td><code>worker.py</code>（NPUWorker，每卡一个进程）、<code>model_runner_v1.py</code>（ModelRunner，批→张量）</td><td><b>执行与喂料</b>：接引擎的批、pad 对齐、准备 input_ids/positions、调模型、交回输出｜上游的执行器绑死 NVIDIA，昇腾必须有自己的执行器才能跑</td></tr>
+<tr><td><code>vllm_ascend/models/</code></td><td><code>deepseek_mtp.py</code> 等各模型一个文件</td><td><b>模型结构</b>：层怎么搭、forward 怎么走｜模型结构上游都有，昇腾只改个别层与权重加载，所以这里多是"继承上游 + 小改"的薄包装</td></tr>
+<tr><td><code>vllm_ascend/ops/</code></td><td><code>mla.py</code>、<code>linear.py</code>、<code>layernorm.py</code>、<code>rotary_embedding.py</code> 等算子包装</td><td><b>算子门面</b>：把昇腾算子包成 vLLM 认识的"层"，注册进 <code>torch.ops</code> 体系｜昇腾算子的调用约定和 PyTorch 不同，中间必须有一层翻译；模型层只认门面，不认具体硬件</td></tr>
+<tr><td><code>vllm_ascend/attention/</code></td><td><code>sfa_v1.py</code>、<code>dsa_v1.py</code>、<code>mla_v1.py</code>，子目录 <code>context_parallel/</code></td><td><b>注意力实现</b>：模型层的 self_attn 最终落到这里的后端真正开算｜注意力后端是可插拔的（不同硬件、不同并行形态各一套），所以策略代码独立成模块；<code>context_parallel/</code> 专门放 DSA-CP 上下文并行的特化</td></tr>
+<tr><td><code>vllm_ascend/patch/</code></td><td><code>patch_deepseek_v2.py</code> 等</td><td><b>运行时补丁</b>：直接替换上游 vLLM 某个类的方法（如把上游 DecoderLayer 的 <code>__init__</code> 换掉）｜上游代码一行不能动，行为差异只能在运行时"打补丁"换进去</td></tr>
+<tr><td><code>vllm_ascend/platform.py</code></td><td>NPUPlatform</td><td><b>平台注册</b>：告诉 vLLM"我是昇腾"——设备、内存、后端选择都从这里入口｜vLLM 启动时按平台分发一切，不注册就轮不到昇腾</td></tr>
+<tr><td>其余专项目录</td><td><code>distributed/</code>、<code>quantization/</code>、<code>spec_decode/</code>、<code>device/</code>、<code>compilation/</code>、<code>eplb/</code> 等</td><td>分布式通信、量化、投机解码、设备管理、图编译、专家负载均衡——各管一块系统能力，本文用不到，知道名字即可</td></tr>
+</table>
+<p>本文的 PR 只动上表前四行里的 5 个文件。约定一下读法：<b>后面每贴一段代码，都先报户口</b>——在哪个模块、这模块管什么、为什么它在这、这个类是谁、这段代码干嘛——然后才是代码本身。</p>
+
 <h3>4.1 对照总表：你的每一行，在 PR 的新路径里去哪了</h3>
-<p>把 PR 改完后真正执行的代码（第 5 章有前后全对照）按你的行号归位，<b>文件与行号全部经本地源码实测</b>：</p>
+<p>把 PR 改完后真正执行的代码（第 5 章有前后全对照）按你的行号归位，<b>文件与行号全部经本地源码实测</b>。表里的函数名这会儿只当"门牌"看，不用记——每个函数是干嘛的、它所在的类是谁，4.3 会挨个报户口：</p>
 <table>
 <tr><th style="width:150px">你的行</th><th style="width:150px">所在模块</th><th>在 vllm-ascend 里（DSA-CP 新路径）</th><th style="width:210px">变了什么</th></tr>
 <tr><td class="cnum">L1 · Q 投影</td><td>attention/</td><td><code>fused_qkv_a_proj</code>（sfa_v1.py:1576，Q/KV 联合低秩投影）→ <code>_q_proj_and_k_up_proj</code>（:1614，Q 侧上投影）</td><td>同一个矩阵乘，拆成低秩两段（q_lora 1536 压缩，省参数省带宽）</td></tr>
@@ -621,7 +634,8 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <div class="figcap">图 6 · 你的 attention 行号 ↔ 框架位置对照：L4、L6~L9、L10 三处是所有故事的发生地；⑤ 是单卡不需要、多卡必须加的</div>
 
 <h3>4.2 第一个意外：你这份代码上 16 卡，先被加了两行（改前）</h3>
-<p>你的 L6 之所以写得这么短，是因为 L4 已经把全量历史 KV <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④（真实代码，上游 deepseek_v2.py:1315，有删节）：</p>
+<p>你的 L6 之所以写得这么短，是因为 L4 已经把全量历史 <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④。</p>
+<p>下面这段代码先报户口。<b>模块</b>：上游 vLLM 的 <code>vllm/model_executor/models/</code>——上游管所有模型结构的地方，DeepSeek / GLM 系的层都定义在这；<b>类</b>：<code>DeepseekV2DecoderLayer</code>，"一层"的封装——<b>你那份 attention 代码在真实框架里，就是住在这样一个"层"对象里</b>，层里除了你的十行，还有前后两个 LN 和一个 MoE；<b>这段 forward</b>：把一层串起来（LN → attention → LN → MoE），①④ 就写在里面（deepseek_v2.py:1315，有删节）：</p>
 <pre><span class="c"># 上游每层都在你的十行外面套了这两行（有删节）</span>
 if input_is_sequence_parallel:
     hidden = tensor_model_parallel_all_gather(hidden, 0)   <span class="c"># <span class="cnum">①</span> 219 → 3504：把假设"买"回来，每层白付一次</span>
@@ -633,7 +647,8 @@ hidden = tensor_model_parallel_reduce_scatter(hidden, 0)   <span class="c"># <sp
 对比两个长度——positions 是全量长度（3504，每个 token 的位置编号都要有），hidden_states 是本卡分片长度（219）。<b>形状对不上，就说明输入已被切成 SP 分片</b>。不需要任何额外开关，一个 shape 比较就够了。</div>
 
 <h3>4.3 PR 的做法：把"全量"从你的 L6 里拆出去</h3>
-<p>既然 DSA-CP 的注意力天生按 token 分片算（每卡只算自己 219 个 token 的 Q，缺的 KV 跨卡定点取），"先聚成全量"就纯属多余。PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>：</p>
+<p>既然 DSA-CP 的注意力天生按 token 分片算（每卡只算自己 219 个 token 的 Q，缺的 KV 跨卡定点取），"先聚成全量"就纯属多余。PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>。</p>
+<p>这段代码也先报户口。<b>模块</b>：<code>vllm_ascend/models/</code>——上游有模型结构，昇腾就要有自己的模型模块；为什么在这个模块：它改的是"层怎么走"（forward 的流程），不是算子本身，所以住 models/ 不住 ops/；<b>类</b>：<code>AscendDSACPDecoderLayer</code>，继承上游 <code>DeepseekV2DecoderLayer</code>，是"装着你那份 attention 的那一层"的昇腾版；<b>这段 forward</b>：先做三个回退检查（任一不满足就走 4.2 的上游老路），全过才分片直进：</p>
 <pre><span class="c"># PR 新增：vllm_ascend/models/deepseek_mtp.py（有删节，全文见 5.1）</span>
 class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
     def forward(self, positions, hidden_states, residual, llama_4_scaling=None):
@@ -653,7 +668,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
         hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)   <span class="c"># MoE 只算自己的 219 行</span>
         return hidden_states, residual</pre>
-<p>你的十行在那一次 <code>forward_sequence_parallel</code> 里怎么分布？九步流水线，每步标了对应你的哪一行：</p>
+<p>那一次 <code>forward_sequence_parallel</code> 的里面，也先报户口。<b>模块</b>：<code>vllm_ascend/attention/</code>——注意力实现模块：上游 vLLM 只定义"注意力后端"的接口，各硬件各出一份实现，昇腾的这一份就叫 SFA；<b>类</b>：<code>AscendSFAImpl</code>（sfa_v1.py），你的十行在这个类里落地成九步流水线；<b>这段 forward</b>（sfa_v1.py:1503）：九步，每步标了对应你的哪一行：</p>
 <div class="card">
 <svg viewBox="0 0 840 920" role="img" aria-label="九步流水线C">
 <defs><marker id="ahC2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
@@ -742,7 +757,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <div class="figcap">图 7 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
 </div>
 
-<p>最后回答"那一堆为什么长成好几层"：这是<b>插件分工</b>，不是把 attention 展开成另一堆数学——模型代码只管算；"能不能吃分片"的判断（门卫，ops/mla.py）、"走哪条路"的选路（调度员，sfa_v1.py）、"昇腾上怎么算"（车间，sfa_cp.py）被做成包装包在 attention 外面，模型代码一个字不用改，换硬件只换最底层。谁决定走哪条路由三道闸门决定：</p>
+<p>最后回答"那一堆为什么长成好几层"：这是<b>插件分工</b>，不是把 attention 展开成另一堆数学。三个包装各报一句户口——<b>门卫</b>住在 <code>ops/</code>（昇腾算子的包装门面：模型层只认门面、不认具体硬件），类是 <code>AscendMultiHeadLatentAttention</code>，就是你 <code>self.self_attn</code> 打开的那个包装器，它用契约四查回答"能不能吃分片"；<b>调度员</b>住在 <code>attention/</code>（注意力实现模块），类是 <code>AscendSFAImpl</code>，管"走哪条路"；<b>车间</b>住在特化子目录 <code>attention/context_parallel/</code>，类是 <code>AscendSFADSACPImpl</code>（继承调度员、只覆盖 ⑤⑥ 两个方法，其余七步原样继承），管"昇腾上怎么算"。模型代码一个字不用改，换硬件只换最底层。谁决定走哪条，由三道闸门决定：</p>
 <div class="card">
 <svg viewBox="0 0 760 460" role="img" aria-label="选择条件树">
 <defs><marker id="ah4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker><marker id="ah4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--text-muted)"/></marker></defs>
