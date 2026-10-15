@@ -485,7 +485,10 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="tm" x="50" y="782">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（进入下一层）；箭头旁＝传给下一层的数据</text>
 <text class="tm" x="50" y="804">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职</text>
 </svg>
-<div class="figcap">图 3 · attention 小块背后是 4 层 vllm-ascend 代码：四步执行流；4.1~4.5 的锚点行均指第 3 层的步骤号</div><div class="card">
+<div class="figcap">图 3 · attention 小块背后是 4 层 vllm-ascend 代码：四步执行流；4.1~4.5 的锚点行均指第 3 层的步骤号</div>
+</div>
+
+<div class="card">
 <svg viewBox="0 0 840 838" role="img" aria-label="请求处理全链路 + 计算一步的改前改后对比">
 <defs>
 <marker id="seqA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#1a4ea8"/></marker>
@@ -592,7 +595,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </div>
 
 <h3>跟着一次 attention 计算走一遍</h3>
-<p>拿 PR 的实测环境当例子：3500 个 token 的 prompt，SP 切片后每卡分到 <b>219</b> 个，形状记作 <b>[219, 8192]</b>。步骤 1，模型层做完 input LN，判定"输入已是本地分片"成立，把 positions、hidden 和 FP16 缩放系数交给 attention，约定「收分片、还分片」；步骤 2，包装层问后端四个条件，全中，走新入口原样透传；步骤 3，通用实现按契约分流，输入准备选校验版、输出收口选 SP 版；步骤 4，后端真正干活——校验分片边界、清零 padding，跨卡取命中的 KV 块算稀疏注意力，再 all_to_all 换 head、o_proj、单次 reduce_scatter，交回 <b>[219, 8192]</b>。模型层接着 post LN → MLP，这一层结束。<b>全程只有步骤 4 里发生过通信</b>（③ 取命中 KV 和 ⑥ 收口），①②④ 那三次布局往返一次都没发生——这就是这个 PR 省下的东西。</p>
+<p>拿 PR 的实测环境当例子：3500 个 token 的 prompt，SP 切片后每卡分到 <b>219</b> 个，形状记作 <b>[219, 8192]</b>。步骤 1，模型层做完 input LN，判定"输入已是本地分片"成立，把 positions、hidden 和 FP16 缩放系数交给 attention，约定「收分片、还分片」；步骤 2，包装层问后端四个条件，全中，走新入口原样透传；步骤 3，通用实现按契约分流，输入准备选校验版、输出收口选 SP 版；步骤 4，后端真正干活——校验分片边界、清零 padding，跨卡取命中的 KV 块算稀疏注意力，再 all_to_all 换 head、o_proj、单次 reduce_scatter，交回 <b>[219, 8192]</b>。模型层接着 post LN → MLP，这一层结束。<b>全程只有步骤 4 里发生过通信</b>（③ 取命中 KV 和 ⑥ 收口）：①② 那两次「聚了又切」没有发生，④ 的归约也不在模型层边界——并进 ⑥ 一步完成。这就是这个 PR 省下的东西。</p>
 
 <h3>四步走读 × 文件 × 改动一览</h3>
 <table>
@@ -697,7 +700,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </table>
 
 <h2 id="s5">5. 前后代码对照（带注释）</h2>
-<p class="dim">"改后"代码均摘自 PR 实际 diff（有删节，只保留主干）；"改前"的模型层路径为示意，按 PR 描述与 vLLM 上游代码整理。绿色加粗行为本 PR 新增逻辑。<b>注释里的 ①~⑥ 序号对应图 1 / 图 2 的通信步骤标记</b>（① AllGather、② 再切本地段、③ 取命中 KV、④ ReduceScatter、⑤ 输入校验、⑥ all-to-all+单次RS）。</p>
+<p class="dim">"改后"代码均摘自 PR 实际 diff（有删节，只保留主干）；"改前"的模型层路径为示意，按 PR 描述与 vLLM 上游代码整理。绿色加粗行为本 PR 新增逻辑。<b>注释里的 ①~⑥ 序号对应图 1 / 图 2 / 图 4 的通信步骤标记</b>（① AllGather、② 再切本地段、③ 取命中 KV、④ ReduceScatter、⑤ 输入校验、⑥ all-to-all+单次RS）。</p>
 
 <h3>5.1 模型层 forward：从"AG → 算 → RS"到布局直通</h3>
 <div class="codetag before">改前 · 上游路径（示意，非逐行原文）</div>
@@ -871,7 +874,7 @@ PR 自述：新增单测尚未运行；release-port 头未在 NPU 上复跑；<c
 <table>
 <tr><th>术语</th><th>本 PR 语境下的含义</th></tr>
 <tr><td>SP token 分片</td><td>SP MoE 下模型层的工作布局：每卡只持全局 token 的 1/TP 连续段</td></tr>
-<tr><td>DSA-CP</td><td>DeepSeek 稀疏注意力 + 上下文并行：Indexer 选 top-k、跨卡定点取 KV（详见同目录《SP与DSA-CP原理介绍》）</td></tr>
+<tr><td>DSA-CP</td><td>DeepSeek 稀疏注意力 + 上下文并行：Indexer 选 top-k、跨卡定点取 KV（图 4 步骤 4 的 ③）</td></tr>
 <tr><td>布局契约</td><td><code>supports_sequence_parallel_input</code>：后端承诺"收本地分片、还本地分片"</td></tr>
 <tr><td>all_to_all_single</td><td>路 B 中把 [本地token, 全head] 换成 [全token, 本地head] 的 head 交换</td></tr>
 <tr><td>reduce_scatter_tensor</td><td>o_proj 行并行未归约 partial 的"归约+散射"一步完成，产出本地 token 分片</td></tr>
