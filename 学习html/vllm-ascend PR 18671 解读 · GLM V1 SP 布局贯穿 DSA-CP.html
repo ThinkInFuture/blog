@@ -572,6 +572,18 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <div class="figcap">图 5 · attention 小块背后是 4 层 vllm-ascend 代码：四步执行流；4.1~4.5 的锚点行均指第 3 层的步骤号</div>
 </div>
 
+<h3>先认识图 4 里的七个框</h3>
+<table>
+<tr><th style="width:120px;">框</th><th style="width:150px;">它是谁</th><th>在这条链里干什么</th><th style="width:170px;">代码归属</th></tr>
+<tr><td><b>用户</b></td><td>调用方</td><td>发来 prompt,等结果</td><td>—</td></tr>
+<tr><td><b>Engine</b></td><td>vLLM 总控</td><td>接收请求,驱动「调度 → 执行 → 采样」整个推理循环</td><td>上游 vLLM</td></tr>
+<tr><td><b>Scheduler</b></td><td>调度器</td><td>把请求组成 batch、管排队与抢占(chunkPrefill/DPLB 都在这一层,见特性地图)</td><td>上游 vLLM</td></tr>
+<tr><td><b>Worker</b></td><td>执行器(每卡一个进程)</td><td>加载模型、执行模型前向——<b>跑的模型代码来自 vllm-ascend</b>(图 3 步骤 1)</td><td>进程属上游,模型代码属 vllm-ascend</td></tr>
+<tr><td><b>NPUPlatform</b></td><td>平台注册层</td><td>告诉 vLLM「我是昇腾」:设备初始化、内存管理、平台/Worker 类注册</td><td>vllm-ascend(PR 未动)</td></tr>
+<tr><td><b>Attention/Ops</b></td><td>注意力实现 + 算子封装</td><td><code>attention/</code> 管注意力怎么算,<code>ops/</code> 管算子怎么接进昇腾(区别见 4.3)</td><td>vllm-ascend</td></tr>
+<tr><td><b>NPU 设备</b></td><td>昇腾硬件</td><td>真正执行算子</td><td>硬件</td></tr>
+</table>
+
 <div class="card">
 <svg viewBox="0 0 840 610" role="img" aria-label="请求经过谁/每处是谁的代码/计算一步改前改后">
 <defs>
@@ -580,7 +592,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </defs>
 <text class="th" x="420" y="24" text-anchor="middle">这条链怎么读：请求经过谁 → 每处是谁的代码 → 「计算」一步改前改后</text>
 <!-- 行1:请求旅程 -->
-<text class="tm" x="15" y="48">① 一条请求经过谁（框底色＝代码归属）</text>
+<text class="tm" x="15" y="48">① 一条请求经过谁（框从左到右 = 上表 7 行；框底色 = 代码归属）</text>
 <rect class="node" x="15" y="56" width="120" height="56" rx="8"/>
 <text class="tb" x="75" y="78" text-anchor="middle">用户</text>
 <text class="ts" x="75" y="98" text-anchor="middle">prompt 3500 字</text>
