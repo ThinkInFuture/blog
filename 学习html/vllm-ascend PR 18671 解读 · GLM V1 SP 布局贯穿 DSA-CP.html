@@ -393,14 +393,14 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>因为它的活儿已经有人干了。跨卡归约（把各卡的部分和加起来）这件事必须做、且只能做一次：改动后由 ⑥ 在 attention 内部完成——all_to_all 换完 head 后，数据正好是"每卡一段 token 的部分和"，紧接着一次 reduce_scatter 同时完成求和和按卡散射，一步到位。模型层原来那个 ④ 如果保留，要么重复归约（结果就错了），要么得先把数据倒腾回旧布局再散一次（通信翻倍）。所以它不是简单删掉，而是职责移进了唯一正确的位置。至于正确性：⑤ 的边界校验保证布局不可能悄悄错（错就当场抛错），FP16 的 scale 放在归约前乘，与上游语义逐位对齐——4.5 节的单测验证了新旧路径结果一致。</p>
 
 <h2 id="s4">4. 逐文件解读</h2>
-<p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？这张图分<b>三层放大</b>：第 1 层是 vLLM 推理主流程——请求进来、Scheduler 组 batch、模型前向、Sampler 出 token，<b>这是每条请求都走、你已经认识的部分</b>；第 2 层放大"模型前向"，就是图 1 画过的 Block×N 链；第 3 层再放大 Block 里的 <b>attention 小块</b>——它在 vllm-ascend 插件里是 4 层代码，从外到里正好就是 PR 改的 4 个文件。三层都从你已经看过的流程放大进去，4.1~4.5 的每个细节因此都有了地址。</p>
+<p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？这张图分<b>三层放大</b>：第 1 层是 vLLM 推理主流程——请求进来、Scheduler 组 batch、模型前向、Sampler 出 token；第 2 层放大"模型前向"，即图 1 的 Block×N 链；第 3 层再放大 Block 里的 attention 小块——它在 vllm-ascend 里不是一块代码，而是 4 层：1 层模型逻辑，外加 3 层跟并行 / 硬件绑定的包装，从外到里正好是 PR 改的 4 个文件。这样 4.1~4.5 的每个细节都有地址。</p>
 
 <div class="card">
-<svg viewBox="0 0 840 748" role="img" aria-label="从 vLLM 主流程三层放大到 PR 改的 4 个文件">
+<svg viewBox="0 0 840 748" role="img" aria-label="vLLM 主流程三层放大到 PR 改的 4 个文件">
 <defs><marker id="ah5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="24" text-anchor="middle">从你认识的 vLLM 主流程，三层放大到 PR 改的 4 个文件</text>
+<text class="th" x="420" y="24" text-anchor="middle">vLLM 主流程三层放大：从推理主流程到 PR 改的 4 个文件</text>
 <!-- 第1层 vLLM 主流程 -->
-<text class="tm" x="50" y="46">第 1 层 · vLLM 推理主流程（最基础——每条请求都走这条，你已经认识）</text>
+<text class="tm" x="50" y="46">第 1 层 · vLLM 推理主流程（每条请求都走这条）</text>
 <rect class="node" x="50" y="56" width="132" height="44" rx="8"/>
 <text class="tb" x="116" y="74" text-anchor="middle">用户请求</text>
 <text class="ts" x="116" y="92" text-anchor="middle">prompt 3500 字</text>
@@ -424,7 +424,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <path class="dash" d="M432 104 C432 122,392 120,392 142" marker-end="url(#ah5)"/>
 <text class="tm" x="446" y="124">放大 ↓</text>
 <!-- 第2层 模型前向 -->
-<text class="tm" x="50" y="134">第 2 层 · 放大"模型前向"——就是图 1 画过的那条链（你已经看懂）</text>
+<text class="tm" x="50" y="134">第 2 层 · 放大"模型前向"（即图 1 的 Block×N 链）</text>
 <rect class="node" x="50" y="144" width="150" height="64" rx="8"/>
 <text class="tb" x="125" y="170" text-anchor="middle">Embedding</text>
 <text class="ts" x="125" y="190" text-anchor="middle">[1, 3500, 8192]</text>
@@ -442,46 +442,46 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="tb" x="659" y="170" text-anchor="middle">LM Head</text>
 <text class="ts" x="659" y="190" text-anchor="middle">logits → 采样</text>
 <!-- 放大线2：attention 小块 → 第3层 -->
-<path class="dash" d="M391 208 C391 226,285 224,285 262" marker-end="url(#ah5)"/>
-<text class="tm" x="404" y="226">再放大 ↓</text>
+<path class="dash" d="M391 208 C391 226,285 244,285 280" marker-end="url(#ah5)"/>
 <!-- 第3层 attention 小块的 4 层代码 -->
-<text class="tm" x="50" y="252">第 3 层 · 再放大"attention 小块"——在 vllm-ascend 里它是 4 层代码，从外到里正好是 PR 改的 4 个文件</text>
-<rect class="bc" x="50" y="264" width="470" height="68" rx="8"/>
-<text class="tb" x="285" y="284" text-anchor="middle">models/deepseek_mtp.py —— 模型侧（总装）</text>
-<text class="ts" x="285" y="304" text-anchor="middle">选模型类（4 条件，图 5）→ 建层（共享索引 buffer）</text>
-<text class="ts" x="285" y="322" text-anchor="middle">每层直通 LN→attn→MLP：token 分片进、分片出（省 ①④）</text>
-<path class="flow" d="M285 332 V350" marker-end="url(#ah5)"/>
-<rect class="ac" x="50" y="354" width="470" height="58" rx="8"/>
-<text class="tb" x="285" y="374" text-anchor="middle">ops/mla.py —— MLA 包装层（门卫）</text>
-<text class="ts" x="285" y="394" text-anchor="middle">能力探测 4 条件："后端能直接吃 SP 分片吗？"能→新入口，不能→回老路</text>
-<path class="flow" d="M285 412 V430" marker-end="url(#ah5)"/>
-<rect class="ac" x="50" y="434" width="470" height="58" rx="8"/>
-<text class="tb" x="285" y="454" text-anchor="middle">attention/sfa_v1.py —— SFA 通用实现（调度员）</text>
-<text class="ts" x="285" y="474" text-anchor="middle">按门卫的答案分流：走哪条输入准备、哪条输出收口；原路径全保留</text>
-<path class="flow" d="M285 492 V510" marker-end="url(#ah5)"/>
-<rect class="bc" x="50" y="514" width="470" height="68" rx="8"/>
-<text class="tb" x="285" y="534" text-anchor="middle">attention/context_parallel/sfa_cp.py —— DSA-CP 后端（车间）</text>
-<text class="ts" x="285" y="554" text-anchor="middle">真正算稀疏注意力的地方：⑤ 校验分片+清零 → ③ 跨卡取命中 KV</text>
-<text class="ts" x="285" y="572" text-anchor="middle">→ ⑥ o_proj 收口（两条路，图 4）</text>
+<text class="tm" x="50" y="252">第 3 层 · 再放大"attention 小块"——在 vllm-ascend 里它不是一块代码，而是 4 层</text>
+<text class="ts" x="50" y="270">模型代码只管"算"；SP 分片校验、跨卡取 KV、昇腾算子这些与并行/硬件绑死的活，被做成 3 层包装包在外面——模型代码零改动</text>
+<rect class="bc" x="50" y="284" width="470" height="68" rx="8"/>
+<text class="tb" x="285" y="304" text-anchor="middle">models/deepseek_mtp.py —— 模型侧（总装）</text>
+<text class="ts" x="285" y="324" text-anchor="middle">选模型类（4 条件，图 5）→ 建层（共享索引 buffer）</text>
+<text class="ts" x="285" y="342" text-anchor="middle">每层直通 LN→attn→MLP：token 分片进、分片出（省 ①④）</text>
+<path class="flow" d="M285 352 V370" marker-end="url(#ah5)"/>
+<rect class="ac" x="50" y="374" width="470" height="58" rx="8"/>
+<text class="tb" x="285" y="394" text-anchor="middle">ops/mla.py —— MLA 包装层（门卫）</text>
+<text class="ts" x="285" y="414" text-anchor="middle">能力探测 4 条件："后端能直接吃 SP 分片吗？"能→新入口，不能→回老路</text>
+<path class="flow" d="M285 432 V450" marker-end="url(#ah5)"/>
+<rect class="ac" x="50" y="454" width="470" height="58" rx="8"/>
+<text class="tb" x="285" y="474" text-anchor="middle">attention/sfa_v1.py —— SFA 通用实现（调度员）</text>
+<text class="ts" x="285" y="494" text-anchor="middle">按门卫的答案分流：走哪条输入准备、哪条输出收口；原路径全保留</text>
+<path class="flow" d="M285 512 V530" marker-end="url(#ah5)"/>
+<rect class="bc" x="50" y="534" width="470" height="68" rx="8"/>
+<text class="tb" x="285" y="554" text-anchor="middle">attention/context_parallel/sfa_cp.py —— DSA-CP 后端（车间）</text>
+<text class="ts" x="285" y="574" text-anchor="middle">真正算稀疏注意力的地方：⑤ 校验分片+清零 → ③ 跨卡取命中 KV</text>
+<text class="ts" x="285" y="592" text-anchor="middle">→ ⑥ o_proj 收口（两条路，图 4）</text>
 <!-- 右侧：改前路径标注 -->
-<path class="garr" d="M520 298 C530 298,534 294,538 292"/>
-<rect class="wc" x="542" y="264" width="270" height="92" rx="8"/>
-<text class="tb" x="677" y="286" text-anchor="middle">改前：模型层边界最费</text>
-<text class="ts" x="677" y="306" text-anchor="middle">① AllGather 进（图 1）· ④ ReduceScatter 出</text>
-<text class="ts" x="677" y="326" text-anchor="middle">每层都来一遍，新路径整段省掉</text>
-<text class="ts" x="677" y="346" text-anchor="middle">（图 2 的灰块）</text>
+<path class="garr" d="M520 318 C530 318,534 314,538 312"/>
+<rect class="wc" x="542" y="284" width="270" height="92" rx="8"/>
+<text class="tb" x="677" y="306" text-anchor="middle">改前：模型层边界最费</text>
+<text class="ts" x="677" y="326" text-anchor="middle">① AllGather 进（图 1）· ④ ReduceScatter 出</text>
+<text class="ts" x="677" y="346" text-anchor="middle">每层都来一遍，新路径整段省掉</text>
+<text class="ts" x="677" y="366" text-anchor="middle">（图 2 的灰块）</text>
 <!-- 右侧：为什么要放大到这里 -->
-<rect class="node" x="542" y="500" width="270" height="150" rx="8"/>
-<text class="tb" x="677" y="522" text-anchor="middle">为什么要放大到这 4 个文件？</text>
-<text class="ts" x="677" y="544" text-anchor="middle">vLLM 主流程（第 1、2 层）是通用引擎，</text>
-<text class="ts" x="677" y="564" text-anchor="middle">不挑硬件；vllm-ascend 插件替换的</text>
-<text class="ts" x="677" y="584" text-anchor="middle">正是 attention / 通信这些</text>
-<text class="ts" x="677" y="604" text-anchor="middle">跟昇腾硬件相关的部分——</text>
-<text class="ts" x="677" y="624" text-anchor="middle">所以 PR 改的 4 个文件</text>
-<text class="ts" x="677" y="644" text-anchor="middle">全在 attention 一线上。</text>
+<rect class="node" x="542" y="534" width="270" height="140" rx="8"/>
+<text class="tb" x="677" y="556" text-anchor="middle">为什么要放大到这 4 个文件？</text>
+<text class="ts" x="677" y="576" text-anchor="middle">vLLM 主流程（第 1、2 层）是通用引擎，</text>
+<text class="ts" x="677" y="594" text-anchor="middle">不挑硬件；vllm-ascend 插件替换的</text>
+<text class="ts" x="677" y="612" text-anchor="middle">正是 attention / 通信这些</text>
+<text class="ts" x="677" y="630" text-anchor="middle">跟昇腾硬件相关的部分——</text>
+<text class="ts" x="677" y="648" text-anchor="middle">所以 PR 改的 4 个文件</text>
+<text class="ts" x="677" y="666" text-anchor="middle">全在 attention 一线上。</text>
 <!-- 图例 -->
-<text class="tm" x="50" y="622">调用方向：模型侧发起，逐层向里，车间真正干活</text>
-<text class="tm" x="50" y="644">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（从上层流程放大到下一层）</text>
+<text class="tm" x="50" y="640">调用方向：模型侧发起，逐层向里，车间真正干活</text>
+<text class="tm" x="50" y="662">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（进入下一层）</text>
 <text class="tm" x="50" y="712">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职</text>
 </svg>
 <div class="figcap">图 3 · 三层放大：主流程 → 模型前向（图 1）→ attention 小块的 4 层代码（= PR 的 4 个文件）；4.1~4.5 的锚点行均指第 3 层的框号</div>
