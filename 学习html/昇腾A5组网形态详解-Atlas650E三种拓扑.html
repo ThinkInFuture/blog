@@ -30,10 +30,13 @@ td{padding:8px 12px;border-bottom:1px solid var(--border-soft);color:#26384d;ver
 tr:last-child td{border-bottom:none}
 .note{background:#eef4ff;border-left:3px solid var(--accent);padding:14px 18px;font-size:14px;color:#26384d;margin:16px 0;border-radius:0 6px 6px 0}
 .fig-title{font-size:13px;font-weight:700;color:#1a4ea8;background:#eef3fb;border:1px solid #d4e2f7;border-radius:12px;display:inline-block;padding:3px 12px;margin:16px 0 8px}
-.mermaid-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:24px 18px 16px;overflow:visible;margin:14px 0 24px}
+.mermaid-wrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:44px 18px 16px;overflow:visible;margin:14px 0 24px}
 .mermaid{display:flex;justify-content:center;overflow:visible}
 .mermaid svg{overflow:visible !important;max-width:100%;height:auto}
 .mermaid svg text{font-size:16px !important}
+.mermaid .cluster-label foreignObject{overflow:visible !important;white-space:nowrap}
+.mermaid .cluster-label span,.mermaid .cluster-label div{white-space:nowrap !important;overflow:visible !important}
+.mermaid .cluster-label{translate:0 -30px}
 .svgwrap{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px 12px;text-align:center;margin:14px 0 6px;overflow:visible}
 .svgwrap svg{max-width:100%;height:auto}
 .svg-note{font-size:12.5px;color:#8a94a3;text-align:center;margin:6px 0 0}
@@ -375,6 +378,44 @@ footer.end{margin-top:56px;padding-top:18px;border-top:1px dashed var(--border);
 </ul>
 <span class="res-bad">❌ 组网③ 判定：非超节点 —— UBoE 以太转发，跨独立 UB 域，无统一内存编址</span>
 
+<h3>RoCE 与 UBoE 的关系：同一个以太网，两种承载</h3>
+<p>一个常见误解先摆正：<strong>RoCE 和 UBoE 不是两种以太网——以太网自始至终是同一个</strong>：标准以太交换机、标准光纤、标准以太网帧。它们的共同点是，都把一种高性能语义<strong>封装进以太网帧</strong>里，复用以太网的全部基础设施；区别只有一个——<strong>封装进去的是什么</strong>。</p>
+<p>把以太网想成一条谁都能上的高速公路：RoCE 和 UBoE 是两支不同的车队。大家都得守公路的交通规则（以太网帧格式），但两支车说的语言、拉的货完全不同——<strong>RoCE 车上讲 RDMA</strong>（行业通用的远程内存读写语义），<strong>UBoE 的货厢里装的是 UB 报文</strong>（灵衢语义）。货到对端，各按各的语言卸车：前者按 RDMA 规则用，后者解封装后继续当 UB 报文处理。</p>
+
+<div class="fig-title">图 6：RoCE 与 UBoE——同一条以太网公路，两种车上语义</div>
+<div class="mermaid-wrap"><div class="mermaid">flowchart LR
+    subgraph R["RoCE：以太网承载 RDMA（IBTA 行业标准）"]
+        direction LR
+        R1["NPU A"] --> R2["RoCE 网卡<br/>RDMA 报文<br/>UDP/IP 封装（端口 4791）"]
+        R2 --> R3["标准以太网<br/>交换机"]
+        R3 --> R4["对端 RoCE 网卡"]
+        R4 --> R5["NPU B<br/>按 RDMA 语义处理"]
+    end
+    subgraph U["UBoE：以太网承载 UB（灵衢体系）"]
+        direction LR
+        U1["NPU A<br/>UB 域 A"] --> U2["封装<br/>UB 报文装进以太网帧"]
+        U2 --> U3["标准以太网<br/>交换机"]
+        U3 --> U4["对端解封装"]
+        U4 --> U5["NPU B<br/>UB 域 B<br/>继续按 UB 语义处理"]
+    end
+    style R fill:#e6f3ff,color:#000000
+    style U fill:#ffedd5,color:#000000
+    style R5 fill:#dbeafe,color:#000000
+    style U5 fill:#fed7aa,color:#000000
+</div></div>
+
+<table>
+<tr><th>维度</th><th>RoCE</th><th>UBoE</th></tr>
+<tr><td><strong>谁的体系</strong></td><td>IBTA 行业标准（InfiniBand 系移植）</td><td>华为灵衢体系</td></tr>
+<tr><td><strong>以太网里装的是什么</strong></td><td>RDMA 语义（远程内存读写，v2 走 UDP/IP）</td><td>UB 报文原样封装</td></tr>
+<tr><td><strong>端点要求</strong></td><td>标准 RoCE 网卡，跨厂商通用</td><td>昇腾 / 灵衢体系（端点要会说 UB）</td></tr>
+<tr><td><strong>跨机之后</strong></td><td>就是 RDMA，与 UB 无关</td><td>回到 UB 语义，但仍是两个独立 UB 域</td></tr>
+<tr><td><strong>在 650E 部署里的角色</strong></td><td>机间普通集群的通用连法</td><td>连接 UB 域与 UB 域，向更大规模灵衢集群演进的路</td></tr>
+</table>
+
+<p>那为什么有了 RoCE 还要造一个 UBoE？关键在<strong>端点说什么语言</strong>。650E 机内说的是 UB：跨机互联要么<strong>整条链路换语言</strong>——走 RoCE，协议栈从 UB 换成 RDMA，集合通信全按 RDMA 路径走；要么<strong>带着母语上路</strong>——走 UBoE，UB 报文原样打包，过一段公路，到对端解包继续说 UB，域内协议连续。对昇腾软件栈来说后者改造小；对网络演进来说，后者是 UB 域规模化的通道——多个超节点拉成超大集群（如 Atlas 950 SuperCluster），走的就是这类「UB 域之间用封装以太网互联」的路子。</p>
+<p>也正因为隔着「封装—转发—解封装」这一段，两者都够不到超节点的门槛：超节点的定义是<strong>同一个 UB 域 + 全局统一内存编址</strong>。RoCE 全程不说 UB，自然谈不上；UBoE 说了 UB，但封装两端的 UB 域各自独立，编址并不统一。只有<strong>不封装、原生 UB 光纤直连</strong>的组网② FM16，才把 16 卡焊进同一个域——这就是三种组网里只有它是小超节点的根本原因。</p>
+
 <h2>四、现场怎么判定：一条命令</h2>
 <p>拿到一套已部署的环境，不用翻网络拓扑图，直接在任意一台机器上执行：</p>
 <pre><code># 现场验证：是不是超节点
@@ -383,7 +424,7 @@ npu-smi info -t spod-info
 # 输出里有合法 spod-id  → SuperPoD（超节点，组网② FM16 灵衢直连）
 # 无返回 / 读不到       → 普通集群（组网① RoCE 或 组网③ UBoE）</code></pre>
 
-<div class="fig-title">图 6：超节点判定流程</div>
+<div class="fig-title">图 7：超节点判定流程</div>
 <div class="mermaid-wrap"><div class="mermaid">flowchart TD
     A["现场拿到一套 650E / 650E 环境"] --> B["任意节点执行<br/>npu-smi info -t spod-info"]
     B --> C["读到合法 spod-id"]
@@ -426,6 +467,7 @@ mermaid.initialize({ startOnLoad: true, theme: 'base', securityLevel: 'loose',
   themeVariables: { fontFamily: '-apple-system, "Segoe UI", "Microsoft YaHei", sans-serif', fontSize: '15px', primaryColor: '#eff6ff', primaryTextColor: '#1f2937', primaryBorderColor: '#3b82f6', lineColor: '#9ca3af' },
   flowchart: { curve: 'basis', useMaxWidth: true, htmlLabels: true, nodeSpacing: 36, rankSpacing: 44, padding: 12 }
 });
+window.addEventListener('load', () => { setTimeout(() => { document.querySelectorAll('.mermaid .cluster-label').forEach(el => { el.style.translate = '0 -30px'; }); }, 800); });
 </script>
 <script defer src="../qrcode.min.js"></script>
 <script defer src="../share.js?v=2"></script>
