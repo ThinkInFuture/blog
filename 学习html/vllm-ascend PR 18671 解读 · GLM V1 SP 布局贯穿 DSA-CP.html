@@ -596,7 +596,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="489" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 图 5 四步在此</text>
 <rect class="ac" x="567" y="56" width="120" height="70" rx="8"/>
 <text class="tb" x="627" y="76" text-anchor="middle">Attention/Ops</text>
-<text class="ts" x="627" y="94" text-anchor="middle">算子计算</text>
+<text class="ts" x="627" y="94" text-anchor="middle">注意力 + 算子</text>
 <text class="ts" x="627" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 步骤 2-4</text>
 <rect class="node" x="705" y="56" width="120" height="56" rx="8"/>
 <text class="tb" x="765" y="78" text-anchor="middle">NPU 设备</text>
@@ -634,55 +634,57 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="735" y="234" text-anchor="middle">车间：算 + 全部通信</text>
 <!-- 放大线2 -->
 <path d="M735 248 C735 268,420 268,420 288" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="5 4" fill="none" marker-end="url(#ah6)"/>
-<text class="tm" x="745" y="264">放大车间 ↓</text>
+<text class="tm" x="555" y="300">放大车间 ↓</text>
 <!-- 行3:改前改后 -->
-<text class="tm" x="15" y="296">③ 放大车间里的「计算」：改前 vs 改后（每层 × N）</text>
-<text class="tm" x="15" y="320">改前 · 每层白付两次集合通信 + 一次布局整理：</text>
-<rect class="wc" x="15" y="328" width="146" height="50" rx="8"/>
-<text class="tb" x="88" y="348" text-anchor="middle">① AllGather</text>
-<text class="ts" x="88" y="366" text-anchor="middle">分片 → 全局</text>
-<text x="88" y="394" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
-<path class="flow" d="M161 352 H177" marker-end="url(#ah6)"/>
-<rect class="wc" x="181" y="328" width="146" height="50" rx="8"/>
-<text class="tb" x="254" y="348" text-anchor="middle">② 切回本地段</text>
-<text class="ts" x="254" y="366" text-anchor="middle">刚聚的全局又切</text>
-<text x="254" y="394" text-anchor="middle" font-size="10.5" font-weight="700" fill="#cf222e">白做，防错位由 ⑤ 接替</text>
-<path class="flow" d="M327 352 H343" marker-end="url(#ah6)"/>
-<rect class="node" x="347" y="328" width="146" height="50" rx="8"/>
-<text class="tb" x="420" y="348" text-anchor="middle">③ 取命中 KV</text>
-<text class="ts" x="420" y="366" text-anchor="middle">本职，保留</text>
-<path class="flow" d="M493 352 H509" marker-end="url(#ah6)"/>
-<rect class="node" x="513" y="328" width="146" height="50" rx="8"/>
-<text class="tb" x="586" y="348" text-anchor="middle">注意力计算</text>
-<text class="ts" x="586" y="366" text-anchor="middle">稀疏注意力</text>
-<path class="flow" d="M659 352 H675" marker-end="url(#ah6)"/>
-<rect class="wc" x="679" y="328" width="146" height="50" rx="8"/>
-<text class="tb" x="752" y="348" text-anchor="middle">④ ReduceScatter</text>
-<text class="ts" x="752" y="366" text-anchor="middle">全局 → 分片</text>
-<text x="752" y="394" text-anchor="middle" font-size="10.5" font-weight="700" fill="#b45309">冗余：职责并入 ⑥</text>
-<text class="tm" x="15" y="422">改后 · ①② 省掉（防错位由 ⑤ 接替），④ 的归约并入 ⑥（绿＝新增/变化）：</text>
-<rect class="ac" x="15" y="430" width="146" height="50" rx="8"/>
-<text class="tb" x="88" y="450" text-anchor="middle">⑤ 校验分片+清零</text>
-<text class="ts" x="88" y="468" text-anchor="middle">纯本地，无通信</text>
-<path class="flow" d="M161 454 H177" marker-end="url(#ah6)"/>
-<rect class="node" x="181" y="430" width="146" height="50" rx="8"/>
-<text class="tb" x="254" y="450" text-anchor="middle">③ 取命中 KV</text>
-<text class="ts" x="254" y="468" text-anchor="middle">本职，不变</text>
-<path class="flow" d="M327 454 H343" marker-end="url(#ah6)"/>
-<rect class="node" x="347" y="430" width="146" height="50" rx="8"/>
-<text class="tb" x="420" y="450" text-anchor="middle">注意力计算</text>
-<text class="ts" x="420" y="468" text-anchor="middle">同前</text>
-<path class="flow" d="M493 454 H509" marker-end="url(#ah6)"/>
-<rect class="ac" x="513" y="430" width="146" height="50" rx="8"/>
-<text class="tb" x="586" y="450" text-anchor="middle">⑥ all_to_all 换 head</text>
-<text class="ts" x="586" y="468" text-anchor="middle">o_proj → 单次 RS</text>
-<path class="flow" d="M659 454 H675" marker-end="url(#ah6)"/>
-<rect class="node" x="679" y="430" width="146" height="50" rx="8"/>
-<text class="tb" x="752" y="450" text-anchor="middle">交回本地分片</text>
-<text class="ts" x="752" y="468" text-anchor="middle">[219, 8192] → 下一层</text>
+<text class="ts" x="15" y="270" font-size="11.5" fill="#5b6b7c">目录注：ops/ = 算子与算子级封装（管算子怎么接进昇腾）；attention/ = 注意力机制实现（管注意力怎么算、KV 怎么管、并行怎么切）。</text>
+<text class="ts" x="15" y="288" font-size="11.5" fill="#5b6b7c">步骤 2 的 mla.py 在 ops/，步骤 3~4 在 attention/。</text>
+<text class="tm" x="15" y="312">③ 放大车间里的「计算」：改前 vs 改后（每层 × N）</text>
+<text class="tm" x="15" y="334">改前 · 每层白付两次集合通信 + 一次布局整理：</text>
+<rect class="wc" x="15" y="342" width="146" height="50" rx="8"/>
+<text class="tb" x="88" y="362" text-anchor="middle">① AllGather</text>
+<text class="ts" x="88" y="380" text-anchor="middle">分片 → 全局</text>
+<text x="88" y="408" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
+<path class="flow" d="M161 366 H177" marker-end="url(#ah6)"/>
+<rect class="wc" x="181" y="342" width="146" height="50" rx="8"/>
+<text class="tb" x="254" y="362" text-anchor="middle">② 切回本地段</text>
+<text class="ts" x="254" y="380" text-anchor="middle">刚聚的全局又切</text>
+<text x="254" y="408" text-anchor="middle" font-size="10.5" font-weight="700" fill="#cf222e">白做，防错位由 ⑤ 接替</text>
+<path class="flow" d="M327 366 H343" marker-end="url(#ah6)"/>
+<rect class="node" x="347" y="342" width="146" height="50" rx="8"/>
+<text class="tb" x="420" y="362" text-anchor="middle">③ 取命中 KV</text>
+<text class="ts" x="420" y="380" text-anchor="middle">本职，保留</text>
+<path class="flow" d="M493 366 H509" marker-end="url(#ah6)"/>
+<rect class="node" x="513" y="342" width="146" height="50" rx="8"/>
+<text class="tb" x="586" y="362" text-anchor="middle">注意力计算</text>
+<text class="ts" x="586" y="380" text-anchor="middle">稀疏注意力</text>
+<path class="flow" d="M659 366 H675" marker-end="url(#ah6)"/>
+<rect class="wc" x="679" y="342" width="146" height="50" rx="8"/>
+<text class="tb" x="752" y="362" text-anchor="middle">④ ReduceScatter</text>
+<text class="ts" x="752" y="380" text-anchor="middle">全局 → 分片</text>
+<text x="752" y="408" text-anchor="middle" font-size="10.5" font-weight="700" fill="#b45309">冗余：职责并入 ⑥</text>
+<text class="tm" x="15" y="434">改后 · ①② 省掉（防错位由 ⑤ 接替），④ 的归约并入 ⑥（绿＝新增/变化）：</text>
+<rect class="ac" x="15" y="442" width="146" height="50" rx="8"/>
+<text class="tb" x="88" y="464" text-anchor="middle">⑤ 校验分片+清零</text>
+<text class="ts" x="88" y="482" text-anchor="middle">纯本地，无通信</text>
+<path class="flow" d="M161 468 H177" marker-end="url(#ah6)"/>
+<rect class="node" x="181" y="442" width="146" height="50" rx="8"/>
+<text class="tb" x="254" y="464" text-anchor="middle">③ 取命中 KV</text>
+<text class="ts" x="254" y="482" text-anchor="middle">本职，不变</text>
+<path class="flow" d="M327 468 H343" marker-end="url(#ah6)"/>
+<rect class="node" x="347" y="442" width="146" height="50" rx="8"/>
+<text class="tb" x="420" y="464" text-anchor="middle">注意力计算</text>
+<text class="ts" x="420" y="482" text-anchor="middle">同前</text>
+<path class="flow" d="M493 468 H509" marker-end="url(#ah6)"/>
+<rect class="ac" x="513" y="442" width="146" height="50" rx="8"/>
+<text class="tb" x="586" y="464" text-anchor="middle">⑥ all_to_all 换 head</text>
+<text class="ts" x="586" y="482" text-anchor="middle">o_proj → 单次 RS</text>
+<path class="flow" d="M659 468 H675" marker-end="url(#ah6)"/>
+<rect class="node" x="679" y="442" width="146" height="50" rx="8"/>
+<text class="tb" x="752" y="464" text-anchor="middle">交回本地分片</text>
+<text class="ts" x="752" y="482" text-anchor="middle">[219, 8192] → 下一层</text>
 <!-- 图例 -->
-<text class="tm" x="15" y="520">读法：行① 看请求经过谁（黄＝上游 vLLM 进程，绿＝vllm-ascend 代码）→ 行② 看 Worker 前向即图 5 的四步 → 行③ 看车间里 PR 省掉了什么</text>
-<text class="tm" x="15" y="542">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职；改后各框的收/做/交细看图 5</text>
+<text class="tm" x="15" y="530">读法：行① 看请求经过谁（黄＝上游 vLLM 进程，绿＝vllm-ascend 代码）→ 行② 看 Worker 前向即图 5 的四步 → 行③ 看车间里 PR 省掉了什么</text>
+<text class="tm" x="15" y="552">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职；改后各框的收/做/交细看图 5</text>
 </svg>
 <div class="figcap">图 6 · 三级行：①请求经过谁 → ②Worker 前向＝图 5 的四步 → ③车间「计算」改前 vs 改后（①② 白做省掉，④ 并入 ⑥，只剩 ③⑥）</div>
 </div>
@@ -735,6 +737,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 
 <h3>4.3 ops/mla.py —— 包装层能力探测与新入口</h3>
 <p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 5 第 3 层第 2 框（门卫，模型层与车间之间的闸门）· 干活：探测车间能不能直接吃 SP 分片 + 提供新入口；不能就退回上游老路</p>
+<p>先说清目录：<code>ops/</code> 放算子与算子级封装（把昇腾算子接进 <code>torch.ops.vllm.*</code>），<code>attention/</code> 放注意力机制实现（SFA / DSA-CP 这类策略代码）——<code>ops/mla.py</code> 虽在 <code>ops/</code> 下，但它是注意力算子的<b>包装门面</b>：向上对接模型层，向下调用 <code>attention/</code> 的实现。</p>
 <p><code>AscendMultiHeadLatentAttention</code> 增加属性 <code>supports_sequence_parallel_input</code>，四个条件全满足才声明支持：<code>output_token_shard_size == 1</code>、后端 impl 声明支持、<code>o_proj.custom_op is None</code>（自定义通信算子有自己的一套通信，不硬套）、<code>o_proj.reduce_results == False</code>。任一不满足 → 自动回退原路径。<b>这是安全阀：不支持的场景一行代码都不用改。</b></p>
 <p>新增入口 <code>forward_sequence_parallel(positions, hidden_states, output_scale)</code>，走自定义算子 <code>torch.ops.vllm.mla_forward</code> 时透传三个新参数。<code>mla_forward</code> 内部增加两道保护：metadata 的 token 数与模型侧不一致 → 报错且不发起任何通信；无 metadata（profiling / DP dummy batch）→ 保持零输出、本地返回。</p>
 
