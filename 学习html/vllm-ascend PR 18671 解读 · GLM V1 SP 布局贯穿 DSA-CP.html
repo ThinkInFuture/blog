@@ -479,8 +479,44 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <h2 id="s4">4. 逐文件解读</h2>
 <p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？分两步。<b>图 5</b> 先把 attention 小块放大——它背后是 vllm-ascend 的 4 层代码，四步执行流、每步收什么做什么交什么。<b>图 6</b> 再回到一条请求的完整旅程：用户请求进入上游 vLLM（Engine 接收、Scheduler 组 batch、Worker 执行），跨过插件边界交给 vllm-ascend（NPUPlatform 平台层、Attention/Ops 算子层），最后由 NPU 设备计算并原路返回——<b>黄色区是上游 vLLM 的通用代码，绿色区才是 vllm-ascend 插件的代码</b>，并对照「计算」一步的改前 vs 改后。之后 4.1~4.5 的每个细节都挂回图 5 的步骤号。</p>
 
+<h3>先看一行代码：attention 是怎么"变成"代码的</h3>
+<p>你可能一直卡在同一处：<b>attention 是个计算，怎么就"变成代码"了？</b>这不是比喻，是字面意思——程序执行到模型代码里的某一行，就跳进另一段代码，把 Q / K / V 真的算出来，再跳回来继续。把那一行，和它的下探路径，原样摆出来：</p>
+<div class="codetag">模型代码（就是图 2 里 Block 的 forward，你认识的那条链）</div>
+<pre><span class="c"># 算 attention,在模型代码里就一行:</span>
+h = self.self_attn(positions, hidden)
+
+<span class="c"># 但 self.self_attn 不是函数,是一个"包装器"对象——它内部还包着别的对象:</span>
+<span class="c">#   self_attn(门卫,ops/mla.py) → mla_attn.impl(车间,attention/context_parallel/sfa_cp.py)</span>
+<span class="c"># 程序执行这一行时,就顺着对象一层层往下跳,直到真正算 attention 的那段代码。</span></pre>
 <div class="card">
-<svg viewBox="0 0 840 812" role="img" aria-label="放大 attention 小块:4 层 vllm-ascend 代码的四步执行流">
+<svg viewBox="0 0 840 330" role="img" aria-label="一行调用的下探路径">
+<defs><marker id="ah9" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#1a4ea8"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">一行调用的下探：每个「.」= 下探一层包装</text>
+<rect class="node" x="60" y="44" width="720" height="50" rx="8"/>
+<text class="tb" x="420" y="65" text-anchor="middle" font-family="ui-monospace,Consolas,monospace">h = self.self_attn(positions, hidden)</text>
+<text class="ts" x="420" y="85" text-anchor="middle">模型代码里的一行 · models/deepseek_mtp.py —— "帮我算一下 attention"</text>
+<path class="flow" d="M420 94 V112" marker-end="url(#ah9)"/>
+<text class="tm" x="432" y="108">self_attn 是对象,不是函数 → 下探一层</text>
+<rect class="ac" x="60" y="116" width="720" height="50" rx="8"/>
+<text class="tb" x="420" y="136" text-anchor="middle">门卫 · ops/mla.py</text>
+<text class="ts" x="420" y="154" text-anchor="middle">先问一句:后端能直接吃 SP 分片吗?能 → 走新入口;不能 → 换老路(行为不变)</text>
+<path class="flow" d="M420 166 V184" marker-end="url(#ah9)"/>
+<text class="tm" x="432" y="180">能 → 继续下探</text>
+<rect class="ac" x="60" y="188" width="720" height="50" rx="8"/>
+<text class="tb" x="420" y="208" text-anchor="middle">调度员 · attention/sfa_v1.py</text>
+<text class="ts" x="420" y="226" text-anchor="middle">按契约选路:输入准备用哪个、输出收口用哪个</text>
+<path class="flow" d="M420 238 V256" marker-end="url(#ah9)"/>
+<text class="tm" x="432" y="252">到底层了</text>
+<rect class="bc" x="60" y="260" width="720" height="54" rx="8"/>
+<text class="tb" x="420" y="280" text-anchor="middle">车间 · attention/context_parallel/sfa_cp.py —— 数学在这里发生</text>
+<text class="ts" x="420" y="300" text-anchor="middle">⑤ 校验分片 → ③ 跨卡取命中 KV → Q·K → softmax → ·V → ⑥ o_proj 收口</text>
+<text class="tm" x="15" y="324">换硬件 = 只换最底层(底座换成昇腾实现);外面两层包装和模型代码共用——这就是「插件」两个字的意思</text>
+</svg>
+</div>
+<p>对照图 3:门卫/调度员/车间就是图 3 第 3 层的那三框,模型层就是步骤 1——下面把每一步的<b>收什么、做什么、交什么</b>摆出来。</p>
+
+<div class="card">
+<svg viewBox="0 0 840 797" role="img" aria-label="放大 attention 小块:4 层 vllm-ascend 代码的四步执行流">
 <defs><marker id="ah5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">放大 attention 小块：它背后是 4 层 vllm-ascend 代码</text>
 <text class="tm" x="50" y="46">第 1 层 · vLLM 推理主流程（每条请求都走这条）</text>
