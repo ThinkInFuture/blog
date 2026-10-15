@@ -498,21 +498,21 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
     return out @ wo                                    <span class="c"># L10 输出投影</span></pre>
 
 <h3>先认目录：你的十行散在 vllm-ascend 的哪些模块里</h3>
-<p>目录就是分工。一张图把整个地址画全——一个套一个（就像江苏 → 南京 → 雨花台 → 华为研究所），①→④ 是调用顺序，绿字标你的十行挂在哪：</p>
+<p>目录就是分工。一张图把整个地址画全——一个套一个：引擎 ⊃ 插件 ⊃ 目录 ⊃ 子目录；①→④ 是调用顺序，绿字标你的十行挂在哪：</p>
 <div class="card">
 <svg viewBox="0 0 840 640" role="img" aria-label="地址全景">
-<text class="th" x="420" y="26" text-anchor="middle">你的十行住在哪：vllm-ascend 地址全景（一个套一个 ≈ 江苏→南京→雨花台→华为研究所）</text>
+<text class="th" x="420" y="26" text-anchor="middle">你的十行住在哪：vllm-ascend 地址全景（一个套一个：引擎 ⊃ 插件 ⊃ 目录 ⊃ 车间）</text>
 <rect class="node" x="14" y="40" width="812" height="560" rx="12"/>
-<text class="tb" x="30" y="62">上游 vLLM · 引擎 〔≈ 江苏省〕</text>
+<text class="tb" x="30" y="62">上游 vLLM · 引擎</text>
 <text class="ts" x="30" y="80" font-family="ui-monospace,Consolas,monospace">vllm/v1/engine/core.py:595</text>
 <text class="ts" x="520" y="62">组批后每步调 execute_model（PR 未动）</text>
 <rect x="30" y="92" width="780" height="440" rx="10" fill="var(--surface,#f7f8fa)" stroke="var(--brand,#2563eb)" stroke-width="1.5" stroke-dasharray="6 5"/>
-<text class="tb" x="46" y="114">vllm_ascend/ · 昇腾插件 〔≈ 南京市〕</text>
+<text class="tb" x="46" y="114">vllm_ascend/ · 昇腾插件</text>
 <text class="ts" x="470" y="114">platform.py：先向 vLLM 报"我是昇腾"</text>
 <rect class="node" x="42" y="130" width="372" height="150" rx="10"/>
 <circle cx="398" cy="150" r="13" fill="var(--surface-muted,#eef1f5)" stroke="var(--border,#dde1e7)" stroke-width="1.5"/>
 <text class="tb" x="398" y="155" text-anchor="middle">①</text>
-<text class="tb" x="58" y="152">worker/ · 执行与喂料 〔≈ 雨花台区〕</text>
+<text class="tb" x="58" y="152">worker/ · 执行与喂料</text>
 <text class="ts" x="58" y="174">接批 → pad 到 3504 → 调模型</text>
 <text class="ts" x="58" y="196">为什么：上游执行器绑死 NVIDIA，</text>
 <text class="ts" x="58" y="214">昇腾必须有自己的执行器才能跑</text>
@@ -542,12 +542,12 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <text class="ts" x="442" y="360" font-weight="700" fill="var(--accent-text,#0f766e)">步 3/4/6 = L1·L2·L3；步 8 = L6~L9</text>
 <text class="ts" x="442" y="380" font-family="ui-monospace,Consolas,monospace">sfa_v1.py:1503 ★PR</text>
 <rect class="ac" x="438" y="392" width="348" height="64" rx="8"/>
-<text class="tb" x="450" y="410">context_parallel/ · 车间 〔≈ 华为研究所〕</text>
+<text class="tb" x="450" y="410">context_parallel/ · DSA-CP 特化（车间）</text>
 <text class="ts" x="450" y="428" font-weight="700" fill="var(--accent-text,#0f766e)">⑤ 校验·③ 取 KV·⑥ 收口 = L4 页表·L10 收口</text>
 <text class="ts" x="450" y="446" font-family="ui-monospace,Consolas,monospace">sfa_cp.py ★PR</text>
 <rect class="ghost" x="42" y="478" width="756" height="36" rx="8"/>
 <text class="tm" x="58" y="501">patch/ 运行时补丁（替换上游类的方法）｜ 其余专项：distributed/ quantization/ spec_decode/ device/ 等，各管一块系统能力</text>
-<text class="tm" x="14" y="622">套框 = 地址包含（江苏→南京→雨花台→华为研究所） · ①→④ = 调用顺序 · ★ = PR 改动 · 绿字 = 你的十行挂哪 · 〔 〕= 类比</text>
+<text class="tm" x="14" y="622">套框 = 地址包含（外层 ⊃ 内层） · ①→④ = 调用顺序 · ★ = PR 改动 · 绿字 = 你的十行挂哪 · 〔 〕= 类比</text>
 </svg>
 </div>
 <div class="figcap">vllm-ascend 地址全景：先认套框（在哪儿），再认格子（管什么、为什么有它），绿字就是你的十行的地址；PR 改的 5 个文件全带 ★</div>
@@ -634,7 +634,32 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 
 <h3>4.2 第一个意外：你这份代码上 16 卡，先被加了两行（改前）</h3>
 <p>你的 L6 之所以写得这么短，是因为 L4 已经把全量历史 <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④。</p>
-<div style="background:var(--surface-muted,#eef1f5);border:1px solid var(--border,#dde1e7);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px;line-height:2.1"><span style="font-weight:700;color:var(--brand-text,#1d4ed8)">户口</span>　<span class="tag blue">上游 vLLM · 引擎</span> ▸ <span class="tag blue">models/ · 模型结构（上游）</span> ▸ <span class="tag teal">DeepseekV2DecoderLayer · 一层的封装——你的十行就住这层里</span><br>层里除了你的十行，还有前后两个 LN 和一个 MoE；这段 forward 把一层串起来，①④ 就写在里面（deepseek_v2.py:1315，有删节）：</div>
+<div class="card">
+<svg viewBox="0 0 840 168" role="img" aria-label="户口图:上游DecoderLayer">
+<text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（改前 · 上游层）</text>
+<text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
+<text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
+<text class="tm" x="539" y="46" text-anchor="middle">类</text>
+<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
+<rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
+<text class="ts" x="115" y="102" text-anchor="middle">core.py:595 组批调执行</text>
+<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
+<rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="327" y="80" text-anchor="middle">models/ · 模型结构</text>
+<text class="ts" x="327" y="102" text-anchor="middle">上游管所有模型的层</text>
+<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
+<rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="539" y="80" text-anchor="middle">DeepseekV2DecoderLayer</text>
+<text class="ts" x="539" y="102" text-anchor="middle">一层的封装·你的十行住这</text>
+<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
+<rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
+<text class="tb" x="738" y="80" text-anchor="middle">forward()</text>
+<text class="ts" x="738" y="102" text-anchor="middle">串 LN/attn/MoE,①④ 在内</text>
+<text class="tm" x="20" y="148">层里除了你的十行还有前后两个 LN 和一个 MoE · deepseek_v2.py:1315,有删节 · 为什么讲它:①④ 不在十行里,在层的外壳上</text>
+<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+</svg>
+</div>
 <pre><span class="c"># 上游每层都在你的十行外面套了这两行（有删节）</span>
 if input_is_sequence_parallel:
     hidden = tensor_model_parallel_all_gather(hidden, 0)   <span class="c"># <span class="cnum">①</span> 219 → 3504：把假设"买"回来，每层白付一次</span>
@@ -647,7 +672,32 @@ hidden = tensor_model_parallel_reduce_scatter(hidden, 0)   <span class="c"># <sp
 
 <h3>4.3 PR 的做法：把"全量"从你的 L6 里拆出去</h3>
 <p>既然 DSA-CP 的注意力天生按 token 分片算（每卡只算自己 219 个 token 的 Q，缺的 KV 跨卡定点取），"先聚成全量"就纯属多余。PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>。</p>
-<div style="background:var(--surface-muted,#eef1f5);border:1px solid var(--border,#dde1e7);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px;line-height:2.1"><span style="font-weight:700;color:var(--brand-text,#1d4ed8)">户口</span>　<span class="tag blue">上游 vLLM · 引擎</span> ▸ <span class="tag blue">vllm_ascend/models/ · 模型结构</span> ▸ <span class="tag teal">AscendDSACPDecoderLayer · 那一层的昇腾版（继承上游）</span><br>为什么住 models/：改的是"层怎么走"，不是算子。这段 forward：三个回退检查任一不过走 4.2 老路，全过才分片直进：</div>
+<div class="card">
+<svg viewBox="0 0 840 168" role="img" aria-label="户口图:PR新层">
+<text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（改后 · PR 新层）</text>
+<text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
+<text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
+<text class="tm" x="539" y="46" text-anchor="middle">类</text>
+<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
+<rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
+<text class="ts" x="115" y="102" text-anchor="middle">照常调到这一层</text>
+<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
+<rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="327" y="80" text-anchor="middle">vllm_ascend/models/</text>
+<text class="ts" x="327" y="102" text-anchor="middle">模型结构·继承上游小改</text>
+<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
+<rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="539" y="80" text-anchor="middle">AscendDSACPDecoderLayer</text>
+<text class="ts" x="539" y="102" text-anchor="middle">那一层的昇腾版</text>
+<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
+<rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
+<text class="tb" x="738" y="80" text-anchor="middle">forward()</text>
+<text class="ts" x="738" y="102" text-anchor="middle">三查不过走老路,过则直通</text>
+<text class="tm" x="20" y="148">为什么住 models/:改的是"层怎么走",不是算子 · 类继承上游 DeepseekV2DecoderLayer</text>
+<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+</svg>
+</div>
 <pre><span class="c"># PR 新增：vllm_ascend/models/deepseek_mtp.py（有删节，全文见 5.1）</span>
 class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
     def forward(self, positions, hidden_states, residual, llama_4_scaling=None):
@@ -667,7 +717,32 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
         hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)   <span class="c"># MoE 只算自己的 219 行</span>
         return hidden_states, residual</pre>
-<div style="background:var(--surface-muted,#eef1f5);border:1px solid var(--border,#dde1e7);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px;line-height:2.1"><span style="font-weight:700;color:var(--brand-text,#1d4ed8)">户口</span>　<span class="tag blue">vllm_ascend</span> ▸ <span class="tag blue">attention/ · 注意力实现（后端可插拔，昇腾这份叫 SFA）</span> ▸ <span class="tag teal">AscendSFAImpl · 你的十行落成九步流水线</span><br>forward 在 sfa_v1.py:1503——每步标了对应你的哪一行：</div>
+<div class="card">
+<svg viewBox="0 0 840 168" role="img" aria-label="户口图:九步流水线">
+<text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（attention 后端）</text>
+<text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
+<text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
+<text class="tm" x="539" y="46" text-anchor="middle">类</text>
+<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
+<rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
+<text class="ts" x="115" y="102" text-anchor="middle">只定义注意力后端接口</text>
+<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
+<rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="327" y="80" text-anchor="middle">vllm_ascend/attention/</text>
+<text class="ts" x="327" y="102" text-anchor="middle">注意力实现·后端可插拔</text>
+<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
+<rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
+<text class="tb" x="539" y="80" text-anchor="middle">AscendSFAImpl</text>
+<text class="ts" x="539" y="102" text-anchor="middle">昇腾这份 SFA 实现</text>
+<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
+<rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
+<text class="tb" x="738" y="80" text-anchor="middle">forward() :1503</text>
+<text class="ts" x="738" y="102" text-anchor="middle">九步·每步标你的行号</text>
+<text class="tm" x="20" y="148">各硬件各出一份后端实现,昇腾的这份叫 SFA · 你的十行在这个类里落成九步流水线</text>
+<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+</svg>
+</div>
 <div class="card">
 <svg viewBox="0 0 840 920" role="img" aria-label="九步流水线C">
 <defs><marker id="ahC2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
@@ -756,11 +831,30 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <div class="figcap">图 7 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
 </div>
 
-<div style="background:var(--surface-muted,#eef1f5);border:1px solid var(--border,#dde1e7);border-radius:8px;padding:8px 12px;margin:10px 0;font-size:13px;line-height:2.1"><span style="font-weight:700;color:var(--brand-text,#1d4ed8)">户口 · 三个包装</span><br>
-<span class="tag amber">门卫 · ops/ 算子门面</span> <span class="tag teal">AscendMultiHeadLatentAttention · 你 self.self_attn 打开的包装器，契约四查</span><br>
-<span class="tag amber">调度员 · attention/ 注意力实现</span> <span class="tag teal">AscendSFAImpl · 管"走哪条路"</span><br>
-<span class="tag amber">车间 · attention/context_parallel/ 特化</span> <span class="tag teal">AscendSFADSACPImpl · 继承调度员，只覆盖 ⑤⑥</span><br>
-三个包装包在 attention 外面，模型代码一个字不用改，换硬件只换最底层。谁决定走哪条，由三道闸门决定：</div>
+<div class="card">
+<svg viewBox="0 0 840 224" role="img" aria-label="户口图:三个包装">
+<text class="th" x="420" y="24" text-anchor="middle">attention 外面的三个包装：谁的地盘 · 什么类 · 管什么</text>
+<text class="tm" x="60" y="52">门卫</text>
+<rect class="node" x="110" y="36" width="200" height="40" rx="8"/>
+<text class="tb" x="210" y="61" text-anchor="middle">ops/ · 算子门面</text>
+<path class="flow" d="M310 56 H330" marker-end="url(#ahH)"/>
+<rect class="bc" x="330" y="36" width="490" height="40" rx="8"/>
+<text class="ts" x="575" y="56" text-anchor="middle"><tspan font-weight="700">AscendMultiHeadLatentAttention</tspan> · 你 self.self_attn 打开的包装器 · 契约四查</text>
+<text class="tm" x="60" y="106">调度员</text>
+<rect class="node" x="110" y="90" width="200" height="40" rx="8"/>
+<text class="tb" x="210" y="115" text-anchor="middle">attention/ · 注意力实现</text>
+<path class="flow" d="M310 110 H330" marker-end="url(#ahH)"/>
+<rect class="bc" x="330" y="90" width="490" height="40" rx="8"/>
+<text class="ts" x="575" y="110" text-anchor="middle"><tspan font-weight="700">AscendSFAImpl</tspan> · 管"走哪条路"(输入/输出两处分流)</text>
+<text class="tm" x="60" y="160">车间</text>
+<rect class="ac" x="110" y="144" width="200" height="40" rx="8"/>
+<text class="tb" x="210" y="169" text-anchor="middle">context_parallel/ · 特化</text>
+<path class="flow" d="M310 164 H330" marker-end="url(#ahH)"/>
+<rect class="ac" x="330" y="144" width="490" height="40" rx="8"/>
+<text class="ts" x="575" y="164" text-anchor="middle"><tspan font-weight="700">AscendSFADSACPImpl</tspan> · 继承调度员,只覆盖 ⑤ 校验 / ⑥ 收口</text>
+<text class="tm" x="20" y="212">三个包装包在 attention 外面,模型代码一个字不用改,换硬件只换最底层 · 谁决定走哪条:三道闸门(下图 8)</text>
+</svg>
+</div>
 <div class="card">
 <svg viewBox="0 0 760 460" role="img" aria-label="选择条件树">
 <defs><marker id="ah4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker><marker id="ah4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--text-muted)"/></marker></defs>
