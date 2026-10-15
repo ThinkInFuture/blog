@@ -104,7 +104,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <h1>vllm-ascend PR #18671 解读 · B 版（改前改后逐行对照）</h1>
 <div style="background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:10px 16px;margin:10px 0;font-size:14px"><strong>PR 地址：</strong><a href="https://github.com/vllm-project/vllm-ascend/pull/18671" target="_blank" rel="nofollow" style="color:#2f6feb;font-weight:600">vllm-project/vllm-ascend · Pull Request #18671</a>（[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP）</div>
 <div class="subtitle">[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP —— 让 SP 的 token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter</div>
-<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（与 A 版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照A 版（六层下探）：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">点此打开</a>。现役版未动，选定后以所选版本替换。</div>
+<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（三版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · C版从你的attention出发.html">C 版（从你认识的 attention 十行代码出发）</a>。现役版未动，选定后以所选版本替换。</div>
 
 <nav class="toc">
 <b>目录</b>
