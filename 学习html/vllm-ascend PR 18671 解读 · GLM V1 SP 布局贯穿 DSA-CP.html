@@ -396,58 +396,109 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？先看<b>图 3</b>——一条请求的完整旅程：用户请求进入上游 vLLM（Engine 接收、Scheduler 组 batch、Worker 执行），跨过插件边界交给 vllm-ascend（NPUPlatform 平台层、Attention/Ops 算子层），最后由 NPU 设备计算并原路返回。<b>黄色区是上游 vLLM 的通用代码，绿色区才是 vllm-ascend 插件的代码——PR 改的 4 个文件全在绿色区</b>。再把绿色区里 Attention/Ops 那一格放大（图 4），就是 4.1~4.5 要展开的 4 层代码。</p>
 
 <div class="card">
-<svg viewBox="0 0 840 570" role="img" aria-label="请求处理全链路:上游 vLLM 与 vllm-ascend 的分工">
+<svg viewBox="0 0 840 838" role="img" aria-label="请求处理全链路 + 计算一步的改前改后对比">
 <defs>
 <marker id="seqA" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#1a4ea8"/></marker>
 <marker id="seqB" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#6b7280"/></marker>
+<marker id="seqC" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#1a4ea8"/></marker>
 </defs>
-<text class="th" x="420" y="24" text-anchor="middle">一条请求的完整旅程（上游 vLLM → 本项目 vllm-ascend → NPU 设备）</text>
-<rect x="118" y="40" width="362" height="466" rx="10" fill="#fffbe6" stroke="#e6c96b" stroke-width="1.5"/>
+<text class="th" x="420" y="24" text-anchor="middle">一条请求的完整旅程 + PR 改动挂在哪里</text>
+<rect x="118" y="40" width="362" height="436" rx="10" fill="#fffbe6" stroke="#e6c96b" stroke-width="1.5"/>
 <text x="299" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#7a5800">上游 vLLM（通用代码，不挑硬件）</text>
-<rect x="482" y="40" width="240" height="466" rx="10" fill="#eafaf0" stroke="#7fcea0" stroke-width="1.5"/>
+<rect x="482" y="40" width="240" height="436" rx="10" fill="#eafaf0" stroke="#7fcea0" stroke-width="1.5"/>
 <text x="602" y="62" text-anchor="middle" font-size="13" font-weight="700" fill="#15803d">本项目 vllm-ascend（昇腾插件）</text>
-<rect class="node" x="8" y="76" width="104" height="38" rx="8"/><text class="tb" x="60" y="100" text-anchor="middle">用户</text>
-<rect class="node" x="128" y="76" width="104" height="38" rx="8"/><text class="tb" x="180" y="100" text-anchor="middle">Engine</text>
-<rect class="node" x="248" y="76" width="104" height="38" rx="8"/><text class="tb" x="300" y="100" text-anchor="middle">Scheduler</text>
-<rect class="node" x="368" y="76" width="104" height="38" rx="8"/><text class="tb" x="420" y="100" text-anchor="middle">Worker</text>
-<rect class="node" x="488" y="76" width="104" height="38" rx="8"/><text class="tb" x="540" y="100" text-anchor="middle">NPUPlatform</text>
-<rect class="node" x="608" y="76" width="104" height="38" rx="8"/><text class="tb" x="660" y="100" text-anchor="middle">Attention/Ops</text>
-<rect class="node" x="728" y="76" width="104" height="38" rx="8"/><text class="tb" x="780" y="100" text-anchor="middle">NPU 设备</text>
-<line x1="60" y1="114" x2="60" y2="474" stroke="#c9ced6" stroke-width="1.5"/>
-<line x1="180" y1="114" x2="180" y2="474" stroke="#c9ced6" stroke-width="1.5"/>
-<line x1="300" y1="114" x2="300" y2="474" stroke="#c9ced6" stroke-width="1.5"/>
-<line x1="420" y1="114" x2="420" y2="474" stroke="#c9ced6" stroke-width="1.5"/>
-<line x1="540" y1="114" x2="540" y2="474" stroke="#69b98c" stroke-width="1.5"/>
-<line x1="660" y1="114" x2="660" y2="474" stroke="#69b98c" stroke-width="1.5"/>
-<line x1="780" y1="114" x2="780" y2="474" stroke="#c9ced6" stroke-width="1.5"/>
-<line x1="60" y1="140" x2="176" y2="140" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="118" y="132" text-anchor="middle">发送请求</text>
-<line x1="180" y1="184" x2="296" y2="184" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="238" y="176" text-anchor="middle">调度</text>
-<line x1="300" y1="228" x2="416" y2="228" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="358" y="220" text-anchor="middle">分配（组好的 batch）</text>
-<line x1="420" y1="272" x2="536" y2="272" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="478" y="264" text-anchor="middle">执行（模型前向）</text>
-<line x1="540" y1="316" x2="656" y2="316" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="598" y="308" text-anchor="middle">计算（attention/算子）</text>
-<line x1="660" y1="360" x2="776" y2="360" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
-<text class="ts" x="718" y="352" text-anchor="middle">NPU 执行</text>
-<line x1="780" y1="398" x2="664" y2="398" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
-<text class="ts" x="718" y="390" text-anchor="middle">结果</text>
-<line x1="660" y1="436" x2="424" y2="436" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
-<text class="ts" x="542" y="428" text-anchor="middle">输出（logits）</text>
-<line x1="420" y1="470" x2="64" y2="470" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
-<text class="ts" x="242" y="462" text-anchor="middle">返回（token）</text>
-<rect class="node" x="8" y="482" width="104" height="38" rx="8"/><text class="tb" x="60" y="506" text-anchor="middle">用户</text>
-<rect class="node" x="128" y="482" width="104" height="38" rx="8"/><text class="tb" x="180" y="506" text-anchor="middle">Engine</text>
-<rect class="node" x="248" y="482" width="104" height="38" rx="8"/><text class="tb" x="300" y="506" text-anchor="middle">Scheduler</text>
-<rect class="node" x="368" y="482" width="104" height="38" rx="8"/><text class="tb" x="420" y="506" text-anchor="middle">Worker</text>
-<rect class="node" x="488" y="482" width="104" height="38" rx="8"/><text class="tb" x="540" y="506" text-anchor="middle">NPUPlatform</text>
-<rect class="node" x="608" y="482" width="104" height="38" rx="8"/><text class="tb" x="660" y="506" text-anchor="middle">Attention/Ops</text>
-<rect class="node" x="728" y="482" width="104" height="38" rx="8"/><text class="tb" x="780" y="506" text-anchor="middle">NPU 设备</text>
-<text class="tm" x="50" y="556">实线＝请求下发方向 · 虚线＝结果返回方向 · 黄区＝上游 vLLM 代码 · 绿区＝vllm-ascend 插件代码（PR 改动全在绿区的 Attention/Ops 一线）</text>
+<rect class="node" x="8" y="76" width="104" height="56" rx="8"/><text class="tb" x="60" y="94" text-anchor="middle">用户</text>
+<rect class="node" x="128" y="76" width="104" height="56" rx="8"/><text class="tb" x="180" y="94" text-anchor="middle">Engine</text>
+<rect class="node" x="248" y="76" width="104" height="56" rx="8"/><text class="tb" x="300" y="94" text-anchor="middle">Scheduler</text>
+<rect class="node" x="368" y="76" width="104" height="56" rx="8"/><text class="tb" x="420" y="94" text-anchor="middle">Worker</text>
+<text class="ts" x="420" y="112" text-anchor="middle" font-size="10" fill="#1d4ed8">★ 步骤 1</text>
+<text class="ts" x="420" y="126" text-anchor="middle" font-size="10" fill="#1d4ed8">deepseek_mtp.py</text>
+<rect class="node" x="488" y="76" width="104" height="56" rx="8"/><text class="tb" x="540" y="94" text-anchor="middle">NPUPlatform</text>
+<text class="ts" x="540" y="112" text-anchor="middle" font-size="10" fill="#6b7280">平台层</text>
+<text class="ts" x="540" y="126" text-anchor="middle" font-size="10" fill="#6b7280">（PR 未动）</text>
+<rect class="node" x="608" y="76" width="104" height="56" rx="8"/><text class="tb" x="660" y="94" text-anchor="middle">Attention/Ops</text>
+<text class="ts" x="660" y="112" text-anchor="middle" font-size="10" fill="#1d4ed8">★ 步骤 2-4</text>
+<text class="ts" x="660" y="126" text-anchor="middle" font-size="10" fill="#1d4ed8">mla/sfa_v1/sfa_cp</text>
+<rect class="node" x="728" y="76" width="104" height="56" rx="8"/><text class="tb" x="780" y="94" text-anchor="middle">NPU 设备</text>
+<line x1="60" y1="132" x2="60" y2="462" stroke="#c9ced6" stroke-width="1.5"/>
+<line x1="180" y1="132" x2="180" y2="462" stroke="#c9ced6" stroke-width="1.5"/>
+<line x1="300" y1="132" x2="300" y2="462" stroke="#c9ced6" stroke-width="1.5"/>
+<line x1="420" y1="132" x2="420" y2="462" stroke="#3b82f6" stroke-width="1.5"/>
+<line x1="540" y1="132" x2="540" y2="462" stroke="#69b98c" stroke-width="1.5"/>
+<line x1="660" y1="132" x2="660" y2="462" stroke="#3b82f6" stroke-width="1.5"/>
+<line x1="780" y1="132" x2="780" y2="462" stroke="#c9ced6" stroke-width="1.5"/>
+<line x1="60" y1="156" x2="176" y2="156" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="118" y="148" text-anchor="middle">发送请求</text>
+<line x1="180" y1="194" x2="296" y2="194" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="238" y="186" text-anchor="middle">调度</text>
+<line x1="300" y1="232" x2="416" y2="232" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="358" y="224" text-anchor="middle">分配（组好的 batch）</text>
+<line x1="420" y1="270" x2="536" y2="270" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="478" y="262" text-anchor="middle">执行（模型前向）</text>
+<line x1="540" y1="308" x2="656" y2="308" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="598" y="300" text-anchor="middle">计算（attention/算子）★PR 主战场</text>
+<line x1="660" y1="346" x2="776" y2="346" stroke="#1a4ea8" stroke-width="2" marker-end="url(#seqA)"/>
+<text class="ts" x="718" y="338" text-anchor="middle">NPU 执行</text>
+<line x1="780" y1="382" x2="664" y2="382" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
+<text class="ts" x="718" y="374" text-anchor="middle">结果</text>
+<line x1="660" y1="418" x2="424" y2="418" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
+<text class="ts" x="542" y="410" text-anchor="middle">输出（logits）</text>
+<line x1="420" y1="454" x2="64" y2="454" stroke="#6b7280" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#seqB)"/>
+<text class="ts" x="242" y="446" text-anchor="middle">返回（token）</text>
+<rect class="node" x="8" y="470" width="104" height="38" rx="8"/><text class="tb" x="60" y="494" text-anchor="middle">用户</text>
+<rect class="node" x="128" y="470" width="104" height="38" rx="8"/><text class="tb" x="180" y="494" text-anchor="middle">Engine</text>
+<rect class="node" x="248" y="470" width="104" height="38" rx="8"/><text class="tb" x="300" y="494" text-anchor="middle">Scheduler</text>
+<rect class="node" x="368" y="470" width="104" height="38" rx="8"/><text class="tb" x="420" y="494" text-anchor="middle">Worker</text>
+<rect class="node" x="488" y="470" width="104" height="38" rx="8"/><text class="tb" x="540" y="494" text-anchor="middle">NPUPlatform</text>
+<rect class="node" x="608" y="470" width="104" height="38" rx="8"/><text class="tb" x="660" y="494" text-anchor="middle">Attention/Ops</text>
+<rect class="node" x="728" y="470" width="104" height="38" rx="8"/><text class="tb" x="780" y="494" text-anchor="middle">NPU 设备</text>
+<text class="th" x="420" y="560" text-anchor="middle">放大「计算」这一步：PR 改的就是它（每个 DecoderLayer × N 都走一遍）</text>
+<text class="tm" x="15" y="588">改前 · 每层白付两次集合通信 + 一次布局整理：</text>
+<rect class="wc" x="15" y="596" width="146" height="54" rx="8"/>
+<text class="tb" x="88" y="616" text-anchor="middle">① AllGather</text>
+<text class="ts" x="88" y="636" text-anchor="middle">分片 → 全局</text>
+<text x="88" y="666" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
+<path class="flow" d="M161 622 H177" marker-end="url(#seqC)"/>
+<rect class="wc" x="181" y="596" width="146" height="54" rx="8"/>
+<text class="tb" x="254" y="616" text-anchor="middle">② 切回本地段</text>
+<text class="ts" x="254" y="636" text-anchor="middle">刚聚的全局又切</text>
+<text x="254" y="666" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
+<path class="flow" d="M327 622 H343" marker-end="url(#seqC)"/>
+<rect class="node" x="347" y="596" width="146" height="54" rx="8"/>
+<text class="tb" x="420" y="616" text-anchor="middle">③ 取命中 KV</text>
+<text class="ts" x="420" y="636" text-anchor="middle">本职，保留</text>
+<path class="flow" d="M493 622 H509" marker-end="url(#seqC)"/>
+<rect class="node" x="513" y="596" width="146" height="54" rx="8"/>
+<text class="tb" x="586" y="616" text-anchor="middle">注意力计算</text>
+<text class="ts" x="586" y="636" text-anchor="middle">稀疏注意力</text>
+<path class="flow" d="M659 622 H675" marker-end="url(#seqC)"/>
+<rect class="wc" x="679" y="596" width="146" height="54" rx="8"/>
+<text class="tb" x="752" y="616" text-anchor="middle">④ ReduceScatter</text>
+<text class="ts" x="752" y="636" text-anchor="middle">全局 → 分片</text>
+<text x="752" y="666" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
+<text class="tm" x="15" y="706">改后 · ①②④ 消失，只剩本职取 KV 和一次收口（绿＝新增/变化）：</text>
+<rect class="ac" x="15" y="714" width="146" height="54" rx="8"/>
+<text class="tb" x="88" y="734" text-anchor="middle">⑤ 校验分片+清零</text>
+<text class="ts" x="88" y="754" text-anchor="middle">纯本地，无通信</text>
+<path class="flow" d="M161 740 H177" marker-end="url(#seqC)"/>
+<rect class="node" x="181" y="714" width="146" height="54" rx="8"/>
+<text class="tb" x="254" y="734" text-anchor="middle">③ 取命中 KV</text>
+<text class="ts" x="254" y="754" text-anchor="middle">本职，不变</text>
+<path class="flow" d="M327 740 H343" marker-end="url(#seqC)"/>
+<rect class="node" x="347" y="714" width="146" height="54" rx="8"/>
+<text class="tb" x="420" y="734" text-anchor="middle">注意力计算</text>
+<text class="ts" x="420" y="754" text-anchor="middle">同前</text>
+<path class="flow" d="M493 740 H509" marker-end="url(#seqC)"/>
+<rect class="ac" x="513" y="714" width="146" height="54" rx="8"/>
+<text class="tb" x="586" y="734" text-anchor="middle">⑥ all_to_all 换 head</text>
+<text class="ts" x="586" y="754" text-anchor="middle">o_proj → 单次 RS</text>
+<path class="flow" d="M659 740 H675" marker-end="url(#seqC)"/>
+<rect class="node" x="679" y="714" width="146" height="54" rx="8"/>
+<text class="tb" x="752" y="734" text-anchor="middle">交回本地分片</text>
+<text class="ts" x="752" y="754" text-anchor="middle">[219, 8192] → 下一层</text>
+<text class="tm" x="15" y="800">文件落点：改前/改后这四步全在 sfa_cp.py（车间）· 步骤 1 判定在 deepseek_mtp.py · 步骤 2 门卫 mla.py · 步骤 3 分流 sfa_v1.py —— 完整收/做/交见下页图 4</text>
 </svg>
-<div class="figcap">图 3 · 请求处理全链路：黄区（上游 vLLM）与绿区（vllm-ascend）以 Worker→NPUPlatform 的「执行」为界；把绿区的 Attention/Ops 再放大就是图 4</div>
+<div class="figcap">图 3 · 上：请求全链路，黄区（上游 vLLM）与绿区（vllm-ascend）以「执行」为界，★ 标 PR 文件落点；下：绿区「计算」一步的改前 vs 改后——①②④ 白做消失，只剩 ③⑥</div>
 </div>
 
 <div class="card">
