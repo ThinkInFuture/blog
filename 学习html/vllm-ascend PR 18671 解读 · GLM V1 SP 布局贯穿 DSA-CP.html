@@ -130,13 +130,23 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <tr><td>硬件实测环境</td><td><b>GLM-5.1 W8A8C8 + MTP=3，双 A3 节点，TP=16 DP=2，V1 runner，SP/DSA-CP 开启，max-num-seqs=12，max-num-batched-tokens=8192</b> —— 与我们的排查环境完全一致</td></tr>
 </table>
 
+<div class="kp w">
+<span class="kp-t">读前须知：四个名词 30 秒（更多缩写见文末第 8 章术语速查）</span>
+<ul>
+<li><b>TP（张量并行）</b>：把一层的权重/计算切到多张卡各算一块——本文 TP=16，即 16 卡一组；</li>
+<li><b>SP（序列并行）</b>：TP 组内再把输入序列横向切，每卡只拿一段 token——一段连续的 1/16；</li>
+<li><b>DSA-CP</b>：DeepSeek 稀疏注意力 + 上下文并行——注意力只算自己那段 token 的 Q，要的 KV 跨卡定点去取；</li>
+<li><b>混合批次</b>：一个 batch 里同时有 prefill（新 prompt 整段编码）和 decode（逐 token 生成）的请求。</li>
+</ul>
+</div>
+
 <div class="kp">
 <span class="kp-t">一句话总结</span>
 GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进 attention 前先把本地 token 分片 <b>AllGather 成全局</b>，DSA-CP 又把它<b>切回本地段</b>；算完再经全局布局 ReduceScatter 回来——每层、每个混合批次都白做一次"聚合→再切→散射"的布局往返。本 PR 让<b>同一份连续 TP token 分片</b>贯穿 Decoder Layer、MLA 包装层、DSA-CP attention 三个边界，通信只剩 attention 内部必须的一次 all-to-all + reduce-scatter。
 </div>
 
 <h2 id="s2">2. 问题：布局来回倒腾（改动前）</h2>
-<p>先理清三方角色：模型层（DecoderLayer）在 SP MoE 下以<b>本地 token 分片</b>工作（每卡只持全局 token 的 1/TP）；DSA-CP attention 天然也是<b>按 token 切卡</b>算的。两者布局本该一致，但原实现里对不上。</p>
+<p>先理清三方角色，关键是看懂 SP 怎么切。TP=16 的组里，3504 个 token（3500 的 prompt 对齐到 16 的倍数，多出的 4 个是 padding）按<b>连续段</b>横向切开——每卡分到 219 个，这就是模型层（DecoderLayer）手里的<b>本地 token 分片</b>。MoE / MLP 天然可切：各卡算各自那 219 个 token 的分片就行，谁也不需要别人的。<b>DSA-CP attention 同样按 token 切卡</b>：每卡只对自己那 219 个 token 的 Q 做注意力，缺的 KV 跨卡定点去取（③）。按理说模型层和 attention 拿的都是分片、布局本该一致，但原实现里对不上——老约定认为「attention 必须在全量 token 上算」，于是有了下面的 ①②④。</p>
 <p>图 1 左侧是业务主线（与并行无关的算子链），右侧是并行框架挂上去的通信步骤，本 PR 只动右侧。原路径的问题：框架在 LN→注意力之间先 <b>① AllGather</b> 聚成全局（[1,219,8192] → [1,3504,8192]）、attention 入口 <code>_prepare_native_hidden_states</code> 又 <b>② 切回本地段</b>，算完 O 投影输出全局布局、框架再 <b>④ ReduceScatter</b> 收回——<b>①②④ 全是无用功</b>，每层都来一遍；<b>③ 取命中 KV</b> 是 DSA-CP 本职通信。</p>
 
 <div class="card">
@@ -647,6 +657,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 
 <h3>4.4 models/deepseek_mtp.py —— 模型层直通与原生模型类</h3>
 <p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 第 3 层第 1 框（模型侧·总装，一次调用的起点）· 干活：选路（4 条件）+ 建层 + 直通链（省 ①④ 的发生地）</p>
+<p>先答一个容易疑惑的点：GLM 的模型改动为什么落在 <code>models/deepseek_mtp.py</code>？因为 GLM MoE DSA 复用 DeepSeekV2 的模型结构（同款 DecoderLayer 与 MTP 头），vllm-ascend 的昇腾版模型类就注册在这个文件里。</p>
 <p><b>AscendDSACPDecoderLayer</b>（继承 DeepseekV2DecoderLayer）：forward 开头判定 <code>input_is_sequence_parallel</code>（SP MoE + residual 非 None + <code>hidden.shape[0] != positions.shape[0]</code>，即本地分片数 ≠ 全局位置数）。满足且 attention 支持契约时，走直通链：</p>
 <pre>input_layernorm → self_attn.mla_attn.forward_sequence_parallel(positions, hidden, output_scale)
 → post_attention_layernorm → mlp(hidden, already_sequence_parallel=True)</pre>
