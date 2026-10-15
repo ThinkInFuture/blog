@@ -462,7 +462,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <rect class="wc" x="181" y="596" width="146" height="54" rx="8"/>
 <text class="tb" x="254" y="616" text-anchor="middle">② 切回本地段</text>
 <text class="ts" x="254" y="636" text-anchor="middle">刚聚的全局又切</text>
-<text x="254" y="666" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
+<text x="254" y="666" text-anchor="middle" font-size="10.5" font-weight="700" fill="#cf222e">白做，防错位由 ⑤ 接替</text>
 <path class="flow" d="M327 622 H343" marker-end="url(#seqC)"/>
 <rect class="node" x="347" y="596" width="146" height="54" rx="8"/>
 <text class="tb" x="420" y="616" text-anchor="middle">③ 取命中 KV</text>
@@ -475,8 +475,8 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <rect class="wc" x="679" y="596" width="146" height="54" rx="8"/>
 <text class="tb" x="752" y="616" text-anchor="middle">④ ReduceScatter</text>
 <text class="ts" x="752" y="636" text-anchor="middle">全局 → 分片</text>
-<text x="752" y="666" text-anchor="middle" font-size="11" font-weight="700" fill="#cf222e">白做</text>
-<text class="tm" x="15" y="706">改后 · ①②④ 消失，只剩本职取 KV 和一次收口（绿＝新增/变化）：</text>
+<text x="752" y="666" text-anchor="middle" font-size="10.5" font-weight="700" fill="#b45309">冗余：职责并入 ⑥</text>
+<text class="tm" x="15" y="706">改后 · ①② 省掉（防错位由 ⑤ 接替），④ 的归约并入 ⑥（绿＝新增/变化）：</text>
 <rect class="ac" x="15" y="714" width="146" height="54" rx="8"/>
 <text class="tb" x="88" y="734" text-anchor="middle">⑤ 校验分片+清零</text>
 <text class="ts" x="88" y="754" text-anchor="middle">纯本地，无通信</text>
@@ -498,7 +498,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="752" y="754" text-anchor="middle">[219, 8192] → 下一层</text>
 <text class="tm" x="15" y="800">文件落点：改前/改后这四步全在 sfa_cp.py（车间）· 步骤 1 判定在 deepseek_mtp.py · 步骤 2 门卫 mla.py · 步骤 3 分流 sfa_v1.py —— 完整收/做/交见下页图 4</text>
 </svg>
-<div class="figcap">图 3 · 上：请求全链路，黄区（上游 vLLM）与绿区（vllm-ascend）以「执行」为界，★ 标 PR 文件落点；下：绿区「计算」一步的改前 vs 改后——①②④ 白做消失，只剩 ③⑥</div>
+<div class="figcap">图 3 · 上：请求全链路，黄区（上游 vLLM）与绿区（vllm-ascend）以「执行」为界，★ 标 PR 文件落点；下：绿区「计算」一步的改前 vs 改后——①② 白做省掉，④ 并入 ⑥，只剩 ③⑥</div>
 </div>
 
 <div class="card">
