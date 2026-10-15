@@ -540,112 +540,162 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 
 <h3>4.1 你的十行，vllm-ascend 原本是怎么完成的</h3>
 <div class="card">
-<svg viewBox="0 0 840 830" role="img" aria-label="流水线图原本">
+<svg viewBox="0 0 920 1440" role="img" aria-label="流水线图原本">
 <defs><marker id="ahQ" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="28" text-anchor="middle">你的 attention → vllm-ascend 怎么完成它:左列实线是你代码的流向,虚线弧线指向它在昇腾里的落点</text>
-<text class="tm" x="125" y="54" text-anchor="middle" font-weight="700">你的 attention(样例代码)</text>
-<text class="tm" x="445" y="54" text-anchor="middle" font-weight="700">vllm-ascend 的实现流水线</text>
-<text class="tm" x="715" y="54" text-anchor="middle" font-weight="700">在哪个模块 · 门牌(最全)</text>
-<rect class="bc" x="20" y="70" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="97" text-anchor="middle" font-weight="700">L1·L2 投影</text>
-<text class="ts" x="125.0" y="121" text-anchor="middle">q=x@wq 等</text>
-<path class="flow" d="M125 154 V182" marker-end="url(#ahQ)"/>
-<rect class="bc" x="20" y="190" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="217" text-anchor="middle" font-weight="700">L3 RoPE 只转 Q/K</text>
-<text class="ts" x="125.0" y="241" text-anchor="middle">rotate 一半维度</text>
-<path class="flow" d="M125 274 V302" marker-end="url(#ahQ)"/>
-<rect class="bc" x="20" y="310" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="337" text-anchor="middle" font-weight="700">L4 KV Cache</text>
-<text class="ts" x="125.0" y="361" text-anchor="middle">cat 拼历史在本卡</text>
-<path class="flow" d="M125 394 V422" marker-end="url(#ahQ)"/>
-<rect class="bc" x="20" y="430" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="457" text-anchor="middle" font-weight="700">L5 GQA repeat</text>
-<text class="ts" x="125.0" y="481" text-anchor="middle">复用 KV 给 Q 头</text>
-<path class="flow" d="M125 514 V542" marker-end="url(#ahQ)"/>
-<rect class="bc" x="20" y="550" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="577" text-anchor="middle" font-weight="700">L6~L9 打分</text>
-<text class="ts" x="125.0" y="601" text-anchor="middle">遮罩→softmax→加权</text>
-<path class="flow" d="M125 634 V662" marker-end="url(#ahQ)"/>
-<rect class="bc" x="20" y="670" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="697" text-anchor="middle" font-weight="700">L10 输出投影</text>
-<text class="ts" x="125.0" y="721" text-anchor="middle">out @ wo</text>
-<rect class="node" x="330" y="70" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="85" text-anchor="middle" font-weight="700">层外壳发起 self_attn</text>
-<text class="ts" x="445.0" y="109" text-anchor="middle">门卫放行 → 后端</text>
-<text class="ts" x="445.0" y="133" text-anchor="middle">步3 联合低秩投影·步6 Q 投影</text>
-<path class="flow" d="M445 154 V182" marker-end="url(#ahQ)"/>
-<rect class="node" x="330" y="190" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="205" text-anchor="middle" font-weight="700">步4 K 侧 rmsnorm+rope</text>
-<text class="ts" x="445.0" y="229" text-anchor="middle">(同一算子内)</text>
-<text class="ts" x="445.0" y="253" text-anchor="middle">步6 Q 侧 rope——同一旋转</text>
-<path class="flow" d="M445 274 V302" marker-end="url(#ahQ)"/>
-<rect class="node" x="330" y="310" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="325" text-anchor="middle" font-weight="700">步4 按 slot 写本卡缓存</text>
-<text class="ts" x="445.0" y="349" text-anchor="middle">步7 全量写回</text>
-<text class="ts" x="445.0" y="373" text-anchor="middle">(slot_mapping 页表定位)</text>
-<path class="flow" d="M445 394 V422" marker-end="url(#ahQ)"/>
-<rect class="node" x="330" y="430" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="457" text-anchor="middle" font-weight="700">无此步</text>
-<text class="ts" x="445.0" y="481" text-anchor="middle">latent KV 天然全头共享</text>
-<path class="flow" d="M445 514 V542" marker-end="url(#ahQ)"/>
-<rect class="node" x="330" y="550" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="565" text-anchor="middle" font-weight="700">步8 稀疏注意力算子</text>
-<text class="ts" x="445.0" y="589" text-anchor="middle">只算 top-2048 块</text>
-<text class="ts" x="445.0" y="613" text-anchor="middle">数学原样</text>
-<path class="flow" d="M445 634 V662" marker-end="url(#ahQ)"/>
-<rect class="node" x="330" y="670" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="685" text-anchor="middle" font-weight="700">步9 o_proj 收口</text>
-<text class="ts" x="445.0" y="709" text-anchor="middle">(原路 :1384 直接投影)</text>
-<text class="ts" x="445.0" y="733" text-anchor="middle">交回层外壳→post LN→MoE</text>
-<rect class="node" x="610" y="70" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="73" text-anchor="middle" font-weight="700">models/ 层对象串 LN·十行·MoE</text>
-<text class="ts" x="715.0" y="97" text-anchor="middle">ops/ 门卫契约四查后放行</text>
-<text class="ts" x="715.0" y="121" text-anchor="middle">attention/ 步3:1576 联合低秩投影</text>
-<text class="ts" x="715.0" y="145" text-anchor="middle">步6:1614 Q 上投影</text>
-<path class="flow" d="M715 154 V182" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="190" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="193" text-anchor="middle" font-weight="700">attention/ :1595 K 侧</text>
-<text class="ts" x="715.0" y="217" text-anchor="middle">rmsnorm+rope 融进同一算子</text>
-<text class="ts" x="715.0" y="241" text-anchor="middle">attention/ :1616 Q 侧</text>
-<text class="ts" x="715.0" y="265" text-anchor="middle">rotate 数学与你的完全一致</text>
-<path class="flow" d="M715 274 V302" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="310" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="313" text-anchor="middle" font-weight="700">attention/ sfa_v1.py:1626</text>
-<text class="ts" x="715.0" y="337" text-anchor="middle">reshape_and_cache 页表定位</text>
-<text class="ts" x="715.0" y="361" text-anchor="middle">slot 指定每个 token 落哪格</text>
-<text class="ts" x="715.0" y="385" text-anchor="middle">页表代替整块 cat 追加</text>
-<path class="flow" d="M715 394 V422" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="430" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="433" text-anchor="middle" font-weight="700">attention/ MLA·DSA 特性</text>
-<text class="ts" x="715.0" y="457" text-anchor="middle">latent KV 天然全头共享</text>
-<text class="ts" x="715.0" y="481" text-anchor="middle">目的相同(省 KV)</text>
-<text class="ts" x="715.0" y="505" text-anchor="middle">手段不同,无独立门牌</text>
-<path class="flow" d="M715 514 V542" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="550" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="553" text-anchor="middle" font-weight="700">attention/ :1683 → :1171</text>
-<text class="ts" x="715.0" y="577" text-anchor="middle">QKᵀ→softmax→·V 原样</text>
-<text class="ts" x="715.0" y="601" text-anchor="middle">遮罩在算子内部处理</text>
-<text class="ts" x="715.0" y="625" text-anchor="middle">融成一个昇腾硬件算子</text>
-<path class="flow" d="M715 634 V662" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="670" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="673" text-anchor="middle" font-weight="700">attention/ :1695</text>
-<text class="ts" x="715.0" y="697" text-anchor="middle">原路:直接投影(:1384)</text>
-<text class="ts" x="715.0" y="721" text-anchor="middle">SP 场景另有 ⑥ 两路收口</text>
-<text class="ts" x="715.0" y="745" text-anchor="middle">(见下一张 PR 流水线图)</text>
-<path class="dash" d="M230 100 C285 100,295 116,336 116" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 116 C580 116,586 132,606 132" marker-end="url(#ahQ)"/>
-<path class="dash" d="M230 220 C285 220,295 236,336 236" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 236 C580 236,586 252,606 252" marker-end="url(#ahQ)"/>
-<path class="dash" d="M230 340 C285 340,295 356,336 356" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 356 C580 356,586 372,606 372" marker-end="url(#ahQ)"/>
-<path class="dash" d="M230 460 C285 460,295 476,336 476" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 476 C580 476,586 492,606 492" marker-end="url(#ahQ)"/>
-<path class="dash" d="M230 580 C285 580,295 596,336 596" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 596 C580 596,586 612,606 612" marker-end="url(#ahQ)"/>
-<path class="dash" d="M230 700 C285 700,295 716,336 716" marker-end="url(#ahQ)"/>
-<path class="dash" d="M560 716 C580 716,586 732,606 732" marker-end="url(#ahQ)"/>
-<text class="tm" x="20" y="790">读法:左列实线 = 你的代码自上而下;弯曲虚线 = 每一步在 vllm-ascend 里的落点;右列门牌最全(模块 / 文件:行号 / 为什么)。</text>
-<text class="tm" x="20" y="816">此时还没有 PR 的事——这就是 vllm-ascend 平时跑你 attention 的样子。</text>
+<text class="th" x="460" y="28" text-anchor="middle">你的 attention → vllm-ascend 怎么完成它:左列实线是你十行的流向,虚线弧线指向它在昇腾里的落点</text>
+<text class="tm" x="135" y="54" text-anchor="middle" font-weight="700">你的 attention(样例代码)</text>
+<text class="tm" x="505" y="54" text-anchor="middle" font-weight="700">vllm-ascend 的实现流水线</text>
+<text class="tm" x="795" y="54" text-anchor="middle" font-weight="700">在哪个模块 · 门牌(最全)</text>
+<rect class="bc" x="20" y="70" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="102" text-anchor="middle" font-weight="700">L1 Q 投影</text>
+<text class="ts" x="135.0" y="128" text-anchor="middle">q = x @ wq</text>
+<path class="flow" d="M135 166 V196" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="200" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="232" text-anchor="middle" font-weight="700">L2 K/V 投影</text>
+<text class="ts" x="135.0" y="258" text-anchor="middle">k=x@wk, v=x@wv</text>
+<path class="flow" d="M135 296 V326" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="330" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="362" text-anchor="middle" font-weight="700">L3 RoPE</text>
+<text class="ts" x="135.0" y="388" text-anchor="middle">只转 Q、K</text>
+<path class="flow" d="M135 426 V456" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="460" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="492" text-anchor="middle" font-weight="700">L4 KV Cache</text>
+<text class="ts" x="135.0" y="518" text-anchor="middle">cat 追加历史</text>
+<path class="flow" d="M135 556 V586" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="590" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="622" text-anchor="middle" font-weight="700">L5 GQA repeat</text>
+<text class="ts" x="135.0" y="648" text-anchor="middle">复用 KV 给 Q 头</text>
+<path class="flow" d="M135 686 V716" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="720" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="752" text-anchor="middle" font-weight="700">L6 打分</text>
+<text class="ts" x="135.0" y="778" text-anchor="middle">q @ kᵀ/√dk</text>
+<path class="flow" d="M135 816 V846" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="850" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="882" text-anchor="middle" font-weight="700">L7 因果遮罩</text>
+<text class="ts" x="135.0" y="908" text-anchor="middle">遮住未来 token</text>
+<path class="flow" d="M135 946 V976" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="980" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1012" text-anchor="middle" font-weight="700">L8 softmax</text>
+<text class="ts" x="135.0" y="1038" text-anchor="middle">归一化</text>
+<path class="flow" d="M135 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="1110" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1142" text-anchor="middle" font-weight="700">L9 加权和</text>
+<text class="ts" x="135.0" y="1168" text-anchor="middle">w @ v_full</text>
+<path class="flow" d="M135 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="1240" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1272" text-anchor="middle" font-weight="700">L10 输出投影</text>
+<text class="ts" x="135.0" y="1298" text-anchor="middle">out @ wo</text>
+<rect class="node" x="380" y="70" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="102" text-anchor="middle" font-weight="700">层外壳发起 self_attn</text>
+<text class="ts" x="505.0" y="128" text-anchor="middle">门卫放行 → 后端</text>
+<path class="flow" d="M505 166 V196" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="200" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="245" text-anchor="middle" font-weight="700">步3 Q/KV 联合低秩投影(KV 段)</text>
+<path class="flow" d="M505 296 V326" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="330" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="375" text-anchor="middle" font-weight="700">步4 K 侧 rope · 步6 Q 侧 rope</text>
+<path class="flow" d="M505 426 V456" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="460" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="505" text-anchor="middle" font-weight="700">步4 写本卡缓存 · 步7 全量写回</text>
+<path class="flow" d="M505 556 V586" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="590" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="635" text-anchor="middle" font-weight="700">无此步(latent KV 全头共享)</text>
+<path class="flow" d="M505 686 V716" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="720" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="765" text-anchor="middle" font-weight="700">步8 稀疏注意力算子(QKᵀ)</text>
+<path class="flow" d="M505 816 V846" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="850" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="895" text-anchor="middle" font-weight="700">步8 内:causal 遮罩处理</text>
+<path class="flow" d="M505 946 V976" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="980" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1025" text-anchor="middle" font-weight="700">步8 内:softmax 归一化</text>
+<path class="flow" d="M505 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="1110" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1155" text-anchor="middle" font-weight="700">步8 内:·V 加权求和</text>
+<path class="flow" d="M505 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="1240" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1285" text-anchor="middle" font-weight="700">步9 收口(o_proj)→交回层外壳</text>
+<rect class="node" x="690" y="70" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="76" text-anchor="middle" font-weight="700">attention/ 步3:1576</text>
+<text class="ts" x="795.0" y="102" text-anchor="middle">(Q 低秩段)· 步6:1614</text>
+<text class="ts" x="795.0" y="128" text-anchor="middle">Q 上投影</text>
+<text class="ts" x="795.0" y="154" text-anchor="middle">矩阵乘原样,拆低秩两段</text>
+<path class="flow" d="M795 166 V196" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="200" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="206" text-anchor="middle" font-weight="700">attention/ 步3(KV 段)</text>
+<text class="ts" x="795.0" y="232" text-anchor="middle">步4 :1595 exec_kv</text>
+<text class="ts" x="795.0" y="258" text-anchor="middle">投影+rmsnorm+写cache</text>
+<text class="ts" x="795.0" y="284" text-anchor="middle">融成一个昇腾算子</text>
+<path class="flow" d="M795 296 V326" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="330" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="336" text-anchor="middle" font-weight="700">attention/ :1595(K 侧)</text>
+<text class="ts" x="795.0" y="362" text-anchor="middle">:1616(Q 侧)</text>
+<text class="ts" x="795.0" y="388" text-anchor="middle">同一旋转,没变</text>
+<text class="ts" x="795.0" y="414" text-anchor="middle">融进算子,数学一致</text>
+<path class="flow" d="M795 426 V456" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="460" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="466" text-anchor="middle" font-weight="700">attention/ :1626</text>
+<text class="ts" x="795.0" y="492" text-anchor="middle">reshape_and_cache</text>
+<text class="ts" x="795.0" y="518" text-anchor="middle">slot 页表逐 token 定位</text>
+<text class="ts" x="795.0" y="544" text-anchor="middle">代替整块 cat 追加</text>
+<path class="flow" d="M795 556 V586" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="590" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="596" text-anchor="middle" font-weight="700">attention/ MLA·DSA 特性</text>
+<text class="ts" x="795.0" y="622" text-anchor="middle">latent KV 全头共享</text>
+<text class="ts" x="795.0" y="648" text-anchor="middle">目的相同(省 KV)</text>
+<text class="ts" x="795.0" y="674" text-anchor="middle">手段不同,无独立步骤</text>
+<path class="flow" d="M795 686 V716" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="720" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="726" text-anchor="middle" font-weight="700">attention/ 步8 :1683 内</text>
+<text class="ts" x="795.0" y="752" text-anchor="middle">QKᵀ/√dk 原样</text>
+<text class="ts" x="795.0" y="778" text-anchor="middle">只在 top-2048 块上算</text>
+<text class="ts" x="795.0" y="804" text-anchor="middle">稀疏,不扫全量历史</text>
+<path class="flow" d="M795 816 V846" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="850" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="856" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="882" text-anchor="middle">causal 遮罩由算子处理</text>
+<text class="ts" x="795.0" y="908" text-anchor="middle">prefill 生效</text>
+<text class="ts" x="795.0" y="934" text-anchor="middle">decode 无需遮罩</text>
+<path class="flow" d="M795 946 V976" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="980" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="986" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1012" text-anchor="middle">softmax 原样</text>
+<text class="ts" x="795.0" y="1038" text-anchor="middle">归一化没变</text>
+<text class="ts" x="795.0" y="1064" text-anchor="middle">数值在算子内部完成</text>
+<path class="flow" d="M795 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="1110" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="1116" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1142" text-anchor="middle">·V 加权原样</text>
+<text class="ts" x="795.0" y="1168" text-anchor="middle">输出 [219,全头]</text>
+<text class="ts" x="795.0" y="1194" text-anchor="middle">等待收口</text>
+<path class="flow" d="M795 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="1240" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="1246" text-anchor="middle" font-weight="700">attention/ :1695</text>
+<text class="ts" x="795.0" y="1272" text-anchor="middle">o_proj 原路:直接投影</text>
+<text class="ts" x="795.0" y="1298" text-anchor="middle">SP 场景另有 ⑥ 两路</text>
+<text class="ts" x="795.0" y="1324" text-anchor="middle">(见 PR 流水线图)</text>
+<path class="dash" d="M250 104 C310 104,320 122,376 122" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 122 C652 122,658 138,686 138" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 234 C310 234,320 252,376 252" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 252 C652 252,658 268,686 268" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 364 C310 364,320 382,376 382" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 382 C652 382,658 398,686 398" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 494 C310 494,320 512,376 512" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 512 C652 512,658 528,686 528" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 624 C310 624,320 642,376 642" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 642 C652 642,658 658,686 658" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 754 C310 754,320 772,376 772" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 772 C652 772,658 788,686 788" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 884 C310 884,320 902,376 902" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 902 C652 902,658 918,686 918" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1014 C310 1014,320 1032,376 1032" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1032 C652 1032,658 1048,686 1048" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1144 C310 1144,320 1162,376 1162" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1162 C652 1162,658 1178,686 1178" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1274 C310 1274,320 1292,376 1292" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1292 C652 1292,658 1308,686 1308" marker-end="url(#ahQ)"/>
+<text class="tm" x="20" y="1386">读法:左列实线 = 你的十行自上而下,一行一格、零省略;弯曲虚线 = 每一行在 vllm-ascend 里的落点;右列门牌最全(模块 / 文件:行号 / 为什么)。</text>
+<text class="tm" x="20" y="1414">此时还没有 PR 的事——这就是 vllm-ascend 平时跑你 attention 的样子。</text>
 </svg>
 </div>
 <div class="figcap">流水线图 · 原本：你的十行在 vllm-ascend 里的完成过程（没有这次 PR 时的样子）</div>
@@ -743,111 +793,111 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
         return hidden_states, residual</pre>
 
 <div class="card">
-<svg viewBox="0 0 840 830" role="img" aria-label="流水线图PR">
+<svg viewBox="0 0 920 920" role="img" aria-label="流水线图PR">
 <defs><marker id="ahQ2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="28" text-anchor="middle">这次 PR 改了什么:左列实线是原本的流向,虚线弧线指向 PR 的做法,右列解释最全</text>
-<text class="tm" x="125" y="54" text-anchor="middle" font-weight="700">vllm-ascend 原本(开 SP+DSA-CP)</text>
-<text class="tm" x="445" y="54" text-anchor="middle" font-weight="700">这次 PR 的代码 / 做法</text>
-<text class="tm" x="715" y="54" text-anchor="middle" font-weight="700">解释(最全)</text>
-<rect class="wc" x="20" y="70" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="97" text-anchor="middle" font-weight="700">层外壳:① AG 聚全量</text>
-<text class="ts" x="125.0" y="121" text-anchor="middle">→attn→④ RS 散回(每层)</text>
-<path class="flow" d="M125 154 V182" marker-end="url(#ahQ)"/>
-<rect class="wc" x="20" y="190" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="217" text-anchor="middle" font-weight="700">输入:上游喂全量</text>
-<text class="ts" x="125.0" y="241" text-anchor="middle">后端步2 切段(②)</text>
-<path class="flow" d="M125 274 V302" marker-end="url(#ahQ)"/>
-<rect class="wc" x="20" y="310" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="337" text-anchor="middle" font-weight="700">KV:跨卡拼全量</text>
-<text class="ts" x="125.0" y="361" text-anchor="middle">每卡全存(步5/步7)</text>
-<path class="flow" d="M125 394 V422" marker-end="url(#ahQ)"/>
-<rect class="wc" x="20" y="430" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="457" text-anchor="middle" font-weight="700">稀疏注意力(步8)</text>
-<text class="ts" x="125.0" y="481" text-anchor="middle">只在自己 token 的 Q 上算</text>
-<path class="flow" d="M125 514 V542" marker-end="url(#ahQ)"/>
-<rect class="wc" x="20" y="550" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="577" text-anchor="middle" font-weight="700">收口:o_proj 直算</text>
-<text class="ts" x="125.0" y="601" text-anchor="middle">(步9 原路,全量投影)</text>
-<path class="flow" d="M125 634 V662" marker-end="url(#ahQ)"/>
-<rect class="wc" x="20" y="670" width="210" height="84" rx="10"/>
-<text class="ts" x="125.0" y="697" text-anchor="middle" font-weight="700">闸门不过走老路</text>
-<text class="ts" x="125.0" y="721" text-anchor="middle">(行为 = 改前)</text>
-<rect class="bc" x="330" y="70" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="85" text-anchor="middle" font-weight="700">层直通:AscendDSACP-</text>
-<text class="ts" x="445.0" y="109" text-anchor="middle">DecoderLayer 分片直进</text>
-<text class="ts" x="445.0" y="133" text-anchor="middle">(回退三条件)</text>
-<path class="flow" d="M445 154 V182" marker-end="url(#ahQ)"/>
-<rect class="bc" x="330" y="190" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="205" text-anchor="middle" font-weight="700">⑤ 新增:校验分片边界+清零</text>
-<text class="ts" x="445.0" y="229" text-anchor="middle">只查不切</text>
-<text class="ts" x="445.0" y="253" text-anchor="middle">(四项断言)</text>
-<path class="flow" d="M445 274 V302" marker-end="url(#ahQ)"/>
-<rect class="bc" x="330" y="310" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="325" text-anchor="middle" font-weight="700">不变:③ 跨卡取命中 KV</text>
-<text class="ts" x="445.0" y="349" text-anchor="middle">每卡都存全量</text>
-<text class="ts" x="445.0" y="373" text-anchor="middle">(下层直接用)</text>
-<path class="flow" d="M445 394 V422" marker-end="url(#ahQ)"/>
-<rect class="bc" x="330" y="430" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="457" text-anchor="middle" font-weight="700">不变:QKᵀ→softmax→·V</text>
-<text class="ts" x="445.0" y="481" text-anchor="middle">十行数学零改动</text>
-<path class="flow" d="M445 514 V542" marker-end="url(#ahQ)"/>
-<rect class="bc" x="330" y="550" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="565" text-anchor="middle" font-weight="700">⑥ 新增:两路收口</text>
-<text class="ts" x="445.0" y="589" text-anchor="middle">路A 全权重零通信</text>
-<text class="ts" x="445.0" y="613" text-anchor="middle">路B all_to_all+单次RS</text>
-<path class="flow" d="M445 634 V662" marker-end="url(#ahQ)"/>
-<rect class="bc" x="330" y="670" width="230" height="84" rx="10"/>
-<text class="ts" x="445.0" y="697" text-anchor="middle" font-weight="700">闸门:类4条件→契约四查</text>
-<text class="ts" x="445.0" y="721" text-anchor="middle">→后端契约四选一</text>
-<rect class="node" x="610" y="70" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="73" text-anchor="middle" font-weight="700">新类住 models/</text>
-<text class="ts" x="715.0" y="97" text-anchor="middle">(deepseek_mtp.py)</text>
-<text class="ts" x="715.0" y="121" text-anchor="middle">①聚了又切 = 白做,拆掉</text>
-<text class="ts" x="715.0" y="145" text-anchor="middle">三查不过走老路,行为不变</text>
-<path class="flow" d="M715 154 V182" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="190" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="193" text-anchor="middle" font-weight="700">sfa_cp.py(车间模块)</text>
-<text class="ts" x="715.0" y="217" text-anchor="middle">断言:token/pad/start/end</text>
-<text class="ts" x="715.0" y="241" text-anchor="middle">与本 rank 对齐,错位抛错</text>
-<text class="ts" x="715.0" y="265" text-anchor="middle">clone 后清零,不碰 residual</text>
-<path class="flow" d="M715 274 V302" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="310" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="313" text-anchor="middle" font-weight="700">attention/ 本职通信</text>
-<text class="ts" x="715.0" y="337" text-anchor="middle">③ 是 DSA-CP 存在的理由</text>
-<text class="ts" x="715.0" y="361" text-anchor="middle">PR 一行不碰</text>
-<text class="ts" x="715.0" y="385" text-anchor="middle">——它本来就是对的</text>
-<path class="flow" d="M715 394 V422" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="430" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="433" text-anchor="middle" font-weight="700">attention/ :1683</text>
-<text class="ts" x="715.0" y="457" text-anchor="middle">只算 indexer 选的</text>
-<text class="ts" x="715.0" y="481" text-anchor="middle">top-2048 块</text>
-<text class="ts" x="715.0" y="505" text-anchor="middle">遮罩在算子内部</text>
-<path class="flow" d="M715 514 V542" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="550" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="553" text-anchor="middle" font-weight="700">sfa_cp.py :507 起</text>
-<text class="ts" x="715.0" y="577" text-anchor="middle">16 卡各算一段</text>
-<text class="ts" x="715.0" y="601" text-anchor="middle">归约只做一次</text>
-<text class="ts" x="715.0" y="625" text-anchor="middle">FP16 先乘 output_scale</text>
-<path class="flow" d="M715 634 V662" marker-end="url(#ahQ)"/>
-<rect class="node" x="610" y="670" width="210" height="84" rx="10"/>
-<text class="ts" x="715.0" y="673" text-anchor="middle" font-weight="700">任何一级不满足</text>
-<text class="ts" x="715.0" y="697" text-anchor="middle">整条链回左列老路</text>
-<text class="ts" x="715.0" y="721" text-anchor="middle">4.6 的回退矩阵单测</text>
-<text class="ts" x="715.0" y="745" text-anchor="middle">逐场景钉死</text>
-<path class="dash" d="M230 100 C285 100,295 116,336 116" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 116 C580 116,586 132,606 132" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M230 220 C285 220,295 236,336 236" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 236 C580 236,586 252,606 252" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M230 340 C285 340,295 356,336 356" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 356 C580 356,586 372,606 372" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M230 460 C285 460,295 476,336 476" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 476 C580 476,586 492,606 492" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M230 580 C285 580,295 596,336 596" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 596 C580 596,586 612,606 612" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M230 700 C285 700,295 716,336 716" marker-end="url(#ahQ2)"/>
-<path class="dash" d="M560 716 C580 716,586 732,606 732" marker-end="url(#ahQ2)"/>
-<text class="tm" x="20" y="790">读法:左列实线 = 原本每一步;弯曲虚线 = PR 在这一步动了什么(或为什么不动);右列解释最全(模块 / 文件 / 行号 / 细节)。</text>
-<text class="tm" x="20" y="816">FP16:output_scale = 1/routed_scaling_factor 在归约前乘,第 0 层 residual 同步缩放——与上游防溢出语义逐位对齐。</text>
+<text class="th" x="460" y="28" text-anchor="middle">这次 PR 改了什么:左列实线是原本的流向,虚线弧线指向 PR 的做法,右列解释最全</text>
+<text class="tm" x="135" y="54" text-anchor="middle" font-weight="700">vllm-ascend 原本(开 SP+DSA-CP)</text>
+<text class="tm" x="505" y="54" text-anchor="middle" font-weight="700">这次 PR 的代码 / 做法</text>
+<text class="tm" x="795" y="54" text-anchor="middle" font-weight="700">解释(最全)</text>
+<rect class="wc" x="20" y="70" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="102" text-anchor="middle" font-weight="700">层外壳:① AG 聚全量</text>
+<text class="ts" x="135.0" y="128" text-anchor="middle">→attn→④ RS 散回(每层)</text>
+<path class="flow" d="M135 166 V196" marker-end="url(#ahQ)"/>
+<rect class="wc" x="20" y="200" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="232" text-anchor="middle" font-weight="700">输入:上游喂全量</text>
+<text class="ts" x="135.0" y="258" text-anchor="middle">后端步2 切段(②)</text>
+<path class="flow" d="M135 296 V326" marker-end="url(#ahQ)"/>
+<rect class="wc" x="20" y="330" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="362" text-anchor="middle" font-weight="700">KV:跨卡拼全量</text>
+<text class="ts" x="135.0" y="388" text-anchor="middle">每卡全存(步5/步7)</text>
+<path class="flow" d="M135 426 V456" marker-end="url(#ahQ)"/>
+<rect class="wc" x="20" y="460" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="492" text-anchor="middle" font-weight="700">稀疏注意力(步8)</text>
+<text class="ts" x="135.0" y="518" text-anchor="middle">只在自己 token 的 Q 上算</text>
+<path class="flow" d="M135 556 V586" marker-end="url(#ahQ)"/>
+<rect class="wc" x="20" y="590" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="622" text-anchor="middle" font-weight="700">收口:o_proj 直算</text>
+<text class="ts" x="135.0" y="648" text-anchor="middle">(步9 原路,全量投影)</text>
+<path class="flow" d="M135 686 V716" marker-end="url(#ahQ)"/>
+<rect class="wc" x="20" y="720" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="752" text-anchor="middle" font-weight="700">闸门不过走老路</text>
+<text class="ts" x="135.0" y="778" text-anchor="middle">(行为 = 改前)</text>
+<rect class="bc" x="380" y="70" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="89" text-anchor="middle" font-weight="700">层直通:AscendDSACP-</text>
+<text class="ts" x="505.0" y="115" text-anchor="middle">DecoderLayer 分片直进</text>
+<text class="ts" x="505.0" y="141" text-anchor="middle">(回退三条件)</text>
+<path class="flow" d="M505 166 V196" marker-end="url(#ahQ)"/>
+<rect class="bc" x="380" y="200" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="219" text-anchor="middle" font-weight="700">⑤ 新增:校验分片边界+清零</text>
+<text class="ts" x="505.0" y="245" text-anchor="middle">只查不切</text>
+<text class="ts" x="505.0" y="271" text-anchor="middle">(四项断言)</text>
+<path class="flow" d="M505 296 V326" marker-end="url(#ahQ)"/>
+<rect class="bc" x="380" y="330" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="349" text-anchor="middle" font-weight="700">不变:③ 跨卡取命中 KV</text>
+<text class="ts" x="505.0" y="375" text-anchor="middle">每卡都存全量</text>
+<text class="ts" x="505.0" y="401" text-anchor="middle">(下层直接用)</text>
+<path class="flow" d="M505 426 V456" marker-end="url(#ahQ)"/>
+<rect class="bc" x="380" y="460" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="492" text-anchor="middle" font-weight="700">不变:QKᵀ→softmax→·V</text>
+<text class="ts" x="505.0" y="518" text-anchor="middle">十行数学零改动</text>
+<path class="flow" d="M505 556 V586" marker-end="url(#ahQ)"/>
+<rect class="bc" x="380" y="590" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="609" text-anchor="middle" font-weight="700">⑥ 新增:两路收口</text>
+<text class="ts" x="505.0" y="635" text-anchor="middle">路A 全权重零通信</text>
+<text class="ts" x="505.0" y="661" text-anchor="middle">路B all_to_all+单次RS</text>
+<path class="flow" d="M505 686 V716" marker-end="url(#ahQ)"/>
+<rect class="bc" x="380" y="720" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="752" text-anchor="middle" font-weight="700">闸门:类4条件→契约四查</text>
+<text class="ts" x="505.0" y="778" text-anchor="middle">→后端契约四选一</text>
+<rect class="node" x="690" y="70" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="76" text-anchor="middle" font-weight="700">新类住 models/</text>
+<text class="ts" x="795.0" y="102" text-anchor="middle">(deepseek_mtp.py)</text>
+<text class="ts" x="795.0" y="128" text-anchor="middle">①聚了又切 = 白做,拆掉</text>
+<text class="ts" x="795.0" y="154" text-anchor="middle">三查不过走老路,行为不变</text>
+<path class="flow" d="M795 166 V196" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="200" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="206" text-anchor="middle" font-weight="700">sfa_cp.py(车间模块)</text>
+<text class="ts" x="795.0" y="232" text-anchor="middle">断言:token/pad/start/end</text>
+<text class="ts" x="795.0" y="258" text-anchor="middle">与本 rank 对齐,错位抛错</text>
+<text class="ts" x="795.0" y="284" text-anchor="middle">clone 后清零,不碰 residual</text>
+<path class="flow" d="M795 296 V326" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="330" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="336" text-anchor="middle" font-weight="700">attention/ 本职通信</text>
+<text class="ts" x="795.0" y="362" text-anchor="middle">③ 是 DSA-CP 存在的理由</text>
+<text class="ts" x="795.0" y="388" text-anchor="middle">PR 一行不碰</text>
+<text class="ts" x="795.0" y="414" text-anchor="middle">——它本来就是对的</text>
+<path class="flow" d="M795 426 V456" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="460" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="466" text-anchor="middle" font-weight="700">attention/ :1683</text>
+<text class="ts" x="795.0" y="492" text-anchor="middle">只算 indexer 选的</text>
+<text class="ts" x="795.0" y="518" text-anchor="middle">top-2048 块</text>
+<text class="ts" x="795.0" y="544" text-anchor="middle">遮罩在算子内部</text>
+<path class="flow" d="M795 556 V586" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="590" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="596" text-anchor="middle" font-weight="700">sfa_cp.py :507 起</text>
+<text class="ts" x="795.0" y="622" text-anchor="middle">16 卡各算一段</text>
+<text class="ts" x="795.0" y="648" text-anchor="middle">归约只做一次</text>
+<text class="ts" x="795.0" y="674" text-anchor="middle">FP16 先乘 output_scale</text>
+<path class="flow" d="M795 686 V716" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="720" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="726" text-anchor="middle" font-weight="700">任何一级不满足</text>
+<text class="ts" x="795.0" y="752" text-anchor="middle">整条链回左列老路</text>
+<text class="ts" x="795.0" y="778" text-anchor="middle">4.6 的回退矩阵单测</text>
+<text class="ts" x="795.0" y="804" text-anchor="middle">逐场景钉死</text>
+<path class="dash" d="M250 104 C310 104,320 122,376 122" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 122 C652 122,658 138,686 138" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 234 C310 234,320 252,376 252" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 252 C652 252,658 268,686 268" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 364 C310 364,320 382,376 382" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 382 C652 382,658 398,686 398" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 494 C310 494,320 512,376 512" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 512 C652 512,658 528,686 528" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 624 C310 624,320 642,376 642" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 642 C652 642,658 658,686 658" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 754 C310 754,320 772,376 772" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 772 C652 772,658 788,686 788" marker-end="url(#ahQ)"/>
+<text class="tm" x="20" y="862">读法:左列实线 = 原本每一步;弯曲虚线 = PR 在这一步动了什么(或为什么不动);右列解释最全(模块 / 文件 / 行号 / 细节)。</text>
+<text class="tm" x="20" y="890">FP16:output_scale = 1/routed_scaling_factor 在归约前乘,第 0 层 residual 同步缩放——与上游防溢出语义逐位对齐。</text>
 </svg>
 </div>
 <div class="figcap">流水线图 · 这次 PR：左列原本（黄 = 问题），中列 PR 做法（粗体 = 改动），右列解释；灰行 = 闸门兜底，不支持就回老路</div>
