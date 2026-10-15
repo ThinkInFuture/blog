@@ -160,7 +160,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">36</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">39</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -168,15 +168,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">36 篇 · 8 个专题</div>
+<div class="sec-badge">39 篇 · 8 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">36</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">39</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">7</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">7</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">10</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">4</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
@@ -185,7 +185,10 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <ul class="list" id="learningList">
 <li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vLLM-Ascend 特性地图解读 · L0L1L2划分与源码对照.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vLLM-Ascend 特性地图解读：L0/L1/L2 划分 × 源码对照<span class="li-tag">vLLM 源码</span></span><span class="li-desc">特性表全景逐格落到代码目录与参数：两条线的归属判断、三个特性的功能链分解、缩写直答与 params 对照</span></span></a></li>
 <li class="li" data-topic="hw" data-ts="20261015"><a href="学习html/昇腾A5组网形态详解-Atlas650E三种拓扑.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">昇腾 A5 组网形态详解：Atlas 650E 的三种拓扑对比<span class="li-tag">硬件架构</span></span><span class="li-desc">机内 8 卡灵衢 UB 背板 Full-Mesh；RoCE / FM16 灵衢直连 / UBoE 三种机间拓扑：是不是超节点，npu-smi 一条命令判定</span></span></a></li>
-<li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vllm-ascend PR 18671 解读 · GLM V1 SP 布局贯穿 DSA-CP.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vllm-ascend PR 18671 解读 · GLM V1 SP 布局贯穿 DSA-CP<span class="li-tag">vLLM 源码</span></span><span class="li-desc">让 GLM V1 的 SP token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter（文内附 PR 地址）</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vllm-ascend PR 18671 解读 · C版从你的attention出发.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vllm-ascend PR 18671 解读 · C 版试稿：从你的 attention 十行出发<span class="li-tag">vLLM 源码 · 试稿</span></span><span class="li-desc">从你认识的 attention 十行（L1~L10）出发，把 PR 每个文件一行一行挂回你的行号：数学一行没少，变的是 L4/L6/L10 三处</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vllm-ascend PR 18671 解读 · A版六层下探.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vllm-ascend PR 18671 解读 · A 版试稿：六层下探<span class="li-tag">vLLM 源码 · 试稿</span></span><span class="li-desc">沿程序真实执行顺序逐层放大：引擎→Worker→Runner→模型层两条 forward→门卫→后端九步流水线，每层带真实行号</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vllm-ascend PR 18671 解读 · B版改前改后对照.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vllm-ascend PR 18671 解读 · B 版试稿：改前改后逐行对照<span class="li-tag">vLLM 源码 · 试稿</span></span><span class="li-desc">两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步两条路</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261015"><a href="学习html/vllm-ascend PR 18671 解读 · GLM V1 SP 布局贯穿 DSA-CP.html"><span class="li-date">2026-10-15</span><span class="li-main"><span class="li-title">vllm-ascend PR 18671 解读 · GLM V1 SP 布局贯穿 DSA-CP<span class="li-tag">vLLM 源码 · 现役版</span></span><span class="li-desc">让 GLM V1 的 SP token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter（另有上方 A/B/C 三版试稿同日上线供对比）</span></span></a></li>
 <li class="li" data-topic="accel" data-ts="20261010"><a href="学习html/DeepSeek-V4.1固定窗口压缩的相位敏感性.html"><span class="li-date">2026-10-10</span><span class="li-main"><span class="li-title">DeepSeek V4.1 为何回退 V4 的固定窗口压缩？一个 token 位移，召回从 50% 掉到 0<span class="li-tag">推理加速</span></span><span class="li-desc">分块 KV 压缩的相位敏感性：6 token 密码实测 50%→0 的周期坑，以及 V4.1 用 CSA2 + SWA 的解法</span></span></a></li>
 <li class="li" data-topic="theory" data-ts="20260926"><a href="学习html/通用大模型架构与形状流转.html"><span class="li-date">2026-09-26</span><span class="li-main"><span class="li-title">通用大模型架构详解：一次前向的形状流转<span class="li-tag">基础理论</span></span><span class="li-desc">基础篇 v1：Embedding + N 层 decoder block + LM head 的完整形状流转，注意力/FFN/KV Cache 逐段拆解</span></span></a></li>
 <li class="li" data-topic="accel" data-ts="20260926"><a href="学习html/Kev 架构详解（含源码）.html"><span class="li-date">2026-09-26</span><span class="li-main"><span class="li-title">Kev 架构详解（含源码）<span class="li-tag">推理加速</span></span><span class="li-desc">为什么不用自回归：Kev 的整体架构、数据格式与指针头、训练与推理流程，以及 act 覆盖率的结构性短板</span></span></a></li>
@@ -220,7 +223,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <li class="li" data-topic="soul" data-ts="20260919"><a href="学习html/RSI-RL关键问题QA.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">RSI/RL 关键问题 Q&amp;A<span class="li-tag">灵魂拷问</span></span><span class="li-desc">12 个关键拷问：GRPO 方差、抗刷分奖励、KL 监控、防退化与自我修改安全——项目做法与差距全摆出</span></span></a></li>
 <li class="li" data-topic="soul" data-ts="20260919"><a href="学习html/三值量化关键问题QA.html"><span class="li-date">2026-09-19</span><span class="li-main"><span class="li-title">三值量化关键问题 Q&amp;A<span class="li-tag">灵魂拷问</span></span><span class="li-desc">20 个面试考点按 P0–P3 分级：三值化、STE、死区复活、部署导出与容易翻车的细节坑</span></span></a></li>
 </ul>
-<button class="more-btn" id="moreBtn">查看全部 23 篇</button>
+<button class="more-btn" id="moreBtn">查看全部 26 篇</button>
 </div>
 
 <div class="sec" id="experiments">
