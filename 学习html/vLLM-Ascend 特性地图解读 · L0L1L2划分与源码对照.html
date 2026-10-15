@@ -162,8 +162,11 @@ footer a { color:var(--accent); }
 框架特性的变更由 vLLM 上游演进驱动（如 <code>cache_config.py</code> 的 C8 派生逻辑对所有模型生效，
 属框架特性线）。投机解码等跨界特性按子项拆分：方法框架属框架特性线，GLM 的 MTP 头适配属模型特性线。</p>
 
-<h2 id="s2">② 典型特性功能分解：为什么归模型特性线，为什么归框架特性线</h2>
-<div class="guide"><span class="qa">这三张图回答什么问题：</span>把一个特性的功能链逐点拆开——蓝框★ = GLM 适配点（必须按 GLM 结构实现，换模型即失效），灰框 = GLM 无需适配的功能点（右列逐点给出不需要适配的原因）。链上有没有适配点，就是 L0 归属的判断依据。</div>
+<h2 id="s2">② 典型特性：先讲清楚是什么，再拆功能链定归属</h2>
+<div class="guide"><span class="qa">这一节怎么读：</span>挑三个典型特性（DP / EPLB / chunkPrefill），<b>每个都先用一段话讲清楚它是什么、解决什么问题</b>，再把它的工作链逐点拆开——蓝框★ = GLM 适配点（必须按 GLM 结构实现，换模型即失效），灰框 = GLM 无需适配的功能点（右列逐点给出原因）。链上有没有适配点，就是 L0 归属的判断依据。</div>
+
+<h3>特性一：DP（数据并行）——先说它是什么</h3>
+<p><strong>DP（Data Parallelism，数据并行）</strong>就是把整套模型复制多份，每份叫一个 DP 实例，各处理各的请求：新请求到来时由负载均衡（DPLB）分给最闲的实例，实例之间互不干扰，吞吐量跟着实例数涨。实测环境 TP=16、DP=4，就是 4 份完整的 16 卡副本同时服务。注意 DP 本身<b>不切模型、只切请求</b>——真正要按模型结构动刀的，是每个实例内部的层内切分与通信插入（下面功能链里带 ★ 的三步）。所以「DP 归哪条线」不是一句话能答的，得拆开看每个功能点。</p>
 <div class="fig-caption">图 2 · DP（并行切分族）的功能点分解 —— 链上有 GLM 适配点，归模型特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = DP 推理的功能点链　右 = 各功能点归属判断（★ = GLM 适配点）</div>
@@ -191,6 +194,8 @@ footer a { color:var(--accent); }
 <p>结论：六个功能点中 3、4、5 三个是 GLM 适配点——它们决定 DP 在 GLM 上能否切对、跑快，更换模型即失效，
 因此该特性归<strong>模型特性线</strong>。链路中的请求分发（功能点 1，DPLB）虽在同一条链上，
 但为通用机制，单独归<strong>框架特性线</strong>——同一条链上两类功能点各归各线。</p>
+<h3>特性二：EPLB（专家负载均衡）——先说它是什么</h3>
+<p>MoE 模型的专家是<b>路由制</b>：每个 token 只去少数几个专家，于是天然不均——热门专家被挤爆、所在卡算力打满，冷门专家闲着，整卡的吞吐被最忙的一张卡拖住。<strong>EPLB（Expert Parallelism Load Balancer，专家负载均衡）</strong>干三件事：每 600 步统计一次各专家的 token 路由热度 → 按热度给过热专家复制冗余副本、重新摆放到空闲卡（专家权重 NPU 间 D2D 直接搬移）→ 对上层模型接口<b>零改动</b>，配置只有 <code>eplb_config</code> 一个入口。它只看负载统计、不看模型结构——这个特点决定了它的归属。</p>
 <div class="fig-caption">图 3 · EPLB（专家负载均衡）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = EPLB 运行链　右 = GLM 无需适配的原因</div>
@@ -211,6 +216,8 @@ footer a { color:var(--accent); }
 </div>
 <p>结论：EPLB 全链路没有任何 GLM 适配点——专家均衡只看负载统计，不看模型结构，
 因此归<strong>框架特性线</strong>：由框架特性线负责开发，GLM 侧只做配置与问题反馈。</p>
+<h3>特性三：chunkPrefill（长输入切块预填充）——先说它是什么</h3>
+<p>一个 3500 token 的长 prompt，如果 prefill 一口气算完，这几百毫秒里整卡都被它占住，同批的 decode 请求全部干等——长请求的 TTFT 没快，别人的 TPOT 却被拖爆。<strong>chunkPrefill（长输入切块预填充）</strong>把长输入按固定块大小切块（如 1024，由 <code>profiling_chunk_config</code> 配置），一次前向只算一块：块 1 算完写 KV 就让出算力，下一轮调度再算块 2，拿着块 1 的 KV 续算，注意力跨块连续。长请求被摊进多个调度轮，decode 不再被长 prompt 卡死。它处理的对象只有「请求与块」，不接触模型结构。</p>
 <div class="fig-caption">图 4 · chunkPrefill（长输入切块预填充）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = chunkPrefill 功能链　右 = GLM 无需适配的原因</div>
