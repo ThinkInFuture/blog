@@ -396,7 +396,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？这张图分<b>三层放大</b>：第 1 层是 vLLM 推理主流程——请求进来、Scheduler 组 batch、模型前向、Sampler 出 token；第 2 层放大"模型前向"，即图 1 的 Block×N 链；第 3 层再放大 Block 里的 attention 小块——它在 vllm-ascend 里不是一块代码，而是 4 层：1 层模型逻辑，外加 3 层跟并行 / 硬件绑定的包装，从外到里正好是 PR 改的 4 个文件。这样 4.1~4.5 的每个细节都有地址。</p>
 
 <div class="card">
-<svg viewBox="0 0 840 748" role="img" aria-label="vLLM 主流程三层放大到 PR 改的 4 个文件">
+<svg viewBox="0 0 840 812" role="img" aria-label="vLLM 主流程三层放大到 PR 改的 4 个文件">
 <defs><marker id="ah5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">vLLM 主流程三层放大：从推理主流程到 PR 改的 4 个文件</text>
 <!-- 第1层 vLLM 主流程 -->
@@ -443,26 +443,36 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="659" y="190" text-anchor="middle">logits → 采样</text>
 <!-- 放大线2：attention 小块 → 第3层 -->
 <path class="dash" d="M391 208 C391 226,285 244,285 280" marker-end="url(#ah5)"/>
-<!-- 第3层 attention 小块的 4 层代码 -->
+<!-- 第3层 attention 小块的 4 层代码：四步执行流 -->
 <text class="tm" x="50" y="252">第 3 层 · 再放大"attention 小块"——在 vllm-ascend 里它不是一块代码，而是 4 层</text>
 <text class="ts" x="50" y="270">模型代码只管"算"；SP 分片校验、跨卡取 KV、昇腾算子这些与并行/硬件绑死的活，被做成 3 层包装包在外面——模型代码零改动</text>
-<rect class="bc" x="50" y="284" width="470" height="68" rx="8"/>
-<text class="tb" x="285" y="304" text-anchor="middle">models/deepseek_mtp.py —— 模型侧（总装）</text>
-<text class="ts" x="285" y="324" text-anchor="middle">选模型类（4 条件，图 5）→ 建层（共享索引 buffer）</text>
-<text class="ts" x="285" y="342" text-anchor="middle">每层直通 LN→attn→MLP：token 分片进、分片出（省 ①④）</text>
-<path class="flow" d="M285 352 V370" marker-end="url(#ah5)"/>
-<rect class="ac" x="50" y="374" width="470" height="58" rx="8"/>
-<text class="tb" x="285" y="394" text-anchor="middle">ops/mla.py —— MLA 包装层（门卫）</text>
-<text class="ts" x="285" y="414" text-anchor="middle">能力探测 4 条件："后端能直接吃 SP 分片吗？"能→新入口，不能→回老路</text>
-<path class="flow" d="M285 432 V450" marker-end="url(#ah5)"/>
-<rect class="ac" x="50" y="454" width="470" height="58" rx="8"/>
-<text class="tb" x="285" y="474" text-anchor="middle">attention/sfa_v1.py —— SFA 通用实现（调度员）</text>
-<text class="ts" x="285" y="494" text-anchor="middle">按门卫的答案分流：走哪条输入准备、哪条输出收口；原路径全保留</text>
-<path class="flow" d="M285 512 V530" marker-end="url(#ah5)"/>
-<rect class="bc" x="50" y="534" width="470" height="68" rx="8"/>
-<text class="tb" x="285" y="554" text-anchor="middle">attention/context_parallel/sfa_cp.py —— DSA-CP 后端（车间）</text>
-<text class="ts" x="285" y="574" text-anchor="middle">真正算稀疏注意力的地方：⑤ 校验分片+清零 → ③ 跨卡取命中 KV</text>
-<text class="ts" x="285" y="592" text-anchor="middle">→ ⑥ o_proj 收口（两条路，图 4）</text>
+<rect class="bc" x="50" y="284" width="470" height="94" rx="8"/>
+<text class="tb" x="285" y="304" text-anchor="middle">步骤 1 · models/deepseek_mtp.py —— 模型层（总装）</text>
+<text class="ts" x="62" y="324">收：上层 hidden——本地分片 [219, 8192]（全局 3504 token，每卡 219）</text>
+<text class="ts" x="62" y="342">做：input LN → 判定"输入已是分片"（3 条件）→ 发起 attention</text>
+<text class="ts" x="62" y="360">交：positions + hidden + output_scale，约定「收分片、还分片」（省 ①④）</text>
+<path class="flow" d="M285 378 V396" marker-end="url(#ah5)"/>
+<text class="tm" x="296" y="390">[219, 8192] 分片</text>
+<rect class="ac" x="50" y="400" width="470" height="76" rx="8"/>
+<text class="tb" x="285" y="420" text-anchor="middle">步骤 2 · ops/mla.py —— MLA 包装层（门卫）</text>
+<text class="ts" x="62" y="440">收：模型层透传的三样</text>
+<text class="ts" x="62" y="458">做：探测后端 4 条件——全中 → 走新入口 mla_forward；任一不满足 → 回老路</text>
+<path class="flow" d="M285 476 V494" marker-end="url(#ah5)"/>
+<text class="tm" x="296" y="488">原样透传</text>
+<rect class="ac" x="50" y="498" width="470" height="76" rx="8"/>
+<text class="tb" x="285" y="518" text-anchor="middle">步骤 3 · attention/sfa_v1.py —— SFA 通用实现（调度员）</text>
+<text class="ts" x="62" y="538">收：同上，外加 attn_metadata（KV 缓存与并行上下文）</text>
+<text class="ts" x="62" y="556">做：按契约分流——输入准备选 ⑤ 校验版、输出收口选 SP 版；原路径全保留</text>
+<path class="flow" d="M285 574 V592" marker-end="url(#ah5)"/>
+<text class="tm" x="296" y="586">按选定路径进入</text>
+<rect class="bc" x="50" y="596" width="470" height="110" rx="8"/>
+<text class="tb" x="285" y="616" text-anchor="middle">步骤 4 · attention/context_parallel/sfa_cp.py —— 后端（车间）</text>
+<text class="ts" x="62" y="636">做：⑤ 校验分片边界+清零 padding → 算稀疏注意力（③ 跨卡取命中 KV）</text>
+<text class="ts" x="62" y="654">　 → attn_output [219, 全部 head] → ⑥ all_to_all 换 head → o_proj（未归约）</text>
+<text class="ts" x="62" y="672">　 → ⑥ 单次 reduce_scatter → [219, 8192] 本地分片（两条收口路 → 图 4）</text>
+<path class="flow" d="M285 706 V722" marker-end="url(#ah5)"/>
+<rect class="node" x="50" y="726" width="470" height="40" rx="8"/>
+<text class="tb" x="285" y="751" text-anchor="middle">交回模型层：还是 [219, 8192] 分片 → post LN → MLP，这一层结束</text>
 <!-- 右侧：改前路径标注 -->
 <path class="garr" d="M520 318 C530 318,534 314,538 312"/>
 <rect class="wc" x="542" y="284" width="270" height="92" rx="8"/>
@@ -471,30 +481,32 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="677" y="346" text-anchor="middle">每层都来一遍，新路径整段省掉</text>
 <text class="ts" x="677" y="366" text-anchor="middle">（图 2 的灰块）</text>
 <!-- 右侧：为什么要放大到这里 -->
-<rect class="node" x="542" y="534" width="270" height="140" rx="8"/>
-<text class="tb" x="677" y="556" text-anchor="middle">为什么要放大到这 4 个文件？</text>
-<text class="ts" x="677" y="576" text-anchor="middle">vLLM 主流程（第 1、2 层）是通用引擎，</text>
-<text class="ts" x="677" y="594" text-anchor="middle">不挑硬件；vllm-ascend 插件替换的</text>
-<text class="ts" x="677" y="612" text-anchor="middle">正是 attention / 通信这些</text>
-<text class="ts" x="677" y="630" text-anchor="middle">跟昇腾硬件相关的部分——</text>
-<text class="ts" x="677" y="648" text-anchor="middle">所以 PR 改的 4 个文件</text>
-<text class="ts" x="677" y="666" text-anchor="middle">全在 attention 一线上。</text>
+<rect class="node" x="542" y="510" width="270" height="140" rx="8"/>
+<text class="tb" x="677" y="532" text-anchor="middle">为什么要放大到这 4 个文件？</text>
+<text class="ts" x="677" y="552" text-anchor="middle">vLLM 主流程（第 1、2 层）是通用引擎，</text>
+<text class="ts" x="677" y="570" text-anchor="middle">不挑硬件；vllm-ascend 插件替换的</text>
+<text class="ts" x="677" y="588" text-anchor="middle">正是 attention / 通信这些</text>
+<text class="ts" x="677" y="606" text-anchor="middle">跟昇腾硬件相关的部分——</text>
+<text class="ts" x="677" y="624" text-anchor="middle">所以 PR 改的 4 个文件</text>
+<text class="ts" x="677" y="642" text-anchor="middle">全在 attention 一线上。</text>
 <!-- 图例 -->
-<text class="tm" x="50" y="640">调用方向：模型侧发起，逐层向里，车间真正干活</text>
-<text class="tm" x="50" y="662">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（进入下一层）</text>
-<text class="tm" x="50" y="712">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职</text>
+<text class="tm" x="50" y="782">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（进入下一层）；箭头旁＝传给下一层的数据</text>
+<text class="tm" x="50" y="804">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职</text>
 </svg>
-<div class="figcap">图 3 · 三层放大：主流程 → 模型前向（图 1）→ attention 小块的 4 层代码（= PR 的 4 个文件）；4.1~4.5 的锚点行均指第 3 层的框号</div>
+<div class="figcap">图 3 · 三层放大：主流程 → 模型前向（图 1）→ attention 小块的四步执行流（步骤 1~4 = PR 的 4 个文件）；4.1~4.5 的锚点行均指第 3 层的步骤号</div>
 </div>
 
-<h3>文件 × 链上位置 × 改动一览</h3>
+<h3>跟着一次 attention 计算走一遍</h3>
+<p>拿 PR 的实测环境当例子：3500 个 token 的 prompt，SP 切片后每卡分到 <b>219</b> 个，形状记作 <b>[219, 8192]</b>。步骤 1，模型层做完 input LN，判定"输入已是本地分片"成立，把 positions、hidden 和 FP16 缩放系数交给 attention，约定「收分片、还分片」；步骤 2，包装层问后端四个条件，全中，走新入口原样透传；步骤 3，通用实现按契约分流，输入准备选校验版、输出收口选 SP 版；步骤 4，后端真正干活——校验分片边界、清零 padding，跨卡取命中的 KV 块算稀疏注意力，再 all_to_all 换 head、o_proj、单次 reduce_scatter，交回 <b>[219, 8192]</b>。模型层接着 post LN → MLP，这一层结束。<b>全程只有步骤 4 里发生过通信</b>（③ 取命中 KV 和 ⑥ 收口），①②④ 那三次布局往返一次都没发生——这就是这个 PR 省下的东西。</p>
+
+<h3>四步走读 × 文件 × 改动一览</h3>
 <table>
-<tr><th>文件</th><th>链上位置（图 3）</th><th>PR 动作</th><th>对应编号 / 图</th></tr>
-<tr><td><code>models/deepseek_mtp.py</code></td><td>第 3 层第 1 框（模型侧·总装）</td><td>选模型类、自建层、DecoderLayer 直通链</td><td>省 ①④；生效条件 → 图 5</td></tr>
-<tr><td><code>ops/mla.py</code></td><td>第 3 层第 2 框（门卫）</td><td>能力探测四条件 + 新入口 <code>forward_sequence_parallel</code></td><td>安全阀：不满足自动回退</td></tr>
-<tr><td><code>attention/sfa_v1.py</code></td><td>第 3 层第 3 框（调度员）</td><td>三处分流（输入准备 / 输出收口 / token 数推断）</td><td>原路径完全保留</td></tr>
-<tr><td><code>attention/context_parallel/sfa_cp.py</code></td><td>第 3 层第 4 框（车间）</td><td>契约声明 + 输入校验清零 + o_proj 收口</td><td>⑤⑥；两条收口路 → 图 4</td></tr>
-<tr><td>（测试 ×4）</td><td>横跨第 3 层全部 4 框</td><td>4 个单测组成回归网</td><td>见 4.5</td></tr>
+<tr><th style="width:52px">步骤</th><th>文件（角色）</th><th>收到什么</th><th>做什么</th><th>交出什么</th></tr>
+<tr><td class="cnum">1</td><td><code>models/deepseek_mtp.py</code>（总装）</td><td>上层的 hidden 本地分片 [219, 8192]</td><td>选模型类（4 条件，图 5）→ 建层 → 每层 LN 后判定分片、发起 attention（直通链，省 ①④）</td><td>positions + hidden + output_scale</td></tr>
+<tr><td class="cnum">2</td><td><code>ops/mla.py</code>（门卫）</td><td>步骤 1 透传的三样</td><td>能力探测四条件；全中走新入口 <code>forward_sequence_parallel</code></td><td>原样透传（不满足 → 回老路）</td></tr>
+<tr><td class="cnum">3</td><td><code>attention/sfa_v1.py</code>（调度员）</td><td>同上，外加 attn_metadata</td><td>按契约三处分流（输入准备 / 输出收口 / token 数推断）</td><td>选定 ⑤ 校验版输入 + SP 版收口</td></tr>
+<tr><td class="cnum">4</td><td><code>attention/context_parallel/sfa_cp.py</code>（车间）</td><td>选定路径的调用</td><td>⑤ 校验+清零 → ③ 跨卡取 KV → 稀疏注意力 → ⑥ o_proj 收口（图 4）</td><td>[219, 8192] 本地分片（还分片）</td></tr>
+<tr><td>—</td><td>（测试 ×4）</td><td>横跨四步</td><td>回归网：正确性、回退、缩放语义逐项钉死</td><td>见 4.5</td></tr>
 </table>
 
 <h3>4.1 sfa_cp.py —— 后端契约与 o_proj 新收口</h3>
