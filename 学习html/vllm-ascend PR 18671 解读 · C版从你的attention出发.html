@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>vllm-ascend PR #18671 解读 · GLM V1 SP 布局贯穿 DSA-CP（C 版试稿）</title>
+<title>vllm-ascend PR #18671 解读：从你的 attention 十行出发</title>
 <style>
 :root{
   --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
@@ -101,10 +101,9 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 
 <div class="wrap">
 
-<h1>vllm-ascend PR #18671 解读 · C 版（从你的 attention 出发）</h1>
+<h1>vllm-ascend PR #18671 解读：从你的 attention 十行出发</h1>
 <div style="background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:10px 16px;margin:10px 0;font-size:14px"><strong>PR 地址：</strong><a href="https://github.com/vllm-project/vllm-ascend/pull/18671" target="_blank" rel="nofollow" style="color:#2f6feb;font-weight:600">vllm-project/vllm-ascend · Pull Request #18671</a>（[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP）</div>
 <div class="subtitle">[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP —— 让 SP 的 token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter</div>
-<div class="kp t"><span class="kp-t">C 版试稿 · 从你的 attention 出发（三版对比中，二选一转正）</span>第 4 章从你认识的 attention 十行代码出发，把 PR 的每个文件一行一行挂回你的 L1~L10：数学没动，变的是 L4/L6/L10 三处与多卡带来的壳。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · B版改前改后对照.html">B 版（改前改后逐行对照）</a>。现役版未动，选定后以所选版本替换。</div>
 
 <nav class="toc">
 <b>目录</b>
