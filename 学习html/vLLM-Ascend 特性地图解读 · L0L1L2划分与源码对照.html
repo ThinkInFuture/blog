@@ -163,11 +163,39 @@ footer a { color:var(--accent); }
 属框架特性线）。投机解码等跨界特性按子项拆分：方法框架属框架特性线，GLM 的 MTP 头适配属模型特性线。</p>
 
 <h2 id="s2">② 典型特性：先讲清楚是什么，再拆功能链定归属</h2>
-<div class="guide"><span class="qa">这一节怎么读：</span>挑三个典型特性（DP / EPLB / chunkPrefill），<b>每个都先用一段话讲清楚它是什么、解决什么问题</b>，再把它的工作链逐点拆开——蓝框★ = GLM 适配点（必须按 GLM 结构实现，换模型即失效），灰框 = GLM 无需适配的功能点（右列逐点给出原因）。链上有没有适配点，就是 L0 归属的判断依据。</div>
+<div class="guide"><span class="qa">这一节怎么读：</span>挑三个典型特性（DP / EPLB / chunkPrefill），<b>每个用三张图讲透</b>：一张讲它是什么，一张看它在实测环境里的样子/效果，一张把工作链逐点拆开（蓝框★ = GLM 适配点）——蓝框★ = GLM 适配点（必须按 GLM 结构实现，换模型即失效），灰框 = GLM 无需适配的功能点（右列逐点给出原因）。链上有没有适配点，就是 L0 归属的判断依据。</div>
 
 <h3>特性一：DP（数据并行）——先说它是什么</h3>
 <p><strong>DP（Data Parallelism，数据并行）</strong>就是把整套模型复制多份，每份叫一个 DP 实例，各处理各的请求：新请求到来时由负载均衡（DPLB）分给最闲的实例，实例之间互不干扰，吞吐量跟着实例数涨。实测环境 TP=16、DP=4，就是 4 份完整的 16 卡副本同时服务。注意 DP 本身<b>不切模型、只切请求</b>——真正要按模型结构动刀的，是每个实例内部的层内切分与通信插入（下面功能链里带 ★ 的三步）。所以「DP 归哪条线」不是一句话能答的，得拆开看每个功能点。</p>
-<div class="fig-caption">图 2 · DP（并行切分族）的功能点分解 —— 链上有 GLM 适配点，归模型特性线</div>
+
+<div class="fig-caption">图 2 · DP 是什么：整套模型复制 4 份，请求分摊，吞吐 ×4</div>
+<div class="arch">
+<div class="arch-title">DP = 复制（不切模型）+ 分发（只切请求）</div>
+<div style="display:flex;gap:10px;align-items:stretch;">
+  <div style="flex:1;background:#f7f8fa;border:1.5px solid #aab3bf;border-radius:10px;padding:10px;text-align:center;font-weight:bold;">新请求队列<div style="font-weight:normal;font-size:.78rem;color:#656d76;margin-top:4px;">3500 字 prompt × 并发 8</div></div>
+  <div style="align-self:center;font-size:1.3rem;color:#3b82f6;">&#8594;</div>
+  <div style="width:110px;background:#eef5ff;border:1.5px solid #3b82f6;border-radius:10px;padding:10px;text-align:center;font-weight:bold;color:#1d4ed8;">DPLB<div style="font-weight:normal;font-size:.78rem;color:#656d76;margin-top:4px;">分给最闲实例<br/>气泡超阈才迁移</div></div>
+  <div style="align-self:center;font-size:1.3rem;color:#3b82f6;">&#8594;</div>
+  <div style="flex:2.4;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+    <div style="background:#f5f7ff;border:1.5px solid #5b6ee1;border-radius:8px;padding:8px;text-align:center;font-size:.82rem;"><b>DP 实例 0</b><br/><span style="color:#656d76;">完整模型副本（16 卡）<br/>自己的 batch / KV Cache</span></div>
+    <div style="background:#f5f7ff;border:1.5px solid #5b6ee1;border-radius:8px;padding:8px;text-align:center;font-size:.82rem;"><b>DP 实例 1</b><br/><span style="color:#656d76;">完整模型副本（16 卡）<br/>自己的 batch / KV Cache</span></div>
+    <div style="background:#f5f7ff;border:1.5px solid #5b6ee1;border-radius:8px;padding:8px;text-align:center;font-size:.82rem;"><b>DP 实例 2</b><br/><span style="color:#656d76;">完整模型副本（16 卡）<br/>自己的 batch / KV Cache</span></div>
+    <div style="background:#f5f7ff;border:1.5px solid #5b6ee1;border-radius:8px;padding:8px;text-align:center;font-size:.82rem;"><b>DP 实例 3</b><br/><span style="color:#656d76;">完整模型副本（16 卡）<br/>自己的 batch / KV Cache</span></div>
+  </div>
+</div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">DP 切的是「请求」不是「模型」：每份副本权重完整；实例内部 16 卡怎么协同切开一层，才是功能链里 ★ 的部分</div>
+</div>
+
+<div class="fig-caption">图 3 · DP 在实测环境里的样子：TP=16 × DP=4，4 份完整副本共 64 卡</div>
+<div class="arch">
+<div class="arch-title">4 个实例，每个是一套完整的 TP=16</div>
+<div style="display:flex;gap:8px;align-items:center;margin:6px 0;"><div style="width:96px;font-size:.8rem;font-weight:bold;color:#3a4aa8;">DP 实例 0</div><div style="flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:3px;"><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡0</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡1</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡2</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡3</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡4</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡5</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡6</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡7</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡8</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡9</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡10</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡11</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡12</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡13</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡14</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡15</div></div></div>
+<div style="display:flex;gap:8px;align-items:center;margin:6px 0;"><div style="width:96px;font-size:.8rem;font-weight:bold;color:#3a4aa8;">DP 实例 1</div><div style="flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:3px;"><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡0</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡1</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡2</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡3</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡4</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡5</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡6</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡7</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡8</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡9</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡10</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡11</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡12</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡13</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡14</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡15</div></div></div>
+<div style="display:flex;gap:8px;align-items:center;margin:6px 0;"><div style="width:96px;font-size:.8rem;font-weight:bold;color:#3a4aa8;">DP 实例 2</div><div style="flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:3px;"><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡0</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡1</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡2</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡3</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡4</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡5</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡6</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡7</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡8</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡9</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡10</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡11</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡12</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡13</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡14</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡15</div></div></div>
+<div style="display:flex;gap:8px;align-items:center;margin:6px 0;"><div style="width:96px;font-size:.8rem;font-weight:bold;color:#3a4aa8;">DP 实例 3</div><div style="flex:1;display:grid;grid-template-columns:repeat(16,1fr);gap:3px;"><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡0</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡1</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡2</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡3</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡4</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡5</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡6</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡7</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡8</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡9</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡10</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡11</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡12</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡13</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡14</div><div style="background:#eef3ff;border:1px solid #91a7ee;border-radius:4px;text-align:center;font-size:.62rem;color:#3a4aa8;padding:3px 0;">卡15</div></div></div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">请求先到 DPLB 再进某个实例；实例之间零耦合——这正是功能点 1（请求分发）归框架线、功能点 3~5（实例内切分）归模型线的原因</div>
+</div>
+<div class="fig-caption">图 4 · DP 的功能点分解 —— 链上有 GLM 适配点（★ 3/4/5），归模型特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = DP 推理的功能点链　右 = 各功能点归属判断（★ = GLM 适配点）</div>
 <div class="flow2-grid">
@@ -196,7 +224,38 @@ footer a { color:var(--accent); }
 但为通用机制，单独归<strong>框架特性线</strong>——同一条链上两类功能点各归各线。</p>
 <h3>特性二：EPLB（专家负载均衡）——先说它是什么</h3>
 <p>MoE 模型的专家是<b>路由制</b>：每个 token 只去少数几个专家，于是天然不均——热门专家被挤爆、所在卡算力打满，冷门专家闲着，整卡的吞吐被最忙的一张卡拖住。<strong>EPLB（Expert Parallelism Load Balancer，专家负载均衡）</strong>干三件事：每 600 步统计一次各专家的 token 路由热度 → 按热度给过热专家复制冗余副本、重新摆放到空闲卡（专家权重 NPU 间 D2D 直接搬移）→ 对上层模型接口<b>零改动</b>，配置只有 <code>eplb_config</code> 一个入口。它只看负载统计、不看模型结构——这个特点决定了它的归属。</p>
-<div class="fig-caption">图 3 · EPLB（专家负载均衡）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
+<div class="fig-caption">图 5 · EPLB 解决什么：MoE 路由不均，整卡吞吐被热门专家拖住</div>
+<div class="arch">
+<div class="arch-title">一批 token 路由之后：有人挤爆，有人闲死</div>
+<div style="display:flex;gap:10px;align-items:stretch;">
+  <div style="flex:1;background:#f7f8fa;border:1.5px solid #aab3bf;border-radius:10px;padding:10px;text-align:center;font-weight:bold;">8 个 token<div style="font-weight:normal;font-size:.78rem;color:#656d76;margin-top:4px;">各自 top-k 选专家</div></div>
+  <div style="align-self:center;font-size:1.3rem;color:#3b82f6;">&#8594;</div>
+  <div style="flex:3;display:grid;grid-template-columns:repeat(4,1fr);gap:8px;">
+    <div style="background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:8px;padding:8px;text-align:center;"><b>专家 0</b><div style="font-size:1.3rem;font-weight:bold;color:#1a7f37;">3</div><div style="font-size:.72rem;color:#656d76;">空闲</div></div>
+    <div style="background:#fef2f2;border:1.5px solid #cf222e;border-radius:8px;padding:8px;text-align:center;"><b>专家 1</b><div style="font-size:1.3rem;font-weight:bold;color:#cf222e;">9</div><div style="font-size:.72rem;color:#656d76;">挤爆</div></div>
+    <div style="background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:8px;padding:8px;text-align:center;"><b>专家 2</b><div style="font-size:1.3rem;font-weight:bold;color:#1a7f37;">1</div><div style="font-size:.72rem;color:#656d76;">空闲</div></div>
+    <div style="background:#fffbeb;border:1.5px solid #d97706;border-radius:8px;padding:8px;text-align:center;"><b>专家 3</b><div style="font-size:1.3rem;font-weight:bold;color:#b45309;">5</div><div style="font-size:.72rem;color:#656d76;">偏忙</div></div>
+  </div>
+</div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">专家与其所在卡绑定：专家 1 打满，同卡的其他专家一起排队——整组步调被最忙的卡决定</div>
+</div>
+
+<div class="fig-caption">图 6 · EPLB 怎么做：统计热度 → 复制副本重排 → D2D 搬权重，负载拉平</div>
+<div class="arch">
+<div class="arch-title">三步循环，对模型零改动</div>
+<div style="display:flex;gap:10px;align-items:stretch;">
+  <div style="flex:1;background:#fef2f2;border:1.5px dashed #cf222e;border-radius:10px;padding:10px;text-align:center;"><b>重摆前</b><div style="margin-top:6px;font-size:.8rem;line-height:1.8;">卡 A：专家 0 + 专家 1<br/>卡 B：专家 2<br/>卡 C：专家 3<br/>负载 <b style="color:#cf222e;">4 / 9 / 5</b>（不均）</div></div>
+  <div style="width:170px;display:flex;flex-direction:column;gap:6px;justify-content:center;">
+    <div style="background:#eef5ff;border:1.5px solid #3b82f6;border-radius:8px;padding:6px;text-align:center;font-size:.78rem;color:#1d4ed8;"><b>① 每 600 步</b>统计路由计数</div>
+    <div style="background:#eef5ff;border:1.5px solid #3b82f6;border-radius:8px;padding:6px;text-align:center;font-size:.78rem;color:#1d4ed8;"><b>② FlashLB</b> 按热度复制副本重排</div>
+    <div style="background:#eef5ff;border:1.5px solid #3b82f6;border-radius:8px;padding:6px;text-align:center;font-size:.78rem;color:#1d4ed8;"><b>③ D2D</b> 搬专家权重（不落 host）</div>
+  </div>
+  <div style="flex:1;background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:10px;padding:10px;text-align:center;"><b>重摆后</b><div style="margin-top:6px;font-size:.8rem;line-height:1.8;">卡 A：专家 0 + 专家 2<br/>卡 B：专家 1（主）<br/>卡 C：专家 3 + 专家 1（副本）<br/>负载 <b style="color:#1a7f37;">4 / 4 / 4</b>（拉平）</div></div>
+</div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">对外只有 <code>eplb_config</code> 一个入口；GLM MoE 上线即被覆盖，无需任何适配</div>
+</div>
+
+<div class="fig-caption">图 7 · EPLB 的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = EPLB 运行链　右 = GLM 无需适配的原因</div>
 <div class="flow2-grid">
@@ -218,7 +277,30 @@ footer a { color:var(--accent); }
 因此归<strong>框架特性线</strong>：由框架特性线负责开发，GLM 侧只做配置与问题反馈。</p>
 <h3>特性三：chunkPrefill（长输入切块预填充）——先说它是什么</h3>
 <p>一个 3500 token 的长 prompt，如果 prefill 一口气算完，这几百毫秒里整卡都被它占住，同批的 decode 请求全部干等——长请求的 TTFT 没快，别人的 TPOT 却被拖爆。<strong>chunkPrefill（长输入切块预填充）</strong>把长输入按固定块大小切块（如 1024，由 <code>profiling_chunk_config</code> 配置），一次前向只算一块：块 1 算完写 KV 就让出算力，下一轮调度再算块 2，拿着块 1 的 KV 续算，注意力跨块连续。长请求被摊进多个调度轮，decode 不再被长 prompt 卡死。它处理的对象只有「请求与块」，不接触模型结构。</p>
-<div class="fig-caption">图 4 · chunkPrefill（长输入切块预填充）的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
+<div class="fig-caption">图 8 · chunkPrefill 解决什么：长 prompt 一口气算，decode 全被卡住</div>
+<div class="arch">
+<div class="arch-title">GPU 时间轴：一个 3500 token 的 prefill 占满整卡</div>
+<div style="margin:6px 0;"><div style="background:#fff4d5;border:1.5px solid #d97706;border-radius:8px;padding:10px;text-align:center;font-weight:bold;color:#7a5800;">3500 token 一次 prefill · 数百 ms 独占整卡</div></div>
+<div style="margin:6px 0;"><div style="background:#f7f8fa;border:1.5px dashed #aab3bf;border-radius:8px;padding:10px;text-align:center;color:#656d76;">同批 decode 请求：★ 整段干等 → TPOT 被拉爆</div></div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">batch 里只要混进 1 个长 prompt，其余所有 decode 请求跟着遭殃——这就是混部场景 TTFT/TPOT 打架的根源</div>
+</div>
+
+<div class="fig-caption">图 9 · chunkPrefill 怎么做：切 4 块、分 4 轮，decode 插空</div>
+<div class="arch">
+<div class="arch-title">3500 = 1024 + 1024 + 1024 + 428，块间靠 KV 续算</div>
+<div style="display:flex;gap:6px;align-items:center;">
+  <div style="flex:2.4;background:#fff4d5;border:1.5px solid #d97706;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;"><b>轮 1 · 块 1</b><br/>1024 token</div>
+  <div style="flex:1;background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;color:#1a7f37;"><b>decode</b><br/>插空</div>
+  <div style="flex:2.4;background:#fff4d5;border:1.5px solid #d97706;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;"><b>轮 2 · 块 2</b><br/>1024 · 携 KV 续算</div>
+  <div style="flex:1;background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;color:#1a7f37;"><b>decode</b><br/>插空</div>
+  <div style="flex:2.4;background:#fff4d5;border:1.5px solid #d97706;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;"><b>轮 3 · 块 3</b><br/>1024 · 携 KV 续算</div>
+  <div style="flex:1;background:#f0fdf4;border:1.5px solid #1a7f37;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;color:#1a7f37;"><b>decode</b><br/>插空</div>
+  <div style="flex:1.2;background:#fff4d5;border:1.5px solid #d97706;border-radius:8px;padding:8px;text-align:center;font-size:.8rem;"><b>轮 4 · 块 4</b><br/>428</div>
+</div>
+<div style="font-size:.8rem;color:#656d76;margin-top:8px;">注意力跨块连续（块 N+1 拿块 N 的 KV 续算）；块大小由 <code>profiling_chunk_config</code> 配置——GLM 侧唯一的动作就是按长文本场景调它</div>
+</div>
+
+<div class="fig-caption">图 10 · chunkPrefill 的功能点分解 —— 每个功能点 GLM 都无需适配，归框架特性线</div>
 <div class="flow2">
 <div class="flow2-title">左 = chunkPrefill 功能链　右 = GLM 无需适配的原因</div>
 <div class="flow2-grid">
