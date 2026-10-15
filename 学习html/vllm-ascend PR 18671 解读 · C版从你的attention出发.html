@@ -534,7 +534,7 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <text class="tm" x="20" y="388">另有 patch/（运行时补丁）与 platform.py（平台注册"我是昇腾"）也在链路上，但与 attention 无直接关系，知道即可</text>
 </svg>
 </div>
-<div class="figcap">目录介绍图：★ = PR 改动文件所在的目录（5 个源码文件全在这四个目录里）</div>
+<div class="figcap">图 5 · 目录介绍：★ = PR 改动文件所在的目录（5 个源码文件全在这四个目录里）</div>
 <p><b>四个目录，一条链。</b>worker/ 管执行与喂料，models/ 管模型结构，ops/ 管算子门面，attention/ 管注意力实现——目录名就是分工，谁也不越界。</p>
 <p>其中两个目录要特别留意：<b>models/ 是你的十行的调用者</b>——层对象把 input LN、self_attn、post LN、MoE 串成一次 forward；<b>ops/ 和 attention/ 是你的十行的实现者</b>——门卫放行后，九步流水线把每一行数学落地。为什么实现要拆成两个模块？ops/ 管"怎么接进 vLLM 的层体系"，attention/ 管"注意力策略本身"——接法和算法是两件事，所以分家。</p>
 
@@ -698,7 +698,7 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <text class="tm" x="20" y="1414">此时还没有 PR 的事——这就是 vllm-ascend 平时跑你 attention 的样子。</text>
 </svg>
 </div>
-<div class="figcap">流水线图 · 原本：你的十行在 vllm-ascend 里的完成过程（没有这次 PR 时的样子）</div>
+<div class="figcap">图 6 · 流水线（原本）：你的十行在 vllm-ascend 里的完成过程（没有这次 PR 时的样子）</div>
 <p><b>看懂这张图，记住三件事。</b></p>
 <p><b>一、你的十行一步没少。</b>左列每一行，中列都有对应——投影、RoPE、写缓存、稀疏注意力、收口，数学原样；唯一的例外是 L5（GQA repeat），MLA 系用 latent KV 全头共享达到同样目的，所以没有独立步骤。</p>
 <p><b>二、实现分散在三个模块，但只有一条调用链。</b>models/ 发起 → ops/ 放行 → attention/ 干活；右列就是每一站的地盘和门牌（文件:行号）。</p>
@@ -731,6 +731,7 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <text class="tm" x="20" y="148">层里除了你的十行还有前后两个 LN 和一个 MoE · deepseek_v2.py:1315,有删节 · 为什么讲它:①④ 不在十行里,在层的外壳上</text>
 </svg>
 </div>
+<div class="figcap">图 7 · 改前上游层的户口：模块 → 类 → 方法（deepseek_v2.py:1315，有删节）</div>
 <p>你的 L6 之所以写得那么短，是因为 L4 已经把全量历史 KV <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④（上游 deepseek_v2.py:1315，有删节）：</p>
 <pre><span class="c"># 上游每层都在你的十行外面套了这两行（有删节）</span>
 if input_is_sequence_parallel:
@@ -769,6 +770,7 @@ hidden = tensor_model_parallel_reduce_scatter(hidden, 0)   <span class="c"># <sp
 <text class="tm" x="20" y="148">为什么住 models/:改的是"层怎么走",不是算子 · 类继承上游 DeepseekV2DecoderLayer</text>
 </svg>
 </div>
+<div class="figcap">图 8 · PR 新层的户口：模块 → 类 → 方法（vllm_ascend/models/deepseek_mtp.py）</div>
 <p>PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>：</p>
 <pre><span class="c"># PR 新增：vllm_ascend/models/deepseek_mtp.py</span>
 class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
@@ -900,7 +902,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <text class="tm" x="20" y="890">FP16:output_scale = 1/routed_scaling_factor 在归约前乘,第 0 层 residual 同步缩放——与上游防溢出语义逐位对齐。</text>
 </svg>
 </div>
-<div class="figcap">流水线图 · 这次 PR：左列原本（黄 = 问题），中列 PR 做法（粗体 = 改动），右列解释；灰行 = 闸门兜底，不支持就回老路</div>
+<div class="figcap">图 9 · 流水线（这次 PR）：左列原本（黄 = 问题），中列 PR 做法（粗体 = 改动），右列解释；灰行 = 闸门兜底，不支持就回老路</div>
 <p><b>这张图就是整个 PR。</b>左列是原本（开了 SP+DSA-CP 的跑法），中列是 PR 的做法，逐行对着看。</p>
 <p><b>改的是三处。</b>层外壳：不再 ① 聚全量 / ④ 散回，分片直进（新类 AscendDSACPDecoderLayer，住 models/）；输入侧：新增 ⑤ 只查不切（四项断言，防静默错位）；输出侧：新增 ⑥ 两路收口（路 A 全权重零通信，路 B all_to_all + 单次 reduce_scatter——归约只做一次，FP16 缩放在归约前乘）。</p>
 <p><b>不动的是三处。</b>③ 跨卡取命中 KV、步 8 的稀疏注意力数学、门卫与闸门的兜底——任何一级条件不满足，整条链回左列老路，行为与改前完全一致。</p>
@@ -924,7 +926,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <text class="ts" x="585" y="204" text-anchor="middle">→ 先乘 output_scale → 1 次 reduce_scatter</text>
 <text class="ts" x="40" y="248">关键细节：FP16 时 output_scale = 1/routed_scaling_factor 在归约前乘——保留上游的防溢出缩放语义</text>
 </svg>
-<div class="figcap">图 7 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
+<div class="figcap">图 10 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
 </div>
 
 <div class="card">
@@ -960,7 +962,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <text class="tm" x="630" y="264" text-anchor="middle">AG + 切段 + RS 行为不变</text>
 <text class="tm" x="380" y="440" text-anchor="middle">注：MLA 包装层另有能力探测（4.3），不满足同样自动回退</text>
 </svg>
-<div class="figcap">图 8 · 生效条件：V1 runner + PP=1 + SP MoE + DSA-CP（其余模型 / V2 / PP / DCP 一律走原路径）</div>
+<div class="figcap">图 11 · 生效条件：V1 runner + PP=1 + SP MoE + DSA-CP（其余模型 / V2 / PP / DCP 一律走原路径）</div>
 </div>
 
 
@@ -1049,7 +1051,7 @@ def forward(self, positions, hidden_states, residual, llama_4_scaling=None):
         return hidden_states, residual</pre>
 
 <h3>5.2 输入准备：从"全局切段"到"校验分片"</h3>
-<div class="figcap"><b>图 9 · 输入准备一图看懂：改前是「切」，改后是「查」</b></div>
+<div class="figcap"><b>图 12 · 输入准备一图看懂：改前是「切」，改后是「查」</b></div>
 <div class="card">
 <svg viewBox="0 0 840 260" role="img" aria-label="输入准备改前改后">
 <defs><marker id="ah8" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#1a4ea8"/></marker></defs>
@@ -1109,7 +1111,7 @@ return hidden_states[context.local_start : context.local_end_with_pad]</pre>
     return hidden_states</pre>
 
 <h3>5.3 输出收口 o_proj：路 A 全权重直算，路 B all-to-all + 单次 RS</h3>
-<div class="codetag after">改后 · _finalize_sequence_parallel_o_proj（PR 新增；对照图 7）</div>
+<div class="codetag after">改后 · _finalize_sequence_parallel_o_proj（PR 新增；对照图 10）</div>
 <pre>def _finalize_sequence_parallel_o_proj(self, attn_output, output, gather_full_o_proj,
                                        attn_metadata, output_scale):
     if gather_full_o_proj:
@@ -1159,7 +1161,7 @@ def supports_sequence_parallel_input(self) -&gt; bool:
     )</pre>
 
 <h3>5.5 模型选择：四个条件全中才换新路径</h3>
-<div class="codetag after">改后 · AscendGlmMoeDsaForCausalLM.__init__（对照图 8）</div>
+<div class="codetag after">改后 · AscendGlmMoeDsaForCausalLM.__init__（对照图 11）</div>
 <pre>class AscendGlmMoeDsaForCausalLM(GlmMoeDsaForCausalLM):
     def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
         if (not vllm_config.use_v2_model_runner                        <span class="c"># 条件1：V1 runner（use_v2=False）</span>
