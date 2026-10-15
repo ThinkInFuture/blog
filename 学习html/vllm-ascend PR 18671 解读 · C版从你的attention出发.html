@@ -346,7 +346,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="tb" x="714" y="148" text-anchor="middle">attention（老约定）：要全量</text>
 <text class="ts" x="714" y="164" text-anchor="middle">→ ① AG 聚全局 → ② 切回 → ④ RS</text>
 <text class="tm" x="46" y="210">这就是 ①②④ 的用武之地：不是模型需要它们，是「attention 必须全量算」的老约定需要——</text>
-<text class="tm" x="46" y="230">本 PR 用布局契约把这个老约定改掉：分片从一而终（改后的样子见下图 4，省掉的通信见下图 6）</text>
+<text class="tm" x="46" y="230">本 PR 用布局契约把这个老约定改掉：分片从一而终（改后的样子见下图 4）</text>
 </svg>
 </div>
 
@@ -482,7 +482,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>因为它的活儿已经有人干了。跨卡归约（把各卡的部分和加起来）这件事必须做、且只能做一次：改动后由 ⑥ 在 attention 内部完成——all_to_all 换完 head 后，数据正好是"每卡一段 token 的部分和"，紧接着一次 reduce_scatter 同时完成求和和按卡散射，一步到位。模型层原来那个 ④ 如果保留，要么重复归约（结果就错了），要么得先把数据倒腾回旧布局再散一次（通信翻倍）。所以它不是简单删掉，而是职责移进了唯一正确的位置。至于正确性：⑤ 的边界校验保证布局不可能悄悄错（错就当场抛错），FP16 的 scale 放在归约前乘，与上游语义逐位对齐——4.6 节的单测验证了新旧路径结果一致。</p>
 
 <h2 id="s4">4. 从你认识的 attention 代码出发</h2>
-<p>先对齐地基。下面这份就是你认识的 attention 推理实现——矩阵乘、RoPE、KV Cache、softmax，十来行（GQA + KV Cache 的典型写法，batch 维省略）。本章只做一件事：<b>把 PR 里"那一堆"文件，一行一行挂回到这份代码上</b>。先说结论：attention 的数学一行没动；"那一堆"其实是两样东西——<b>你这份代码在框架里的原样出现</b>，加上<b>为了在 16 张卡上跑起来、在它周围加的通信与选址</b>。</p>
+<p>先对齐地基。下面这份就是你认识的 attention 推理实现——矩阵乘、RoPE、KV Cache、softmax，十来行（GQA + KV Cache 的典型写法，batch 维省略）。本章把这份代码在 vllm-ascend 里的完成过程画成三张图：<b>目录介绍图 → 完成流水线图 → PR 对照流水线图</b>，每张图配一段讲解。先说结论：attention 的数学一行没动；"那一堆"其实是两样东西——<b>你这份代码在框架里的原样出现</b>，加上<b>为了在 16 张卡上跑起来、在它周围加的通信与选址</b>。</p>
 <pre><span class="c"># 你认识的 attention（推理版，等价于典型的 GQA+KVCache 教程实现）</span>
 def forward(x, is_prefill):                            <span class="c"># x: [1, seq, hidden]</span>
     q = x @ wq                                         <span class="c"># L1  Q 投影</span>
@@ -494,153 +494,138 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
     scores = q @ k_full.transpose(-1,-2) / sqrt(dk)    <span class="c"># L6  打分——隐含假设：全量历史都在本卡</span>
     if is_prefill: scores = causal_mask(scores)        <span class="c"># L7  因果遮罩</span>
     w = softmax(scores, dim=-1)                        <span class="c"># L8  归一化</span>
-    out = w @ v_full        <span class="c"># v_full：L4 拼好的全量值缓存</span>                             <span class="c"># L9  加权求和</span>
+    out = w @ v_full                                   <span class="c"># L9  加权求和</span>
     return out @ wo                                    <span class="c"># L10 输出投影</span></pre>
 
-<h3>先认目录：你的十行散在 vllm-ascend 的哪些模块里</h3>
-<p>目录就是分工。一张图把整个地址画全——一个套一个：引擎 ⊃ 插件 ⊃ 目录 ⊃ 子目录；①→④ 是调用顺序，绿字标你的十行挂在哪：</p>
+<h3>先认目录：与 attention 相关的目录，一个一个认</h3>
 <div class="card">
-<svg viewBox="0 0 840 640" role="img" aria-label="地址全景">
-<text class="th" x="420" y="26" text-anchor="middle">你的十行住在哪：vllm-ascend 地址全景（一个套一个：引擎 ⊃ 插件 ⊃ 目录 ⊃ 车间）</text>
-<rect class="node" x="14" y="40" width="812" height="560" rx="12"/>
-<text class="tb" x="30" y="62">上游 vLLM · 引擎</text>
-<text class="ts" x="30" y="80" font-family="ui-monospace,Consolas,monospace">vllm/v1/engine/core.py:595</text>
-<text class="ts" x="520" y="62">组批后每步调 execute_model（PR 未动）</text>
-<rect x="30" y="92" width="780" height="440" rx="10" fill="var(--surface,#f7f8fa)" stroke="var(--brand,#2563eb)" stroke-width="1.5" stroke-dasharray="6 5"/>
-<text class="tb" x="46" y="114">vllm_ascend/ · 昇腾插件</text>
-<text class="ts" x="470" y="114">platform.py：先向 vLLM 报"我是昇腾"</text>
-<rect class="node" x="42" y="130" width="372" height="150" rx="10"/>
-<circle cx="398" cy="150" r="13" fill="var(--surface-muted,#eef1f5)" stroke="var(--border,#dde1e7)" stroke-width="1.5"/>
-<text class="tb" x="398" y="155" text-anchor="middle">①</text>
-<text class="tb" x="58" y="152">worker/ · 执行与喂料</text>
-<text class="ts" x="58" y="174">接批 → pad 到 3504 → 调模型</text>
-<text class="ts" x="58" y="196">为什么：上游执行器绑死 NVIDIA，</text>
-<text class="ts" x="58" y="214">昇腾必须有自己的执行器才能跑</text>
-<text class="ts" x="58" y="236" font-family="ui-monospace,Consolas,monospace">worker.py:643 ＋ model_runner_v1.py:2035</text>
-<rect class="bc" x="426" y="130" width="372" height="150" rx="10"/>
-<circle cx="782" cy="150" r="13" fill="var(--surface-muted,#eef1f5)" stroke="var(--border,#dde1e7)" stroke-width="1.5"/>
-<text class="tb" x="782" y="155" text-anchor="middle">②</text>
-<text class="tb" x="442" y="152">models/ · 模型结构</text>
-<text class="ts" x="442" y="174">层怎么搭、forward 怎么走 —— 你的十行的调用者</text>
-<text class="ts" x="442" y="196" font-weight="700" fill="var(--accent-text,#0f766e)">★ 你的 L1~L10 就住这层的 forward 里</text>
-<text class="ts" x="442" y="216">为什么：只改个别层 → 继承上游小改</text>
-<text class="ts" x="442" y="236" font-family="ui-monospace,Consolas,monospace">deepseek_mtp.py ★PR</text>
-<rect class="ac" x="42" y="296" width="372" height="170" rx="10"/>
-<circle cx="398" cy="316" r="13" fill="var(--surface-muted,#eef1f5)" stroke="var(--border,#dde1e7)" stroke-width="1.5"/>
-<text class="tb" x="398" y="321" text-anchor="middle">③</text>
-<text class="tb" x="58" y="318">ops/ · 算子门面</text>
-<text class="ts" x="58" y="340">把昇腾算子包成 vLLM 认识的"层"</text>
-<text class="ts" x="58" y="360">（mla.py = 门卫：契约四查 + 新入口）</text>
-<text class="ts" x="58" y="382">为什么：调用约定不同，中间要有翻译，</text>
-<text class="ts" x="58" y="400">模型层只认门面、不认具体硬件</text>
-<text class="ts" x="58" y="422" font-family="ui-monospace,Consolas,monospace">mla.py:151 ★PR</text>
-<rect class="bc" x="426" y="296" width="372" height="170" rx="10"/>
-<circle cx="782" cy="316" r="13" fill="var(--surface-muted,#eef1f5)" stroke="var(--border,#dde1e7)" stroke-width="1.5"/>
-<text class="tb" x="782" y="321" text-anchor="middle">④</text>
-<text class="tb" x="442" y="318">attention/ · 注意力实现</text>
-<text class="ts" x="442" y="340">你的 self_attn 落到这真正开算（后端可插拔）</text>
-<text class="ts" x="442" y="360" font-weight="700" fill="var(--accent-text,#0f766e)">步 3/4/6 = L1·L2·L3；步 8 = L6~L9</text>
-<text class="ts" x="442" y="380" font-family="ui-monospace,Consolas,monospace">sfa_v1.py:1503 ★PR</text>
-<rect class="ac" x="438" y="392" width="348" height="64" rx="8"/>
-<text class="tb" x="450" y="410">context_parallel/ · DSA-CP 特化（车间）</text>
-<text class="ts" x="450" y="428" font-weight="700" fill="var(--accent-text,#0f766e)">⑤ 校验·③ 取 KV·⑥ 收口 = L4 页表·L10 收口</text>
-<text class="ts" x="450" y="446" font-family="ui-monospace,Consolas,monospace">sfa_cp.py ★PR</text>
-<rect class="ghost" x="42" y="478" width="756" height="36" rx="8"/>
-<text class="tm" x="58" y="501">patch/ 运行时补丁（替换上游类的方法）｜ 其余专项：distributed/ quantization/ spec_decode/ device/ 等，各管一块系统能力</text>
-<text class="tm" x="14" y="622">套框 = 地址包含（外层 ⊃ 内层） · ①→④ = 调用顺序 · ★ = PR 改动 · 绿字 = 你的十行挂哪 · 〔 〕= 类比</text>
+<svg viewBox="0 0 840 400" role="img" aria-label="目录介绍图">
+<text class="th" x="420" y="26" text-anchor="middle">与 attention 相关的目录：左 = 目录名，右 = 它管什么、为什么有它</text>
+<rect class="node" x="20" y="42" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="66" text-anchor="middle">vllm_ascend/worker/</text>
+<text class="ts" x="140" y="86" text-anchor="middle">执行与喂料</text>
+<rect class="node" x="272" y="42" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="64">接引擎的批 → pad 到 3504 → 调模型、收回输出</text>
+<text class="ts" x="286" y="86" fill="var(--text-muted,#6b7280)">为什么有它：上游执行器绑死 NVIDIA，昇腾必须有自己的执行器</text>
+<rect class="bc" x="20" y="108" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="132" text-anchor="middle">vllm_ascend/models/</text>
+<text class="ts" x="140" y="152" text-anchor="middle">模型结构 ★</text>
+<rect class="bc" x="272" y="108" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="130">层怎么搭、forward 怎么走 —— <tspan font-weight="700" fill="var(--accent-text,#0f766e)">你的十行的调用者</tspan></text>
+<text class="ts" x="286" y="152" fill="var(--text-muted,#6b7280)">为什么有它：模型结构上游都有，昇腾只改个别层，继承上游小改</text>
+<rect class="ac" x="20" y="174" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="198" text-anchor="middle">vllm_ascend/ops/</text>
+<text class="ts" x="140" y="218" text-anchor="middle">算子门面 ★</text>
+<rect class="ac" x="272" y="174" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="196">把昇腾算子包成 vLLM 认识的"层"；attention 的门卫（mla.py）在这</text>
+<text class="ts" x="286" y="218" fill="var(--text-muted,#6b7280)">为什么有它：调用约定不同，模型层只认门面、不认具体硬件</text>
+<rect class="bc" x="20" y="240" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="264" text-anchor="middle">vllm_ascend/attention/</text>
+<text class="ts" x="140" y="284" text-anchor="middle">注意力实现 ★</text>
+<rect class="bc" x="272" y="240" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="262">self_attn 的后端：九步流水线（sfa_v1.py:1503）在这里真正开算</text>
+<text class="ts" x="286" y="284" fill="var(--text-muted,#6b7280)">为什么有它：注意力后端可插拔（不同硬件/并行形态各一套），策略独立成模块</text>
+<rect class="ac" x="20" y="306" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="330" text-anchor="middle">…/attention/context_parallel/</text>
+<text class="ts" x="140" y="350" text-anchor="middle">DSA-CP 特化（车间）★</text>
+<rect class="ac" x="272" y="306" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="328">⑤ 校验 · ③ 取命中 KV · ⑥ 收口 —— 上下文并行的专属逻辑</text>
+<text class="ts" x="286" y="350" fill="var(--text-muted,#6b7280)">为什么有它：上下文并行（KV 与计算再切多卡）的特化单独放一个子目录</text>
+<text class="tm" x="20" y="388">另有 patch/（运行时补丁）与 platform.py（平台注册"我是昇腾"）也在链路上，但与 attention 无直接关系，知道即可</text>
 </svg>
 </div>
-<div class="figcap">vllm-ascend 地址全景：先认套框（在哪儿），再认格子（管什么、为什么有它），绿字就是你的十行的地址；PR 改的 5 个文件全带 ★</div>
+<div class="figcap">目录介绍图：★ = PR 改动文件所在的目录（5 个源码文件全在这四个目录里）</div>
+<p><b>四个目录，一条链。</b>worker/ 管执行与喂料，models/ 管模型结构，ops/ 管算子门面，attention/ 管注意力实现——目录名就是分工，谁也不越界。</p>
+<p>其中两个目录要特别留意：<b>models/ 是你的十行的调用者</b>——层对象把 input LN、self_attn、post LN、MoE 串成一次 forward；<b>ops/ 和 attention/ 是你的十行的实现者</b>——门卫放行后，九步流水线把每一行数学落地。为什么实现要拆成两个模块？ops/ 管"怎么接进 vLLM 的层体系"，attention/ 管"注意力策略本身"——接法和算法是两件事，所以分家。</p>
 
-<p>后面每贴一段代码，代码上方都有一张「户口」小图：从引擎一路用箭头点到"你现在在这儿"（末级高亮）——模块、类、方法一眼看清，不用再从文字里找地址。</p>
-
-<h3>4.1 你的十行，在 vllm-ascend 里原本是怎么跑的</h3>
-<p>先不谈 PR。看清楚 vllm-ascend 平时是怎么把你的十行跑起来的——一共两级：<b>外面一层"层外壳"</b>（models/ 模块里的层对象，把 LN、你的十行、MoE 串起来），<b>里面一套"九步流水线"</b>（attention/ 模块里的后端，你的十行在这落地）。这条链就是 vllm-ascend 的日常，这次 PR 一条都没拆它：</p>
+<h3>4.1 你的十行，vllm-ascend 原本是怎么完成的</h3>
 <div class="card">
-<svg viewBox="0 0 840 500" role="img" aria-label="原本执行链">
-<defs><marker id="ahO" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">你的十行在 vllm-ascend 里原本的跑法（没有这次 PR 时的样子）</text>
-<text class="tm" x="30" y="52">第一级 · 层外壳（models/ 模块，DeepseekV2DecoderLayer.forward）：把一层串起来</text>
-<rect class="node" x="30" y="60" width="120" height="52" rx="8"/>
-<text class="tb" x="90" y="82" text-anchor="middle">引擎的批</text>
-<text class="ts" x="90" y="100" text-anchor="middle">3504 token</text>
-<path class="flow" d="M150 86 H172" marker-end="url(#ahO)"/>
-<rect class="node" x="176" y="60" width="120" height="52" rx="8"/>
-<text class="tb" x="236" y="82" text-anchor="middle">input LN</text>
-<text class="ts" x="236" y="100" text-anchor="middle">归一化</text>
-<path class="flow" d="M296 86 H318" marker-end="url(#ahO)"/>
-<rect class="bc" x="322" y="60" width="220" height="52" rx="8"/>
-<text class="tb" x="432" y="82" text-anchor="middle">self_attn = 你的十行</text>
-<text class="ts" x="432" y="100" text-anchor="middle">L1~L10 全在这一格</text>
-<path class="flow" d="M542 86 H564" marker-end="url(#ahO)"/>
-<rect class="node" x="568" y="60" width="120" height="52" rx="8"/>
-<text class="tb" x="628" y="82" text-anchor="middle">post LN</text>
-<text class="ts" x="628" y="100" text-anchor="middle">归一化</text>
-<path class="flow" d="M688 86 H710" marker-end="url(#ahO)"/>
-<rect class="node" x="714" y="60" width="106" height="52" rx="8"/>
-<text class="tb" x="767" y="82" text-anchor="middle">MoE</text>
-<text class="ts" x="767" y="100" text-anchor="middle">各算各段</text>
-<path class="flow" d="M432 112 V138" marker-end="url(#ahO)"/>
-<text class="tm" x="446" y="130">self_attn 这一行往下调,进入第二级</text>
-<text class="tm" x="30" y="146">第二级 · attention 后端（attention/ 模块）：先经过门卫,再进九步流水线</text>
-<rect class="ac" x="30" y="154" width="380" height="56" rx="8"/>
-<text class="tb" x="220" y="176" text-anchor="middle">ops/mla.py · 包装器（门卫）</text>
-<text class="ts" x="220" y="198" text-anchor="middle">AscendMultiHeadLatentAttention:把调用送进后端</text>
-<path class="flow" d="M410 182 H432" marker-end="url(#ahO)"/>
-<rect class="bc" x="436" y="154" width="384" height="56" rx="8"/>
-<text class="tb" x="628" y="176" text-anchor="middle">attention/sfa_v1.py · 后端（AscendSFAImpl）</text>
-<text class="ts" x="628" y="198" text-anchor="middle">forward(:1503) = 九步流水线 ↓</text>
-<text class="tm" x="30" y="240">九步展开(绿字=挂回你的行号;这条链原本就在,这次 PR 不拆它):</text>
-<!-- 九步两行 -->
-<rect class="node" x="30" y="250" width="150" height="56" rx="8"/>
-<text class="tb" x="105" y="270" text-anchor="middle">1 拿本卡上下文</text>
-<text class="ts" x="105" y="290" text-anchor="middle">框架选址</text>
-<rect class="node" x="192" y="250" width="150" height="56" rx="8"/>
-<text class="tb" x="267" y="270" text-anchor="middle">2 输入准备</text>
-<text class="ts" x="267" y="290" text-anchor="middle">整备 hidden</text>
-<rect class="bc" x="354" y="250" width="150" height="56" rx="8"/>
-<text class="tb" x="429" y="270" text-anchor="middle">3 Q/KV 投影</text>
-<text class="ts" x="429" y="290" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L1·L2</text>
-<rect class="bc" x="516" y="250" width="150" height="56" rx="8"/>
-<text class="tb" x="591" y="270" text-anchor="middle">4 KV 整形+写缓存</text>
-<text class="ts" x="591" y="290" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L2·L3·L4</text>
-<rect class="node" x="678" y="250" width="132" height="56" rx="8"/>
-<text class="tb" x="744" y="270" text-anchor="middle">5 跨卡拼全量 KV</text>
-<text class="ts" x="744" y="290" text-anchor="middle">要谁的去取</text>
-<path class="flow" d="M180 278 H192" marker-end="url(#ahO)"/>
-<path class="flow" d="M342 278 H354" marker-end="url(#ahO)"/>
-<path class="flow" d="M504 278 H516" marker-end="url(#ahO)"/>
-<path class="flow" d="M666 278 H678" marker-end="url(#ahO)"/>
-<rect class="node" x="30" y="322" width="150" height="56" rx="8"/>
-<text class="tb" x="105" y="342" text-anchor="middle">6 Q 投影+rope</text>
-<text class="ts" x="105" y="362" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L1·L3</text>
-<rect class="node" x="192" y="322" width="150" height="56" rx="8"/>
-<text class="tb" x="267" y="342" text-anchor="middle">7 全量写回缓存</text>
-<text class="ts" x="267" y="362" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L4</text>
-<rect class="bc" x="354" y="322" width="150" height="56" rx="8"/>
-<text class="tb" x="429" y="342" text-anchor="middle">8 稀疏注意力</text>
-<text class="ts" x="429" y="362" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L6~L9</text>
-<rect class="bc" x="516" y="322" width="150" height="56" rx="8"/>
-<text class="tb" x="591" y="342" text-anchor="middle">9 收口(o_proj)</text>
-<text class="ts" x="591" y="362" text-anchor="middle" fill="var(--accent-text,#0f766e)" font-weight="700">L10</text>
-<rect class="node" x="678" y="322" width="132" height="56" rx="8"/>
-<text class="tb" x="744" y="342" text-anchor="middle">交回层外壳</text>
-<text class="ts" x="744" y="362" text-anchor="middle">→ post LN → MoE</text>
-<path class="flow" d="M180 350 H192" marker-end="url(#ahO)"/>
-<path class="flow" d="M342 350 H354" marker-end="url(#ahO)"/>
-<path class="flow" d="M504 350 H516" marker-end="url(#ahO)"/>
-<path class="flow" d="M666 350 H678" marker-end="url(#ahO)"/>
-<text class="tm" x="30" y="412">九步里只有两处通信:步 5(取/拼 KV)和步 9(收口)。平时(不开 SP+DSA-CP)这条链安安稳稳;一旦开了 SP+DSA-CP,</text>
-<text class="tm" x="30" y="432">层外壳要先把 token 聚成全量再散回去——麻烦出在第一级的外壳上,不在你的十行里(4.2)。这次 PR 只在步 2、步 9 各加一条岔路(4.3)。</text>
-<text class="tm" x="30" y="474">绿字 = 你的行号 · 蓝 = 数学格 · 灰 = 框架格 · 这张图是"原本"的样子;PR 之后的同一条链见 4.3 图 5</text>
+<svg viewBox="0 0 840 588" role="img" aria-label="流水线图原本">
+<defs><marker id="ahP" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">你的 attention → vllm-ascend 怎么完成它：左 = 你的逻辑，中 = 昇腾流水线，右 = 门牌</text>
+<text class="tm" x="125" y="50" text-anchor="middle" font-weight="700">你的 attention（样例代码）</text>
+<text class="tm" x="417" y="50" text-anchor="middle" font-weight="700">vllm-ascend 的实现流水线</text>
+<text class="tm" x="711" y="50" text-anchor="middle" font-weight="700">在哪个模块 · 门牌</text>
+<rect class="bc" x="20" y="60" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="82" text-anchor="middle">L1·L2 投影</text>
+<text class="ts" x="125" y="104" text-anchor="middle">q=x@wq, k=x@wk, v=x@wv</text>
+<path class="flow" d="M230 93 H250" marker-end="url(#ahP)"/>
+<rect class="node" x="254" y="60" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="82" text-anchor="middle">层外壳发起 self_attn → 门卫放行</text>
+<text class="ts" x="417" y="104" text-anchor="middle">后端步 3 Q/KV 联合低秩投影、步 6 Q 上投影</text>
+<path class="flow" d="M580 93 H598" marker-end="url(#ahP)"/>
+<rect class="node" x="602" y="60" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="82" text-anchor="middle">models/ 发起（模型结构）</text>
+<text class="ts" x="711" y="104" text-anchor="middle">ops/ 门卫 · attention/ :1576 :1614</text>
+<rect class="bc" x="20" y="136" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="158" text-anchor="middle">L3 RoPE 只转 Q/K</text>
+<text class="ts" x="125" y="180" text-anchor="middle">rotate 一半维度</text>
+<path class="flow" d="M230 169 H250" marker-end="url(#ahP)"/>
+<rect class="node" x="254" y="136" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="158" text-anchor="middle">步 4 K 侧 rmsnorm+rope（同一算子内）</text>
+<text class="ts" x="417" y="180" text-anchor="middle">步 6 Q 侧 rope——同一个旋转</text>
+<path class="flow" d="M580 169 H598" marker-end="url(#ahP)"/>
+<rect class="node" x="602" y="136" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="158" text-anchor="middle">attention/</text>
+<text class="ts" x="711" y="180" text-anchor="middle">:1595（K 侧）· :1616（Q 侧）</text>
+<rect class="bc" x="20" y="212" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="234" text-anchor="middle">L4 KV Cache</text>
+<text class="ts" x="125" y="256" text-anchor="middle">cat 把历史拼在本卡</text>
+<path class="flow" d="M230 245 H250" marker-end="url(#ahP)"/>
+<rect class="node" x="254" y="212" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="234" text-anchor="middle">步 4 按 slot 写本卡缓存</text>
+<text class="ts" x="417" y="256" text-anchor="middle">步 7 全量写回（slot_mapping 页表定位）</text>
+<path class="flow" d="M580 245 H598" marker-end="url(#ahP)"/>
+<rect class="node" x="602" y="212" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="234" text-anchor="middle">attention/</text>
+<text class="ts" x="711" y="256" text-anchor="middle">sfa_v1.py:1626</text>
+<rect class="node" x="20" y="288" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="310" text-anchor="middle">L5 GQA</text>
+<text class="ts" x="125" y="332" text-anchor="middle">repeat 复用 KV 给 Q 头</text>
+<path class="flow" d="M230 321 H250" marker-end="url(#ahP)" stroke-dasharray="4 4"/>
+<rect class="node" x="254" y="288" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="310" text-anchor="middle">无此步：latent KV 天然全头共享</text>
+<text class="ts" x="417" y="332" text-anchor="middle">目的相同（省 KV），手段不同</text>
+<path class="flow" d="M580 321 H598" marker-end="url(#ahP)" stroke-dasharray="4 4"/>
+<rect class="node" x="602" y="288" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="310" text-anchor="middle">attention/（MLA/DSA 特性）</text>
+<text class="ts" x="711" y="332" text-anchor="middle">没有独立门牌</text>
+<rect class="bc" x="20" y="364" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="386" text-anchor="middle">L6~L9 打分</text>
+<text class="ts" x="125" y="408" text-anchor="middle">遮罩→softmax→加权</text>
+<path class="flow" d="M230 397 H250" marker-end="url(#ahP)"/>
+<rect class="bc" x="254" y="364" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="386" text-anchor="middle">步 8 稀疏注意力算子</text>
+<text class="ts" x="417" y="408" text-anchor="middle">QKᵀ→softmax→·V 原样，只算 top-2048 块</text>
+<path class="flow" d="M580 397 H598" marker-end="url(#ahP)"/>
+<rect class="node" x="602" y="364" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="386" text-anchor="middle">attention/</text>
+<text class="ts" x="711" y="408" text-anchor="middle">sfa_v1.py:1683</text>
+<rect class="bc" x="20" y="440" width="210" height="66" rx="8"/>
+<text class="tb" x="125" y="462" text-anchor="middle">L10 输出投影</text>
+<text class="ts" x="125" y="484" text-anchor="middle">out @ wo</text>
+<path class="flow" d="M230 473 H250" marker-end="url(#ahP)"/>
+<rect class="node" x="254" y="440" width="326" height="66" rx="8"/>
+<text class="ts" x="417" y="462" text-anchor="middle">步 9 o_proj 收口（原路：直接投影 :1384）</text>
+<text class="ts" x="417" y="484" text-anchor="middle">交回层外壳 → post LN → MoE</text>
+<path class="flow" d="M580 473 H598" marker-end="url(#ahP)"/>
+<rect class="node" x="602" y="440" width="218" height="66" rx="8"/>
+<text class="ts" x="711" y="462" text-anchor="middle">attention/</text>
+<text class="ts" x="711" y="484" text-anchor="middle">:1695</text>
+<text class="tm" x="20" y="540">三列读法：左 = 你写的；中 = 它在 vllm-ascend 里怎么被完成；右 = 在哪个模块、哪个文件。六行里只有 L5 没有对应——目的相同、手段不同。</text>
+<text class="tm" x="20" y="566">此时还没有 PR 的事——这就是 vllm-ascend 平时跑你 attention 的样子。</text>
 </svg>
 </div>
-<div class="figcap">图 5 · 你的十行在 vllm-ascend 里原本的跑法:层外壳(models/)串起 LN→十行→LN→MoE;self_attn 经门卫(ops/)进九步流水线(attention/)——这就是 vllm-ascend 完成你那份 attention 代码的全部逻辑</div>
+<div class="figcap">流水线图 · 原本：你的十行在 vllm-ascend 里的完成过程（没有这次 PR 时的样子）</div>
+<p><b>看懂这张图，记住三件事。</b></p>
+<p><b>一、你的十行一步没少。</b>左列每一行，中列都有对应——投影、RoPE、写缓存、稀疏注意力、收口，数学原样；唯一的例外是 L5（GQA repeat），MLA 系用 latent KV 全头共享达到同样目的，所以没有独立步骤。</p>
+<p><b>二、实现分散在三个模块，但只有一条调用链。</b>models/ 发起 → ops/ 放行 → attention/ 干活；右列就是每一站的地盘和门牌（文件:行号）。</p>
+<p><b>三、此时还没有 PR 的事。</b>这就是 vllm-ascend 平时跑你 attention 的完整样子。它什么时候出问题、这次 PR 改了它哪里，往下看。</p>
 
-<h3>4.2 第一个意外：你这份代码上 16 卡，先被加了两行（改前）</h3>
-<p>你的 L6 之所以写得这么短，是因为 L4 已经把全量历史 <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④。</p>
+<h3>4.2 开了 SP + DSA-CP，原本的跑法出了问题</h3>
 <div class="card">
 <svg viewBox="0 0 840 168" role="img" aria-label="户口图:上游DecoderLayer">
+<defs><marker id="ahH1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（改前 · 上游层）</text>
 <text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
 <text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
@@ -649,36 +634,36 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
 <text class="ts" x="115" y="102" text-anchor="middle">core.py:595 组批调执行</text>
-<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
+<path class="flow" d="M210 86 H232" marker-end="url(#ahH1)"/>
 <rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="327" y="80" text-anchor="middle">models/ · 模型结构</text>
 <text class="ts" x="327" y="102" text-anchor="middle">上游管所有模型的层</text>
-<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
+<path class="flow" d="M422 86 H444" marker-end="url(#ahH1)"/>
 <rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="539" y="80" text-anchor="middle">DeepseekV2DecoderLayer</text>
 <text class="ts" x="539" y="102" text-anchor="middle">一层的封装·你的十行住这</text>
-<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
+<path class="flow" d="M634 86 H656" marker-end="url(#ahH1)"/>
 <rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
 <text class="tb" x="738" y="80" text-anchor="middle">forward()</text>
 <text class="ts" x="738" y="102" text-anchor="middle">串 LN/attn/MoE,①④ 在内</text>
 <text class="tm" x="20" y="148">层里除了你的十行还有前后两个 LN 和一个 MoE · deepseek_v2.py:1315,有删节 · 为什么讲它:①④ 不在十行里,在层的外壳上</text>
-<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 </svg>
 </div>
+<p>你的 L6 之所以写得那么短，是因为 L4 已经把全量历史 KV <code>cat</code> 进了同一张卡——<b>"所有 token 的 KV 我都拿得到"</b>是单卡默认成立的隐含假设。16 卡把 token 切成 16 段后，每张卡只分到 219 个 token，这个假设碎了。上游 vLLM 的解法很直接：<b>每层先把 token 聚回全量，让你的 attention 照旧在全量上跑，算完再散回去</b>——这就是第 2 章的 ① 和 ④（上游 deepseek_v2.py:1315，有删节）：</p>
 <pre><span class="c"># 上游每层都在你的十行外面套了这两行（有删节）</span>
 if input_is_sequence_parallel:
     hidden = tensor_model_parallel_all_gather(hidden, 0)   <span class="c"># <span class="cnum">①</span> 219 → 3504：把假设"买"回来，每层白付一次</span>
 hidden = self.self_attn(positions, hidden, ...)            <span class="c"># ← 你的 L1~L10 在这里面，照旧全量跑</span>
 ...
 hidden = tensor_model_parallel_reduce_scatter(hidden, 0)   <span class="c"># <span class="cnum">④</span> 3504 → 219：再把假设"退"回去</span></pre>
-<p>更亏的是 L4：DSA-CP 的注意力本来就要跨卡取命中的 KV 块（③），于是 ① 聚出来的全量 token 转头又要被 attention 切回本地段（②）——<b>聚了又切，切完就扔</b>，每层每批都来一遍。这就是第 2 章图 2 的灰块；问题不在你的十行数学，在"喂给它的数据布局"来回倒腾。</p>
+<p>更亏的是 L4：DSA-CP 的注意力本来就要跨卡取命中的 KV 块（③），于是 ① 聚出来的全量 token 转头又被切回本地段（②）——<b>聚了又切，切完就扔</b>，每层每批都来一遍。这就是第 2 章图 2 的灰块；问题不在你的十行数学，在"喂给它的数据布局"来回倒腾。</p>
 <div class="kp"><span class="kp-t">检测技巧：程序怎么知道"输入已经是分片"？</span>
 对比两个长度——positions 是全量长度（3504，每个 token 的位置编号都要有），hidden_states 是本卡分片长度（219）。<b>形状对不上，就说明输入已被切成 SP 分片</b>。不需要任何额外开关，一个 shape 比较就够了。</div>
 
-<h3>4.3 PR 的做法：把"全量"从你的 L6 里拆出去</h3>
-<p>既然 DSA-CP 的注意力天生按 token 分片算（每卡只算自己 219 个 token 的 Q，缺的 KV 跨卡定点取），"先聚成全量"就纯属多余。PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>。</p>
+<h3>4.3 这次 PR：拆掉聚散，分片直通</h3>
 <div class="card">
 <svg viewBox="0 0 840 168" role="img" aria-label="户口图:PR新层">
+<defs><marker id="ahH2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（改后 · PR 新层）</text>
 <text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
 <text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
@@ -687,132 +672,125 @@ hidden = tensor_model_parallel_reduce_scatter(hidden, 0)   <span class="c"># <sp
 <rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
 <text class="ts" x="115" y="102" text-anchor="middle">照常调到这一层</text>
-<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
+<path class="flow" d="M210 86 H232" marker-end="url(#ahH2)"/>
 <rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="327" y="80" text-anchor="middle">vllm_ascend/models/</text>
 <text class="ts" x="327" y="102" text-anchor="middle">模型结构·继承上游小改</text>
-<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
+<path class="flow" d="M422 86 H444" marker-end="url(#ahH2)"/>
 <rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="539" y="80" text-anchor="middle">AscendDSACPDecoderLayer</text>
 <text class="ts" x="539" y="102" text-anchor="middle">那一层的昇腾版</text>
-<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
+<path class="flow" d="M634 86 H656" marker-end="url(#ahH2)"/>
 <rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
 <text class="tb" x="738" y="80" text-anchor="middle">forward()</text>
 <text class="ts" x="738" y="102" text-anchor="middle">三查不过走老路,过则直通</text>
 <text class="tm" x="20" y="148">为什么住 models/:改的是"层怎么走",不是算子 · 类继承上游 DeepseekV2DecoderLayer</text>
-<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 </svg>
 </div>
-<pre><span class="c"># PR 新增：vllm_ascend/models/deepseek_mtp.py（有删节，全文见 5.1）</span>
+<p>PR 的模型层改成：<b>分片直接进 attention，你的十行在分片上原样跑</b>：</p>
+<pre><span class="c"># PR 新增：vllm_ascend/models/deepseek_mtp.py</span>
 class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
     def forward(self, positions, hidden_states, residual, llama_4_scaling=None):
-        <span class="c"># 判定"输入已是分片"：就是 4.2 检测技巧那个 shape 比较</span>
-        input_is_sequence_parallel = (... and hidden_states.shape[0] != positions.shape[0])
-        <span class="c"># 三个回退条件任一命中 → 原样走 4.2 的上游老路，①④ 照做，行为不变</span>
-        if (not input_is_sequence_parallel or llama_4_scaling is not None
+        input_is_sequence_parallel = (self.use_sequence_parallel_moe
+                                      and residual is not None
+                                      and hidden_states.shape[0] != positions.shape[0])
+        <span class="c"># 回退三条件：不是分片 / 带缩放的特殊批 / attention 契约不支持 → 原样走 4.2 的上游老路</span>
+        if (not input_is_sequence_parallel
+                or llama_4_scaling is not None
                 or not self.self_attn.mla_attn.supports_sequence_parallel_input):
             return super().forward(positions, hidden_states, residual, llama_4_scaling)
 
         hidden_states, residual = self.input_layernorm(hidden_states, residual)
         output_scale = 1.0 / self.routed_scaling_factor if hidden_states.dtype == torch.float16 else 1.0
         hidden_states = self.self_attn.mla_attn.forward_sequence_parallel(
-            positions, hidden_states, output_scale=output_scale)   <span class="c"># ← 分片直进：你的 L1~L10 全在里面（图 5）</span>
+            positions, hidden_states, output_scale=output_scale)   <span class="c"># 分片直进，无<span class="cnum">①</span> 无<span class="cnum">④</span></span>
         if hidden_states.dtype == torch.float16 and self.layer_idx == 0:
-            residual *= 1.0 / self.routed_scaling_factor
+            residual *= 1.0 / self.routed_scaling_factor           <span class="c"># FP16 防溢出：第 0 层 residual 同步缩放</span>
         hidden_states, residual = self.post_attention_layernorm(hidden_states, residual)
-        hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)   <span class="c"># MoE 只算自己的 219 行</span>
+        hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)
         return hidden_states, residual</pre>
+
 <div class="card">
-<svg viewBox="0 0 840 168" role="img" aria-label="户口图:九步流水线">
-<text class="th" x="420" y="24" text-anchor="middle">从引擎点到这段代码：模块 → 类 → 方法（attention 后端）</text>
-<text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
-<text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
-<text class="tm" x="539" y="46" text-anchor="middle">类</text>
-<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
-<rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
-<text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
-<text class="ts" x="115" y="102" text-anchor="middle">只定义注意力后端接口</text>
-<path class="flow" d="M210 86 H232" marker-end="url(#ahH)"/>
-<rect class="node" x="232" y="54" width="190" height="64" rx="10"/>
-<text class="tb" x="327" y="80" text-anchor="middle">vllm_ascend/attention/</text>
-<text class="ts" x="327" y="102" text-anchor="middle">注意力实现·后端可插拔</text>
-<path class="flow" d="M422 86 H444" marker-end="url(#ahH)"/>
-<rect class="node" x="444" y="54" width="190" height="64" rx="10"/>
-<text class="tb" x="539" y="80" text-anchor="middle">AscendSFAImpl</text>
-<text class="ts" x="539" y="102" text-anchor="middle">昇腾这份 SFA 实现</text>
-<path class="flow" d="M634 86 H656" marker-end="url(#ahH)"/>
-<rect class="bc" x="656" y="54" width="164" height="64" rx="10"/>
-<text class="tb" x="738" y="80" text-anchor="middle">forward() :1503</text>
-<text class="ts" x="738" y="102" text-anchor="middle">九步·每步标你的行号</text>
-<text class="tm" x="20" y="148">各硬件各出一份后端实现,昇腾的这份叫 SFA · 你的十行在这个类里落成九步流水线</text>
-<defs><marker id="ahH" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<svg viewBox="0 0 840 588" role="img" aria-label="流水线图PR">
+<defs><marker id="ahP2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">这次 PR 改了什么：左 = vllm-ascend 原本，中 = PR 的做法，右 = 解释</text>
+<text class="tm" x="145" y="50" text-anchor="middle" font-weight="700">原本（开 SP+DSA-CP）</text>
+<text class="tm" x="435" y="50" text-anchor="middle" font-weight="700">这次 PR 的代码 / 做法</text>
+<text class="tm" x="710" y="50" text-anchor="middle" font-weight="700">解释</text>
+<rect class="wc" x="20" y="60" width="250" height="66" rx="8"/>
+<text class="ts" x="145" y="82" text-anchor="middle">层外壳：① AllGather 聚全量</text>
+<text class="ts" x="145" y="104" text-anchor="middle">→ attention → ④ RS 散回（每层）</text>
+<path class="flow" d="M270 93 H292" marker-end="url(#ahP2)"/>
+<rect class="bc" x="296" y="60" width="278" height="66" rx="8"/>
+<text class="ts" x="435" y="82" text-anchor="middle"><tspan font-weight="700">层直通：AscendDSACPDecoderLayer</tspan></text>
+<text class="ts" x="435" y="104" text-anchor="middle">分片直接进 attention（回退三条件）</text>
+<path class="flow" d="M574 93 H596" marker-end="url(#ahP2)"/>
+<rect class="node" x="600" y="60" width="220" height="66" rx="8"/>
+<text class="ts" x="710" y="82" text-anchor="middle">新类住 models/（deepseek_mtp.py）</text>
+<text class="ts" x="710" y="104" text-anchor="middle">①聚了又切 = 白做，拆掉</text>
+<rect class="wc" x="20" y="136" width="250" height="66" rx="8"/>
+<text class="ts" x="145" y="158" text-anchor="middle">输入：上游喂全量</text>
+<text class="ts" x="145" y="180" text-anchor="middle">后端步 2 切段（②）</text>
+<path class="flow" d="M270 169 H292" marker-end="url(#ahP2)"/>
+<rect class="ac" x="296" y="136" width="278" height="66" rx="8"/>
+<text class="ts" x="435" y="158" text-anchor="middle"><tspan font-weight="700">⑤ 新增：校验分片边界 + 清零</tspan></text>
+<text class="ts" x="435" y="180" text-anchor="middle">只查不切（四项断言，错位当场抛错）</text>
+<path class="flow" d="M574 169 H596" marker-end="url(#ahP2)"/>
+<rect class="node" x="600" y="136" width="220" height="66" rx="8"/>
+<text class="ts" x="710" y="158" text-anchor="middle">sfa_cp.py（车间模块）</text>
+<text class="ts" x="710" y="180" text-anchor="middle">防"静默算错"的安全阀</text>
+<rect class="node" x="20" y="212" width="250" height="66" rx="8"/>
+<text class="ts" x="145" y="234" text-anchor="middle">KV：跨卡拼全量、每卡全存</text>
+<text class="ts" x="145" y="256" text-anchor="middle">（步 5 / 步 7）</text>
+<path class="flow" d="M270 245 H292" marker-end="url(#ahP2)"/>
+<rect class="node" x="296" y="212" width="278" height="66" rx="8"/>
+<text class="ts" x="435" y="234" text-anchor="middle">不变：③ 跨卡取命中 KV 照旧</text>
+<text class="ts" x="435" y="256" text-anchor="middle">每卡都存全量 KV（下层直接用）</text>
+<path class="flow" d="M574 245 H596" marker-end="url(#ahP2)"/>
+<rect class="node" x="600" y="212" width="220" height="66" rx="8"/>
+<text class="ts" x="710" y="234" text-anchor="middle">attention/</text>
+<text class="ts" x="710" y="256" text-anchor="middle">稀疏注意力的本职通信</text>
+<rect class="node" x="20" y="288" width="250" height="66" rx="8"/>
+<text class="ts" x="145" y="310" text-anchor="middle">稀疏注意力（步 8）</text>
+<text class="ts" x="145" y="332" text-anchor="middle">只在自己 token 的 Q 上算</text>
+<path class="flow" d="M270 321 H292" marker-end="url(#ahP2)"/>
+<rect class="node" x="296" y="288" width="278" height="66" rx="8"/>
+<text class="ts" x="435" y="310" text-anchor="middle">不变：QKᵀ → softmax → ·V 原样</text>
+<text class="ts" x="435" y="332" text-anchor="middle">你的十行的数学零改动</text>
+<path class="flow" d="M574 321 H596" marker-end="url(#ahP2)"/>
+<rect class="node" x="600" y="288" width="220" height="66" rx="8"/>
+<text class="ts" x="710" y="310" text-anchor="middle">attention/（:1683）</text>
+<text class="ts" x="710" y="332" text-anchor="middle">L6~L9 原样保留</text>
+<rect class="node" x="20" y="364" width="250" height="66" rx="8"/>
+<text class="ts" x="145" y="386" text-anchor="middle">收口：o_proj 直算（步 9 原路）</text>
+<text class="ts" x="145" y="408" text-anchor="middle">全量 token 上直接投影</text>
+<path class="flow" d="M270 397 H292" marker-end="url(#ahP2)"/>
+<rect class="bc" x="296" y="364" width="278" height="66" rx="8"/>
+<text class="ts" x="435" y="386" text-anchor="middle"><tspan font-weight="700">⑥ 新增：两路收口</tspan></text>
+<text class="ts" x="435" y="408" text-anchor="middle">路A 全权重零通信 / 路B all_to_all+单次RS</text>
+<path class="flow" d="M574 397 H596" marker-end="url(#ahP2)"/>
+<rect class="node" x="600" y="364" width="220" height="66" rx="8"/>
+<text class="ts" x="710" y="386" text-anchor="middle">sfa_cp.py（:507 起）</text>
+<text class="ts" x="710" y="408" text-anchor="middle">16 卡各算一段，归约只做一次</text>
+<rect class="ghost" x="20" y="440" width="250" height="56" rx="8"/>
+<text class="ts" x="145" y="462" text-anchor="middle">闸门不过时走的老路</text>
+<text class="ts" x="145" y="484" text-anchor="middle">行为与改前完全一致</text>
+<path class="flow" d="M270 468 H292" marker-end="url(#ahP2)"/>
+<rect class="ghost" x="296" y="440" width="278" height="56" rx="8"/>
+<text class="ts" x="435" y="462" text-anchor="middle">闸门：模型类 4 条件 → 门卫契约四查</text>
+<text class="ts" x="435" y="484" text-anchor="middle">→ 后端契约四选一</text>
+<path class="flow" d="M574 468 H596" marker-end="url(#ahP2)"/>
+<rect class="ghost" x="600" y="440" width="220" height="56" rx="8"/>
+<text class="ts" x="710" y="462" text-anchor="middle">任何一级不满足 → 整条链</text>
+<text class="ts" x="710" y="484" text-anchor="middle">回左列老路（下图 8）</text>
+<text class="tm" x="20" y="540">三列读法：左 = 原本（含它的问题）；中 = PR 的代码与做法（粗体 = 改动）；右 = 解释（模块 / 文件 / 为什么）。</text>
+<text class="tm" x="20" y="566">FP16 细节：output_scale = 1/routed_scaling_factor 在归约前乘，第 0 层 residual 同步缩放——与上游防溢出语义逐位对齐。</text>
 </svg>
 </div>
-<div class="card">
-<svg viewBox="0 0 840 920" role="img" aria-label="九步流水线C">
-<defs><marker id="ahC2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="28" text-anchor="middle">你的十行在九步流水线里的位置（sfa_v1.py:1503 forward）—— 灰字＝对应你的行号</text>
-<rect class="node" x="40" y="48" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="70">步 1 · 拿本卡并行上下文 · :1527</text>
-<text class="ts" x="56" y="92">读 DSACPContext：本卡是哪段 [local_start, local_end_with_pad)</text>
-<path class="flow" d="M275 106 V128" marker-end="url(#ahC2)"/>
-<rect class="bc" x="40" y="132" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="154">步 2 · 输入准备 · :1575 【PR 加岔路】</text>
-<text class="ts" x="56" y="176">SP：⑤ 校验四断言 + 清零 ｜ 原路：pad + 切片（改前 ② ，图 9）</text>
-<path class="flow" d="M275 190 V212" marker-end="url(#ahC2)"/>
-<rect class="ac" x="524" y="120" width="296" height="82" rx="8"/>
-<text class="tb" x="672" y="142" text-anchor="middle">你的代码里没有（防错位安全阀）</text>
-<text class="ts" x="536" y="164">四项断言：token / pad / start / end 对齐本 rank，</text>
-<text class="ts" x="536" y="182">错位当场抛 RuntimeError（防静默算错）</text>
-<text class="ts" x="536" y="198">clone 后清零 padding（不碰 residual 共享存储）</text>
-<rect class="node" x="40" y="216" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="238">步 3 · Q/KV 联合低秩投影 · :1576</text>
-<text class="ts" x="56" y="260">fused_qkv_a_proj → q_c + kv_no_split</text>
-<text class="ts" x="498" y="238" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L1·L2（低秩前段）</text>
-<path class="flow" d="M275 274 V296" marker-end="url(#ahC2)"/>
-<rect class="node" x="40" y="300" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="322">步 4 · 本卡 KV 整形并写缓存 · :1595</text>
-<text class="ts" x="56" y="344">rmsnorm + rope + 按 slot 写入本卡 KV cache</text>
-<text class="ts" x="498" y="322" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L2 后段·L3·L4</text>
-<path class="flow" d="M275 358 V380" marker-end="url(#ahC2)"/>
-<rect class="node" x="40" y="384" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="406">步 5 · 跨卡拼全量 KV · :1605</text>
-<text class="ts" x="56" y="428">all_gather_async —— 这就是 ③ 取命中 KV（DSA-CP 本职）</text>
-<text class="ts" x="498" y="406" text-anchor="end" font-weight="700" fill="var(--accent-text)">L6 要的"全量"从哪来</text>
-<path class="flow" d="M275 442 V464" marker-end="url(#ahC2)"/>
-<rect class="node" x="40" y="468" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="490">步 6 · Q 投影 + rope · :1614</text>
-<text class="ts" x="56" y="512">q_c → 各头的 ql_nope / q_pe，加位置编码</text>
-<text class="ts" x="498" y="490" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L1（Q 侧）·L3</text>
-<path class="flow" d="M275 526 V548" marker-end="url(#ahC2)"/>
-<rect class="node" x="40" y="552" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="574">步 7 · 全量 KV 写回本卡缓存 · :1626</text>
-<text class="ts" x="56" y="596">拼好的全量 KV 按 slot 写回——每卡都存全量，下层直接用</text>
-<text class="ts" x="498" y="574" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L4（全量副本）</text>
-<path class="flow" d="M275 610 V632" marker-end="url(#ahC2)"/>
-<rect class="bc" x="40" y="636" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="658">步 8 · 选 top-k + 稀疏注意力开算 · :1670 / :1683</text>
-<text class="ts" x="56" y="680">indexer 选 2048 块 → Q·K → softmax → ·V（数学在这里发生）</text>
-<text class="ts" x="498" y="658" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L6·L7·L8·L9</text>
-<path class="flow" d="M275 694 V716" marker-end="url(#ahC2)"/>
-<rect class="bc" x="40" y="720" width="470" height="58" rx="8"/>
-<text class="tb" x="56" y="742">步 9 · 输出收口 · :1695 【PR 加岔路】</text>
-<text class="ts" x="56" y="764">SP：⑥ 两路收口（下图 7）｜ 原路：直接 o_proj（:1384）</text>
-<text class="ts" x="498" y="742" text-anchor="end" font-weight="700" fill="var(--accent-text)">你的 L10</text>
-<rect class="ac" x="524" y="704" width="296" height="88" rx="8"/>
-<text class="tb" x="672" y="726" text-anchor="middle">⑥ = 你的 L10 + 一次收口通信</text>
-<text class="ts" x="536" y="748">路 A：全权重直算，零通信；路 B：all_to_all 换头</text>
-<text class="ts" x="536" y="766">→ o_proj（不归约）→ 先乘 output_scale（FP16）</text>
-<text class="ts" x="536" y="784">→ 一次 reduce_scatter 还原本卡分片</text>
-<path class="flow" d="M275 778 V800" marker-end="url(#ahC2)"/>
-<rect class="node" x="40" y="804" width="470" height="44" rx="8"/>
-<text class="tb" x="275" y="831" text-anchor="middle">交回模型层：还是 [219, 8192] 本地分片 → post LN → MoE，这一层结束</text>
-<text class="tm" x="40" y="878">你的 L5（GQA repeat）没有对应步：DSA 的 latent KV 全头共享，目的相同、手段不同。</text>
-<text class="tm" x="40" y="900">改前的 ①②④ 不在这九步里——它们发生在上一层模型 forward（4.2）；契约不过就走原路，行为与改前完全一致。</text>
-</svg>
-</div>
-<div class="figcap">图 5 · 九步流水线 × 你的 attention 行号：数学步（3/4/6/8）全是你的老朋友；框架步（1/2）与通信步（5/9）是 16 卡带来的</div>
-<p>总结这一节的三个"变化点"，对应你的三行：<b>L4 换了姿势</b>（整块 cat → 页表 slot_mapping + 全量副本）；<b>L6 换了范围</b>（全量扫描 → top-2048 稀疏块）；<b>L10 加了收口</b>（单卡一个矩阵乘 → ⑥ all_to_all + 单次 reduce_scatter）。再加一个你的代码里没有的 ⑤ 校验，防的是分片错位。输出收口两条路：</p>
+<div class="figcap">流水线图 · 这次 PR：左列原本（黄 = 问题），中列 PR 做法（粗体 = 改动），右列解释；灰行 = 闸门兜底，不支持就回老路</div>
+<p><b>这张图就是整个 PR。</b>左列是原本（开了 SP+DSA-CP 的跑法），中列是 PR 的做法，逐行对着看。</p>
+<p><b>改的是三处。</b>层外壳：不再 ① 聚全量 / ④ 散回，分片直进（新类 AscendDSACPDecoderLayer，住 models/）；输入侧：新增 ⑤ 只查不切（四项断言，防静默错位）；输出侧：新增 ⑥ 两路收口（路 A 全权重零通信，路 B all_to_all + 单次 reduce_scatter——归约只做一次，FP16 缩放在归约前乘）。</p>
+<p><b>不动的是三处。</b>③ 跨卡取命中 KV、步 8 的稀疏注意力数学、门卫与闸门的兜底——任何一级条件不满足，整条链回左列老路，行为与改前完全一致。</p>
 <div class="card">
 <svg viewBox="0 0 760 260" role="img" aria-label="o_proj 两条收口路径">
 <defs><marker id="ah3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
@@ -836,30 +814,6 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <div class="figcap">图 7 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
 </div>
 
-<div class="card">
-<svg viewBox="0 0 840 224" role="img" aria-label="户口图:三个包装">
-<text class="th" x="420" y="24" text-anchor="middle">attention 外面的三个包装：谁的地盘 · 什么类 · 管什么</text>
-<text class="tm" x="60" y="52">门卫</text>
-<rect class="node" x="110" y="36" width="200" height="40" rx="8"/>
-<text class="tb" x="210" y="61" text-anchor="middle">ops/ · 算子门面</text>
-<path class="flow" d="M310 56 H330" marker-end="url(#ahH)"/>
-<rect class="bc" x="330" y="36" width="490" height="40" rx="8"/>
-<text class="ts" x="575" y="56" text-anchor="middle"><tspan font-weight="700">AscendMultiHeadLatentAttention</tspan> · 你 self.self_attn 打开的包装器 · 契约四查</text>
-<text class="tm" x="60" y="106">调度员</text>
-<rect class="node" x="110" y="90" width="200" height="40" rx="8"/>
-<text class="tb" x="210" y="115" text-anchor="middle">attention/ · 注意力实现</text>
-<path class="flow" d="M310 110 H330" marker-end="url(#ahH)"/>
-<rect class="bc" x="330" y="90" width="490" height="40" rx="8"/>
-<text class="ts" x="575" y="110" text-anchor="middle"><tspan font-weight="700">AscendSFAImpl</tspan> · 管"走哪条路"(输入/输出两处分流)</text>
-<text class="tm" x="60" y="160">车间</text>
-<rect class="ac" x="110" y="144" width="200" height="40" rx="8"/>
-<text class="tb" x="210" y="169" text-anchor="middle">context_parallel/ · 特化</text>
-<path class="flow" d="M310 164 H330" marker-end="url(#ahH)"/>
-<rect class="ac" x="330" y="144" width="490" height="40" rx="8"/>
-<text class="ts" x="575" y="164" text-anchor="middle"><tspan font-weight="700">AscendSFADSACPImpl</tspan> · 继承调度员,只覆盖 ⑤ 校验 / ⑥ 收口</text>
-<text class="tm" x="20" y="212">三个包装包在 attention 外面,模型代码一个字不用改,换硬件只换最底层 · 谁决定走哪条:三道闸门(下图 8)</text>
-</svg>
-</div>
 <div class="card">
 <svg viewBox="0 0 760 460" role="img" aria-label="选择条件树">
 <defs><marker id="ah4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker><marker id="ah4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--text-muted)"/></marker></defs>
@@ -911,78 +865,14 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <tr><td>（你的代码里没有）</td><td>attention/context_parallel/</td><td>⑤ <code>_prepare_sequence_parallel_hidden_states</code>（sfa_cp.py）：校验分片边界 + 清零 padding</td><td>防错位的安全阀：分片错了当场抛错，不悄悄算错</td></tr>
 </table>
 
-<div class="card">
-<svg viewBox="0 0 840 486" role="img" aria-label="你的attention对照图">
-<defs><marker id="ahC1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">你的十行 ↔ vllm-ascend：数学没换，换的是"谁提供数据、在哪算、归约谁做"</text>
-<text class="tm" x="195" y="52" text-anchor="middle" font-weight="700">你的 attention（单卡）</text>
-<text class="tm" x="625" y="52" text-anchor="middle" font-weight="700">vllm-ascend DSA-CP 路径（16 卡）</text>
-<!-- row L1/L2 -->
-<rect class="node" x="30" y="62" width="330" height="44" rx="8"/>
-<text class="tb" x="195" y="80" text-anchor="middle">L1·L2 投影 q=x@wq, k=x@wk, v=x@wv</text>
-<text class="ts" x="195" y="98" text-anchor="middle">普通矩阵乘</text>
-<path class="flow" d="M360 84 H398" marker-end="url(#ahC1)"/>
-<rect class="ac" x="402" y="62" width="408" height="44" rx="8"/>
-<text class="tb" x="606" y="80" text-anchor="middle">fused_qkv_a_proj :1576（低秩联合）→ Q 上投影 :1614</text>
-<text class="ts" x="606" y="98" text-anchor="middle">同一个矩阵乘，拆低秩两段</text>
-<!-- row L3 -->
-<rect class="node" x="30" y="114" width="330" height="44" rx="8"/>
-<text class="tb" x="195" y="132" text-anchor="middle">L3 RoPE 只转 Q、K</text>
-<text class="ts" x="195" y="150" text-anchor="middle">rotate 一半维度</text>
-<path class="flow" d="M360 136 H398" marker-end="url(#ahC1)"/>
-<rect class="node" x="402" y="114" width="408" height="44" rx="8"/>
-<text class="tb" x="606" y="132" text-anchor="middle">K 侧：npu_kv_rmsnorm_rope_cache 内 :1595</text>
-<text class="ts" x="606" y="150" text-anchor="middle">Q 侧：rope_single :1616 · 同一个旋转</text>
-<!-- row L4 -->
-<rect class="wc" x="30" y="166" width="330" height="56" rx="8"/>
-<text class="tb" x="195" y="186" text-anchor="middle">L4 KV Cache：torch.cat 整条历史拼本卡</text>
-<text class="ts" x="195" y="206" text-anchor="middle">★ 故事最多的一行，见 4.2 / 4.3</text>
-<path class="flow" d="M360 194 H398" marker-end="url(#ahC1)"/>
-<rect class="ac" x="402" y="166" width="408" height="56" rx="8"/>
-<text class="tb" x="606" y="186" text-anchor="middle">reshape_and_cache :1626：slot_mapping 页表定位</text>
-<text class="ts" x="606" y="206" text-anchor="middle">＋ DSA-CP 的全量副本：all_gather 拼齐再存 :1605</text>
-<!-- row L5 -->
-<rect class="node" x="30" y="230" width="330" height="44" rx="8"/>
-<text class="tb" x="195" y="248" text-anchor="middle">L5 GQA：KV 复用给 Q 头</text>
-<text class="ts" x="195" y="266" text-anchor="middle">repeat_interleave</text>
-<path class="flow" d="M360 252 H398" marker-end="url(#ahC1)"/>
-<rect class="node" x="402" y="230" width="408" height="44" rx="8"/>
-<text class="tb" x="606" y="248" text-anchor="middle">MLA / DSA：latent KV 天然全头共享</text>
-<text class="ts" x="606" y="266" text-anchor="middle">同目的（省 KV），不同手段</text>
-<!-- row L6-L9 -->
-<rect class="bc" x="30" y="282" width="330" height="56" rx="8"/>
-<text class="tb" x="195" y="302" text-anchor="middle">L6~L9 打分 → 遮罩 → softmax → 加权</text>
-<text class="ts" x="195" y="322" text-anchor="middle">attention 的数学本体</text>
-<path class="flow" d="M360 310 H398" marker-end="url(#ahC1)"/>
-<rect class="bc" x="402" y="282" width="408" height="56" rx="8"/>
-<text class="tb" x="606" y="302" text-anchor="middle">稀疏注意力算子 :1683（QKᵀ → softmax → ·V 原样）</text>
-<text class="ts" x="606" y="322" text-anchor="middle">只在 top-2048 块上算（缺的 KV 跨卡取）＋ 融成昇腾算子</text>
-<!-- row L10 -->
-<rect class="node" x="30" y="346" width="330" height="44" rx="8"/>
-<text class="tb" x="195" y="364" text-anchor="middle">L10 输出投影 out @ wo</text>
-<text class="ts" x="195" y="382" text-anchor="middle">一个矩阵乘</text>
-<path class="flow" d="M360 368 H398" marker-end="url(#ahC1)"/>
-<rect class="ac" x="402" y="346" width="408" height="44" rx="8"/>
-<text class="tb" x="606" y="364" text-anchor="middle">o_proj 收口 :1695 ＋ ⑥ all_to_all + 单次 RS</text>
-<text class="ts" x="606" y="382" text-anchor="middle">同一个投影，多了收口通信（16 卡各算一段）</text>
-<!-- row ⑤ -->
-<rect class="ghost" x="30" y="398" width="330" height="40" rx="8"/>
-<text class="ts" x="195" y="423" text-anchor="middle">（你的代码里没有：单卡不需要防错位）</text>
-<rect class="ac" x="402" y="398" width="408" height="40" rx="8"/>
-<text class="tb" x="606" y="423" text-anchor="middle">⑤ 校验分片 + 清零（sfa_cp.py）：错位当场抛错</text>
-<text class="tm" x="30" y="466">你的十行都在，一行没少；"那一堆" = 它们在 16 卡上的样子 ＋ 选路 / 校验的壳（门卫与调度员，见 4.3 闸门）</text>
-</svg>
-</div>
-<div class="figcap">图 6 · 你的 attention 行号 ↔ 框架位置对照：L4、L6~L9、L10 三处是所有故事的发生地；⑤ 是单卡不需要、多卡必须加的</div>
-
 <h3>4.5 PR 落点总表</h3>
 <table>
 <tr><th>文件</th><th style="width:190px">挂在你哪一行 / 哪一步</th><th>改动一句话</th></tr>
 <tr><td><code>vllm_ascend/models/deepseek_mtp.py</code></td><td>你的十行外面（模型层 forward）</td><td>新增 <code>AscendDSACPDecoderLayer</code>（分片直进 + 回退三条件）与 <code>AscendDSACPModel</code>（换装 + 建层）</td></tr>
-<tr><td><code>vllm_ascend/ops/mla.py</code></td><td>进九步之前的门卫</td><td>契约四查 + 新入口 <code>forward_sequence_parallel</code> + custom op 传参/校验</td></tr>
-<tr><td><code>vllm_ascend/attention/sfa_v1.py</code></td><td>九步本体（步 2 / 步 9 的岔路）</td><td>forward 加两参，输入准备 / 输出收口两处分流，原路全保留</td></tr>
-<tr><td><code>vllm_ascend/attention/context_parallel/sfa_cp.py</code></td><td>⑤（步 2）/ ⑥（步 9）/ 契约属性</td><td>校验清零 + 两路收口 + impl 四选一</td></tr>
-<tr><td><code>vllm_ascend/attention/sfa_kv_offload.py</code></td><td>KV offload 路径</td><td>透传两个新参数（小改）</td></tr>
+<tr><td><code>vllm_ascend/ops/mla.py</code></td><td>attention 模块（门卫）</td><td>契约四查 + 新入口 <code>forward_sequence_parallel</code> + custom op 传参/校验</td></tr>
+<tr><td><code>vllm_ascend/attention/sfa_v1.py</code></td><td>attention 后端（九步本体）</td><td>forward 加两参，输入准备 / 输出收口两处分流，原路全保留</td></tr>
+<tr><td><code>vllm_ascend/attention/context_parallel/sfa_cp.py</code></td><td>attention 后端（⑤⑥ + 契约）</td><td>契约属性 + ⑤ 校验清零 + ⑥ 两路收口 + impl 四选一</td></tr>
+<tr><td><code>vllm_ascend/attention/sfa_kv_offload.py</code></td><td>attention 后端（KV offload）</td><td>KV offload 路径透传两个新参数（小改）</td></tr>
 </table>
 
 <h3>4.6 测试（5 个文件，覆盖面很扎实）</h3>
@@ -995,7 +885,7 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <tr><td><code>test_mla.py</code>（+142 行）</td><td>能力探测矩阵（backend × shard_size × custom_op × reduce_results）；metadata 不匹配拒错；dummy batch 零输出不通信；默认分发不变</td></tr>
 <tr><td><code>test_glm_moe_dsa.py</code>（PR 更新后新增）</td><td>GLM MoE DSA 模型选择 / 回归（第 5 个测试文件，对应换装闸门）</td></tr></table>
 <h2 id="s5">5. 前后代码对照（带注释）</h2>
-<p class="dim">"改后"代码均摘自 PR 实际 diff（有删节，只保留主干）；"改前"的模型层为上游 vLLM 真实代码（DeepseekV2DecoderLayer.forward，deepseek_v2.py，有删节）。绿色加粗行为本 PR 新增逻辑。<b>注释里的 ①~⑥ 序号对应图 2 / 图 4 / 图 6 的通信步骤标记</b>（① AllGather、② 再切本地段、③ 取命中 KV、④ ReduceScatter、⑤ 输入校验、⑥ all-to-all+单次RS）。</p>
+<p class="dim">"改后"代码均摘自 PR 实际 diff（有删节，只保留主干）；"改前"的模型层为上游 vLLM 真实代码（DeepseekV2DecoderLayer.forward，deepseek_v2.py，有删节）。绿色加粗行为本 PR 新增逻辑。<b>注释里的 ①~⑥ 序号对应图 2 / 图 4 的通信步骤标记</b>（① AllGather、② 再切本地段、③ 取命中 KV、④ ReduceScatter、⑤ 输入校验、⑥ all-to-all+单次RS）。</p>
 
 <h3>5.1 模型层 forward：从"AG → 算 → RS"到布局直通</h3>
 <div class="codetag before">改前 · 上游 vLLM 真实路径（deepseek_v2.py:1315 DeepseekV2DecoderLayer.forward，有删节）</div>
@@ -1209,7 +1099,7 @@ PR 自述：新增单测尚未运行；release-port 头未在 NPU 上复跑；<c
 <table>
 <tr><th>术语</th><th>本 PR 语境下的含义</th></tr>
 <tr><td>SP token 分片</td><td>SP MoE 下模型层的工作布局：每卡只持全局 token 的 1/TP 连续段</td></tr>
-<tr><td>DSA-CP</td><td>DeepSeek 稀疏注意力 + 上下文并行：Indexer 选 top-k、跨卡定点取 KV（图 6 步骤 4 的 ③）</td></tr>
+<tr><td>DSA-CP</td><td>DeepSeek 稀疏注意力 + 上下文并行：Indexer 选 top-k、跨卡定点取 KV（第 2 章 ③ 取命中 KV）</td></tr>
 <tr><td>布局契约</td><td><code>supports_sequence_parallel_input</code>：后端承诺"收本地分片、还本地分片"</td></tr>
 <tr><td>all_to_all_single</td><td>路 B 中把 [本地token, 全head] 换成 [全token, 本地head] 的 head 交换</td></tr>
 <tr><td>reduce_scatter_tensor</td><td>o_proj 行并行未归约 partial 的"归约+散射"一步完成，产出本地 token 分片</td></tr>
