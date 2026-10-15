@@ -498,18 +498,63 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
     out = w @ v_full        <span class="c"># v_full：L4 拼好的全量值缓存</span>                             <span class="c"># L9  加权求和</span>
     return out @ wo                                    <span class="c"># L10 输出投影</span></pre>
 
+<h3>先认目录：你的十行散在 vllm-ascend 的哪些模块里</h3>
+<p>vllm-ascend 的目录就是分工，四个模块各管一摊：<b>worker/</b> 管执行与喂料——接批、把 token 数对齐到 3504、调模型；<b>models/</b> 管模型结构——你的十行住在这层的 forward 里，是被调用的对象；<b>ops/</b> 管昇腾算子的包装门面——attention 进车间前的门卫；<b>attention/</b> 管注意力的实现策略——九步流水线本体，以及它的 DSA-CP 特化子目录 context_parallel/。你的十行不会在这些目录里重复出现——它们只被 models/ 调用，由 ops/ 和 attention/ 服务：</p>
+<div class="card">
+<svg viewBox="0 0 840 392" role="img" aria-label="模块地图">
+<defs><marker id="ahC0" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">vllm-ascend 模块地图 × 你的十行（箭头 = 调用方向；绿字 = 挂回你的哪一行）</text>
+<rect class="ghost" x="24" y="40" width="792" height="38" rx="8"/>
+<text class="tb" x="40" y="56">上游 vllm · 引擎</text>
+<text class="ts" x="40" y="72" font-family="ui-monospace,Consolas,monospace">vllm/v1/engine/core.py:595</text>
+<text class="ts" x="520" y="64">组批后每步调 execute_model（PR 未动）</text>
+<path class="flow" d="M420 78 V84" marker-end="url(#ahC0)"/>
+<rect class="node" x="24" y="88" width="792" height="44" rx="8"/>
+<text class="tb" x="40" y="104">vllm_ascend/worker/ · 执行与喂料</text>
+<text class="ts" x="40" y="124" font-family="ui-monospace,Consolas,monospace">worker.py:643 ＋ model_runner_v1.py:2035</text>
+<text class="ts" x="520" y="104">接批 → pad 到 3504 → 调模型</text>
+<text class="ts" x="520" y="124">"本卡是哪段"的元数据由车间打包（见最下行）</text>
+<path class="flow" d="M420 132 V138" marker-end="url(#ahC0)"/>
+<rect class="bc" x="24" y="142" width="792" height="44" rx="8"/>
+<text class="tb" x="40" y="158">vllm_ascend/models/ · 模型结构 —— 你的十行的调用者</text>
+<text class="ts" x="40" y="178" font-family="ui-monospace,Consolas,monospace">deepseek_mtp.py</text>
+<text class="ts" x="520" y="158">forward：LN → attention → LN → MoE</text>
+<text class="ts" x="520" y="178" font-weight="700" fill="var(--accent-text)">改前在此加 ①④，改后分片直进（4.3）</text>
+<path class="flow" d="M420 186 V192" marker-end="url(#ahC0)"/>
+<rect class="ac" x="24" y="196" width="792" height="44" rx="8"/>
+<text class="tb" x="40" y="212">vllm_ascend/ops/ · 昇腾算子包装（attention 的门面）</text>
+<text class="ts" x="40" y="232" font-family="ui-monospace,Consolas,monospace">mla.py:151</text>
+<text class="ts" x="520" y="212">门卫：契约四查 + 新入口</text>
+<text class="ts" x="520" y="232">能吃分片，你的十行才被放进车间</text>
+<path class="flow" d="M420 240 V246" marker-end="url(#ahC0)"/>
+<rect class="bc" x="24" y="250" width="792" height="44" rx="8"/>
+<text class="tb" x="40" y="266">vllm_ascend/attention/ · 注意力实现（调度员 · 九步流水线）</text>
+<text class="ts" x="40" y="286" font-family="ui-monospace,Consolas,monospace">sfa_v1.py:1503</text>
+<text class="ts" x="520" y="266" font-weight="700" fill="var(--accent-text)">步 3/4/6 = 你的 L1·L2·L3；步 8 = L6~L9</text>
+<text class="ts" x="520" y="286">L10 的原路收口也在这（:1384）</text>
+<path class="flow" d="M420 294 V300" marker-end="url(#ahC0)"/>
+<rect class="ac" x="24" y="304" width="792" height="48" rx="8"/>
+<text class="tb" x="40" y="322">vllm_ascend/attention/context_parallel/ · DSA-CP 特化（车间）</text>
+<text class="ts" x="40" y="342" font-family="ui-monospace,Consolas,monospace">sfa_cp.py</text>
+<text class="ts" x="520" y="322" font-weight="700" fill="var(--accent-text)">⑤ 校验 · ③ 取 KV · ⑥ 收口 = 你的 L4 页表 · L10 收口</text>
+<text class="ts" x="520" y="342">"本卡是哪段"的元数据也在这打包（:188，供 worker 用）</text>
+<text class="tm" x="24" y="378">灰 = PR 未动；蓝/绿 = PR 改动区（5 个源码文件全在下面四行模块里）；行号同 4.1 总表，九步展开见 4.4 图 5</text>
+</svg>
+</div>
+<div class="figcap">vllm-ascend 模块地图 × 你的十行：worker/ 喂料 → models/ 调用 → ops/ 把门 → attention/ 干活（context_parallel/ 是它的 DSA-CP 特化）</div>
+
 <h3>4.1 对照总表：你的每一行，在 PR 的新路径里去哪了</h3>
 <p>把 PR 改完后真正执行的代码（第 5 章有前后全对照）按你的行号归位，<b>文件与行号全部经本地源码实测</b>：</p>
 <table>
-<tr><th style="width:150px">你的行</th><th>在 vllm-ascend 里（DSA-CP 新路径）</th><th style="width:230px">变了什么</th></tr>
-<tr><td class="cnum">L1 · Q 投影</td><td><code>fused_qkv_a_proj</code>（sfa_v1.py:1576，Q/KV 联合低秩投影）→ <code>_q_proj_and_k_up_proj</code>（:1614，Q 侧上投影）</td><td>同一个矩阵乘，拆成低秩两段（q_lora 1536 压缩，省参数省带宽）</td></tr>
-<tr><td class="cnum">L2 · K/V 投影</td><td><code>exec_kv</code>（:1595 → <code>npu_kv_rmsnorm_rope_cache</code> 昇腾算子）</td><td>同一个投影，与 rmsnorm、写缓存融合成一个硬件算子</td></tr>
-<tr><td class="cnum">L3 · RoPE</td><td>K 侧在上面的算子内；Q 侧 <code>rope_single</code>（:1616）</td><td>同一个旋转，没变</td></tr>
-<tr><td class="cnum">L4 · KV Cache</td><td><code>_store_parallel_kv</code>（:1626 → <code>DeviceOperator.reshape_and_cache</code>）</td><td>不再整块 <code>cat</code>：<b>slot_mapping（页表）指定每个 token 的 KV 落在哪一格</b>；且 DSA-CP 先把 16 卡的 KV 拼成全量、每卡都存一份（为什么，见 4.2/4.3）</td></tr>
-<tr><td class="cnum">L5 · GQA repeat</td><td>没有对应物：DSA 是 MLA 系，latent KV 天然全头共享</td><td>目的相同（省 KV），手段不同</td></tr>
-<tr><td class="cnum">L6~L9 · 打分/遮罩/归一化/加权</td><td><code>_execute_sparse_flash_attention_process</code>（:1683 → :1171，昇腾稀疏注意力算子）</td><td><b>QKᵀ → softmax → ·V 原样都在</b>；变化有二：只在 indexer 选出的 top-2048 个 KV 块上算（稀疏），且融成一个硬件算子，遮罩在算子内部处理</td></tr>
-<tr><td class="cnum">L10 · 输出投影</td><td><code>_finalize_o_proj</code>（:1695；SP 路径为 <code>_finalize_sequence_parallel_o_proj</code>，sfa_cp.py）</td><td>同一个投影；PR 在这里加了一次 all_to_all + 单次 reduce_scatter（⑥），因为 16 卡各算一段（4.3 讲）</td></tr>
-<tr><td>（你的代码里没有）</td><td>⑤ <code>_prepare_sequence_parallel_hidden_states</code>（sfa_cp.py）：校验分片边界 + 清零 padding</td><td>防错位的安全阀：分片错了当场抛错，不悄悄算错</td></tr>
+<tr><th style="width:150px">你的行</th><th style="width:150px">所在模块</th><th>在 vllm-ascend 里（DSA-CP 新路径）</th><th style="width:210px">变了什么</th></tr>
+<tr><td class="cnum">L1 · Q 投影</td><td>attention/</td><td><code>fused_qkv_a_proj</code>（sfa_v1.py:1576，Q/KV 联合低秩投影）→ <code>_q_proj_and_k_up_proj</code>（:1614，Q 侧上投影）</td><td>同一个矩阵乘，拆成低秩两段（q_lora 1536 压缩，省参数省带宽）</td></tr>
+<tr><td class="cnum">L2 · K/V 投影</td><td>attention/</td><td><code>exec_kv</code>（:1595 → <code>npu_kv_rmsnorm_rope_cache</code> 昇腾算子）</td><td>同一个投影，与 rmsnorm、写缓存融合成一个硬件算子</td></tr>
+<tr><td class="cnum">L3 · RoPE</td><td>attention/</td><td>K 侧在上面的算子内；Q 侧 <code>rope_single</code>（:1616）</td><td>同一个旋转，没变</td></tr>
+<tr><td class="cnum">L4 · KV Cache</td><td>attention/context_parallel/</td><td><code>_store_parallel_kv</code>（:1626 → <code>DeviceOperator.reshape_and_cache</code>）</td><td>不再整块 <code>cat</code>：<b>slot_mapping（页表）指定每个 token 的 KV 落在哪一格</b>；且 DSA-CP 先把 16 卡的 KV 拼成全量、每卡都存一份（为什么，见 4.2/4.3）</td></tr>
+<tr><td class="cnum">L5 · GQA repeat</td><td>—（无对应物）</td><td>没有对应物：DSA 是 MLA 系，latent KV 天然全头共享</td><td>目的相同（省 KV），手段不同</td></tr>
+<tr><td class="cnum">L6~L9 · 打分/遮罩/归一化/加权</td><td>attention/</td><td><code>_execute_sparse_flash_attention_process</code>（:1683 → :1171，昇腾稀疏注意力算子）</td><td><b>QKᵀ → softmax → ·V 原样都在</b>；变化有二：只在 indexer 选出的 top-2048 个 KV 块上算（稀疏），且融成一个硬件算子，遮罩在算子内部处理</td></tr>
+<tr><td class="cnum">L10 · 输出投影</td><td>attention/context_parallel/</td><td><code>_finalize_o_proj</code>（:1695；SP 路径为 <code>_finalize_sequence_parallel_o_proj</code>，sfa_cp.py）</td><td>同一个投影；PR 在这里加了一次 all_to_all + 单次 reduce_scatter（⑥），因为 16 卡各算一段（4.3 讲）</td></tr>
+<tr><td>（你的代码里没有）</td><td>attention/context_parallel/</td><td>⑤ <code>_prepare_sequence_parallel_hidden_states</code>（sfa_cp.py）：校验分片边界 + 清零 padding</td><td>防错位的安全阀：分片错了当场抛错，不悄悄算错</td></tr>
 </table>
 
 <div class="card">
@@ -739,11 +784,11 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <h3>4.4 PR 落点总表</h3>
 <table>
 <tr><th>文件</th><th style="width:190px">挂在你哪一行 / 哪一步</th><th>改动一句话</th></tr>
-<tr><td><code>models/deepseek_mtp.py</code></td><td>你的十行外面（模型层 forward）</td><td>新增 <code>AscendDSACPDecoderLayer</code>（分片直进 + 回退三条件）与 <code>AscendDSACPModel</code>（换装 + 建层）</td></tr>
-<tr><td><code>ops/mla.py</code></td><td>进九步之前的门卫</td><td>契约四查 + 新入口 <code>forward_sequence_parallel</code> + custom op 传参/校验</td></tr>
-<tr><td><code>attention/sfa_v1.py</code></td><td>九步本体（步 2 / 步 9 的岔路）</td><td>forward 加两参，输入准备 / 输出收口两处分流，原路全保留</td></tr>
-<tr><td><code>attention/context_parallel/sfa_cp.py</code></td><td>⑤（步 2）/ ⑥（步 9）/ 契约属性</td><td>校验清零 + 两路收口 + impl 四选一</td></tr>
-<tr><td><code>attention/sfa_kv_offload.py</code></td><td>KV offload 路径</td><td>透传两个新参数（小改）</td></tr>
+<tr><td><code>vllm_ascend/models/deepseek_mtp.py</code></td><td>你的十行外面（模型层 forward）</td><td>新增 <code>AscendDSACPDecoderLayer</code>（分片直进 + 回退三条件）与 <code>AscendDSACPModel</code>（换装 + 建层）</td></tr>
+<tr><td><code>vllm_ascend/ops/mla.py</code></td><td>进九步之前的门卫</td><td>契约四查 + 新入口 <code>forward_sequence_parallel</code> + custom op 传参/校验</td></tr>
+<tr><td><code>vllm_ascend/attention/sfa_v1.py</code></td><td>九步本体（步 2 / 步 9 的岔路）</td><td>forward 加两参，输入准备 / 输出收口两处分流，原路全保留</td></tr>
+<tr><td><code>vllm_ascend/attention/context_parallel/sfa_cp.py</code></td><td>⑤（步 2）/ ⑥（步 9）/ 契约属性</td><td>校验清零 + 两路收口 + impl 四选一</td></tr>
+<tr><td><code>vllm_ascend/attention/sfa_kv_offload.py</code></td><td>KV offload 路径</td><td>透传两个新参数（小改）</td></tr>
 </table>
 
 <h3>4.5 测试（5 个文件，覆盖面很扎实）</h3>
