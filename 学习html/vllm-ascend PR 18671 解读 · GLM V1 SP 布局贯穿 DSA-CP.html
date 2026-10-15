@@ -393,80 +393,112 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>因为它的活儿已经有人干了。跨卡归约（把各卡的部分和加起来）这件事必须做、且只能做一次：改动后由 ⑥ 在 attention 内部完成——all_to_all 换完 head 后，数据正好是"每卡一段 token 的部分和"，紧接着一次 reduce_scatter 同时完成求和和按卡散射，一步到位。模型层原来那个 ④ 如果保留，要么重复归约（结果就错了），要么得先把数据倒腾回旧布局再散一次（通信翻倍）。所以它不是简单删掉，而是职责移进了唯一正确的位置。至于正确性：⑤ 的边界校验保证布局不可能悄悄错（错就当场抛错），FP16 的 scale 放在归约前乘，与上游语义逐位对齐——4.5 节的单测验证了新旧路径结果一致。</p>
 
 <h2 id="s4">4. 逐文件解读</h2>
-<p>第 2、3 章的两张图站在<b>模型层视角</b>；但 PR 实际改的是 4 个文件。先建立<b>工程调用链视角</b>：一次 forward 从 Runner 到最底层后端要穿过 7 环，PR 的 4 个文件各站哪几环、对应图 2 的哪块改动，先看图——之后 4.1~4.5 的每个细节都能挂回这张图上。</p>
+<p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？这张图分<b>三层放大</b>：第 1 层是 vLLM 推理主流程——请求进来、Scheduler 组 batch、模型前向、Sampler 出 token，<b>这是每条请求都走、你已经认识的部分</b>；第 2 层放大"模型前向"，就是图 1 画过的 Block×N 链；第 3 层再放大 Block 里的 <b>attention 小块</b>——它在 vllm-ascend 插件里是 4 层代码，从外到里正好就是 PR 改的 4 个文件。三层都从你已经看过的流程放大进去，4.1~4.5 的每个细节因此都有了地址。</p>
 
 <div class="card">
-<svg viewBox="0 0 840 620" role="img" aria-label="一次 forward 的调用链与四个文件的站位">
+<svg viewBox="0 0 840 748" role="img" aria-label="从 vLLM 主流程三层放大到 PR 改的 4 个文件">
 <defs><marker id="ah5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="24" text-anchor="middle">一次 forward 的调用链：PR 四个文件各站哪一环（自上而下调用）</text>
-<!-- 环1 Runner -->
-<rect class="node" x="50" y="44" width="420" height="44" rx="8"/>
-<text class="tb" x="260" y="62" text-anchor="middle">V1 Runner（不动）</text>
-<text class="ts" x="260" y="80" text-anchor="middle">组 batch · 发起 model.forward</text>
-<path class="flow" d="M260 88 V106" marker-end="url(#ah5)"/>
-<!-- 环2 CausalLM -->
-<rect class="ac" x="50" y="110" width="420" height="54" rx="8"/>
-<text class="tb" x="260" y="129" text-anchor="middle">AscendGlmMoeDsaForCausalLM（选模型类）</text>
-<text class="ts" x="260" y="149" text-anchor="middle">models/deepseek_mtp.py · 4 条件全中才换新路径（→ 图 5）</text>
-<path class="flow" d="M260 164 V182" marker-end="url(#ah5)"/>
-<!-- 环3 Model -->
-<rect class="ac" x="50" y="186" width="420" height="54" rx="8"/>
-<text class="tb" x="260" y="205" text-anchor="middle">AscendDSACPModel（建层）</text>
-<text class="ts" x="260" y="225" text-anchor="middle">同文件 · 自建全部层，全层共享索引 buffer（权重名不变）</text>
-<path class="flow" d="M260 240 V258" marker-end="url(#ah5)"/>
-<!-- 环4 DecoderLayer -->
-<rect class="bc" x="50" y="262" width="420" height="68" rx="8"/>
-<text class="tb" x="260" y="282" text-anchor="middle">AscendDSACPDecoderLayer.forward（× N 层）</text>
-<text class="ts" x="260" y="302" text-anchor="middle">直通链：LN → attention → LN → MLP，全程无 AllGather / ReduceScatter</text>
-<text class="ts" x="260" y="320" text-anchor="middle">判定 input_is_sequence_parallel，不满足 → 原样走上游</text>
-<path class="flow" d="M260 330 V348" marker-end="url(#ah5)"/>
-<!-- 环5 MLA 包装层 -->
-<rect class="ac" x="50" y="352" width="420" height="54" rx="8"/>
-<text class="tb" x="260" y="371" text-anchor="middle">AscendMultiHeadLatentAttention（MLA 包装层）</text>
-<text class="ts" x="260" y="391" text-anchor="middle">ops/mla.py · 能力探测 4 条件 + 新入口 forward_sequence_parallel</text>
-<path class="flow" d="M260 406 V424" marker-end="url(#ah5)"/>
-<!-- 环6 SFA 通用 forward -->
-<rect class="ac" x="50" y="428" width="420" height="54" rx="8"/>
-<text class="tb" x="260" y="447" text-anchor="middle">AscendSFAImpl.forward（SFA 通用层）</text>
-<text class="ts" x="260" y="467" text-anchor="middle">attention/sfa_v1.py · 按 input_is_sequence_parallel 三处分流</text>
-<path class="flow" d="M260 482 V500" marker-end="url(#ah5)"/>
-<!-- 环7 DSA-CP 后端 -->
-<rect class="bc" x="50" y="504" width="420" height="68" rx="8"/>
-<text class="tb" x="260" y="524" text-anchor="middle">AscendSFADSACPImpl（DSA-CP 后端）</text>
-<text class="ts" x="260" y="542" text-anchor="middle">attention/context_parallel/sfa_cp.py</text>
-<text class="ts" x="260" y="560" text-anchor="middle">契约 True · ⑤ 输入校验+清零 · ⑥ o_proj 收口</text>
-<!-- 右侧：改前路径标注（对应环4） -->
-<path class="garr" d="M470 296 C510 296,516 292,522 290"/>
-<rect class="wc" x="526" y="258" width="280" height="76" rx="8"/>
-<text class="tb" x="666" y="278" text-anchor="middle">改前：这层边界最费</text>
-<text class="ts" x="666" y="298" text-anchor="middle">① AllGather 进 · ④ ReduceScatter 出（图 1）</text>
-<text class="ts" x="666" y="318" text-anchor="middle">新路径：整段省掉（图 2 灰块）</text>
-<!-- 右侧：attention 内部通信（对应环7） -->
-<path class="dash" d="M470 538 C510 538,516 534,522 532"/>
-<rect class="ac" x="526" y="494" width="280" height="112" rx="8"/>
-<text class="tb" x="666" y="514" text-anchor="middle">attention 内部通信（唯一的）</text>
-<text class="ts" x="666" y="534" text-anchor="middle">⑤ 校验 + padding 清零（新增，无通信）</text>
-<text class="ts" x="666" y="554" text-anchor="middle">③ 取命中 KV（本职，不变）</text>
-<text class="ts" x="666" y="574" text-anchor="middle">⑥ all_to_all + 单次 RS（归约在此，图 4）</text>
-<text class="tm" x="526" y="594">对应图 2 右下的绿块与蓝块</text>
+<text class="th" x="420" y="24" text-anchor="middle">从你认识的 vLLM 主流程，三层放大到 PR 改的 4 个文件</text>
+<!-- 第1层 vLLM 主流程 -->
+<text class="tm" x="50" y="46">第 1 层 · vLLM 推理主流程（最基础——每条请求都走这条，你已经认识）</text>
+<rect class="node" x="50" y="56" width="132" height="44" rx="8"/>
+<text class="tb" x="116" y="74" text-anchor="middle">用户请求</text>
+<text class="ts" x="116" y="92" text-anchor="middle">prompt 3500 字</text>
+<path class="flow" d="M182 78 H204" marker-end="url(#ah5)"/>
+<rect class="node" x="208" y="56" width="132" height="44" rx="8"/>
+<text class="tb" x="274" y="74" text-anchor="middle">Scheduler</text>
+<text class="ts" x="274" y="92" text-anchor="middle">组 batch（混合批次）</text>
+<path class="flow" d="M340 78 H362" marker-end="url(#ah5)"/>
+<rect class="bc" x="366" y="56" width="132" height="44" rx="8"/>
+<text class="tb" x="432" y="74" text-anchor="middle">模型前向 ×N 层</text>
+<text class="ts" x="432" y="92" text-anchor="middle">★ 图 1 的 Block×N</text>
+<path class="flow" d="M498 78 H520" marker-end="url(#ah5)"/>
+<rect class="node" x="524" y="56" width="132" height="44" rx="8"/>
+<text class="tb" x="590" y="74" text-anchor="middle">Sampler</text>
+<text class="ts" x="590" y="92" text-anchor="middle">选下一个 token</text>
+<path class="flow" d="M656 78 H678" marker-end="url(#ah5)"/>
+<rect class="node" x="682" y="56" width="132" height="44" rx="8"/>
+<text class="tb" x="748" y="74" text-anchor="middle">返回 / 循环</text>
+<text class="ts" x="748" y="92" text-anchor="middle">decode 重复此路</text>
+<!-- 放大线1：模型前向 → 第2层 -->
+<path class="dash" d="M432 104 C432 122,392 120,392 142" marker-end="url(#ah5)"/>
+<text class="tm" x="446" y="124">放大 ↓</text>
+<!-- 第2层 模型前向 -->
+<text class="tm" x="50" y="134">第 2 层 · 放大"模型前向"——就是图 1 画过的那条链（你已经看懂）</text>
+<rect class="node" x="50" y="144" width="150" height="64" rx="8"/>
+<text class="tb" x="125" y="170" text-anchor="middle">Embedding</text>
+<text class="ts" x="125" y="190" text-anchor="middle">[1, 3500, 8192]</text>
+<path class="flow" d="M200 176 H228" marker-end="url(#ah5)"/>
+<rect class="grpA" x="232" y="144" width="320" height="64" rx="8"/>
+<text class="tb" x="392" y="162" text-anchor="middle">Block × N</text>
+<rect class="node" x="244" y="170" width="84" height="28" rx="6"/>
+<text class="ts" x="286" y="188" text-anchor="middle">LN</text>
+<rect class="bc" x="336" y="170" width="110" height="28" rx="6"/>
+<text class="tb" x="391" y="188" text-anchor="middle">attention ★</text>
+<rect class="node" x="454" y="170" width="86" height="28" rx="6"/>
+<text class="ts" x="497" y="188" text-anchor="middle">FFN</text>
+<path class="flow" d="M552 176 H580" marker-end="url(#ah5)"/>
+<rect class="node" x="584" y="144" width="150" height="64" rx="8"/>
+<text class="tb" x="659" y="170" text-anchor="middle">LM Head</text>
+<text class="ts" x="659" y="190" text-anchor="middle">logits → 采样</text>
+<!-- 放大线2：attention 小块 → 第3层 -->
+<path class="dash" d="M391 208 C391 226,285 224,285 262" marker-end="url(#ah5)"/>
+<text class="tm" x="404" y="226">再放大 ↓</text>
+<!-- 第3层 attention 小块的 4 层代码 -->
+<text class="tm" x="50" y="252">第 3 层 · 再放大"attention 小块"——在 vllm-ascend 里它是 4 层代码，从外到里正好是 PR 改的 4 个文件</text>
+<rect class="bc" x="50" y="264" width="470" height="68" rx="8"/>
+<text class="tb" x="285" y="284" text-anchor="middle">models/deepseek_mtp.py —— 模型侧（总装）</text>
+<text class="ts" x="285" y="304" text-anchor="middle">选模型类（4 条件，图 5）→ 建层（共享索引 buffer）</text>
+<text class="ts" x="285" y="322" text-anchor="middle">每层直通 LN→attn→MLP：token 分片进、分片出（省 ①④）</text>
+<path class="flow" d="M285 332 V350" marker-end="url(#ah5)"/>
+<rect class="ac" x="50" y="354" width="470" height="58" rx="8"/>
+<text class="tb" x="285" y="374" text-anchor="middle">ops/mla.py —— MLA 包装层（门卫）</text>
+<text class="ts" x="285" y="394" text-anchor="middle">能力探测 4 条件："后端能直接吃 SP 分片吗？"能→新入口，不能→回老路</text>
+<path class="flow" d="M285 412 V430" marker-end="url(#ah5)"/>
+<rect class="ac" x="50" y="434" width="470" height="58" rx="8"/>
+<text class="tb" x="285" y="454" text-anchor="middle">attention/sfa_v1.py —— SFA 通用实现（调度员）</text>
+<text class="ts" x="285" y="474" text-anchor="middle">按门卫的答案分流：走哪条输入准备、哪条输出收口；原路径全保留</text>
+<path class="flow" d="M285 492 V510" marker-end="url(#ah5)"/>
+<rect class="bc" x="50" y="514" width="470" height="68" rx="8"/>
+<text class="tb" x="285" y="534" text-anchor="middle">attention/context_parallel/sfa_cp.py —— DSA-CP 后端（车间）</text>
+<text class="ts" x="285" y="554" text-anchor="middle">真正算稀疏注意力的地方：⑤ 校验分片+清零 → ③ 跨卡取命中 KV</text>
+<text class="ts" x="285" y="572" text-anchor="middle">→ ⑥ o_proj 收口（两条路，图 4）</text>
+<!-- 右侧：改前路径标注 -->
+<path class="garr" d="M520 298 C530 298,534 294,538 292"/>
+<rect class="wc" x="542" y="264" width="270" height="92" rx="8"/>
+<text class="tb" x="677" y="286" text-anchor="middle">改前：模型层边界最费</text>
+<text class="ts" x="677" y="306" text-anchor="middle">① AllGather 进（图 1）· ④ ReduceScatter 出</text>
+<text class="ts" x="677" y="326" text-anchor="middle">每层都来一遍，新路径整段省掉</text>
+<text class="ts" x="677" y="346" text-anchor="middle">（图 2 的灰块）</text>
+<!-- 右侧：为什么要放大到这里 -->
+<rect class="node" x="542" y="500" width="270" height="150" rx="8"/>
+<text class="tb" x="677" y="522" text-anchor="middle">为什么要放大到这 4 个文件？</text>
+<text class="ts" x="677" y="544" text-anchor="middle">vLLM 主流程（第 1、2 层）是通用引擎，</text>
+<text class="ts" x="677" y="564" text-anchor="middle">不挑硬件；vllm-ascend 插件替换的</text>
+<text class="ts" x="677" y="584" text-anchor="middle">正是 attention / 通信这些</text>
+<text class="ts" x="677" y="604" text-anchor="middle">跟昇腾硬件相关的部分——</text>
+<text class="ts" x="677" y="624" text-anchor="middle">所以 PR 改的 4 个文件</text>
+<text class="ts" x="677" y="644" text-anchor="middle">全在 attention 一线上。</text>
 <!-- 图例 -->
-<text class="tm" x="50" y="606">灰＝不动 · 绿＝外围改造 · 蓝＝核心改动 · 黄虚线＝改前路径；4.1~4.5 的锚点行均指本图环号</text>
+<text class="tm" x="50" y="622">调用方向：模型侧发起，逐层向里，车间真正干活</text>
+<text class="tm" x="50" y="644">蓝＝核心改动 · 绿＝外围改造 · 灰＝不动 · 虚线＝放大镜（从上层流程放大到下一层）</text>
+<text class="tm" x="50" y="712">对照第 2 章：①②④ 是改前每层白做的布局往返，⑤⑥ 是 PR 的接替者，③ 是 DSA-CP 本职</text>
 </svg>
-<div class="figcap">图 3 · 工程调用链全景：环 2/3/4 在 models/deepseek_mtp.py，环 5 在 ops/mla.py，环 6 在 attention/sfa_v1.py，环 7 在 attention/context_parallel/sfa_cp.py</div>
+<div class="figcap">图 3 · 三层放大：主流程 → 模型前向（图 1）→ attention 小块的 4 层代码（= PR 的 4 个文件）；4.1~4.5 的锚点行均指第 3 层的框号</div>
 </div>
 
 <h3>文件 × 链上位置 × 改动一览</h3>
 <table>
 <tr><th>文件</th><th>链上位置（图 3）</th><th>PR 动作</th><th>对应编号 / 图</th></tr>
-<tr><td><code>models/deepseek_mtp.py</code></td><td>环 2 ~ 环 4（模型侧三环）</td><td>选模型类、自建层、DecoderLayer 直通链</td><td>省 ①④；生效条件 → 图 5</td></tr>
-<tr><td><code>ops/mla.py</code></td><td>环 5（MLA 包装层）</td><td>能力探测四条件 + 新入口 <code>forward_sequence_parallel</code></td><td>安全阀：不满足自动回退</td></tr>
-<tr><td><code>attention/sfa_v1.py</code></td><td>环 6（SFA 通用 forward）</td><td>三处分流（输入准备 / 输出收口 / token 数推断）</td><td>原路径完全保留</td></tr>
-<tr><td><code>attention/context_parallel/sfa_cp.py</code></td><td>环 7（DSA-CP 后端 impl）</td><td>契约声明 + 输入校验清零 + o_proj 收口</td><td>⑤⑥；两条收口路 → 图 4</td></tr>
-<tr><td>（测试 ×4）</td><td>横跨环 2 ~ 环 7</td><td>4 个单测组成回归网</td><td>见 4.5</td></tr>
+<tr><td><code>models/deepseek_mtp.py</code></td><td>第 3 层第 1 框（模型侧·总装）</td><td>选模型类、自建层、DecoderLayer 直通链</td><td>省 ①④；生效条件 → 图 5</td></tr>
+<tr><td><code>ops/mla.py</code></td><td>第 3 层第 2 框（门卫）</td><td>能力探测四条件 + 新入口 <code>forward_sequence_parallel</code></td><td>安全阀：不满足自动回退</td></tr>
+<tr><td><code>attention/sfa_v1.py</code></td><td>第 3 层第 3 框（调度员）</td><td>三处分流（输入准备 / 输出收口 / token 数推断）</td><td>原路径完全保留</td></tr>
+<tr><td><code>attention/context_parallel/sfa_cp.py</code></td><td>第 3 层第 4 框（车间）</td><td>契约声明 + 输入校验清零 + o_proj 收口</td><td>⑤⑥；两条收口路 → 图 4</td></tr>
+<tr><td>（测试 ×4）</td><td>横跨第 3 层全部 4 框</td><td>4 个单测组成回归网</td><td>见 4.5</td></tr>
 </table>
 
 <h3>4.1 sfa_cp.py —— 后端契约与 o_proj 新收口</h3>
-<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 环 7（最底层后端 impl）· 干活：契约声明 + ⑤ 输入侧 + ⑥ 输出收口（两条路 → 图 4）</p>
+<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 第 3 层第 4 框（车间，最里层，真正算注意力的地方）· 干活：契约声明 + ⑤ 输入侧 + ⑥ 输出收口（两条路 → 图 4）</p>
 <p><b>能力声明</b>：<code>AscendSFADSACPImpl</code> 增加类属性 <code>supports_sequence_parallel_input = True</code>（DSA-CP 的 SFA 实现：TP 组内按 token 分片）；同文件的 <code>AscendSFADCPImpl</code>（DCP 布局）显式声明 <code>False</code>——因为 DCP 是 query/head 两轴分别恢复的，两端给不出同一份连续 token 分片，不硬吃这个契约。</p>
 <p><b>输入侧</b>新增 <code>_prepare_sequence_parallel_hidden_states</code>：不再从全局 token 切段，而是校验上层传来的分片边界（<code>local_start / local_end_with_pad / num_tokens_pad</code> 与本 rank 严格一致，不一致直接抛 RuntimeError，防止静默错位），然后把 Graph/DP padding 区清零（先 clone 再清，避免污染 residual 的共享存储）。</p>
 <p><b>输出侧</b>新增 <code>_finalize_sequence_parallel_o_proj</code>，按 <code>gather_full_o_proj</code> 分两条路：</p>
@@ -495,16 +527,16 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </div>
 
 <h3>4.2 sfa_v1.py —— forward 分流</h3>
-<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 环 6（SFA 通用 forward，环 7 的父类）· 干活：按 <code>input_is_sequence_parallel</code> 三处分流；不满足契约时走的原路径全部保留</p>
+<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 第 3 层第 3 框（调度员，车间的外一层）· 干活：按 <code>input_is_sequence_parallel</code> 三处分流；不满足契约时走的原路径全部保留</p>
 <p>SFA forward 签名扩展两个参数：<code>input_is_sequence_parallel</code> 和 <code>output_scale</code>。内部三处分流：① <code>qk_rope_head_dim==0</code>（无 RoPE）时的 token 数推断不再走本地 shape，改信 metadata；② 输入准备按契约选 <code>_prepare_sequence_parallel_hidden_states</code> 或原 <code>_prepare_native_hidden_states</code>；③ 输出收口选新的 SP 版 o_proj 或原版。原路径行为完全不变。</p>
 
 <h3>4.3 ops/mla.py —— 包装层能力探测与新入口</h3>
-<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 环 5（MLA 包装层，模型层与后端之间的闸门）· 干活：探测环 7 的契约是否可用 + 提供新入口；不可用就退回上游老路</p>
+<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 第 3 层第 2 框（门卫，模型层与车间之间的闸门）· 干活：探测车间能不能直接吃 SP 分片 + 提供新入口；不能就退回上游老路</p>
 <p><code>AscendMultiHeadLatentAttention</code> 增加属性 <code>supports_sequence_parallel_input</code>，四个条件全满足才声明支持：<code>output_token_shard_size == 1</code>、后端 impl 声明支持、<code>o_proj.custom_op is None</code>（自定义通信算子有自己的一套通信，不硬套）、<code>o_proj.reduce_results == False</code>。任一不满足 → 自动回退原路径。<b>这是安全阀：不支持的场景一行代码都不用改。</b></p>
 <p>新增入口 <code>forward_sequence_parallel(positions, hidden_states, output_scale)</code>，走自定义算子 <code>torch.ops.vllm.mla_forward</code> 时透传三个新参数。<code>mla_forward</code> 内部增加两道保护：metadata 的 token 数与模型侧不一致 → 报错且不发起任何通信；无 metadata（profiling / DP dummy batch）→ 保持零输出、本地返回。</p>
 
 <h3>4.4 models/deepseek_mtp.py —— 模型层直通与原生模型类</h3>
-<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 环 2 ~ 环 4（模型侧三环，一次调用的起点）· 干活：选路（4 条件）+ 建层 + DecoderLayer 直通链（省 ①④ 的发生地）</p>
+<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 图 3 第 3 层第 1 框（模型侧·总装，一次调用的起点）· 干活：选路（4 条件）+ 建层 + 直通链（省 ①④ 的发生地）</p>
 <p><b>AscendDSACPDecoderLayer</b>（继承 DeepseekV2DecoderLayer）：forward 开头判定 <code>input_is_sequence_parallel</code>（SP MoE + residual 非 None + <code>hidden.shape[0] != positions.shape[0]</code>，即本地分片数 ≠ 全局位置数）。满足且 attention 支持契约时，走直通链：</p>
 <pre>input_layernorm → self_attn.mla_attn.forward_sequence_parallel(positions, hidden, output_scale)
 → post_attention_layernorm → mlp(hidden, already_sequence_parallel=True)</pre>
@@ -548,7 +580,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </div>
 
 <h3>4.5 测试（4 个文件，覆盖面很扎实）</h3>
-<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 横跨图 3 环 2 ~ 环 7 · 角色：给整条新链路织回归网（正确性、回退、缩放语义逐项钉死）</p>
+<p class="dim" style="margin-top:2px"><b style="color:var(--brand-text)">📍 链上定位</b> · 横跨图 3 第 3 层全部 4 框 · 角色：给整条新链路织回归网（正确性、回退、缩放语义逐项钉死）</p>
 <table>
 <tr><th>文件</th><th>覆盖点</th></tr>
 <tr><td><code>test_deepseek_dsa_cp.py</code>（新增）</td><td>混合批次下连续两层的本地分片与 residual 保持（4 rank × 3 dtype）；5 种不支持布局全部回退上游路径；FP16 缩放逐层对齐；模型选择条件矩阵；构造器权重名 / 共享索引 buffer 不变量</td></tr>
