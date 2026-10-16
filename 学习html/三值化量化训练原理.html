@@ -129,20 +129,20 @@
         <h2>1. 正常训练：光滑的“溜滑梯”</h2>
         <p>正常的神经网络训练，就像站在一个<strong>光滑的斜坡（损失函数）</strong>上。</p>
         <ul style="padding-left:20px; color:#475569; margin-bottom:15px;">
-            <li><strong>前向</strong>：你往下滑（计算损失）。</li>
-            <li><strong>反向</strong>：你感受坡度（计算梯度），坡度朝哪，你就朝反方向迈步。</li>
+            <li><strong>前向</strong>：往下滑（计算损失）。</li>
+            <li><strong>反向</strong>：感受坡度（计算梯度），坡度朝哪，就朝反方向迈步。</li>
             <li><strong>结果</strong>：每一步都稳稳地往下走，最终到达山底（最优解）。</li>
         </ul>
         <div class="mermaid">
 flowchart TD
-    A["权重 w（你的位置）"] --> B["前向计算（往下滑）"]
+    A["权重 w（当前位置）"] --> B["前向计算（往下滑）"]
     B --> C["算出损失（多高）"]
     C --> D["反向求导（感受坡度）"]
     D --> E["梯度下降（朝反方向迈步）"]
     E --> A
         </div>
         <div class="good-box">
-            <strong>✅ 关键点：</strong> 因为斜坡是连续的，坡度（梯度）永远存在，你永远知道该往哪走。
+            <strong>✅ 关键点：</strong> 因为斜坡是连续的，坡度（梯度）永远存在，永远知道该往哪走。
         </div>
     </div>
 
@@ -152,7 +152,7 @@ flowchart TD
         <p>三值化时，我们把权重强制变成 <code>-1</code>、<code>0</code>、<code>+1</code>。这就好比把<strong>光滑的斜坡</strong>，改成了<strong>只有三级的陡峭台阶</strong>。</p>
         <div class="danger-box">
             <strong>⛔ 致命问题：</strong> 台阶的平面是平的（导数为0），台阶的边缘是垂直的（导数无穷大）。<br>
-            当你站在台阶上时，你<strong>感觉不到坡度</strong>（梯度消失了）！你根本不知道是该往左走还是往右走。
+            站在台阶上时，<strong>感觉不到坡度</strong>（梯度消失了）！根本不知道是该往左走还是往右走。
         </div>
         <div class="mermaid">
 flowchart TD
@@ -171,7 +171,7 @@ flowchart TD
         <h2>3. STE 的魔法：假装有个“隐形斜坡”</h2>
         <p>STE（直通估计器）想了个鬼点子：<strong>前向传播时，我踩台阶（做三值化）；反向传播时，我假装台阶不存在，直接穿透过去！</strong></p>
         <div class="analogy-box">
-            <strong>🎯 比喻：</strong> 就像你闭着眼睛下楼梯。脚踩空了（前向离散化），但大脑告诉你“刚才那一步是平的”（反向直通），你的手还是能扶住墙（梯度），继续往下摸。
+            <strong>🎯 比喻：</strong> 就像闭着眼睛下楼梯。脚踩空了（前向离散化），但大脑以为“刚才那一步是平的”（反向直通），手还是能扶住墙（梯度），继续往下摸。
         </div>
 
         <!-- 图A：前向传播（踩台阶） -->
