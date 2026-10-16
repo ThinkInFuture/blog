@@ -847,199 +847,199 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <svg viewBox="0 0 920 1450" role="img" aria-label="昇腾实现展开图">
 <defs><marker id="ahExp" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="460" y="26" text-anchor="middle">每一步为什么这么实现:流水线(最左)→怎么做→为什么→收益点,逐层展开</text>
-<text class="ts" x="95" y="48" text-anchor="middle" font-weight="700">昇腾实现流水线</text>
-<text class="ts" x="95" y="68" text-anchor="middle">(=图7 中列)</text>
-<text class="ts" x="309" y="48" text-anchor="middle" font-weight="700">怎么做 · 门牌</text>
-<text class="ts" x="309" y="68" text-anchor="middle">(本地实测)</text>
-<text class="ts" x="559" y="48" text-anchor="middle" font-weight="700">为什么这么设计</text>
-<text class="ts" x="796" y="48" text-anchor="middle" font-weight="700">收益点(省什么)</text>
-<rect class="bc" x="20" y="74" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="111" text-anchor="middle" font-weight="700">层外壳发起 self_attn</text>
-<text class="ts" x="95" y="133" text-anchor="middle">门卫放行 → 后端</text>
-<path class="flow" d="M95.0 178 V200" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="74" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="100" text-anchor="middle" font-weight="700">十行 L1 的调用者</text>
-<text class="ts" x="309" y="122" text-anchor="middle">层外壳串 LN→AG→attn</text>
-<text class="ts" x="309" y="144" text-anchor="middle">→RS;门卫 :151 放行</text>
-<path class="dash" d="M170 112 C179 112,179 132,189 132" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="74" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="100" text-anchor="middle" font-weight="700">层管布局,门卫管接入——</text>
-<text class="ts" x="559" y="122" text-anchor="middle">模型代码不碰硬件细节</text>
-<text class="ts" x="559" y="144" text-anchor="middle">接法与算法分家</text>
-<path class="dash" d="M426 112 C435 112,435 132,445 132" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="74" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="100" text-anchor="middle" font-weight="700">换后端只动门卫</text>
-<text class="ts" x="796" y="122" text-anchor="middle">模型层零改动</text>
-<text class="ts" x="796" y="144" text-anchor="middle">多卡逻辑收在壳上</text>
-<path class="dash" d="M670 112 C679 112,679 132,689 132" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="202" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="239" text-anchor="middle" font-weight="700">步3 Q/KV 联合</text>
-<text class="ts" x="95" y="261" text-anchor="middle">低秩投影(KV 段)</text>
-<path class="flow" d="M95.0 306 V328" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="202" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="228" text-anchor="middle" font-weight="700">fused_qkv_a_proj(:1576)</text>
-<text class="ts" x="309" y="250" text-anchor="middle">一次矩阵乘同出 Q 路 1536</text>
-<text class="ts" x="309" y="272" text-anchor="middle">与 KV latent,后段再上投影</text>
-<path class="dash" d="M170 240 C179 240,179 260,189 260" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="202" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="228" text-anchor="middle" font-weight="700">MLA 先压低秩 latent,</text>
-<text class="ts" x="559" y="250" text-anchor="middle">数学等价;KV 账本按</text>
-<text class="ts" x="559" y="272" text-anchor="middle">latent 记,不按全头记</text>
-<path class="dash" d="M426 240 C435 240,435 260,445 260" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="202" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="228" text-anchor="middle" font-weight="700">KV Cache 不随头数</text>
-<text class="ts" x="796" y="250" text-anchor="middle">翻倍——省显存是大头;</text>
-<text class="ts" x="796" y="272" text-anchor="middle">三投影合一省访存</text>
-<path class="dash" d="M670 240 C679 240,679 260,689 260" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="330" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="367" text-anchor="middle" font-weight="700">步4 K 侧 rope</text>
-<text class="ts" x="95" y="389" text-anchor="middle">步6 Q 侧 rope</text>
-<path class="flow" d="M95.0 434 V456" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="330" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="356" text-anchor="middle" font-weight="700">K 侧旋转融进 exec_kv</text>
-<text class="ts" x="309" y="378" text-anchor="middle">(:1595);Q 侧 rope_single</text>
-<text class="ts" x="309" y="400" text-anchor="middle">(:1616)就地转</text>
-<path class="dash" d="M170 368 C179 368,179 388,189 388" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="330" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="356" text-anchor="middle" font-weight="700">K 转后才写 cache,</text>
-<text class="ts" x="559" y="378" text-anchor="middle">Q 不进 cache 随算随转</text>
-<text class="ts" x="559" y="400" text-anchor="middle">——顺序不能反</text>
-<path class="dash" d="M426 368 C435 368,435 388,445 388" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="330" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="356" text-anchor="middle" font-weight="700">少一次中间张量读写;</text>
-<text class="ts" x="796" y="378" text-anchor="middle">旋转数学与十行的 L3</text>
-<text class="ts" x="796" y="400" text-anchor="middle">逐位一致</text>
-<path class="dash" d="M670 368 C679 368,679 388,689 388" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="458" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="495" text-anchor="middle" font-weight="700">步4 写本卡缓存</text>
-<text class="ts" x="95" y="517" text-anchor="middle">步7 全量写回</text>
-<path class="flow" d="M95.0 562 V584" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="458" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="484" text-anchor="middle" font-weight="700">slot 页表逐 token 定位写</text>
-<text class="ts" x="309" y="506" text-anchor="middle">(:1626);DSA-CP 跨卡拼</text>
-<text class="ts" x="309" y="528" text-anchor="middle">全量、每卡各存一份(:1605)</text>
-<path class="dash" d="M170 496 C179 496,179 516,189 516" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="458" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="484" text-anchor="middle" font-weight="700">页表代替整块 cat;</text>
-<text class="ts" x="559" y="506" text-anchor="middle">每卡全存是跨卡取块</text>
-<text class="ts" x="559" y="528" text-anchor="middle">命中块的前提</text>
-<path class="dash" d="M426 496 C435 496,435 516,445 516" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="458" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="484" text-anchor="middle" font-weight="700">无大拷贝、无碎片;</text>
-<text class="ts" x="796" y="506" text-anchor="middle">代价 KV×16 份——</text>
-<text class="ts" x="796" y="528" text-anchor="middle">拿显存换正确性</text>
-<path class="dash" d="M670 496 C679 496,679 516,689 516" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="586" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="623" text-anchor="middle" font-weight="700">无此步(GQA)</text>
-<text class="ts" x="95" y="645" text-anchor="middle">latent KV 全头共享</text>
-<path class="flow" d="M95.0 690 V712" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="586" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="612" text-anchor="middle" font-weight="700">GQA 的 repeat 没有对应物:</text>
-<text class="ts" x="309" y="634" text-anchor="middle">latent KV 生来全头共用</text>
-<text class="ts" x="309" y="656" text-anchor="middle">(:1595 段内)</text>
-<path class="dash" d="M170 624 C179 624,179 644,189 644" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="586" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="612" text-anchor="middle" font-weight="700">GQA 用 repeat 凑复用;</text>
-<text class="ts" x="559" y="634" text-anchor="middle">MLA 把复用直接做进</text>
-<text class="ts" x="559" y="656" text-anchor="middle">结构里</text>
-<path class="dash" d="M426 624 C435 624,435 644,445 644" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="586" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="612" text-anchor="middle" font-weight="700">显存不随 Q 头数翻倍;</text>
-<text class="ts" x="796" y="634" text-anchor="middle">省掉 repeat 的拷贝</text>
-<text class="ts" x="796" y="656" text-anchor="middle">与算力(对比十行的 L5)</text>
-<path class="dash" d="M670 624 C679 624,679 644,689 644" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="714" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="751" text-anchor="middle" font-weight="700">步8 稀疏注意力</text>
-<text class="ts" x="95" y="773" text-anchor="middle">算子(QKᵀ)</text>
-<path class="flow" d="M95.0 818 V840" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="714" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="740" text-anchor="middle" font-weight="700">indexer 先选 top-2048 块</text>
-<text class="ts" x="309" y="762" text-anchor="middle">(:1670);算子只在选中块</text>
-<text class="ts" x="309" y="784" text-anchor="middle">上 QKᵀ/√dk(:1683)</text>
-<path class="dash" d="M170 752 C179 752,179 772,189 772" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="714" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="740" text-anchor="middle" font-weight="700">长历史里相关的只有</text>
-<text class="ts" x="559" y="762" text-anchor="middle">少数块;索引器先挑,</text>
-<text class="ts" x="559" y="784" text-anchor="middle">注意力再算</text>
-<path class="dash" d="M426 752 C435 752,435 772,445 772" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="714" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="740" text-anchor="middle" font-weight="700">算力从扫全量历史降到</text>
-<text class="ts" x="796" y="762" text-anchor="middle">2048 块;序列越长</text>
-<text class="ts" x="796" y="784" text-anchor="middle">省得越多</text>
-<path class="dash" d="M670 752 C679 752,679 772,689 772" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="842" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="879" text-anchor="middle" font-weight="700">步8 内:</text>
-<text class="ts" x="95" y="901" text-anchor="middle">causal 遮罩处理</text>
-<path class="flow" d="M95.0 946 V968" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="842" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="868" text-anchor="middle" font-weight="700">遮罩由算子内部按</text>
-<text class="ts" x="309" y="890" text-anchor="middle">prefill/decode 自动处理</text>
-<text class="ts" x="309" y="912" text-anchor="middle">(:1683 算子内)</text>
-<path class="dash" d="M170 880 C179 880,179 900,189 900" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="842" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="868" text-anchor="middle" font-weight="700">遮罩是算子固定语义,</text>
-<text class="ts" x="559" y="890" text-anchor="middle">不必在外面造 mask</text>
-<text class="ts" x="559" y="912" text-anchor="middle">张量</text>
-<path class="dash" d="M426 880 C435 880,435 900,445 900" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="842" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="868" text-anchor="middle" font-weight="700">省 mask 张量的显存</text>
-<text class="ts" x="796" y="890" text-anchor="middle">与生成耗时;prefill</text>
-<text class="ts" x="796" y="912" text-anchor="middle">遮未来,decode 免遮</text>
-<path class="dash" d="M670 880 C679 880,679 900,689 900" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="970" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="1007" text-anchor="middle" font-weight="700">步8 内:</text>
-<text class="ts" x="95" y="1029" text-anchor="middle">softmax 归一化</text>
-<path class="flow" d="M95.0 1074 V1096" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="970" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="996" text-anchor="middle" font-weight="700">softmax 在算子内部完成,</text>
-<text class="ts" x="309" y="1018" text-anchor="middle">与 QKᵀ 连续执行</text>
-<text class="ts" x="309" y="1040" text-anchor="middle">(:1683 算子内)</text>
-<path class="dash" d="M170 1008 C179 1008,179 1028,189 1028" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="970" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="1007" text-anchor="middle" font-weight="700">三步数学融为一个</text>
-<text class="ts" x="559" y="1029" text-anchor="middle">算子,中间结果不落地</text>
-<path class="dash" d="M426 1008 C435 1008,435 1028,445 1028" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="970" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="996" text-anchor="middle" font-weight="700">分数矩阵不写显存——</text>
-<text class="ts" x="796" y="1018" text-anchor="middle">省带宽,这正是融合</text>
-<text class="ts" x="796" y="1040" text-anchor="middle">的意义</text>
-<path class="dash" d="M670 1008 C679 1008,679 1028,689 1028" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="1098" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="1135" text-anchor="middle" font-weight="700">步8 内:</text>
-<text class="ts" x="95" y="1157" text-anchor="middle">·V 加权求和</text>
-<path class="flow" d="M95.0 1202 V1224" marker-end="url(#ahExp)"/>
-<rect class="node" x="192" y="1098" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="1124" text-anchor="middle" font-weight="700">·V 加权同算子出结果</text>
-<text class="ts" x="309" y="1146" text-anchor="middle">[219,全头],停在收口前</text>
-<text class="ts" x="309" y="1168" text-anchor="middle">(:1683 算子内)</text>
-<path class="dash" d="M170 1136 C179 1136,179 1156,189 1156" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="1098" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="1135" text-anchor="middle" font-weight="700">同一条算子流水线,</text>
-<text class="ts" x="559" y="1157" text-anchor="middle">一次出全部分数结果</text>
-<path class="dash" d="M426 1136 C435 1136,435 1156,445 1156" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="1098" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="1124" text-anchor="middle" font-weight="700">每卡只算自己 219 个</text>
-<text class="ts" x="796" y="1146" text-anchor="middle">token 的输出,天然</text>
-<text class="ts" x="796" y="1168" text-anchor="middle">按卡并行</text>
-<path class="dash" d="M670 1136 C679 1136,679 1156,689 1156" marker-end="url(#ahExp)"/>
-<rect class="bc" x="20" y="1226" width="150" height="104" rx="10"/>
-<text class="ts" x="95" y="1263" text-anchor="middle" font-weight="700">步9 收口(o_proj)</text>
-<text class="ts" x="95" y="1285" text-anchor="middle">→交回层外壳</text>
-<rect class="node" x="192" y="1226" width="234" height="104" rx="10"/>
-<text class="ts" x="309" y="1252" text-anchor="middle" font-weight="700">_finalize_o_proj(:1695;</text>
-<text class="ts" x="309" y="1274" text-anchor="middle">原路 :1384)投影后交回;</text>
-<text class="ts" x="309" y="1296" text-anchor="middle">SP 时归约另有安排(18870)</text>
-<path class="dash" d="M170 1264 C179 1264,179 1284,189 1284" marker-end="url(#ahExp)"/>
-<rect class="node" x="448" y="1226" width="222" height="104" rx="10"/>
-<text class="ts" x="559" y="1252" text-anchor="middle" font-weight="700">输出投影保持原样;</text>
-<text class="ts" x="559" y="1274" text-anchor="middle">通信只在 SP 需要</text>
-<text class="ts" x="559" y="1296" text-anchor="middle">时才加</text>
-<path class="dash" d="M426 1264 C435 1264,435 1284,445 1284" marker-end="url(#ahExp)"/>
-<rect class="node" x="692" y="1226" width="208" height="104" rx="10"/>
-<text class="ts" x="796" y="1252" text-anchor="middle" font-weight="700">不开 SP 零额外通信;</text>
-<text class="ts" x="796" y="1274" text-anchor="middle">开 SP 归约只做一次</text>
-<text class="ts" x="796" y="1296" text-anchor="middle">(o_proj 两路图)</text>
-<path class="dash" d="M670 1264 C679 1264,679 1284,689 1284" marker-end="url(#ahExp)"/>
+<text class="ts" x="85" y="48" text-anchor="middle" font-weight="700">昇腾实现流水线</text>
+<text class="ts" x="85" y="68" text-anchor="middle">(=图7 中列)</text>
+<text class="ts" x="299" y="48" text-anchor="middle" font-weight="700">怎么做 · 门牌</text>
+<text class="ts" x="299" y="68" text-anchor="middle">(本地实测)</text>
+<text class="ts" x="548" y="48" text-anchor="middle" font-weight="700">为什么这么设计</text>
+<text class="ts" x="782" y="48" text-anchor="middle" font-weight="700">收益点(省什么)</text>
+<rect class="bc" x="20" y="74" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="111" text-anchor="middle" font-weight="700">层外壳 self_attn</text>
+<text class="ts" x="85" y="133" text-anchor="middle">门卫放行 → 后端</text>
+<path class="flow" d="M85.0 178 V200" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="74" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="100" text-anchor="middle" font-weight="700">十行 L1 的调用者</text>
+<text class="ts" x="299" y="122" text-anchor="middle">层外壳串 LN→AG→attn</text>
+<text class="ts" x="299" y="144" text-anchor="middle">→RS;门卫 :151 放行</text>
+<path class="dash" d="M150 112 C168 112,168 132,191 132" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="74" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="100" text-anchor="middle" font-weight="700">层管布局,门卫管接入——</text>
+<text class="ts" x="548" y="122" text-anchor="middle">模型代码不碰硬件细节</text>
+<text class="ts" x="548" y="144" text-anchor="middle">接法与算法分家</text>
+<path class="dash" d="M404 112 C422 112,422 132,445 132" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="74" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="100" text-anchor="middle" font-weight="700">换后端只动门卫</text>
+<text class="ts" x="782" y="122" text-anchor="middle">模型层零改动</text>
+<text class="ts" x="782" y="144" text-anchor="middle">多卡逻辑收在壳上</text>
+<path class="dash" d="M648 112 C666 112,666 132,689 132" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="202" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="239" text-anchor="middle" font-weight="700">步3 Q/KV 联合</text>
+<text class="ts" x="85" y="261" text-anchor="middle">低秩投影(KV 段)</text>
+<path class="flow" d="M85.0 306 V328" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="202" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="228" text-anchor="middle" font-weight="700">fused_qkv_a_proj(:1576)</text>
+<text class="ts" x="299" y="250" text-anchor="middle">一次矩阵乘同出 Q 路 1536</text>
+<text class="ts" x="299" y="272" text-anchor="middle">与 KV latent,后段再上投影</text>
+<path class="dash" d="M150 240 C168 240,168 260,191 260" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="202" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="228" text-anchor="middle" font-weight="700">MLA 先压低秩 latent,</text>
+<text class="ts" x="548" y="250" text-anchor="middle">数学等价;KV 账本按</text>
+<text class="ts" x="548" y="272" text-anchor="middle">latent 记,不按全头记</text>
+<path class="dash" d="M404 240 C422 240,422 260,445 260" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="202" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="228" text-anchor="middle" font-weight="700">KV Cache 不随头数</text>
+<text class="ts" x="782" y="250" text-anchor="middle">翻倍——省显存是大头;</text>
+<text class="ts" x="782" y="272" text-anchor="middle">三投影合一省访存</text>
+<path class="dash" d="M648 240 C666 240,666 260,689 260" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="330" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="367" text-anchor="middle" font-weight="700">步4 K 侧 rope</text>
+<text class="ts" x="85" y="389" text-anchor="middle">步6 Q 侧 rope</text>
+<path class="flow" d="M85.0 434 V456" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="330" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="356" text-anchor="middle" font-weight="700">K 侧旋转融进 exec_kv</text>
+<text class="ts" x="299" y="378" text-anchor="middle">(:1595);Q 侧 rope_single</text>
+<text class="ts" x="299" y="400" text-anchor="middle">(:1616)就地转</text>
+<path class="dash" d="M150 368 C168 368,168 388,191 388" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="330" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="356" text-anchor="middle" font-weight="700">K 转后才写 cache,</text>
+<text class="ts" x="548" y="378" text-anchor="middle">Q 不进 cache 随算随转</text>
+<text class="ts" x="548" y="400" text-anchor="middle">——顺序不能反</text>
+<path class="dash" d="M404 368 C422 368,422 388,445 388" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="330" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="356" text-anchor="middle" font-weight="700">少一次中间张量读写;</text>
+<text class="ts" x="782" y="378" text-anchor="middle">旋转数学与十行的 L3</text>
+<text class="ts" x="782" y="400" text-anchor="middle">逐位一致</text>
+<path class="dash" d="M648 368 C666 368,666 388,689 388" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="458" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="495" text-anchor="middle" font-weight="700">步4 写本卡缓存</text>
+<text class="ts" x="85" y="517" text-anchor="middle">步7 全量写回</text>
+<path class="flow" d="M85.0 562 V584" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="458" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="484" text-anchor="middle" font-weight="700">slot 页表逐 token 定位写</text>
+<text class="ts" x="299" y="506" text-anchor="middle">(:1626);DSA-CP 跨卡拼</text>
+<text class="ts" x="299" y="528" text-anchor="middle">全量、每卡各存一份(:1605)</text>
+<path class="dash" d="M150 496 C168 496,168 516,191 516" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="458" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="484" text-anchor="middle" font-weight="700">页表代替整块 cat;</text>
+<text class="ts" x="548" y="506" text-anchor="middle">每卡全存是跨卡取块</text>
+<text class="ts" x="548" y="528" text-anchor="middle">命中块的前提</text>
+<path class="dash" d="M404 496 C422 496,422 516,445 516" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="458" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="484" text-anchor="middle" font-weight="700">无大拷贝、无碎片;</text>
+<text class="ts" x="782" y="506" text-anchor="middle">代价 KV×16 份——</text>
+<text class="ts" x="782" y="528" text-anchor="middle">拿显存换正确性</text>
+<path class="dash" d="M648 496 C666 496,666 516,689 516" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="586" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="623" text-anchor="middle" font-weight="700">无此步(GQA)</text>
+<text class="ts" x="85" y="645" text-anchor="middle">latent 全头共享</text>
+<path class="flow" d="M85.0 690 V712" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="586" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="612" text-anchor="middle" font-weight="700">GQA 的 repeat 没有对应物:</text>
+<text class="ts" x="299" y="634" text-anchor="middle">latent KV 生来全头共用</text>
+<text class="ts" x="299" y="656" text-anchor="middle">(:1595 段内)</text>
+<path class="dash" d="M150 624 C168 624,168 644,191 644" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="586" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="612" text-anchor="middle" font-weight="700">GQA 用 repeat 凑复用;</text>
+<text class="ts" x="548" y="634" text-anchor="middle">MLA 把复用直接做进</text>
+<text class="ts" x="548" y="656" text-anchor="middle">结构里</text>
+<path class="dash" d="M404 624 C422 624,422 644,445 644" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="586" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="612" text-anchor="middle" font-weight="700">显存不随 Q 头数翻倍;</text>
+<text class="ts" x="782" y="634" text-anchor="middle">省掉 repeat 的拷贝</text>
+<text class="ts" x="782" y="656" text-anchor="middle">与算力(对比十行的 L5)</text>
+<path class="dash" d="M648 624 C666 624,666 644,689 644" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="714" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="751" text-anchor="middle" font-weight="700">步8 稀疏注意力</text>
+<text class="ts" x="85" y="773" text-anchor="middle">算子(QKᵀ)</text>
+<path class="flow" d="M85.0 818 V840" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="714" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="740" text-anchor="middle" font-weight="700">indexer 先选 top-2048 块</text>
+<text class="ts" x="299" y="762" text-anchor="middle">(:1670);算子只在选中块</text>
+<text class="ts" x="299" y="784" text-anchor="middle">上 QKᵀ/√dk(:1683)</text>
+<path class="dash" d="M150 752 C168 752,168 772,191 772" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="714" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="740" text-anchor="middle" font-weight="700">长历史里相关的只有</text>
+<text class="ts" x="548" y="762" text-anchor="middle">少数块;索引器先挑,</text>
+<text class="ts" x="548" y="784" text-anchor="middle">注意力再算</text>
+<path class="dash" d="M404 752 C422 752,422 772,445 772" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="714" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="740" text-anchor="middle" font-weight="700">算力从扫全量历史降到</text>
+<text class="ts" x="782" y="762" text-anchor="middle">2048 块;序列越长</text>
+<text class="ts" x="782" y="784" text-anchor="middle">省得越多</text>
+<path class="dash" d="M648 752 C666 752,666 772,689 772" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="842" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="879" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="901" text-anchor="middle">causal 遮罩处理</text>
+<path class="flow" d="M85.0 946 V968" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="842" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="868" text-anchor="middle" font-weight="700">遮罩由算子内部按</text>
+<text class="ts" x="299" y="890" text-anchor="middle">prefill/decode 自动处理</text>
+<text class="ts" x="299" y="912" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 880 C168 880,168 900,191 900" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="842" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="868" text-anchor="middle" font-weight="700">遮罩是算子固定语义,</text>
+<text class="ts" x="548" y="890" text-anchor="middle">不必在外面造 mask</text>
+<text class="ts" x="548" y="912" text-anchor="middle">张量</text>
+<path class="dash" d="M404 880 C422 880,422 900,445 900" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="842" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="868" text-anchor="middle" font-weight="700">省 mask 张量的显存</text>
+<text class="ts" x="782" y="890" text-anchor="middle">与生成耗时;prefill</text>
+<text class="ts" x="782" y="912" text-anchor="middle">遮未来,decode 免遮</text>
+<path class="dash" d="M648 880 C666 880,666 900,689 900" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="970" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1007" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="1029" text-anchor="middle">softmax 归一化</text>
+<path class="flow" d="M85.0 1074 V1096" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="970" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="996" text-anchor="middle" font-weight="700">softmax 在算子内部完成,</text>
+<text class="ts" x="299" y="1018" text-anchor="middle">与 QKᵀ 连续执行</text>
+<text class="ts" x="299" y="1040" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 1008 C168 1008,168 1028,191 1028" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="970" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1007" text-anchor="middle" font-weight="700">三步数学融为一个</text>
+<text class="ts" x="548" y="1029" text-anchor="middle">算子,中间结果不落地</text>
+<path class="dash" d="M404 1008 C422 1008,422 1028,445 1028" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="970" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="996" text-anchor="middle" font-weight="700">分数矩阵不写显存——</text>
+<text class="ts" x="782" y="1018" text-anchor="middle">省带宽,这正是融合</text>
+<text class="ts" x="782" y="1040" text-anchor="middle">的意义</text>
+<path class="dash" d="M648 1008 C666 1008,666 1028,689 1028" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="1098" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1135" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="1157" text-anchor="middle">·V 加权求和</text>
+<path class="flow" d="M85.0 1202 V1224" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="1098" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="1124" text-anchor="middle" font-weight="700">·V 加权同算子出结果</text>
+<text class="ts" x="299" y="1146" text-anchor="middle">[219,全头],停在收口前</text>
+<text class="ts" x="299" y="1168" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 1136 C168 1136,168 1156,191 1156" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="1098" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1135" text-anchor="middle" font-weight="700">同一条算子流水线,</text>
+<text class="ts" x="548" y="1157" text-anchor="middle">一次出全部分数结果</text>
+<path class="dash" d="M404 1136 C422 1136,422 1156,445 1156" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="1098" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="1124" text-anchor="middle" font-weight="700">每卡只算自己 219 个</text>
+<text class="ts" x="782" y="1146" text-anchor="middle">token 的输出,天然</text>
+<text class="ts" x="782" y="1168" text-anchor="middle">按卡并行</text>
+<path class="dash" d="M648 1136 C666 1136,666 1156,689 1156" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="1226" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1263" text-anchor="middle" font-weight="700">步9 收口(o_proj)</text>
+<text class="ts" x="85" y="1285" text-anchor="middle">→交回层外壳</text>
+<rect class="node" x="194" y="1226" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="1252" text-anchor="middle" font-weight="700">_finalize_o_proj(:1695;</text>
+<text class="ts" x="299" y="1274" text-anchor="middle">原路 :1384)投影后交回;</text>
+<text class="ts" x="299" y="1296" text-anchor="middle">SP 时归约另有安排(18870)</text>
+<path class="dash" d="M150 1264 C168 1264,168 1284,191 1284" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="1226" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1252" text-anchor="middle" font-weight="700">输出投影保持原样;</text>
+<text class="ts" x="548" y="1274" text-anchor="middle">通信只在 SP 需要</text>
+<text class="ts" x="548" y="1296" text-anchor="middle">时才加</text>
+<path class="dash" d="M404 1264 C422 1264,422 1284,445 1284" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="1226" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="1252" text-anchor="middle" font-weight="700">不开 SP 零额外通信;</text>
+<text class="ts" x="782" y="1274" text-anchor="middle">开 SP 归约只做一次</text>
+<text class="ts" x="782" y="1296" text-anchor="middle">(o_proj 两路图)</text>
+<path class="dash" d="M648 1264 C666 1264,666 1284,689 1284" marker-end="url(#ahExp)"/>
 <text class="tm" x="20" y="1386">读法:最左列=图7 中列的流水线原样搬来;向右三列逐层展开——怎么做(带门牌)→为什么这么设计→收益点。口径:3504 全量/219 每卡/16 卡/top-2048 块。</text>
 <text class="tm" x="20" y="1412">本图讲"原本为什么这么实现"。本 PR(18870)九步一行没动——改的是层外壳 SP 开关与 PP 出口布局(见 4.7)。</text>
 </svg>
