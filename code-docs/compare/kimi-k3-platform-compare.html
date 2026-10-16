@@ -1101,7 +1101,7 @@ graph LR
 
 <div class="card">
 <h3>"和 Ascend 底层啥关系"——一次 KDA 计算的完整下沉过程</h3>
-<pre><code class="language-python"># ① Python 层：ops/kimi_kda.py（你能在文档里打开的源码）
+<pre><code class="language-python"># ① Python 层：ops/kimi_kda.py（文档里能打开的源码）
 def _run_prefill(self, ...):
     ...准备 q/k/v/beta 并按 AscendC 契约整理（_prepare_beta）...
     return torch.ops._C_ascend.chunk_kda_fwd(q, k, v, g, beta, ...)   # ← 跨过 Python/USA 边界
