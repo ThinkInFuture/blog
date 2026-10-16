@@ -424,23 +424,21 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="figcap">图 4 · 改动后：业务主线一个框都没动；五条件开 SP（蓝）、Ⓐ 白归约消失（灰）、PP 出口聚全量上移（绿）</div>
 
 <h2 id="s4">4. 主线讲解：从架构全貌到这次 PR</h2>
-<p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它，4.1 先摆这次问题涉及的上游原始写法（图 5 给出全局定位 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10~14），4.8~4.10 三张表收拢，每张图配一段讲解。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"开关与边界"——层的 SP 开关、o_proj 的归约权、PP 出口的布局。</p>
+<p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它，4.1 先摆这块推理的朴素 PyTorch 写法、定位到框架加的壳（图 5 给出全局定位 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10~14），4.8~4.10 三张表收拢，每张图配一段讲解。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"开关与边界"——层的 SP 开关、o_proj 的归约权、PP 出口的布局。</p>
 
-<h3>4.1 先看这次的问题代码：上游原始写法</h3>
-<p>老规矩，先把这次 PR 要动的代码摆出来——<b>上游用 PyTorch 写这块推理的原始写法</b>：层外壳的 SP 开关、o_proj 的归约接线、PP 出口的交接（有删节，ⒶⒷ 编号见第 2 章）：</p>
-<pre><span class="c"># 上游原始写法（PP&gt;1 时的层外壳与投影接线）</span>
-layer.use_sequence_parallel_moe = False        <span class="c"># <span class="cnum">Ⓑ</span> guard：PP&gt;1 强制关 decoder SP</span>
-layer.self_attn.o_proj.reduce_results = True   <span class="c"># <span class="cnum">Ⓐ</span> 投影后每层各归各的</span>
+<h3>4.1 先看这块推理的原始写法：朴素 PyTorch</h3>
+<p>老规矩，先立对比基准——<b>这块推理（一层 Transformer 的前向）用 PyTorch 朴素写出来长什么样</b>。你自己写模型推理就会这么写：单卡、没有任何并行概念（有删节）。十行示例管的是 attention 这一小块；这里把整层摆出来，MoE 一并看：</p>
+<pre><span class="c"># 朴素 PyTorch 写法：一层 Transformer 的前向（单卡，无框架）</span>
+def layer_forward(hidden_states):
+    h = input_layernorm(hidden_states)          <span class="c"># 进层先归一化</span>
+    h = self_attn(h)                            <span class="c"># 注意力：QKV 投影 → QKᵀ/softmax/·V → o_proj（十行示例就是这段）</span>
+    hidden_states = h + hidden_states           <span class="c"># 残差 1</span>
+    h = post_attention_layernorm(hidden_states) <span class="c"># MoE 前再归一化</span>
+    h = mlp(hidden_states=h)                    <span class="c"># 前馈；GLM 这层是 MoE：路由选专家 → 专家 FFN → 加权合并</span>
+    return h + hidden_states                    <span class="c"># 残差 2 → 交给下一层</span>
 
-def forward(self, positions, hidden_states, residual):   <span class="c"># DeepseekV2Model.forward（补丁版）</span>
-    for layer in self.layers[start:end]:       <span class="c"># 本 stage 的层逐层跑</span>
-        hidden_states, residual = layer(positions, hidden_states, residual)
-        <span class="c"># 改前 SP 被关：hidden 一直是全量，层内没人做布局整理</span>
-    if not pp_group.is_last_rank:
-        return IntermediateTensors(...)        <span class="c"># PP 出口：直接交下一 stage</span>
-    hidden_states, _ = self.norm(hidden_states, residual)
-    return hidden_states, ...</pre>
-<p><b>问题就藏在这几行的组合里：</b>Ⓑ 一刀切关 SP，是为了保 PP transport 的全量约定，初衷没错；但代价是 Ⓐ 每层白付一次归约，而 FlashComm1 配置位照样报开启——<b>名实不符</b>。十行 attention 的数学一行没动，动的全是这几行的"开关与接线"。</p>
+<span class="c"># 模型级就是 for 循环把 N 层串起来，最后 norm + lm_head 出下一个 token</span></pre>
+<p><b>这次 PR 动的不是这段数学——数学一行没动。</b>动的是 vLLM 框架给这段朴素代码<b>加的壳</b>：进了框架，这一层被接上三件并行零件——层的 SP 开关（<span class="cnum">Ⓑ</span>）、o_proj 的归约接线（<span class="cnum">Ⓐ</span>）、PP 出口的交接。裸 PyTorch 里根本没有这些东西，它们全是框架为多卡布局塞进来的；PP&gt;1 时框架还一刀切关掉 SP，让 Ⓐ 每层白付一次归约，而 FlashComm1 配置位照样报开启——<b>名实不符，问题全住在壳上</b>（ⒶⒷ 编号见第 2 章）。</p>
 <p>这段代码在全局的什么位置？把模型架构到框架的全貌画出来（图 5）：</p>
 <div class="card">
 <svg viewBox="0 0 840 750" role="img" aria-label="架构框架图">
