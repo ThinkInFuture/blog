@@ -104,7 +104,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <h1>vllm-ascend PR #18671 解读 · B 版（改前改后逐行对照）</h1>
 <div style="background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:10px 16px;margin:10px 0;font-size:14px"><strong>PR 地址：</strong><a href="https://github.com/vllm-project/vllm-ascend/pull/18671" target="_blank" rel="nofollow" style="color:#2f6feb;font-weight:600">vllm-project/vllm-ascend · Pull Request #18671</a>（[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP）</div>
 <div class="subtitle">[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP —— 让 SP 的 token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter</div>
-<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（三版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · C版从你的attention出发.html">C 版（从你认识的 attention 十行代码出发）</a>。现役版未动，选定后以所选版本替换。</div>
+<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（三版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · 十行attention到昇腾实现全链.html">C 版（从你认识的 attention 十行代码出发）</a>。现役版未动，选定后以所选版本替换。</div>
 
 <nav class="toc">
 <b>目录</b>
@@ -165,7 +165,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="30" y="264">车间：契约声明 + ⑤ 输入校验 + ⑥ o_proj 收口</text>
 <rect class="ac" x="20" y="282" width="430" height="48" rx="8"/>
 <text class="tb" x="30" y="301">attention/sfa_kv_offload.py</text>
-<text class="ts" x="30" y="320">KV offload：透传两个新参数（小改）</text>
+<text class="ts" x="30" y="320">KV offload：透传两个新参数（小改，与门卫/九步无接触）</text>
 <text class="tm" x="470" y="50" font-weight="700" fill="#6b7280">测试 ×5（回归网）</text>
 <rect class="ghost" x="470" y="58" width="350" height="48" rx="8"/>
 <text class="tb" x="480" y="77">test_deepseek_dsa_cp.py（新增）</text>
@@ -181,7 +181,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="480" y="264">本地 SFA 分发 / 索引缓存所有权 / nope 组合</text>
 <rect class="ghost" x="470" y="282" width="350" height="48" rx="8"/>
 <text class="tb" x="480" y="301">test_glm_moe_dsa.py（新增）</text>
-<text class="ts" x="480" y="320">GLM MoE DSA 模型选择 / 回归</text>
+<text class="ts" x="480" y="320">GLM MoE DSA 模型选择 / 换装回归（PR 新增）</text>
 <text class="tm" x="20" y="362">五个源码文件按调用顺序排布；测试覆盖明细见第 4 章测试表</text>
 </svg>
 </div>
@@ -335,7 +335,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text x="726" y="68" text-anchor="middle" font-size="11" fill="#60a5fa" font-weight="400">卡14</text><rect x="751" y="44" width="44" height="40" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
 <text x="773" y="68" text-anchor="middle" font-size="11" fill="#60a5fa" font-weight="400">卡15</text>
 <text x="420" y="104" text-anchor="middle" font-size="11" fill="#cf222e">第 16 段的尾部含 4 个 padding（3500 对齐到 16 的倍数 = 3504）</text>
-<text class="tm" x="46" y="140" font-weight="700" fill="#1d4ed8">放大卡 0 ↓</text>
+<text class="tm" x="20" y="100" font-weight="700" fill="#1d4ed8">放大 ↓</text>
 <path d="M68 88 C68 108,105 108,105 124" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="5 4" fill="none" marker-end="url(#ah7)"/>
 <rect class="bc" x="46" y="128" width="240" height="44" rx="8"/>
 <text class="tb" x="166" y="148" text-anchor="middle">卡 0 的本地分片 [219, 8192]</text>
@@ -645,9 +645,9 @@ class AscendDSACPDecoderLayer(DeepseekV2DecoderLayer):
 <text class="tb" x="630" y="224" text-anchor="middle">上游 DeepseekV2Model</text>
 <text class="ts" x="630" y="244" text-anchor="middle">任一条件不满足 → 原路径</text>
 <text class="tm" x="630" y="264" text-anchor="middle">AG + 切段 + RS 行为不变</text>
-<text class="tm" x="380" y="440" text-anchor="middle">注：MLA 包装层另有能力探测（4.3），不满足同样自动回退</text>
+<text class="tm" x="380" y="440" text-anchor="middle">注：MLA 包装层另有能力探测（4.7），不满足同样自动回退</text>
 </svg>
-<div class="figcap">图 8 · 生效条件：V1 runner + PP=1 + SP MoE + DSA-CP（其余模型 / V2 / PP / DCP 一律走原路径）</div>
+<div class="figcap">图 14 · 生效条件：V1 runner + PP=1 + SP MoE + DSA-CP（其余模型 / V2 / PP / DCP 一律走原路径）</div>
 </div>
 
 <p><b>闸门 2 · 层级</b>——每个 attention 模块（门卫，ops/mla.py）上的契约属性，四个条件与出来：</p>
@@ -762,7 +762,7 @@ def resolve_sfa_impl(vllm_config=None):
 <text class="ts" x="585" y="204" text-anchor="middle">→ 先乘 output_scale → 1 次 reduce_scatter</text>
 <text class="ts" x="40" y="248">关键细节：FP16 时 output_scale = 1/routed_scaling_factor 在归约前乘——保留上游的防溢出缩放语义</text>
 </svg>
-<div class="figcap">图 7 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
+<div class="figcap">图 13 · o_proj 收口：路 A 全权重直算，路 B all-to-all + 单次 reduce-scatter，尾部 padding 清零</div>
 </div>
 
 
@@ -1008,7 +1008,7 @@ PR 自述：新增单测尚未运行；release-port 头未在 NPU 上复跑；<c
 <tr><td>index cache / topk buffer</td><td>Indexer 命中索引的层间共享缓冲，新模型类保持全层共享同一 buffer</td></tr>
 </table>
 
-<p class="dim" style="margin-top:36px">来源：github.com/vllm-project/vllm-ascend PR #18671（draft，base: releases/v0.30.0，+898/−22，8 files）· 本页为技术解读，数据均引自 PR 原文</p>
+<p class="dim" style="margin-top:36px">来源：github.com/vllm-project/vllm-ascend PR #18671（draft，base: releases/v0.30.0，+923/−34，10 文件）· 本页为技术解读，数据均引自 PR 原文</p>
 
 </div>
 
