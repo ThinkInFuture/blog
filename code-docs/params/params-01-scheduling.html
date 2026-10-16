@@ -123,7 +123,7 @@ flowchart TD
 
 <h2 id="s3">③ 概念爬坡：从"发个请求"走到"这 8 个参数"</h2>
 <div class="card">
-<p><strong>级 1 · LLM 的回答是逐字蹦出来的。</strong>你熟悉的普通 Web 服务（比如查订单），一次请求
+<p><strong>级 1 · LLM 的回答是逐字蹦出来的。</strong>常见的普通 Web 服务（比如查订单），一次请求
 就是一次数据库查询、一次返回，服务器"处理完"这个请求就结束了。但大模型不同：它回答一段话，
 是把这段话<strong>一个 token 一个 token 接连生成</strong>的（token 可粗略理解为"词元"，模型的最小文字单位）。
 生成 500 字的回答，模型的前向计算（forward，喂入内容算出下一个词）要跑几十上百次。
@@ -133,7 +133,7 @@ flowchart TD
 <div class="fig-caption">图 3-1 · 爬坡级 1：一次请求 ≠ 一次计算</div>
 <div class="mermaid">
 flowchart LR
-    W["你熟悉的 Web 服务<br/>1 个请求 = 1 次处理 = 完成"] --> Q["LLM 服务<br/>1 个请求 = 几十上百次前向计算<br/>（每算一次，多生成一个 token）"]
+    W["常见的 Web 服务<br/>1 个请求 = 1 次处理 = 完成"] --> Q["LLM 服务<br/>1 个请求 = 几十上百次前向计算<br/>（每算一次，多生成一个 token）"]
     Q --> R["所以同一时刻服务器里<br/>每个请求都是'半成品'，都还在排队等着被反复计算"]
     style W fill:#eef3ff,stroke:#5b6ee1
     style R fill:#fff8e1,stroke:#9a6700
@@ -204,7 +204,7 @@ symmetric buffer＝对称缓冲（多卡可直接互相读写的共享显存区�
 
 <h2 id="s4">④ 主干流程：一个参数从"命令行"走到"生效"</h2>
 <div class="card">
-<p>这 8 个参数的生效路径完全一致，学会一次就认识全家。你在启动命令里写
+<p>这 8 个参数的生效路径完全一致，学会一次就认识全家。启动命令里写下
 <code>--additional-config '{"scheduler_config": {"enable_balance_scheduling": true}}'</code>，
 这串 JSON 被解析进 <code>AscendConfig</code>（vllm_ascend 自己的配置容器，ascend_config.py），
 先做类型与<strong>互斥校验</strong>（比如 profiling_chunk 与 balance 不能同时开，第⑦节细讲），
@@ -225,7 +225,7 @@ flowchart TD
 <p>下面这段是参数的"户口本"：全部 6 个子配置都在 <code>scheduler_config</code> 名下
 （行号 391-423），另有 <code>enable_reduce_sample</code>（L464）与
 <code>mega_moe_max_tokens</code>（L483）在顶层。每行默认值就是"不开"——
-vllm-ascend 的原则是增强特性全部 opt-in（你要显式打开）。</p>
+vllm-ascend 的原则是增强特性全部 opt-in（需显式打开）。</p>
 </div>
 <div class="fig-caption">代码 B1 · 参数定义总览：scheduler_config 全家福</div>
 <pre><span class="fname">vllm_ascend/ascend_config.py · AscendConfig 默认值示例 · L391-423</span><code class="language-python">            "scheduler_config": {                       # ← 6 个调度子配置都住这里
@@ -541,7 +541,7 @@ flowchart TD
             self.get_symm_buffer_for_mega_moe, self.mega_moe = moe_utils.load_cann_mega_moe_ops()  # →NPU
 
             # P nodes and PD-mixed nodes use the configured value. ...
-            max_recv_token_num = get_ascend_config().mega_moe_max_tokens  # ⚡你的申报值
+            max_recv_token_num = get_ascend_config().mega_moe_max_tokens  # ⚡申报值
             # absolute_safe_max_recv_token_num is the max value required by mega moe api
             if max_recv_token_num &gt; absolute_safe_max_recv_token_num:
                 max_recv_token_num = absolute_safe_max_recv_token_num   # ↳ 超上限被夹住
@@ -585,10 +585,10 @@ flowchart TD
 <h2 id="s6">⑥ 关键数据结构：调度器是一棵"可组合"的类树</h2>
 <div class="card">
 <p>读完 8 个参数再看全局，会发现一个漂亮的设计：vllm-ascend 没有写一个"万能调度器"，而是把每种增强写成
-<strong>可叠加的类</strong>，启动时按你打开的参数<strong>组装</strong>出最终的调度器。
+<strong>可叠加的类</strong>，启动时按打开的参数<strong>组装</strong>出最终的调度器。
 基座是 <code>RecomputeScheduler</code>（它留了给 DyntraLB 用的钩子），
 DyntraLB 以 Mixin（混入类：把一组能力"掺"进别的类）方式叠加，还有异步版本组合；
-balance 是独立的一支。理解这棵树，你就能看懂日志里"我的请求到底被哪个调度器处理了"。</p>
+balance 是独立的一支。理解这棵树，就能看懂日志里"我的请求到底被哪个调度器处理了"。</p>
 </div>
 <div class="guide"><span class="qa">这张图回答什么问题：</span>打开不同参数组合后，运行中的调度器到底是哪个类——继承树即组装表。</div>
 <div class="fig-caption">图 6-1 · 调度器继承树（结构视角）</div>
