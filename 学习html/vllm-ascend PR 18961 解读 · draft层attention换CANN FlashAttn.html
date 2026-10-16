@@ -1,0 +1,1456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vllm-ascend PR #18961 解读：给 GLM 的 draft 层 attention 换上 CANN FlashAttn</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --del:#c2410c;--code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --del:#f87171;--code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+h4{font-size:15px;margin:20px 0 6px;color:var(--accent-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:20px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 28px;font-size:14px}
+nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--brand-text);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.cnum{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--brand);font-weight:700}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.8px;line-height:1.6}
+pre .c{color:var(--text-muted)}
+pre .a{color:var(--ok);font-weight:700}
+pre .d{color:var(--del);text-decoration:line-through}
+.codetag{font-size:13px;font-weight:700;margin:14px 0 4px}
+.codetag.before{color:var(--del)}
+.codetag.after{color:var(--ok)}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.figgrid{display:grid;grid-template-columns:1fr;gap:20px}
+@media (min-width:1200px){.figgrid{grid-template-columns:1fr 1fr}.figgrid .card{overflow-x:auto}}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp.g{border-color:var(--ok);background:var(--ok-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12.5px;font-weight:600;margin-right:6px}
+.tag.blue{background:var(--brand-bg);color:var(--brand-text)}
+.tag.teal{background:var(--accent-bg);color:var(--accent-text)}
+.tag.amber{background:var(--warn-bg);color:var(--warn)}
+.tag.green{background:var(--ok-bg);color:var(--ok)}
+.dim{color:var(--text-muted);font-size:13.5px}
+.quote{border-left:3px solid var(--border);padding:2px 14px;margin:12px 0;color:var(--text-muted);font-size:13.5px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:8}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none}
+.flow{stroke:var(--brand);stroke-width:2;fill:none}
+.dash{stroke:var(--accent);stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+.ghost{fill:var(--surface);stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4}
+.grpA{fill:var(--brand-bg);stroke:var(--brand);stroke-width:2}
+.grpB{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+.frame{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:6 5}
+.gbadge{fill:var(--surface-muted);stroke:var(--border);stroke-width:1.5}
+.nb{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.cb{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.bdg{fill:var(--text);font-size:17px;font-weight:700}
+.garr{stroke:var(--border);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+<h1>vllm-ascend PR #18961 解读：给 GLM 的 draft 层 attention 换上 CANN FlashAttn</h1>
+<div style="background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:10px 16px;margin:10px 0;font-size:14px"><strong>PR 地址：</strong><a href="https://github.com/vllm-project/vllm-ascend/pull/18961" target="_blank" rel="nofollow" style="color:#2f6feb;font-weight:600">vllm-project/vllm-ascend · Pull Request #18961</a>（[v0.30.0][Feature][Attention] CANN FlashAttn for A5 V1 GLM DFlash2 eager drafts）</div>
+<div class="subtitle">target 一根手指不动——七重条件窄门里，draft 层的 attention 换 CANN 9.2 引擎：device 长度取一次、tiling 计划一步一建层间复用，两节点 P/D 实测 mean TPOT 14.90 → 10.97 ms</div>
+
+<nav class="toc">
+<b>目录</b>
+<ol>
+<li><a href="#s1">PR 档案</a></li>
+<li><a href="#s2">问题：draft 层的 attention 借了别人的引擎（改动前）</a></li>
+<li><a href="#s3">核心思路：窄门换引擎，target 不动</a></li>
+<li><a href="#s4">主线讲解：从架构全貌到这次 PR</a></li>
+<li><a href="#s5">前后代码对照（带注释）</a></li>
+<li><a href="#s6">与我们排查问题的关系</a></li>
+<li><a href="#s7">收益、风险与待验证</a></li>
+<li><a href="#s8">术语速查</a></li>
+</ol>
+</nav>
+
+<h2 id="s1">1. PR 档案</h2>
+<table>
+<tr><th style="width:130px">项目</th><th>内容</th></tr>
+<tr><td>标题</td><td><b>[v0.30.0][Feature][Attention] CANN FlashAttn for A5 V1 GLM DFlash2 eager drafts</b></td></tr>
+<tr><td>作者 / 状态</td><td>开放中（950DT + CANN 9.2 上 16 个 eager 精度用例已过；性能数字引自上游 #18717）</td></tr>
+<tr><td>目标分支</td><td><code>releases/v0.30.0</code>——与 #18671、#18870 同一条版本线</td></tr>
+<tr><td>改动规模</td><td>9 个文件，+594 / −0 行（3 个源码文件 + 6 个测试文件；diff 实测，纯新增）</td></tr>
+<tr><td>涉及模块</td><td><code>vllm_ascend/attention/fa_v1.py</code>（新增后端）、<code>vllm_ascend/platform.py</code>（选路闸门）、<code>vllm_ascend/device/hardware_profile.py</code>（能力位）</td></tr>
+<tr><td>关联 PR</td><td>上游 <a href="https://github.com/vllm-project/vllm-ascend/pull/18717" target="_blank" rel="nofollow">#18717</a>（本篇是其 v0.30.0 回移植，性能数字出自它）；前作 #18671 / #18870（本站已解读，同一条 GLM 布局线）</td></tr>
+<tr><td>生效场景</td><td><b>A5（950DT）+ V1 runner + GLM MoE DSA 主模型 + DFlash2 draft + enforce_eager + FP16/BF16 未量化 KV</b>——条件不全自动回老路</td></tr>
+</table>
+
+<div class="kp w">
+<span class="kp-t">读前须知：五个名词 30 秒（更多缩写见文末第 8 章术语速查）</span>
+<ul>
+<li><b>MTP draft / DFlash2</b>（架构件）：GLM 架构里主模型旁边的那件小模型——推理时先连猜几个 token、再由主模型一次前向验证；dflash 是这代 draft 的方法名；</li>
+<li><b>enforce_eager</b>（框架开关）：对应你自己写 PyTorch 推理时"逐层即时执行"的朴素方式——禁用图捕获、每层现场跑；</li>
+<li><b>CANN FlashAttn</b>（算子）：CANN 算子库里的融合注意力算子——QKᵀ、遮罩、softmax、·V 一个算子出齐，算子本体住在 CANN（vllm-ascend 只管喂参数）；</li>
+<li><b>A5（950DT）/ CANN 9.2</b>（硬件与算子库版本）：本 PR 的门槛条件——能力位挂在 device/ 目录的硬件画像里；</li>
+<li><b>SFA</b>（③里的后端）：GLM DSA 主模型现在选的稀疏注意力后端（attention/ 目录）——本 PR <b>不动它</b>，只给 draft 层换引擎。</li>
+</ul>
+</div>
+
+<div class="kp">
+<span class="kp-t">一句话总结</span>
+draft 层的 attention 数学与主模型一字不差，但"被调用的方式"特殊：每步要连猜 k 次、序列极短、每步都要重新备料。改前它与最普通的 dense 层查同一张后端选路表，拿到通用后端——每层自建元数据、长度依赖 CPU 镜像（拒绝采样后可能过期）、每层重建 tiling 计划，备料开销吃进每 token 时延。本 PR 在选路表前加一道<b>七重条件窄门</b>，全过才给 draft 层换上 CANN FlashAttn 专用后端：<b>device 长度取一次、tiling 计划一步一建层间复用</b>；主模型 target 的选路一个字不动。
+</div>
+
+<div class="figcap" style="margin-top:26px"><b>图 1 · PR 改动全景：3 个源码文件＝「引擎三件」，6 个测试文件组成回归网</b></div>
+<div class="card">
+<svg viewBox="0 0 840 486" role="img" aria-label="PR 18961 改动全景">
+<text class="th" x="420" y="24" text-anchor="middle">PR #18961 改动全景：+594 / −0 · 9 个文件</text>
+<text class="tm" x="20" y="50" font-weight="700" fill="#1d4ed8">源码 ×3（选路 → 后端 → 门槛，全在「引擎」上）</text>
+<rect class="bc" x="20" y="58" width="400" height="76" rx="8"/>
+<text class="tb" x="30" y="80">attention/fa_v1.py（新增）</text>
+<text class="ts" x="30" y="100">新后端三件套：元数据（device 长度）→</text>
+<text class="ts" x="30" y="120">plan 缓存 → CANN flash_attn 调用与回填</text>
+<rect class="ac" x="20" y="154" width="400" height="76" rx="8"/>
+<text class="tb" x="30" y="176">platform.py（+52）</text>
+<text class="ts" x="30" y="196">选路总闸：backend_map 查表前插入</text>
+<text class="ts" x="30" y="216">_validate_flash_attn_backend 七重条件窄门</text>
+<rect class="ac" x="20" y="250" width="400" height="60" rx="8"/>
+<text class="tb" x="30" y="272">device/hardware_profile.py（+3）</text>
+<text class="ts" x="30" y="292">能力位 DEVICE_LENGTH_FLASH_ATTN，A5 开</text>
+<text class="tm" x="470" y="50" font-weight="700" fill="#6b7280">测试 ×6（回归网）</text>
+<rect class="ghost" x="470" y="58" width="350" height="56" rx="8"/>
+<text class="tb" x="480" y="78">ut/attention/test_flash_attn.py（+240）</text>
+<text class="ts" x="480" y="97">精度对金标准 + 选路矩阵 + plan 复用三道锁</text>
+<rect class="ghost" x="470" y="124" width="350" height="56" rx="8"/>
+<text class="tb" x="480" y="144">e2e/test_flash_attn_precision.py（+99）</text>
+<text class="ts" x="480" y="163">16 个 eager NPU 精度用例（FP16/BF16）</text>
+<rect class="ghost" x="470" y="190" width="350" height="56" rx="8"/>
+<text class="tb" x="480" y="210">ut/spec_decode/test_dflash2_proposer.py</text>
+<text class="ts" x="480" y="229">draft 侧选 fa 后端、不覆写 causality</text>
+<rect class="ghost" x="470" y="256" width="350" height="46" rx="8"/>
+<text class="tb" x="480" y="276">ut/device/test_hardware_profile.py（+1）</text>
+<text class="ts" x="480" y="293">A5 能力位登记</text>
+<rect class="ghost" x="470" y="312" width="350" height="46" rx="8"/>
+<text class="tb" x="480" y="332">CI 配置 ×2（test_config / estimated_times）</text>
+<text class="ts" x="480" y="349">精度用例路由到 A5 的 CANN 9.2 镜像</text>
+<text class="tm" x="20" y="390">门卫（ops/）、SFA 九步（sfa_v1.py）、模型层（models/）一行没动——本 PR 全部改在「draft 层的引擎与备料」。</text>
+<text class="tm" x="20" y="418">前两作拆的是布局（聚散与边界）；本篇换引擎——同一族 GLM 部署里，把"快"从通信省到备料省。</text>
+<text class="tm" x="20" y="446">口径：+594/−0 纯新增，9 文件；行号与条件以 PR diff 为准。</text>
+</svg>
+</div>
+
+<h2 id="s2">2. 问题：draft 层的 attention 借了别人的引擎（改动前）</h2>
+<p>GLM 的架构（①）里除了 N 层主模型，还有一件 MTP 模块——前两篇讲布局时它一直在图角落里挂着黄框。这次它当主角：<b>推理时 draft 先连猜 k 个 token，主模型一次前向验证</b>（一轮"猜-验"见下图 3 上半部）。draft 层自己也是一层层 Transformer，每层也有 attention——<b>数学与主模型一字不差</b>；差别全在"被调用的方式"：序列极短、每步 k 次连猜、验证淘汰后下一步重来。</p>
+<p>进了框架，每层的 attention 都要由框架配引擎（③的 platform.py 管这件事）。主模型 target 顺利选上 SFA（稀疏注意力后端）；draft 层呢——它查的是<b>同一张选路表</b>，而表里它的特征是"非 MLA、非稀疏、非压缩"，落格到<b>通用 attention 后端</b>，与最普通的 dense 层同桌吃饭（Ⓐ）。通用后端为"大而全"设计：每层各自建注意力元数据、长度依赖 CPU 镜像——<b>拒绝采样刚淘汰过 token，CPU 镜像可能还没同步</b>；每个 draft step 的每层还要各自重建 tiling 计划，一步 k 次猜 × N' 层，备料重复 N'×(k+1) 次（Ⓑ）。这些开销全部吃进每 token 时延：上游 #18717 两节点 P/D 实测，mean TPOT 14.90 ms 里相当一块是备料，不是数学。</p>
+<div class="card">
+<svg viewBox="0 0 840 1300" role="img" aria-label="改动前：左主线右draft老路">
+<defs><marker id="ahA9" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">改动前 · 左＝GLM DSA V1 主线（原样），右＝框架线（draft attention 的老路）</text>
+<rect class="node" x="110" y="40" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="65" text-anchor="middle">用户输入：3500 字 prompt</text>
+<path class="flow" d="M240 80 V96" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="100" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="121" text-anchor="middle">Token 化（词表 128k）</text>
+<text class="ts" x="240" y="141" text-anchor="middle">ids [1, 3500]</text>
+<path class="flow" d="M240 144 V160" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="164" width="260" height="48" rx="8"/>
+<text class="tb" x="240" y="185" text-anchor="middle">Token 嵌入 ≈ 1.05B</text>
+<text class="ts" x="240" y="205" text-anchor="middle">128k×8192 → [1, 3500, 8192]</text>
+<path class="flow" d="M240 212 V262" marker-end="url(#{ahA9})"/>
+<rect class="frame" x="70" y="232" width="440" height="790" rx="10"/>
+<text class="tb" x="86" y="256">Block × N（每层 ≈ 1.1B）：前 k 层 dense 前缀 → 后续连续 MoE 层</text>
+<rect class="node" x="110" y="266" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="287" text-anchor="middle">LayerNorm</text>
+<text class="ts" x="240" y="303" text-anchor="middle">[1, 219, 8192]</text>
+<path class="flow" d="M240 310 V342" marker-end="url(#{ahA9})"/>
+<rect class="grpA" x="90" y="346" width="300" height="230" rx="10"/>
+<text class="tb" x="240" y="366" text-anchor="middle">self_attn（MLA/DSA）</text>
+<text class="tm" x="240" y="382" text-anchor="middle">latent KV · indexer top-2048 稀疏</text>
+<rect class="node" x="120" y="392" width="240" height="44" rx="8"/>
+<text class="tb" x="240" y="411" text-anchor="middle">Q/KV 低秩投影</text>
+<text class="ts" x="240" y="429" text-anchor="middle">latent 压缩（步 3）</text>
+<path class="flow" d="M240 436 V452" marker-end="url(#{ahA9})"/>
+<rect class="bc" x="120" y="456" width="240" height="44" rx="8"/>
+<text class="tb" x="240" y="475" text-anchor="middle">稀疏注意力（top-2048）</text>
+<text class="ts" x="240" y="493" text-anchor="middle">Q·Kᵀ/√d → softmax → ·V</text>
+<path class="flow" d="M240 500 V516" marker-end="url(#{ahA9})"/>
+<rect class="node" x="196" y="520" width="88" height="40" rx="8"/>
+<text class="tb" x="240" y="545" text-anchor="middle">O 投影</text>
+<path class="flow" d="M240 560 V588" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="592" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="617" text-anchor="middle">残差连接 +</text>
+<path class="flow" d="M240 632 V648" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="652" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="673" text-anchor="middle">LayerNorm</text>
+<text class="ts" x="240" y="689" text-anchor="middle">[1, 219, 8192]</text>
+<path class="flow" d="M240 696 V712" marker-end="url(#{ahA9})"/>
+<rect class="grpB" x="90" y="716" width="300" height="230" rx="10"/>
+<text class="tb" x="240" y="738" text-anchor="middle">MoE（路由 + 共享专家）</text>
+<rect class="node" x="100" y="756" width="135" height="48" rx="8"/>
+<text class="tb" x="167" y="776" text-anchor="middle">共享专家</text>
+<text class="ts" x="167" y="794" text-anchor="middle">每 token 必走</text>
+<rect class="node" x="245" y="756" width="135" height="48" rx="8"/>
+<text class="tb" x="312" y="776" text-anchor="middle">路由专家</text>
+<text class="ts" x="312" y="794" text-anchor="middle">top-k 选通</text>
+<path class="flow" d="M167 804 V826" marker-end="url(#{ahA9})"/>
+<path class="flow" d="M312 804 V826" marker-end="url(#{ahA9})"/>
+<rect class="node" x="145" y="830" width="200" height="40" rx="8"/>
+<text class="tb" x="245" y="855" text-anchor="middle">共享 + 路由加权合并</text>
+<path class="flow" d="M245 870 V886" marker-end="url(#{ahA9})"/>
+<rect class="node" x="145" y="890" width="200" height="44" rx="8"/>
+<text class="tb" x="245" y="909" text-anchor="middle">SP：各卡各算 219 分片</text>
+<text class="ts" x="245" y="927" text-anchor="middle">already_sequence_parallel</text>
+<path class="flow" d="M245 934 V962" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="966" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="991" text-anchor="middle">残差连接 +</text>
+<path class="flow" d="M240 1006 V1034" marker-end="url(#{ahA9})"/>
+<rect class="wc" x="110" y="1038" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="1063" text-anchor="middle">MTP 模块（投机解码，MTP=3）</text>
+<text class="ts" x="240" y="1079" text-anchor="middle">draft 层：与主模型层同构</text>
+<path class="flow" d="M240 1082 V1098" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="1094" width="260" height="48" rx="8"/>
+<text class="tb" x="240" y="1115" text-anchor="middle">LM Head（与嵌入共享权重）</text>
+<text class="ts" x="240" y="1135" text-anchor="middle">8192×128k → logits [1, 128k]</text>
+<path class="flow" d="M240 1142 V1158" marker-end="url(#{ahA9})"/>
+<rect class="node" x="110" y="1154" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="1175" text-anchor="middle">生成下一个 Token</text>
+<text class="ts" x="240" y="1191" text-anchor="middle">decode 重复整条链，KV 从缓存取</text>
+<rect class="node" x="545" y="180" width="270" height="56" rx="8"/>
+<text class="tb" x="690" y="201" text-anchor="middle">框架 · 每层 attention 配引擎</text>
+<text class="ts" x="690" y="221" text-anchor="middle">target 选 SFA;draft 查同一张表</text>
+<path class="dash" d="M370 188 H527" marker-end="url(#ahA9)"/>
+<rect class="wc" x="545" y="268" width="270" height="76" rx="8"/>
+<text class="tb" x="690" y="290" text-anchor="middle">Ⓐ backend_map 同表选路</text>
+<text class="ts" x="690" y="312" text-anchor="middle">draft=(非MLA,非稀疏,非压缩)</text>
+<text class="ts" x="690" y="334" text-anchor="middle">→通用后端,与 dense 同桌</text>
+<path class="dash" d="M370 288 C430 288,470 306,527 306" marker-end="url(#ahA9)"/>
+<circle class="gbadge" cx="545" cy="306" r="16"/>
+<text class="bdg" x="545" y="312" text-anchor="middle" style="fill:var(--text-muted)">Ⓐ</text>
+<rect class="wc" x="545" y="372" width="270" height="72" rx="8"/>
+<text class="tb" x="690" y="394" text-anchor="middle">target 享受专用路径</text>
+<text class="ts" x="690" y="416" text-anchor="middle">SFA 为稀疏注意力定制;</text>
+<text class="ts" x="690" y="438" text-anchor="middle">draft 的小步快跑没有对应物</text>
+<path class="dash" d="M364 480 C420 480,470 420,527 404" marker-end="url(#ahA9)"/>
+<rect class="wc" x="545" y="472" width="270" height="76" rx="8"/>
+<text class="tb" x="690" y="494" text-anchor="middle">Ⓑ 备料逐层重复</text>
+<text class="ts" x="690" y="516" text-anchor="middle">每层建元数据;长度取 CPU 镜像</text>
+<text class="ts" x="690" y="538" text-anchor="middle">(拒绝采样后可能过期)</text>
+<path class="dash" d="M284 540 C380 540,460 510,527 510" marker-end="url(#ahA9)"/>
+<circle class="gbadge" cx="545" cy="510" r="16"/>
+<text class="bdg" x="545" y="516" text-anchor="middle" style="fill:var(--text-muted)">Ⓑ</text>
+<rect class="node" x="545" y="580" width="270" height="64" rx="8"/>
+<text class="tb" x="690" y="602" text-anchor="middle">每 step 每层重建 tiling 计划</text>
+<text class="ts" x="690" y="624" text-anchor="middle">k 次猜×N' 层;吃进 TPOT 14.90ms</text>
+<path class="dash" d="M370 612 H527" marker-end="url(#ahA9)"/>
+<text class="tm" x="20" y="1240">读法:左列=GLM DSA V1 的模型架构(dense 前缀+连续 MoE+MLA/DSA+MTP);右列=框架线里 draft attention 的老路;虚线=挂点。Ⓐ 是选路,Ⓑ 是备料。</text>
+<text class="tm" x="20" y="1268">问题不在数学,在引擎:与 dense 同桌选路(Ⓐ),备料逐层重复(Ⓑ)——全吃进每 token 时延。</text>
+</svg>
+</div>
+<div class="figcap">图 2 · 改动前：Ⓐ draft 与 dense 同表选路，Ⓑ 备料逐层重复——TPOT 的大头不在数学在备料</div>
+
+<div class="card">
+<svg viewBox="0 0 840 384" role="img" aria-label="target 与 draft 的分工">
+<defs><marker id="ahD3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">先看①的原物：一轮完整的「猜-验」循环，再看 target 与 draft 的分工</text>
+<rect class="node" x="20" y="44" width="140" height="52" rx="8"/>
+<text class="tb" x="90" y="66" text-anchor="middle">主模型出 1 个</text>
+<text class="ts" x="90" y="84" text-anchor="middle">token（N 层前向）</text>
+<path class="flow" d="M160 70 H180" marker-end="url(#ahD3)"/>
+<rect class="wc" x="184" y="44" width="150" height="52" rx="8"/>
+<text class="tb" x="259" y="66" text-anchor="middle">draft 连猜 k 个</text>
+<text class="ts" x="259" y="84" text-anchor="middle">小模型 · 本 PR 主角</text>
+<path class="flow" d="M334 70 H354" marker-end="url(#ahD3)"/>
+<rect class="node" x="358" y="44" width="150" height="52" rx="8"/>
+<text class="tb" x="433" y="66" text-anchor="middle">主模型一次前向</text>
+<text class="ts" x="433" y="84" text-anchor="middle">验证 k 个猜的</text>
+<path class="flow" d="M508 70 H528" marker-end="url(#ahD3)"/>
+<rect class="node" x="532" y="44" width="150" height="52" rx="8"/>
+<text class="tb" x="607" y="66" text-anchor="middle">收下命中的</text>
+<text class="ts" x="607" y="84" text-anchor="middle">淘汰没中的</text>
+<path class="flow" d="M682 70 H702" marker-end="url(#ahD3)"/>
+<rect class="node" x="706" y="44" width="114" height="52" rx="8"/>
+<text class="tb" x="763" y="66" text-anchor="middle">下一轮</text>
+<text class="ts" x="763" y="84" text-anchor="middle">decode 循环</text>
+<path class="dash" d="M763 96 V130 H90 V96" marker-end="url(#ahD3)"/>
+<text class="tm" x="20" y="150">每一轮里 draft 的 attention 要跑 k 次、主模型跑 1 次——draft 单次虽小，次数是主模型的 k 倍，备料开销随次数放大。</text>
+<rect class="bc" x="20" y="176" width="388" height="132" rx="10"/>
+<text class="tb" x="214" y="200" text-anchor="middle">target（主模型，N 层）</text>
+<text class="ts" x="214" y="224" text-anchor="middle">GLM DSA V1：dense 前缀 + 连续 MoE</text>
+<text class="ts" x="214" y="246" text-anchor="middle">attention 选 SFA（稀疏，top-2048）</text>
+<text class="ts" x="214" y="268" text-anchor="middle">本 PR 一根手指不动（测试钉死选路不变）</text>
+<text class="ts" x="214" y="292" text-anchor="middle">图 5 至图 9 讲的就是它这条路</text>
+<rect class="wc" x="432" y="176" width="388" height="132" rx="10"/>
+<text class="tb" x="626" y="200" text-anchor="middle">draft（MTP 小模型，N' 层）</text>
+<text class="ts" x="626" y="224" text-anchor="middle">与主模型层同构 · enforce_eager 逐层即时跑</text>
+<text class="ts" x="626" y="246" text-anchor="middle">改前：与普通 dense 层查同一张选路表（Ⓐ）</text>
+<text class="ts" x="626" y="268" text-anchor="middle">备料逐层重复（Ⓑ）——本 PR 换引擎的对象</text>
+<text class="ts" x="626" y="292" text-anchor="middle">数学与主模型一字不差</text>
+<text class="tm" x="20" y="344">读法：上半部＝①里一轮「猜-验」的原物；下半部＝同一个框架里 target 与 draft 的引擎分工——本 PR 只动右框。</text>
+<text class="tm" x="20" y="366">draft 的每层 attention：序列短（1 至 k+1 个 token）、每步重来——这是它与主模型调用方式的全部差别。</text>
+</svg>
+<div class="figcap">图 3 · target 与 draft 的分工：一轮「猜-验」循环里，draft 的 attention 跑 k 次、备料也随之重复 k 次</div>
+</div>
+
+<h3>ⒶⒷ 速查（后文正文与代码注释均用此编号）</h3>
+<div class="kp t">
+<ul>
+<li><b>Ⓐ 选路同表</b>：draft 层的 attention 与最普通的 dense 层查同一张 backend_map 选路表，落格到通用后端（attention_v1）——没有 draft 专用路径；</li>
+<li><b>Ⓑ 备料重复</b>：每层各自建注意力元数据、长度依赖 CPU 镜像（拒绝采样后可能过期）、每层各自重建 tiling 计划——一步 k 次猜 × N' 层，重复 N'×(k+1) 次。</li>
+</ul>
+</div>
+
+<h2 id="s3">3. 核心思路：窄门换引擎，target 不动</h2>
+<p>问题住在引擎与备料上，数学没病——那就不动数学，换引擎。本 PR 三条思路：<b>一、新后端</b>：attention/fa_v1.py 三件套（元数据从 device 长度建、tiling 计划按几何特征缓存并在一个 draft step 内层间复用、CANN flash_attn 算子出结果后回填 vLLM 的输出缓冲）；<b>二、窄门</b>：只在七重条件全过时启用——A5 硬件、V1 runner、本层是 draft、draft 必须 eager、target 是 glm_moe_dsa、draft 是 DFlash2、FP16/BF16 未量化 KV（另排除五个未实现的特性），任一不满足<b>静默回老路</b>，行为与改前一致；<b>三、target 不动</b>：主模型照旧选 SFA，"缓存的 target 选路不变"有测试钉死。改后的样子见图 4：</p>
+<div class="card">
+<svg viewBox="0 0 840 1300" role="img" aria-label="改动后：左主线不动右换引擎">
+<defs><marker id="ahC9" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">改动后 · 业务主线与图 2 完全一致；只动框架线：窄门换引擎（蓝/绿）、ⒶⒷ 消失（灰）</text>
+<rect class="node" x="110" y="40" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="65" text-anchor="middle">用户输入：3500 字 prompt</text>
+<path class="flow" d="M240 80 V96" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="100" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="121" text-anchor="middle">Token 化（词表 128k）</text>
+<text class="ts" x="240" y="141" text-anchor="middle">ids [1, 3500]</text>
+<path class="flow" d="M240 144 V160" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="164" width="260" height="48" rx="8"/>
+<text class="tb" x="240" y="185" text-anchor="middle">Token 嵌入 ≈ 1.05B</text>
+<text class="ts" x="240" y="205" text-anchor="middle">128k×8192 → [1, 3500, 8192]</text>
+<path class="flow" d="M240 212 V262" marker-end="url(#{ahC9})"/>
+<rect class="frame" x="70" y="232" width="440" height="790" rx="10"/>
+<text class="tb" x="86" y="256">Block × N（每层 ≈ 1.1B）：前 k 层 dense 前缀 → 后续连续 MoE 层</text>
+<rect class="node" x="110" y="266" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="287" text-anchor="middle">LayerNorm</text>
+<text class="ts" x="240" y="303" text-anchor="middle">[1, 219, 8192]</text>
+<path class="flow" d="M240 310 V342" marker-end="url(#{ahC9})"/>
+<rect class="grpA" x="90" y="346" width="300" height="230" rx="10"/>
+<text class="tb" x="240" y="366" text-anchor="middle">self_attn（MLA/DSA）</text>
+<text class="tm" x="240" y="382" text-anchor="middle">latent KV · indexer top-2048 稀疏</text>
+<rect class="node" x="120" y="392" width="240" height="44" rx="8"/>
+<text class="tb" x="240" y="411" text-anchor="middle">Q/KV 低秩投影</text>
+<text class="ts" x="240" y="429" text-anchor="middle">latent 压缩（步 3）</text>
+<path class="flow" d="M240 436 V452" marker-end="url(#{ahC9})"/>
+<rect class="bc" x="120" y="456" width="240" height="44" rx="8"/>
+<text class="tb" x="240" y="475" text-anchor="middle">稀疏注意力（top-2048）</text>
+<text class="ts" x="240" y="493" text-anchor="middle">Q·Kᵀ/√d → softmax → ·V</text>
+<path class="flow" d="M240 500 V516" marker-end="url(#{ahC9})"/>
+<rect class="node" x="196" y="520" width="88" height="40" rx="8"/>
+<text class="tb" x="240" y="545" text-anchor="middle">O 投影</text>
+<path class="flow" d="M240 560 V588" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="592" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="617" text-anchor="middle">残差连接 +</text>
+<path class="flow" d="M240 632 V648" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="652" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="673" text-anchor="middle">LayerNorm</text>
+<text class="ts" x="240" y="689" text-anchor="middle">[1, 219, 8192]</text>
+<path class="flow" d="M240 696 V712" marker-end="url(#{ahC9})"/>
+<rect class="grpB" x="90" y="716" width="300" height="230" rx="10"/>
+<text class="tb" x="240" y="738" text-anchor="middle">MoE（路由 + 共享专家）</text>
+<rect class="node" x="100" y="756" width="135" height="48" rx="8"/>
+<text class="tb" x="167" y="776" text-anchor="middle">共享专家</text>
+<text class="ts" x="167" y="794" text-anchor="middle">每 token 必走</text>
+<rect class="node" x="245" y="756" width="135" height="48" rx="8"/>
+<text class="tb" x="312" y="776" text-anchor="middle">路由专家</text>
+<text class="ts" x="312" y="794" text-anchor="middle">top-k 选通</text>
+<path class="flow" d="M167 804 V826" marker-end="url(#{ahC9})"/>
+<path class="flow" d="M312 804 V826" marker-end="url(#{ahC9})"/>
+<rect class="node" x="145" y="830" width="200" height="40" rx="8"/>
+<text class="tb" x="245" y="855" text-anchor="middle">共享 + 路由加权合并</text>
+<path class="flow" d="M245 870 V886" marker-end="url(#{ahC9})"/>
+<rect class="node" x="145" y="890" width="200" height="44" rx="8"/>
+<text class="tb" x="245" y="909" text-anchor="middle">SP：各卡各算 219 分片</text>
+<text class="ts" x="245" y="927" text-anchor="middle">already_sequence_parallel</text>
+<path class="flow" d="M245 934 V962" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="966" width="260" height="40" rx="8"/>
+<text class="tb" x="240" y="991" text-anchor="middle">残差连接 +</text>
+<path class="flow" d="M240 1006 V1034" marker-end="url(#{ahC9})"/>
+<rect class="wc" x="110" y="1038" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="1063" text-anchor="middle">MTP 模块（投机解码，MTP=3）</text>
+<text class="ts" x="240" y="1079" text-anchor="middle">draft 层：与主模型层同构</text>
+<path class="flow" d="M240 1082 V1098" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="1094" width="260" height="48" rx="8"/>
+<text class="tb" x="240" y="1115" text-anchor="middle">LM Head（与嵌入共享权重）</text>
+<text class="ts" x="240" y="1135" text-anchor="middle">8192×128k → logits [1, 128k]</text>
+<path class="flow" d="M240 1142 V1158" marker-end="url(#{ahC9})"/>
+<rect class="node" x="110" y="1154" width="260" height="44" rx="8"/>
+<text class="tb" x="240" y="1175" text-anchor="middle">生成下一个 Token</text>
+<text class="ts" x="240" y="1191" text-anchor="middle">decode 重复整条链，KV 从缓存取</text>
+<rect class="node" x="545" y="180" width="270" height="56" rx="8"/>
+<text class="tb" x="690" y="201" text-anchor="middle">框架 · 配引擎（target 不变）</text>
+<text class="ts" x="690" y="221" text-anchor="middle">target 仍选 SFA——测试钉死</text>
+<path class="dash" d="M370 188 H527" marker-end="url(#ahC9)"/>
+<rect class="bc" x="545" y="268" width="270" height="76" rx="8"/>
+<text class="tb" x="690" y="290" text-anchor="middle">蓝 · 窄门：七重条件全过</text>
+<text class="ts" x="690" y="312" text-anchor="middle">A5·V1·draft·eager·glm_moe_dsa</text>
+<text class="ts" x="690" y="334" text-anchor="middle">·DFlash2·FP16/BF16·KV 未量化</text>
+<path class="dash" d="M370 288 C430 288,470 306,527 306" marker-end="url(#ahC9)"/>
+<rect class="ac" x="545" y="372" width="270" height="76" rx="8"/>
+<text class="tb" x="690" y="394" text-anchor="middle">绿 · 新后端 fa_v1.py</text>
+<text class="ts" x="690" y="416" text-anchor="middle">device 长度一次 · plan 层间复用</text>
+<text class="ts" x="690" y="438" text-anchor="middle">CANN flash_attn + copy_ 回填</text>
+<path class="dash" d="M364 480 C420 480,470 420,527 404" marker-end="url(#ahC9)"/>
+<rect class="ghost" x="545" y="472" width="270" height="64" rx="8"/>
+<text class="tb" x="690" y="494" text-anchor="middle">灰 · Ⓐ 消失：不再同表</text>
+<text class="ts" x="690" y="516" text-anchor="middle">draft 专用引擎,不与 dense 同桌</text>
+<path class="dash" d="M284 540 C380 540,460 510,527 510" marker-end="url(#ahC9)"/>
+<rect class="bc" x="545" y="580" width="270" height="64" rx="8"/>
+<text class="tb" x="690" y="602" text-anchor="middle">蓝 · Ⓑ 消失：备料一步一次</text>
+<text class="ts" x="690" y="624" text-anchor="middle">TPOT 14.90→10.97ms(#18717)</text>
+<path class="dash" d="M370 612 H527" marker-end="url(#ahC9)"/>
+<text class="tm" x="20" y="1240">读法:左列与图 2 逐格一致(=GLM DSA V1 架构),一个框都没动;右列=引擎三件:窄门(platform.py)、新后端(fa_v1.py)、门槛(device/)。</text>
+<text class="tm" x="20" y="1268">target(主模型)的选路一个字不动;条件不全静默回老路——行为与改前一致。</text>
+</svg>
+</div>
+<div class="figcap">图 4 · 改动后：业务主线一个框都没动；七重窄门换引擎（蓝）、fa_v1 三件套（绿）、ⒶⒷ 消失（灰）</div>
+
+<h2 id="s4">4. 主线讲解：从架构全貌到这次 PR</h2>
+<p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它，4.1 先摆这块推理的朴素 PyTorch 写法并定位到框架加的壳（图 5 给出全局定位 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10 至图 13），4.8 至 4.10 三张表收拢。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"引擎与备料"——draft 层选哪个后端、元数据怎么建、tiling 计划建几次、调哪个算子。</p>
+
+<h3>4.1 先看这块推理的原始写法：朴素 PyTorch</h3>
+<p>老规矩，先立对比基准——<b>这块推理（draft 层的投机解码一步）用 PyTorch 朴素写出来长什么样</b>。你自己写带草稿模型的推理就会这么写：单卡、没有任何框架概念（有删节）。draft 层的 attention 数学就在 layer 里，与主模型一字不差：</p>
+<pre><span class="c"># 朴素 PyTorch 写法：投机解码的一步（单卡，无框架）</span>
+draft_kv = []                                 <span class="c"># draft 层自己的 KV 缓存</span>
+for t in range(k):                            <span class="c"># draft 连猜 k 个 token</span>
+    x = embed(last_token)
+    for layer in draft_layers:                <span class="c"># draft 模型的 N' 层</span>
+        h = layer.self_attn(layer.norm(x), cache=draft_kv)
+        <span class="c"># attention：QKV 投影 → QKᵀ → softmax → ·V → o_proj</span>
+        h = layer.moe(h)                      <span class="c"># 前馈；GLM 这层是 MoE</span>
+        x = h + x                             <span class="c"># 残差</span>
+    last_token = lm_head(x).argmax()          <span class="c"># 猜出下一个 token</span>
+
+accepted = verify(draft_tokens)               <span class="c"># 主模型一次前向，验证 k 个猜的</span>
+<span class="c"># 收下命中的、淘汰没中的，下一轮 decode 循环重来</span></pre>
+<p><b>这次 PR 动的不是这段数学——数学一行没动。</b>动的是 vLLM 框架给这段朴素代码<b>加的壳</b>：进了框架，每层的 attention 要由框架配引擎——选哪个后端（<span class="cnum">Ⓐ</span>）、配料怎么备（<span class="cnum">Ⓑ</span>：元数据/长度/tiling 计划）。裸 PyTorch 里根本没有"配引擎"这件事，attention 就是 layer 里那几行；draft 层被调用方式的特殊（每步 k 次、序列短、每步重来），框架的老壳没有为它定制——问题全住在壳上（ⒶⒷ 代码长相见第 2 章）。</p>
+<p>这段代码在全局的什么位置？把模型架构到框架的全貌画出来（图 5）：</p>
+<div class="card">
+<svg viewBox="0 0 840 750" role="img" aria-label="架构框架图">
+<defs><marker id="ahArc" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">模型架构 → 框架流程:模型的每一件,在 vllm-ascend 里住哪、谁调它</text>
+<text class="tm" x="175" y="48" text-anchor="middle" font-weight="700">模型架构(自上而下)</text>
+<text class="tm" x="590" y="48" text-anchor="middle" font-weight="700">框架落点 · 调用者(文件:行号实测)</text>
+<rect class="node" x="40" y="60" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="90" text-anchor="middle" font-weight="700">Token 嵌入</text>
+<text class="ts" x="175" y="112" text-anchor="middle">词表 128k · hidden 8192</text>
+<rect class="bc" x="370" y="60" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="80" text-anchor="start" font-weight="700">上游 runner 喂 ids [1,3500],嵌入成 [1,3500,8192];</text>
+<text class="ts" x="384" y="102" text-anchor="start">pad 到 3504 在 Runner 做(model_runner_v1.py:2935)</text>
+<path class="flow" d="M175 138 V157" marker-end="url(#ahArc)"/>
+<path class="dash" d="M310 104 C338 104,338 120,366 120" marker-end="url(#ahArc)"/>
+<rect class="node" x="40" y="160" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="190" text-anchor="middle" font-weight="700">× N 层 DecoderLayer</text>
+<text class="ts" x="175" y="212" text-anchor="middle">每层≈1.1B,外壳串四件</text>
+<rect class="bc" x="370" y="160" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="180" text-anchor="start" font-weight="700">层外壳 forward:input LN → self_attn → post LN → MoE</text>
+<text class="ts" x="384" y="202" text-anchor="start">(deepseek_v2.py:1315);★ 选路总闸 platform.py 与新后端</text>
+<text class="ts" x="384" y="224" text-anchor="start">fa_v1.py 挂在引擎层(见 4.7)</text>
+<path class="flow" d="M175 238 V257" marker-end="url(#ahArc)"/>
+<path class="dash" d="M310 204 C338 204,338 220,366 220" marker-end="url(#ahArc)"/>
+<rect class="node" x="40" y="260" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="290" text-anchor="middle" font-weight="700">└ self_attn(十行示例)</text>
+<text class="ts" x="175" y="312" text-anchor="middle">MLA/DSA:latent KV+top-2048</text>
+<rect class="bc" x="370" y="260" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="280" text-anchor="start" font-weight="700">门卫 ops/mla.py:151 放行 → 后端 sfa_v1.py:1503</text>
+<text class="ts" x="384" y="302" text-anchor="start">九步流水线开算;GLM 与 DeepSeek 共用这条实现链</text>
+<path class="flow" d="M175 338 V357" marker-end="url(#ahArc)"/>
+<path class="dash" d="M310 304 C338 304,338 320,366 320" marker-end="url(#ahArc)"/>
+<rect class="node" x="40" y="360" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="390" text-anchor="middle" font-weight="700">└ MoE(路由+共享)</text>
+<text class="ts" x="175" y="412" text-anchor="middle">SwiGLU,≈0.8B/层</text>
+<rect class="bc" x="370" y="360" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="380" text-anchor="start" font-weight="700">SP MoE:各卡各算自己 219 个 token 的分片,天然免通信</text>
+<text class="ts" x="384" y="402" text-anchor="start">(mlp 收 already_sequence_parallel=True,不再整理布局)</text>
+<path class="flow" d="M175 438 V457" marker-end="url(#ahArc)"/>
+<path class="dash" d="M310 404 C338 404,338 420,366 420" marker-end="url(#ahArc)"/>
+<rect class="wc" x="40" y="460" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="490" text-anchor="middle" font-weight="700">MTP 模块(投机解码)</text>
+<text class="ts" x="175" y="512" text-anchor="middle">环境 MTP=3 ★</text>
+<rect class="ac" x="370" y="460" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="480" text-anchor="start" font-weight="700">vllm_ascend/models/deepseek_mtp.py ★:本 PR 换装闸门在此——</text>
+<text class="ts" x="384" y="502" text-anchor="start">本 PR 不动;</text>
+<text class="ts" x="384" y="524" text-anchor="start">改的落点在引擎三件(见 ★)</text>
+<path class="flow" d="M175 538 V557" marker-end="url(#ahArc)"/>
+<path class="dash" d="M310 504 C338 504,338 520,366 520" marker-end="url(#ahArc)"/>
+<rect class="node" x="40" y="560" width="270" height="78" rx="10"/>
+<text class="ts" x="175" y="590" text-anchor="middle" font-weight="700">LM Head(与嵌入共享)</text>
+<text class="ts" x="175" y="612" text-anchor="middle">logits [1,128k]</text>
+<rect class="bc" x="370" y="560" width="440" height="78" rx="10"/>
+<text class="ts" x="384" y="580" text-anchor="start" font-weight="700">Runner 收回输出送采样;decode 每出一个 token,</text>
+<text class="ts" x="384" y="602" text-anchor="start">再从第 2 行整条链走一遍(KV 从页表缓存取)</text>
+<path class="dash" d="M310 604 C338 604,338 620,366 620" marker-end="url(#ahArc)"/>
+<text class="tm" x="20" y="690">读法:左列=模型自上而下的架构件;右列=它在框架里的落点与调用者;黄行 MTP(draft)是本 PR 换引擎的对象(★)。链子:Runner→层外壳→门卫→后端九步。</text>
+<text class="tm" x="20" y="716">下一步:先认目录分工(图 6),再从十行示例进流水线(图 7);完整调用时序见时序图(图 8),每步为什么这么实现见展开图(图 9)。</text>
+</svg>
+</div>
+<div class="figcap">图 5 · 模型架构 → 框架流程：模型的每一件在 vllm-ascend 里的落点与调用者（★ = 本 PR 改动落点）</div>
+<p><b>看懂这张图，再定位本 PR。</b>架构件一个没变、链子一段没短——<b>变的是"引擎层"</b>：draft 层的 attention 在选路处（platform.py）多了道窄门，全过就换到新后端（attention/fa_v1.py）；门槛挂在硬件画像（device/）上。这就是为什么图 5 的 ★ 落在引擎三件上，而不是任何注意力算子上。</p>
+
+<h3>4.2 先认目录：与 attention 相关的目录，一个一个认</h3>
+<div class="card">
+<svg viewBox="0 0 840 400" role="img" aria-label="目录介绍图">
+<text class="th" x="420" y="26" text-anchor="middle">与 attention 相关的目录：左 = 目录名，右 = 它管什么、为什么有它</text>
+<rect class="node" x="20" y="42" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="66" text-anchor="middle">vllm_ascend/worker/</text>
+<text class="ts" x="140" y="86" text-anchor="middle">执行与喂料</text>
+<rect class="node" x="272" y="42" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="64">接引擎的批 → pad 到 3504 → 调模型、收回输出</text>
+<text class="ts" x="286" y="86" fill="var(--text-muted,#6b7280)">为什么有它：上游执行器绑死 NVIDIA，昇腾必须有自己的执行器</text>
+<rect class="bc" x="20" y="108" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="132" text-anchor="middle">vllm_ascend/models/</text>
+<text class="ts" x="140" y="152" text-anchor="middle">模型结构</text>
+<rect class="bc" x="272" y="108" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="130">层怎么搭、forward 怎么走 —— <tspan font-weight="700" fill="var(--accent-text,#0f766e)">十行示例的调用者</tspan></text>
+<text class="ts" x="286" y="152" fill="var(--text-muted,#6b7280)">为什么有它：模型结构上游都有，昇腾只改个别层，继承上游小改</text>
+<rect class="ac" x="20" y="174" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="198" text-anchor="middle">vllm_ascend/ops/</text>
+<text class="ts" x="140" y="218" text-anchor="middle">算子门面</text>
+<rect class="ac" x="272" y="174" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="196">把昇腾算子包成 vLLM 认识的"层"；attention 的门卫（mla.py）在这</text>
+<text class="ts" x="286" y="218" fill="var(--text-muted,#6b7280)">为什么有它：调用约定不同，模型层只认门面、不认具体硬件</text>
+<rect class="bc" x="20" y="240" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="264" text-anchor="middle">vllm_ascend/attention/</text>
+<text class="ts" x="140" y="284" text-anchor="middle">注意力实现 ★(fa_v1.py)</text>
+<rect class="bc" x="272" y="240" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="262">self_attn 的后端：九步流水线（sfa_v1.py:1503）在这里真正开算</text>
+<text class="ts" x="286" y="284" fill="var(--text-muted,#6b7280)">为什么有它：注意力后端可插拔（不同硬件/并行形态各一套），策略独立成模块</text>
+<rect class="ac" x="20" y="306" width="240" height="56" rx="8"/>
+<text class="tb" x="140" y="330" text-anchor="middle">…/attention/context_parallel/</text>
+<text class="ts" x="140" y="350" text-anchor="middle">DSA-CP 特化（车间）</text>
+<rect class="ac" x="272" y="306" width="548" height="56" rx="8"/>
+<text class="ts" x="286" y="328">校验 · 跨卡取命中 KV · 收口 —— 上下文并行的专属逻辑</text>
+<text class="ts" x="286" y="350" fill="var(--text-muted,#6b7280)">为什么有它：上下文并行（KV 与计算再切多卡）的特化单独放一个子目录</text>
+<text class="tm" x="20" y="388">platform.py（选路总闸）★ 与 device/（硬件画像）★ 是本 PR 另两处落点;patch/（运行时补丁）知道即可</text>
+</svg>
+</div>
+<div class="figcap">图 6 · 目录介绍：★ = 本 PR 落点（attention/ 新后端 fa_v1.py；platform.py 选路；device/ 硬件画像）</div>
+<p>地图没变，落点变了：本 PR 的三个源码文件分别落在 <b>attention/</b>（新后端 fa_v1.py）、<b>platform.py</b>（选路总闸）与 <b>device/</b>（硬件画像能力位）——一个管"跑什么"，一个管"谁上场"，一个管"哪台机器能上场"。</p>
+
+<h3>4.3 实现线：attention 在 vllm-ascend 原本是怎么完成的</h3>
+<p>架构全貌看完了；现在换一条线——从 PyTorch 实现切进去，看它被怎么实现。拿十行 attention 示例当解剖标本（target 主模型这条路；draft 层的老路见 4.6），左列十行自上而下，右列是框架接手每行的落点：</p>
+<div class="card">
+<svg viewBox="0 0 920 1440" role="img" aria-label="流水线图原本">
+<defs><marker id="ahQ" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="460" y="28" text-anchor="middle">十行 attention 示例 → vllm-ascend 怎么完成它:左列实线是十行的流向,虚线弧线指向它在昇腾里的落点</text>
+<text class="tm" x="135" y="54" text-anchor="middle" font-weight="700">十行 attention(样例代码)</text>
+<text class="tm" x="505" y="54" text-anchor="middle" font-weight="700">vllm-ascend 的实现流水线</text>
+<text class="tm" x="795" y="54" text-anchor="middle" font-weight="700">在哪个模块 · 门牌(最全)</text>
+<rect class="bc" x="20" y="70" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="102" text-anchor="middle" font-weight="700">L1 Q 投影</text>
+<text class="ts" x="135.0" y="128" text-anchor="middle">q = x @ wq</text>
+<path class="flow" d="M135 166 V196" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="200" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="232" text-anchor="middle" font-weight="700">L2 K/V 投影</text>
+<text class="ts" x="135.0" y="258" text-anchor="middle">k=x@wk, v=x@wv</text>
+<path class="flow" d="M135 296 V326" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="330" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="362" text-anchor="middle" font-weight="700">L3 RoPE</text>
+<text class="ts" x="135.0" y="388" text-anchor="middle">只转 Q、K</text>
+<path class="flow" d="M135 426 V456" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="460" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="492" text-anchor="middle" font-weight="700">L4 KV Cache</text>
+<text class="ts" x="135.0" y="518" text-anchor="middle">cat 追加历史</text>
+<path class="flow" d="M135 556 V586" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="590" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="622" text-anchor="middle" font-weight="700">L5 GQA repeat</text>
+<text class="ts" x="135.0" y="648" text-anchor="middle">复用 KV 给 Q 头</text>
+<path class="flow" d="M135 686 V716" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="720" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="752" text-anchor="middle" font-weight="700">L6 打分</text>
+<text class="ts" x="135.0" y="778" text-anchor="middle">q @ kᵀ/√dk</text>
+<path class="flow" d="M135 816 V846" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="850" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="882" text-anchor="middle" font-weight="700">L7 因果遮罩</text>
+<text class="ts" x="135.0" y="908" text-anchor="middle">遮住未来 token</text>
+<path class="flow" d="M135 946 V976" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="980" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1012" text-anchor="middle" font-weight="700">L8 softmax</text>
+<text class="ts" x="135.0" y="1038" text-anchor="middle">归一化</text>
+<path class="flow" d="M135 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="1110" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1142" text-anchor="middle" font-weight="700">L9 加权和</text>
+<text class="ts" x="135.0" y="1168" text-anchor="middle">w @ v_full</text>
+<path class="flow" d="M135 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="bc" x="20" y="1240" width="230" height="96" rx="10"/>
+<text class="ts" x="135.0" y="1272" text-anchor="middle" font-weight="700">L10 输出投影</text>
+<text class="ts" x="135.0" y="1298" text-anchor="middle">out @ wo</text>
+<rect class="node" x="380" y="70" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="102" text-anchor="middle" font-weight="700">层外壳发起 self_attn</text>
+<text class="ts" x="505.0" y="128" text-anchor="middle">门卫放行 → 后端</text>
+<path class="flow" d="M505 166 V196" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="200" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="245" text-anchor="middle" font-weight="700">步3 Q/KV 联合低秩投影(KV 段)</text>
+<path class="flow" d="M505 296 V326" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="330" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="375" text-anchor="middle" font-weight="700">步4 K 侧 rope · 步6 Q 侧 rope</text>
+<path class="flow" d="M505 426 V456" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="460" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="505" text-anchor="middle" font-weight="700">步4 写本卡缓存 · 步7 全量写回</text>
+<path class="flow" d="M505 556 V586" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="590" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="635" text-anchor="middle" font-weight="700">无此步(latent KV 全头共享)</text>
+<path class="flow" d="M505 686 V716" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="720" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="765" text-anchor="middle" font-weight="700">步8 稀疏注意力算子(QKᵀ)</text>
+<path class="flow" d="M505 816 V846" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="850" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="895" text-anchor="middle" font-weight="700">步8 内:causal 遮罩处理</text>
+<path class="flow" d="M505 946 V976" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="980" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1025" text-anchor="middle" font-weight="700">步8 内:softmax 归一化</text>
+<path class="flow" d="M505 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="1110" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1155" text-anchor="middle" font-weight="700">步8 内:·V 加权求和</text>
+<path class="flow" d="M505 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="node" x="380" y="1240" width="250" height="96" rx="10"/>
+<text class="ts" x="505.0" y="1285" text-anchor="middle" font-weight="700">步9 收口(o_proj)→交回层外壳</text>
+<rect class="node" x="690" y="70" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="84" text-anchor="middle" font-weight="700">attention/ 步3:1576</text>
+<text class="ts" x="795.0" y="110" text-anchor="middle">(Q 低秩段)· 步6:1614</text>
+<text class="ts" x="795.0" y="136" text-anchor="middle">Q 上投影</text>
+<text class="ts" x="795.0" y="162" text-anchor="middle">矩阵乘原样,拆低秩两段</text>
+<path class="flow" d="M795 166 V196" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="200" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="214" text-anchor="middle" font-weight="700">attention/ 步3(KV 段)</text>
+<text class="ts" x="795.0" y="240" text-anchor="middle">步4 :1595 exec_kv</text>
+<text class="ts" x="795.0" y="266" text-anchor="middle">投影+rmsnorm+写cache</text>
+<text class="ts" x="795.0" y="292" text-anchor="middle">融成一个昇腾算子</text>
+<path class="flow" d="M795 296 V326" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="330" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="344" text-anchor="middle" font-weight="700">attention/ :1595(K 侧)</text>
+<text class="ts" x="795.0" y="370" text-anchor="middle">:1616(Q 侧)</text>
+<text class="ts" x="795.0" y="396" text-anchor="middle">同一旋转,没变</text>
+<text class="ts" x="795.0" y="422" text-anchor="middle">融进算子,数学一致</text>
+<path class="flow" d="M795 426 V456" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="460" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="474" text-anchor="middle" font-weight="700">attention/ :1626</text>
+<text class="ts" x="795.0" y="500" text-anchor="middle">reshape_and_cache</text>
+<text class="ts" x="795.0" y="526" text-anchor="middle">slot 页表逐 token 定位</text>
+<text class="ts" x="795.0" y="552" text-anchor="middle">代替整块 cat 追加</text>
+<path class="flow" d="M795 556 V586" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="590" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="604" text-anchor="middle" font-weight="700">attention/ MLA·DSA 特性</text>
+<text class="ts" x="795.0" y="630" text-anchor="middle">latent KV 全头共享</text>
+<text class="ts" x="795.0" y="656" text-anchor="middle">目的相同(省 KV)</text>
+<text class="ts" x="795.0" y="682" text-anchor="middle">手段不同,无独立步骤</text>
+<path class="flow" d="M795 686 V716" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="720" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="734" text-anchor="middle" font-weight="700">attention/ 步8 :1683 内</text>
+<text class="ts" x="795.0" y="760" text-anchor="middle">QKᵀ/√dk 原样</text>
+<text class="ts" x="795.0" y="786" text-anchor="middle">只在 top-2048 块上算</text>
+<text class="ts" x="795.0" y="812" text-anchor="middle">稀疏,不扫全量历史</text>
+<path class="flow" d="M795 816 V846" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="850" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="864" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="890" text-anchor="middle">causal 遮罩由算子处理</text>
+<text class="ts" x="795.0" y="916" text-anchor="middle">prefill 生效</text>
+<text class="ts" x="795.0" y="942" text-anchor="middle">decode 无需遮罩</text>
+<path class="flow" d="M795 946 V976" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="980" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="994" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1020" text-anchor="middle">softmax 原样</text>
+<text class="ts" x="795.0" y="1046" text-anchor="middle">归一化没变</text>
+<text class="ts" x="795.0" y="1072" text-anchor="middle">数值在算子内部完成</text>
+<path class="flow" d="M795 1076 V1106" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="1110" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="1124" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1150" text-anchor="middle">·V 加权原样</text>
+<text class="ts" x="795.0" y="1176" text-anchor="middle">输出 [219,全头]</text>
+<text class="ts" x="795.0" y="1202" text-anchor="middle">等待收口</text>
+<path class="flow" d="M795 1206 V1236" marker-end="url(#ahQ)"/>
+<rect class="node" x="690" y="1240" width="210" height="96" rx="10"/>
+<text class="ts" x="795.0" y="1254" text-anchor="middle" font-weight="700">attention/ :1695</text>
+<text class="ts" x="795.0" y="1280" text-anchor="middle">o_proj 原路:直接投影</text>
+<text class="ts" x="795.0" y="1306" text-anchor="middle">draft 另有引擎安排</text>
+<text class="ts" x="795.0" y="1332" text-anchor="middle">(本 PR,见 4.7)</text>
+<path class="dash" d="M250 104 C310 104,320 122,376 122" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 122 C652 122,658 138,686 138" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 234 C310 234,320 252,376 252" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 252 C652 252,658 268,686 268" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 364 C310 364,320 382,376 382" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 382 C652 382,658 398,686 398" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 494 C310 494,320 512,376 512" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 512 C652 512,658 528,686 528" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 624 C310 624,320 642,376 642" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 642 C652 642,658 658,686 658" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 754 C310 754,320 772,376 772" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 772 C652 772,658 788,686 788" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 884 C310 884,320 902,376 902" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 902 C652 902,658 918,686 918" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1014 C310 1014,320 1032,376 1032" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1032 C652 1032,658 1048,686 1048" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1144 C310 1144,320 1162,376 1162" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1162 C652 1162,658 1178,686 1178" marker-end="url(#ahQ)"/>
+<path class="dash" d="M250 1274 C310 1274,320 1292,376 1292" marker-end="url(#ahQ)"/>
+<path class="dash" d="M630 1292 C652 1292,658 1308,686 1308" marker-end="url(#ahQ)"/>
+<text class="tm" x="20" y="1386">读法:左列实线 = 十行示例自上而下,一行一格、零省略;弯曲虚线 = 每一行在 vllm-ascend 里的落点;右列门牌最全(模块 / 文件:行号 / 为什么)。</text>
+<text class="tm" x="20" y="1414">此时还没有 PR 的事——这就是 vllm-ascend 平时跑这份十行示例的样子(target 这条路;draft 老路见 4.6)。</text>
+</svg>
+</div>
+<div class="figcap">图 7 · 流水线（原本）：十行示例在 vllm-ascend 里的完成过程（target 主模型这条路）</div>
+<p><b>十行示例的每一行，框架都有对应落点。</b>这套"逐行挂门牌"的完成过程就是 vllm-ascend 平时跑 attention 的样子——本 PR 不改这条链的任何一环，它改的是链子入口处"<b>这条链配不配给 draft 用</b>"的选路判断。</p>
+
+<h3>4.4 全链时序：谁调用谁，每一棒先自己干再交棒</h3>
+<div class="card">
+<svg viewBox="0 0 920 2528" role="img" aria-label="全链时序图">
+<defs><marker id="ahSeq" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="460" y="26" text-anchor="middle">vllm-ascend 跑十行 attention 示例:全链时序——每个函数先"自己:"干完,再"委托:"下一棒(文件:行号实测)</text>
+<rect class="node" x="5" y="26" width="140" height="88" rx="10"/>
+<text class="ts" x="75" y="54" text-anchor="middle" font-weight="700">上游 vLLM 引擎</text>
+<text class="ts" x="75" y="69" text-anchor="middle">组批·调度</text>
+<text class="ts" x="75" y="84" text-anchor="middle">core.py:595</text>
+<rect class="node" x="150" y="26" width="140" height="88" rx="10"/>
+<text class="ts" x="220" y="54" text-anchor="middle" font-weight="700">Worker 昇腾插件</text>
+<text class="ts" x="220" y="69" text-anchor="middle">NPUWorker</text>
+<text class="ts" x="220" y="84" text-anchor="middle">worker.py:643→669</text>
+<rect class="node" x="290" y="26" width="150" height="88" rx="10"/>
+<text class="ts" x="365" y="46" text-anchor="middle" font-weight="700">执行器·喂料</text>
+<text class="ts" x="365" y="62" text-anchor="middle">NPUModelRunner</text>
+<text class="ts" x="365" y="76" text-anchor="middle">model_runner_v1.py</text>
+<text class="ts" x="365" y="92" text-anchor="middle">:2035 主入口</text>
+<rect class="node" x="435" y="26" width="150" height="88" rx="10"/>
+<text class="ts" x="510" y="46" text-anchor="middle" font-weight="700">模型层 models/</text>
+<text class="ts" x="510" y="62" text-anchor="middle">AscendDeepSeekMTP</text>
+<text class="ts" x="510" y="76" text-anchor="middle">deepseek_mtp.py:23</text>
+<text class="ts" x="510" y="92" text-anchor="middle">层外壳上游 :1315</text>
+<rect class="ac" x="580" y="26" width="150" height="88" rx="10"/>
+<text class="ts" x="655" y="46" text-anchor="middle" font-weight="700">门卫 ops/mla.py</text>
+<text class="ts" x="655" y="62" text-anchor="middle">AscendMultiHead</text>
+<text class="ts" x="655" y="76" text-anchor="middle">LatentAttention</text>
+<text class="ts" x="655" y="92" text-anchor="middle">:151/:163/:181</text>
+<rect class="bc" x="755" y="26" width="150" height="88" rx="10"/>
+<text class="ts" x="830" y="39" text-anchor="middle" font-weight="700">后端 attention/</text>
+<text class="ts" x="830" y="54" text-anchor="middle">AscendSFAImpl /</text>
+<text class="ts" x="830" y="69" text-anchor="middle">AscendSFADSACPImpl</text>
+<text class="ts" x="830" y="84" text-anchor="middle">sfa_v1.py:1503</text>
+<text class="ts" x="830" y="99" text-anchor="middle">sfa_cp.py:292</text>
+<rect class="ghost" x="85" y="128" width="320" height="110" rx="8"/>
+<text class="ts" x="245" y="143" text-anchor="middle" font-weight="700">自己:组批——调度器把多条请求</text>
+<text class="ts" x="245" y="167" text-anchor="middle">拼成一个批;每条请求的 attention</text>
+<text class="ts" x="245" y="191" text-anchor="middle">各自算各自的(按请求边界遮罩,互不</text>
+<text class="ts" x="245" y="215" text-anchor="middle">串);批越大 NPU 一趟吃越满(core.py:595)</text>
+<text class="ts" x="148" y="254" text-anchor="middle" font-weight="700">委托:execute_model(批)——整批交给 Worker</text>
+<text class="ts" x="148" y="274" text-anchor="middle">引擎此后只收 output,再组下一批</text>
+<path class="flow" d="M83 280 H210" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="230" y="290" width="320" height="110" rx="8"/>
+<text class="ts" x="390" y="305" text-anchor="middle" font-weight="700">自己:不碰 attention 数学——监控统计;</text>
+<text class="ts" x="390" y="329" text-anchor="middle">PP 按层切段部署时,段与段之间收发</text>
+<text class="ts" x="390" y="353" text-anchor="middle">hidden(下一段 attention 就吃这份输入)</text>
+<text class="ts" x="390" y="377" text-anchor="middle">(worker.py:643→669)</text>
+<text class="ts" x="292" y="416" text-anchor="middle" font-weight="700">委托:model_runner.execute_model(:669)</text>
+<text class="ts" x="292" y="436" text-anchor="middle">——喂料员接手,把批变成算子要的形状</text>
+<path class="flow" d="M228 442 H355" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="375" y="452" width="320" height="134" rx="8"/>
+<text class="ts" x="535" y="467" text-anchor="middle" font-weight="700">自己:喂料——pad 3500→3504(16 的倍数,</text>
+<text class="ts" x="535" y="491" text-anchor="middle">昇腾矩阵单元才吃得满);再组注意力</text>
+<text class="ts" x="535" y="515" text-anchor="middle">元数据:每条请求的边界+KV slot 起点</text>
+<text class="ts" x="535" y="539" text-anchor="middle">——attention 算子按它切请求,免造</text>
+<text class="ts" x="535" y="563" text-anchor="middle">整块大 mask 张量(:2935·build :3294)</text>
+<text class="ts" x="438" y="602" text-anchor="middle" font-weight="700">委托:模型 forward——层外壳逐层发起,</text>
+<text class="ts" x="438" y="622" text-anchor="middle">每层一次 attention+MoE</text>
+<path class="flow" d="M373 628 H500" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="520" y="638" width="320" height="110" rx="8"/>
+<text class="ts" x="680" y="653" text-anchor="middle" font-weight="700">自己:MTP 投影层(draft,与主层同构——</text>
+<text class="ts" x="680" y="677" text-anchor="middle">这里也住着一个 attention)——加载期</text>
+<text class="ts" x="680" y="701" text-anchor="middle">rot 一次性把权重排成后端要的形状,</text>
+<text class="ts" x="680" y="725" text-anchor="middle">免得每次 forward 重排(deepseek_mtp.py:23)</text>
+<rect class="ghost" x="520" y="758" width="320" height="110" rx="8"/>
+<text class="ts" x="680" y="773" text-anchor="middle" font-weight="700">自己(层外壳):LN→AG 聚全量(每卡 219</text>
+<text class="ts" x="680" y="797" text-anchor="middle">hidden 做 AG 拼成 3504——十行示例的</text>
+<text class="ts" x="680" y="821" text-anchor="middle">hidden_states 输入,就是聚完的它)→</text>
+<text class="ts" x="680" y="845" text-anchor="middle">self_attn→RS 散回→postLN→MoE(:1315)</text>
+<text class="ts" x="582" y="884" text-anchor="middle" font-weight="700">委托:self_attn(positions,hidden)——</text>
+<text class="ts" x="582" y="904" text-anchor="middle">十行示例,从这一行进入框架</text>
+<path class="flow" d="M518 910 H645" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="665" y="920" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="935" text-anchor="middle" font-weight="700">自己:预建输出张量 output——十行</text>
+<text class="ts" x="790" y="959" text-anchor="middle">的 attn_output 落这;预分配免碎片</text>
+<text class="ts" x="790" y="983" text-anchor="middle">(mla.py:151)</text>
+<rect class="ghost" x="665" y="1016" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="1031" text-anchor="middle" font-weight="700">自己:custom op 直通车(:163)——</text>
+<text class="ts" x="790" y="1055" text-anchor="middle">编译器到此止步,防图优化把后端</text>
+<text class="ts" x="790" y="1079" text-anchor="middle">的融合算子拆散——护住省带宽的融合</text>
+<rect class="ghost" x="665" y="1112" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="1127" text-anchor="middle" font-weight="700">自己:取层权重/KV 句柄/批元数据,</text>
+<text class="ts" x="790" y="1151" text-anchor="middle">凑齐后端开算要的三样再递进去</text>
+<text class="ts" x="790" y="1175" text-anchor="middle">(mla_forward 函数体)</text>
+<text class="ts" x="742" y="1214" text-anchor="middle" font-weight="700">委托:impl.forward(层名,hidden,kv,</text>
+<text class="ts" x="742" y="1234" text-anchor="middle">元数据,output)(:181)——进车间</text>
+<path class="flow" d="M663 1240 H820" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="500" y="1250" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1265" text-anchor="middle" font-weight="700">impl 谁干活,加载期 resolve_sfa_impl 四</text>
+<text class="ts" x="660" y="1289" text-anchor="middle">选一定死(:1303)——运行时每层直接调,</text>
+<text class="ts" x="660" y="1313" text-anchor="middle">零选路开销;开 DSA-CP 选</text>
+<text class="ts" x="660" y="1337" text-anchor="middle">AscendSFADSACPImpl(sfa_cp.py:292)</text>
+<rect class="ghost" x="500" y="1370" width="320" height="134" rx="8"/>
+<text class="ts" x="660" y="1385" text-anchor="middle" font-weight="700">步准备:DSACPContext 立坐标——本卡管</text>
+<text class="ts" x="660" y="1409" text-anchor="middle">哪段:local_start=rank×219;全量</text>
+<text class="ts" x="660" y="1433" text-anchor="middle">3504=round_up(3500,16)(:1527/CP:188)</text>
+<text class="ts" x="660" y="1457" text-anchor="middle">后面九步全按这套坐标切活:Q 按卡</text>
+<text class="ts" x="660" y="1481" text-anchor="middle">切段(各 219),KV 不切(全量各存)</text>
+<rect class="ghost" x="500" y="1514" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1529" text-anchor="middle" font-weight="700">步3:Q/KV 联合低秩投影(:1576)——十行</text>
+<text class="ts" x="660" y="1553" text-anchor="middle">的 q/k/v_proj 三个矩阵乘合成一枪;</text>
+<text class="ts" x="660" y="1577" text-anchor="middle">KV 压成低秩 latent——cache 按它记账</text>
+<text class="ts" x="660" y="1601" text-anchor="middle">不按头数记,这就是省显存的源头</text>
+<rect class="ghost" x="500" y="1634" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="1649" text-anchor="middle" font-weight="700">步4:exec_kv 融合算子(:1595)——十行</text>
+<text class="ts" x="660" y="1673" text-anchor="middle">里 K/V 侧的投影+rmsnorm+rope+写</text>
+<text class="ts" x="660" y="1697" text-anchor="middle">cache 融成一枪;中间结果不落显存(省带宽)</text>
+<rect class="ghost" x="500" y="1730" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1745" text-anchor="middle" font-weight="700">跨卡取命中 KV 拼全量(:1605)——算</text>
+<text class="ts" x="660" y="1769" text-anchor="middle">QKᵀ 要全量历史 K,本卡只存了 1/16;</text>
+<text class="ts" x="660" y="1793" text-anchor="middle">只取 indexer 命中的块,不全搬——</text>
+<text class="ts" x="660" y="1817" text-anchor="middle">通信量按命中块数走,不按历史长度走</text>
+<rect class="ghost" x="500" y="1850" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="1865" text-anchor="middle" font-weight="700">步6:Q 投影+Q 侧 rope(:1614/:1616)——</text>
+<text class="ts" x="660" y="1889" text-anchor="middle">十行的 q_proj+rope(q);Q 不进 cache,</text>
+<text class="ts" x="660" y="1913" text-anchor="middle">随算随转,不占显存</text>
+<rect class="ghost" x="500" y="1946" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1961" text-anchor="middle" font-weight="700">步7:写回全量 cache(_store_parallel_kv</text>
+<text class="ts" x="660" y="1985" text-anchor="middle">:1626)——本卡算出的 latent KV 每卡</text>
+<text class="ts" x="660" y="2009" text-anchor="middle">各存一份,供别卡日后跨卡来取——</text>
+<text class="ts" x="660" y="2033" text-anchor="middle">代价 KV×16 份,拿显存换互通</text>
+<rect class="ghost" x="500" y="2066" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="2081" text-anchor="middle" font-weight="700">选块:indexer 选 top-2048 块(:1670)——</text>
+<text class="ts" x="660" y="2105" text-anchor="middle">十行里没有这步(DSA 加的):长历史里</text>
+<text class="ts" x="660" y="2129" text-anchor="middle">真正相关的只有少数块,先挑后算</text>
+<rect class="ghost" x="500" y="2162" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="2177" text-anchor="middle" font-weight="700">步8:稀疏注意力算子(:1683)——十行的</text>
+<text class="ts" x="660" y="2201" text-anchor="middle">QKᵀ/遮罩/softmax/·V 四步数学在这</text>
+<text class="ts" x="660" y="2225" text-anchor="middle">一个算子里出齐;分数矩阵全程不落</text>
+<text class="ts" x="660" y="2249" text-anchor="middle">显存——省带宽,这正是融合的意义</text>
+<rect class="ghost" x="500" y="2282" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="2297" text-anchor="middle" font-weight="700">步9:收口 o_proj(:1695)——十行的</text>
+<text class="ts" x="660" y="2321" text-anchor="middle">o_proj 原样;输出只剩本卡的 219 段,</text>
+<text class="ts" x="660" y="2345" text-anchor="middle">交回门卫→层外壳,后面 RS 散回各卡</text>
+<text class="ts" x="660" y="2369" text-anchor="middle">(原路 :1384)</text>
+<text class="ts" x="460" y="2408" text-anchor="middle" font-weight="700">output 原路返回:后端→门卫→层外壳</text>
+<text class="ts" x="460" y="2428" text-anchor="middle">→Runner→Worker→引擎,再进下一层</text>
+<path class="dash" d="M822 2434 H85" marker-end="url(#ahSeq)"/>
+<line class="dash" x1="75" y1="118" x2="75" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="220" y1="118" x2="220" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="365" y1="118" x2="365" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="510" y1="118" x2="510" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="655" y1="118" x2="655" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="830" y1="118" x2="830" y2="2454" stroke-dasharray="5 5"/>
+<text class="tm" x="20" y="2486">读法:"自己:"框=自己干的活——每框写清两件事:跟十行示例什么关系、省什么(显存/带宽/算力);"委托:"箭头=交给下一棒;右侧自转圈=九步流水线(同图7 中列)。</text>
+<text class="tm" x="20" y="2512">每层都走一遍右半边,本图只画一次;impl 在加载期定死。本 PR(18961)不动这条调用链——它改的是链子入口"选哪个后端"与备料(见 4.7)。</text>
+</svg>
+</div>
+<div class="figcap">图 8 · 全链时序图：从引擎到后端，每个类"自己做什么 / 委托什么"——每框写明跟十行的关系与省什么（文件与行号本地实测）</div>
+<p>时序图末尾那串自转圈（后端九步）是主模型 target 的 SFA 路径；draft 层的老路更简单——通用后端没有九步流水线，但<b>每一棒"先自己备料再开算"的节奏是一样的</b>。本 PR 动的是第一棒之前的选路与备料，不动调用链本身。</p>
+
+<h3>4.5 为什么这么实现：逐步收益</h3>
+<p>还剩最后一个问题：<b>target 这条路每一步为什么这么实现？各自省的是什么？</b>把流水线中列原样搬到最左，向右逐层展开——怎么做（带门牌）→ 为什么这么设计 → 收益点：</p>
+<div class="card">
+<svg viewBox="0 0 920 1450" role="img" aria-label="昇腾实现展开图">
+<defs><marker id="ahExp" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="460" y="26" text-anchor="middle">每一步为什么这么实现:流水线(最左)→怎么做→为什么→收益点,逐层展开</text>
+<text class="ts" x="85" y="48" text-anchor="middle" font-weight="700">昇腾实现流水线</text>
+<text class="ts" x="85" y="68" text-anchor="middle">(=图7 中列)</text>
+<text class="ts" x="299" y="48" text-anchor="middle" font-weight="700">怎么做 · 门牌</text>
+<text class="ts" x="299" y="68" text-anchor="middle">(本地实测)</text>
+<text class="ts" x="548" y="48" text-anchor="middle" font-weight="700">为什么这么设计</text>
+<text class="ts" x="782" y="48" text-anchor="middle" font-weight="700">收益点(省什么)</text>
+<rect class="bc" x="20" y="74" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="111" text-anchor="middle" font-weight="700">层外壳 self_attn</text>
+<text class="ts" x="85" y="133" text-anchor="middle">门卫放行 → 后端</text>
+<path class="flow" d="M85.0 178 V200" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="74" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="100" text-anchor="middle" font-weight="700">十行 L1 的调用者</text>
+<text class="ts" x="299" y="122" text-anchor="middle">层外壳串 LN→AG→attn</text>
+<text class="ts" x="299" y="144" text-anchor="middle">→RS;门卫 :151 放行</text>
+<path class="dash" d="M150 112 C168 112,168 132,191 132" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="74" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="100" text-anchor="middle" font-weight="700">层管布局,门卫管接入——</text>
+<text class="ts" x="548" y="122" text-anchor="middle">模型代码不碰硬件细节</text>
+<text class="ts" x="548" y="144" text-anchor="middle">接法与算法分家</text>
+<path class="dash" d="M404 112 C422 112,422 132,445 132" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="74" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="100" text-anchor="middle" font-weight="700">换后端只动门卫</text>
+<text class="ts" x="782" y="122" text-anchor="middle">模型层零改动</text>
+<text class="ts" x="782" y="144" text-anchor="middle">多卡逻辑收在壳上</text>
+<path class="dash" d="M648 112 C666 112,666 132,689 132" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="202" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="239" text-anchor="middle" font-weight="700">步3 Q/KV 联合</text>
+<text class="ts" x="85" y="261" text-anchor="middle">低秩投影(KV 段)</text>
+<path class="flow" d="M85.0 306 V328" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="202" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="228" text-anchor="middle" font-weight="700">fused_qkv_a_proj(:1576)</text>
+<text class="ts" x="299" y="250" text-anchor="middle">一次矩阵乘同出 Q 路 1536</text>
+<text class="ts" x="299" y="272" text-anchor="middle">与 KV latent,后段再上投影</text>
+<path class="dash" d="M150 240 C168 240,168 260,191 260" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="202" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="228" text-anchor="middle" font-weight="700">MLA 先压低秩 latent,</text>
+<text class="ts" x="548" y="250" text-anchor="middle">数学等价;KV 账本按</text>
+<text class="ts" x="548" y="272" text-anchor="middle">latent 记,不按全头记</text>
+<path class="dash" d="M404 240 C422 240,422 260,445 260" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="202" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="228" text-anchor="middle" font-weight="700">KV Cache 不随头数</text>
+<text class="ts" x="782" y="250" text-anchor="middle">翻倍——省显存是大头;</text>
+<text class="ts" x="782" y="272" text-anchor="middle">三投影合一省访存</text>
+<path class="dash" d="M648 240 C666 240,666 260,689 260" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="330" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="367" text-anchor="middle" font-weight="700">步4 K 侧 rope</text>
+<text class="ts" x="85" y="389" text-anchor="middle">步6 Q 侧 rope</text>
+<path class="flow" d="M85.0 434 V456" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="330" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="356" text-anchor="middle" font-weight="700">K 侧旋转融进 exec_kv</text>
+<text class="ts" x="299" y="378" text-anchor="middle">(:1595);Q 侧 rope_single</text>
+<text class="ts" x="299" y="400" text-anchor="middle">(:1616)就地转</text>
+<path class="dash" d="M150 368 C168 368,168 388,191 388" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="330" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="356" text-anchor="middle" font-weight="700">K 转后才写 cache,</text>
+<text class="ts" x="548" y="378" text-anchor="middle">Q 不进 cache 随算随转</text>
+<text class="ts" x="548" y="400" text-anchor="middle">——顺序不能反</text>
+<path class="dash" d="M404 368 C422 368,422 388,445 388" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="330" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="356" text-anchor="middle" font-weight="700">少一次中间张量读写;</text>
+<text class="ts" x="782" y="378" text-anchor="middle">旋转数学与十行的 L3</text>
+<text class="ts" x="782" y="400" text-anchor="middle">逐位一致</text>
+<path class="dash" d="M648 368 C666 368,666 388,689 388" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="458" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="495" text-anchor="middle" font-weight="700">步4 写本卡缓存</text>
+<text class="ts" x="85" y="517" text-anchor="middle">步7 全量写回</text>
+<path class="flow" d="M85.0 562 V584" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="458" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="484" text-anchor="middle" font-weight="700">slot 页表逐 token 定位写</text>
+<text class="ts" x="299" y="506" text-anchor="middle">(:1626);DSA-CP 跨卡拼</text>
+<text class="ts" x="299" y="528" text-anchor="middle">全量、每卡各存一份(:1605)</text>
+<path class="dash" d="M150 496 C168 496,168 516,191 516" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="458" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="484" text-anchor="middle" font-weight="700">页表代替整块 cat;</text>
+<text class="ts" x="548" y="506" text-anchor="middle">每卡全存是跨卡取块</text>
+<text class="ts" x="548" y="528" text-anchor="middle">命中块的前提</text>
+<path class="dash" d="M404 496 C422 496,422 516,445 516" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="458" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="484" text-anchor="middle" font-weight="700">无大拷贝、无碎片;</text>
+<text class="ts" x="782" y="506" text-anchor="middle">代价 KV×16 份——</text>
+<text class="ts" x="782" y="528" text-anchor="middle">拿显存换正确性</text>
+<path class="dash" d="M648 496 C666 496,666 516,689 516" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="586" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="623" text-anchor="middle" font-weight="700">无此步(GQA)</text>
+<text class="ts" x="85" y="645" text-anchor="middle">latent 全头共享</text>
+<path class="flow" d="M85.0 690 V712" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="586" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="612" text-anchor="middle" font-weight="700">GQA 的 repeat 没有对应物:</text>
+<text class="ts" x="299" y="634" text-anchor="middle">latent KV 生来全头共用</text>
+<text class="ts" x="299" y="656" text-anchor="middle">(:1595 段内)</text>
+<path class="dash" d="M150 624 C168 624,168 644,191 644" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="586" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="612" text-anchor="middle" font-weight="700">GQA 用 repeat 凑复用;</text>
+<text class="ts" x="548" y="634" text-anchor="middle">MLA 把复用直接做进</text>
+<text class="ts" x="548" y="656" text-anchor="middle">结构里</text>
+<path class="dash" d="M404 624 C422 624,422 644,445 644" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="586" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="612" text-anchor="middle" font-weight="700">显存不随 Q 头数翻倍;</text>
+<text class="ts" x="782" y="634" text-anchor="middle">省掉 repeat 的拷贝</text>
+<text class="ts" x="782" y="656" text-anchor="middle">与算力(对比十行的 L5)</text>
+<path class="dash" d="M648 624 C666 624,666 644,689 644" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="714" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="751" text-anchor="middle" font-weight="700">步8 稀疏注意力</text>
+<text class="ts" x="85" y="773" text-anchor="middle">算子(QKᵀ)</text>
+<path class="flow" d="M85.0 818 V840" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="714" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="740" text-anchor="middle" font-weight="700">indexer 先选 top-2048 块</text>
+<text class="ts" x="299" y="762" text-anchor="middle">(:1670);算子只在选中块</text>
+<text class="ts" x="299" y="784" text-anchor="middle">上 QKᵀ/√dk(:1683)</text>
+<path class="dash" d="M150 752 C168 752,168 772,191 772" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="714" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="740" text-anchor="middle" font-weight="700">长历史里相关的只有</text>
+<text class="ts" x="548" y="762" text-anchor="middle">少数块;索引器先挑,</text>
+<text class="ts" x="548" y="784" text-anchor="middle">注意力再算</text>
+<path class="dash" d="M404 752 C422 752,422 772,445 772" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="714" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="740" text-anchor="middle" font-weight="700">算力从扫全量历史降到</text>
+<text class="ts" x="782" y="762" text-anchor="middle">2048 块;序列越长</text>
+<text class="ts" x="782" y="784" text-anchor="middle">省得越多</text>
+<path class="dash" d="M648 752 C666 752,666 772,689 772" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="842" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="879" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="901" text-anchor="middle">causal 遮罩处理</text>
+<path class="flow" d="M85.0 946 V968" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="842" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="868" text-anchor="middle" font-weight="700">遮罩由算子内部按</text>
+<text class="ts" x="299" y="890" text-anchor="middle">prefill/decode 自动处理</text>
+<text class="ts" x="299" y="912" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 880 C168 880,168 900,191 900" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="842" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="868" text-anchor="middle" font-weight="700">遮罩是算子固定语义,</text>
+<text class="ts" x="548" y="890" text-anchor="middle">不必在外面造 mask</text>
+<text class="ts" x="548" y="912" text-anchor="middle">张量</text>
+<path class="dash" d="M404 880 C422 880,422 900,445 900" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="842" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="868" text-anchor="middle" font-weight="700">省 mask 张量的显存</text>
+<text class="ts" x="782" y="890" text-anchor="middle">与生成耗时;prefill</text>
+<text class="ts" x="782" y="912" text-anchor="middle">遮未来,decode 免遮</text>
+<path class="dash" d="M648 880 C666 880,666 900,689 900" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="970" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1007" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="1029" text-anchor="middle">softmax 归一化</text>
+<path class="flow" d="M85.0 1074 V1096" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="970" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="996" text-anchor="middle" font-weight="700">softmax 在算子内部完成,</text>
+<text class="ts" x="299" y="1018" text-anchor="middle">与 QKᵀ 连续执行</text>
+<text class="ts" x="299" y="1040" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 1008 C168 1008,168 1028,191 1028" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="970" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1007" text-anchor="middle" font-weight="700">三步数学融为一个</text>
+<text class="ts" x="548" y="1029" text-anchor="middle">算子,中间结果不落地</text>
+<path class="dash" d="M404 1008 C422 1008,422 1028,445 1028" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="970" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="996" text-anchor="middle" font-weight="700">分数矩阵不写显存——</text>
+<text class="ts" x="782" y="1018" text-anchor="middle">省带宽,这正是融合</text>
+<text class="ts" x="782" y="1040" text-anchor="middle">的意义</text>
+<path class="dash" d="M648 1008 C666 1008,666 1028,689 1028" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="1098" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1135" text-anchor="middle" font-weight="700">步8 内:</text>
+<text class="ts" x="85" y="1157" text-anchor="middle">·V 加权求和</text>
+<path class="flow" d="M85.0 1202 V1224" marker-end="url(#ahExp)"/>
+<rect class="node" x="194" y="1098" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="1124" text-anchor="middle" font-weight="700">·V 加权同算子出结果</text>
+<text class="ts" x="299" y="1146" text-anchor="middle">[219,全头],停在收口前</text>
+<text class="ts" x="299" y="1168" text-anchor="middle">(:1683 算子内)</text>
+<path class="dash" d="M150 1136 C168 1136,168 1156,191 1156" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="1098" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1135" text-anchor="middle" font-weight="700">同一条算子流水线,</text>
+<text class="ts" x="548" y="1157" text-anchor="middle">一次出全部分数结果</text>
+<path class="dash" d="M404 1136 C422 1136,422 1156,445 1156" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="1098" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="1124" text-anchor="middle" font-weight="700">每卡只算自己 219 个</text>
+<text class="ts" x="782" y="1146" text-anchor="middle">token 的输出,天然</text>
+<text class="ts" x="782" y="1168" text-anchor="middle">按卡并行</text>
+<path class="dash" d="M648 1136 C666 1136,666 1156,689 1156" marker-end="url(#ahExp)"/>
+<rect class="bc" x="20" y="1226" width="130" height="104" rx="10"/>
+<text class="ts" x="85" y="1263" text-anchor="middle" font-weight="700">步9 收口(o_proj)</text>
+<text class="ts" x="85" y="1285" text-anchor="middle">→交回层外壳</text>
+<rect class="node" x="194" y="1226" width="210" height="104" rx="10"/>
+<text class="ts" x="299" y="1252" text-anchor="middle" font-weight="700">_finalize_o_proj(:1695;</text>
+<text class="ts" x="299" y="1274" text-anchor="middle">原路 :1384)投影后交回;</text>
+<text class="ts" x="299" y="1296" text-anchor="middle">draft 层另有引擎安排(本 PR)</text>
+<path class="dash" d="M150 1264 C168 1264,168 1284,191 1284" marker-end="url(#ahExp)"/>
+<rect class="node" x="448" y="1226" width="200" height="104" rx="10"/>
+<text class="ts" x="548" y="1252" text-anchor="middle" font-weight="700">输出投影保持原样;</text>
+<text class="ts" x="548" y="1274" text-anchor="middle">通信只在 SP 需要</text>
+<text class="ts" x="548" y="1296" text-anchor="middle">时才加</text>
+<path class="dash" d="M404 1264 C422 1264,422 1284,445 1284" marker-end="url(#ahExp)"/>
+<rect class="node" x="692" y="1226" width="180" height="104" rx="10"/>
+<text class="ts" x="782" y="1252" text-anchor="middle" font-weight="700">不开 SP 零额外通信;</text>
+<text class="ts" x="782" y="1274" text-anchor="middle">开 SP 归约只做一次</text>
+<text class="ts" x="782" y="1296" text-anchor="middle">(o_proj 两路图)</text>
+<path class="dash" d="M648 1264 C666 1264,666 1284,689 1284" marker-end="url(#ahExp)"/>
+<text class="tm" x="20" y="1386">读法:最左列=图7 中列的流水线原样搬来;向右三列逐层展开——怎么做(带门牌)→为什么这么设计→收益点。口径:3504 全量/219 每卡/16 卡/top-2048 块。</text>
+<text class="tm" x="20" y="1412">本图讲"原本为什么这么实现"。本 PR(18961)九步一行没动——它给 draft 层换引擎(fa_v1,见 4.7),target 这条路照旧。</text>
+</svg>
+</div>
+<div class="figcap">图 9 · 昇腾实现展开图：最左列 = 图 7 中列流水线；向右逐层展开「怎么做 → 为什么 → 收益点」</div>
+<p><b>逐行看收益，"省"分三种。</b>省显存的：低秩 latent 让 KV Cache 不随头数翻倍；省带宽的：融合算子让中间结果不落显存；省算力的：稀疏注意力只算选中的块。本 PR 省的是第四种——<b>省备料</b>：不算得更快，是"准备算"更快（device 长度一次取齐、tiling 计划一步一建），这是 TPOT 那 26% 的来源。</p>
+
+<h3>4.6 问题：draft 层的 attention 借了别人的引擎</h3>
+<p>两条线在此交汇。先用 4.1 朴素基准的口径说清毛病：<b>框架给这段朴素代码加的壳，没有为 draft 的调用方式定制</b>——draft 每步 k 次连猜、序列极短、验证淘汰后重来，而老壳按"通用层"对待它：选路查同桌的表（Ⓐ），备料每层每步重做（Ⓑ，长度还可能取到拒绝采样前的旧镜像）。症状是端侧的：两节点 P/D 下 mean TPOT 14.90 ms——数学只占其中一块，备料吃掉的是纯开销。从引擎点进这段代码（改前户口）：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 252" role="img" aria-label="户口图改前">
+<defs><marker id="ahK10" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">改前户口：draft 层的引擎在哪一行被派定</text>
+<rect class="node" x="30" y="48" width="180" height="64" rx="8"/>
+<text class="tb" x="120" y="72" text-anchor="middle">vLLM 引擎</text>
+<text class="ts" x="120" y="92" text-anchor="middle">为每层 attention 配引擎</text>
+<path class="flow" d="M210 80 H240" marker-end="url(#ahK10)"/>
+<rect class="node" x="244" y="48" width="200" height="64" rx="8"/>
+<text class="tb" x="344" y="72" text-anchor="middle">platform.py · 选路总闸</text>
+<text class="ts" x="344" y="92" text-anchor="middle">get_attn_backend_cls</text>
+<path class="flow" d="M444 80 H474" marker-end="url(#ahK10)"/>
+<rect class="node" x="478" y="48" width="180" height="64" rx="8"/>
+<text class="tb" x="568" y="72" text-anchor="middle">backend_map 查表</text>
+<text class="ts" x="568" y="92" text-anchor="middle">(非MLA,非稀疏,非压缩)</text>
+<path class="flow" d="M658 80 H688" marker-end="url(#ahK10)"/>
+<rect class="wc" x="692" y="44" width="128" height="72" rx="8"/>
+<text class="tb" x="756" y="68" text-anchor="middle">Ⓐ 通用后端</text>
+<text class="ts" x="756" y="88" text-anchor="middle">attention_v1</text>
+<text class="ts" x="756" y="106" text-anchor="middle">与 dense 同桌</text>
+<text class="tm" x="30" y="152">选路之后（Ⓑ 的家）：每层自建注意力元数据 · 长度取 CPU 镜像（拒绝采样后可能过期）· 每层重建 tiling 计划——一步 k 次猜 × N' 层重复 N'×(k+1) 次。</text>
+<text class="tm" x="30" y="180">为什么讲它：draft 的 TPOT 开销不在数学在这条链——换引擎要先看清它每一环住哪。</text>
+<text class="tm" x="30" y="208">口径：选路与通用后端均为 v0.30.0 现状（PR diff 的改前基线）；行号以 diff 为准。</text>
+</svg>
+<div class="figcap">图 10 · 改前户口：draft 的引擎在 backend_map 落格处被派定为通用后端（Ⓐ），备料在选路之后逐层重复（Ⓑ）</div>
+</div>
+
+<h3>4.7 这次 PR：七重条件窄门 + 新后端三件套</h3>
+<p>改法两句话：<b>选路总闸在查表之前插一道窄门</b>（七重条件全过 → 返回新后端；任一不满足 → 照旧查表，静默回老路）；<b>新后端 fa_v1.py 三件套</b>接住 draft 的调用方式。改后户口：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 258" role="img" aria-label="户口图改后">
+<defs><marker id="ahK11" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">改后户口：窄门插在查表之前，全过换新后端</text>
+<rect class="node" x="30" y="48" width="180" height="64" rx="8"/>
+<text class="tb" x="120" y="72" text-anchor="middle">vLLM 引擎</text>
+<text class="ts" x="120" y="92" text-anchor="middle">为每层 attention 配引擎</text>
+<path class="flow" d="M210 80 H240" marker-end="url(#ahK11)"/>
+<rect class="node" x="244" y="48" width="200" height="64" rx="8"/>
+<text class="tb" x="344" y="72" text-anchor="middle">platform.py · 选路总闸</text>
+<text class="ts" x="344" y="92" text-anchor="middle">get_attn_backend_cls</text>
+<path class="flow" d="M444 80 H474" marker-end="url(#ahK11)"/>
+<rect class="bc" x="478" y="44" width="180" height="72" rx="8"/>
+<text class="tb" x="568" y="66" text-anchor="middle">★ 窄门（新增）</text>
+<text class="ts" x="568" y="86" text-anchor="middle">_validate_flash_attn</text>
+<text class="ts" x="568" y="104" text-anchor="middle">_backend 七重条件</text>
+<path class="flow" d="M658 80 H688" marker-end="url(#ahK11)"/>
+<rect class="ac" x="692" y="44" width="128" height="72" rx="8"/>
+<text class="tb" x="756" y="66" text-anchor="middle">★ 新后端</text>
+<text class="ts" x="756" y="86" text-anchor="middle">fa_v1.py</text>
+<text class="ts" x="756" y="106" text-anchor="middle">CANN FlashAttn</text>
+<path class="dash" d="M568 116 V150 H368" marker-end="url(#ahK11)"/>
+<rect class="ghost" x="164" y="152" width="204" height="44" rx="8"/>
+<text class="ts" x="266" y="172" text-anchor="middle">任一条件不满足：</text>
+<text class="ts" x="266" y="188" text-anchor="middle">静默回 backend_map 老路</text>
+<text class="tm" x="30" y="214">门槛住 device/：DEVICE_LENGTH_FLASH_ATTN 能力位，当前仅 A5 的画像开。</text>
+<text class="tm" x="30" y="238">为什么讲它：换没换上引擎、什么条件下换，全由这行窄门说了算——排查时先看它。</text>
+</svg>
+<div class="figcap">图 11 · 改后户口：窄门在 backend_map 之前，七重全过 → fa_v1.AscendFlashAttentionBackend；任一不满足回老路</div>
+</div>
+
+<p><b>老路 ↔ PR 做法，逐行对照</b>（左列=老路一步的备料与开算，中列=PR 做法，右列=门牌与为什么）：</p>
+
+<div class="card">
+<svg viewBox="0 0 920 948" role="img" aria-label="PR 流水线对照">
+<defs><marker id="ahF12" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="460" y="26" text-anchor="middle">draft attention 一步：老路 ↔ 这次 PR</text>
+<text class="tb" x="140" y="56" text-anchor="middle">老路（ⒶⒷ 的家）</text>
+<text class="tb" x="450" y="56" text-anchor="middle">PR 做法</text>
+<text class="tb" x="770" y="56" text-anchor="middle">门牌 · 为什么</text>
+<rect class="wc" x="20" y="74" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="98" text-anchor="middle">draft 层被调用</text>
+<text class="ts" x="140" y="120" text-anchor="middle">一步猜 k 次 × N' 层</text>
+<text class="ts" x="140" y="142" text-anchor="middle">序列短,每步重来</text>
+<rect class="node" x="310" y="74" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="98" text-anchor="middle">同一个调用（不变）</text>
+<text class="ts" x="450" y="120" text-anchor="middle">数学一行没动;变的是</text>
+<text class="ts" x="450" y="142" text-anchor="middle">引擎与备料</text>
+<rect class="node" x="640" y="74" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="98" text-anchor="middle">调用方式:draft 特有</text>
+<text class="ts" x="770" y="120" text-anchor="middle">(每步 k 次/短序列)</text>
+<text class="ts" x="770" y="142" text-anchor="middle">这就是要定制的理由</text>
+<path class="flow" d="M140 170 V196" marker-end="url(#ahF12)"/>
+<rect class="wc" x="20" y="204" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="228" text-anchor="middle">Ⓐ 查 backend_map 同表</text>
+<text class="ts" x="140" y="250" text-anchor="middle">(非MLA,非稀疏,非压缩)</text>
+<text class="ts" x="140" y="272" text-anchor="middle">→ 通用后端,与 dense 同桌</text>
+<rect class="bc" x="310" y="204" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="228" text-anchor="middle">★ 窄门:七重条件全过</text>
+<text class="ts" x="450" y="250" text-anchor="middle">→ fa_v1.AscendFlash</text>
+<text class="ts" x="450" y="272" text-anchor="middle">AttentionBackend</text>
+<rect class="node" x="640" y="204" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="228" text-anchor="middle">platform.py</text>
+<text class="ts" x="770" y="250" text-anchor="middle">draft 专用窄门,</text>
+<text class="ts" x="770" y="272" text-anchor="middle">不再与 dense 同桌</text>
+<path class="flow" d="M140 300 V326" marker-end="url(#ahF12)"/>
+<rect class="wc" x="20" y="334" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="358" text-anchor="middle">每层自建注意力元数据</text>
+<text class="ts" x="140" y="380" text-anchor="middle">每层一套,不复用</text>
+<rect class="ac" x="310" y="334" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="358" text-anchor="middle">元数据从 device 长度建</text>
+<text class="ts" x="450" y="380" text-anchor="middle">Builder 只信 device 侧,</text>
+<text class="ts" x="450" y="402" text-anchor="middle">一次取齐</text>
+<rect class="node" x="640" y="334" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="358" text-anchor="middle">fa_v1.py Builder</text>
+<text class="ts" x="770" y="380" text-anchor="middle">CPU 镜像不再被</text>
+<text class="ts" x="770" y="402" text-anchor="middle">拒绝采样弄脏</text>
+<path class="flow" d="M140 430 V456" marker-end="url(#ahF12)"/>
+<rect class="wc" x="20" y="464" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="488" text-anchor="middle">Ⓑ 长度取 CPU 镜像</text>
+<text class="ts" x="140" y="510" text-anchor="middle">拒绝采样后可能过期</text>
+<text class="ts" x="140" y="532" text-anchor="middle">算错窗口就要重来</text>
+<rect class="ac" x="310" y="464" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="488" text-anchor="middle">query_start_loc / seq_lens</text>
+<text class="ts" x="450" y="510" text-anchor="middle">直接取 device 张量,</text>
+<text class="ts" x="450" y="532" text-anchor="middle">clamp+cummax 防 dummy 负边界</text>
+<rect class="node" x="640" y="464" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="488" text-anchor="middle">fa_v1.py Impl</text>
+<text class="ts" x="770" y="510" text-anchor="middle">惰性算一次,</text>
+<text class="ts" x="770" y="532" text-anchor="middle">存在 metadata 里</text>
+<path class="flow" d="M140 560 V586" marker-end="url(#ahF12)"/>
+<rect class="wc" x="20" y="594" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="618" text-anchor="middle">Ⓑ 每层重建 tiling 计划</text>
+<text class="ts" x="140" y="640" text-anchor="middle">一步重复 N'×(k+1) 次</text>
+<text class="ts" x="140" y="662" text-anchor="middle">纯 host 侧开销</text>
+<rect class="ac" x="310" y="594" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="618" text-anchor="middle">plan 按 plan_key 缓存</text>
+<text class="ts" x="450" y="640" text-anchor="middle">(头数,KV头数,head_dim,</text>
+<text class="ts" x="450" y="662" text-anchor="middle">窗口,布局)·层间复用</text>
+<rect class="node" x="640" y="594" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="618" text-anchor="middle">fa_v1.py Impl</text>
+<text class="ts" x="770" y="640" text-anchor="middle">一个 draft step 一建,</text>
+<text class="ts" x="770" y="662" text-anchor="middle">N' 层共享</text>
+<path class="flow" d="M140 690 V716" marker-end="url(#ahF12)"/>
+<rect class="wc" x="20" y="724" width="240" height="96" rx="8"/>
+<text class="tb" x="140" y="748" text-anchor="middle">通用算子开算</text>
+<text class="ts" x="140" y="770" text-anchor="middle">结果另开新张量</text>
+<rect class="ac" x="310" y="724" width="280" height="96" rx="8"/>
+<text class="tb" x="450" y="748" text-anchor="middle">CANN flash_attn 一枪</text>
+<text class="ts" x="450" y="770" text-anchor="middle">attention_transfer_window 内</text>
+<text class="ts" x="450" y="792" text-anchor="middle">copy_ 回填 vLLM 输出缓冲</text>
+<rect class="node" x="640" y="724" width="260" height="96" rx="8"/>
+<text class="ts" x="770" y="748" text-anchor="middle">cann_ops(CANN 家)</text>
+<text class="ts" x="770" y="770" text-anchor="middle">只在用它的 worker import;</text>
+<text class="ts" x="770" y="792" text-anchor="middle">回填=对齐 vLLM 约定</text>
+<path class="flow" d="M140 820 V846" marker-end="url(#ahF12)"/>
+<rect class="node" x="20" y="854" width="240" height="68" rx="8"/>
+<text class="tb" x="140" y="878" text-anchor="middle">TPOT 14.90 ms</text>
+<text class="ts" x="140" y="900" text-anchor="middle">两节点 P/D(#18717)</text>
+<rect class="bc" x="310" y="854" width="280" height="68" rx="8"/>
+<text class="tb" x="450" y="878" text-anchor="middle">TPOT 10.97 ms（−26%）</text>
+<text class="ts" x="450" y="900" text-anchor="middle">吞吐 484.39→491.31 tok/s</text>
+<rect class="node" x="640" y="854" width="260" height="68" rx="8"/>
+<text class="ts" x="770" y="878" text-anchor="middle">省的是备料(host 侧),</text>
+<text class="ts" x="770" y="900" text-anchor="middle">不是数学——第四种省</text>
+<path class="dash" d="M262 122 C280 122,286 122,306 122" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 252 C280 252,286 252,306 252" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 382 C280 382,286 382,306 382" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 512 C280 512,286 512,306 512" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 642 C280 642,286 642,306 642" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 772 C280 772,286 772,306 772" marker-end="url(#ahF12)"/>
+<path class="dash" d="M262 902 C280 902,286 902,306 902" marker-end="url(#ahF12)"/>
+<text class="tm" x="20" y="942">读法:左列实线=老路一步的自上而下;中列=PR 逐行替换;右列=门牌(文件:对象)与为什么。灰=老路痛点,蓝/绿=PR 改动,颜色语义与图 2/图 4 一致。</text>
+</svg>
+<div class="figcap">图 12 · 流水线对照：draft attention 一步的六行对照——窄门换引擎、device 长度一次、plan 层间复用、CANN 算子收尾</div>
+</div>
+
+<p><b>窄门里到底查什么？七重条件一棵树</b>（任一"否"都回老路——所以叫窄门）：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 588" role="img" aria-label="七重条件树">
+<defs><marker id="ahT13" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">_validate_flash_attn_backend：七重条件，全过才换引擎</text>
+<rect class="node" x="40" y="44" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="64">条件一 · 这层的特征是普通 dense attention</text>
+<text class="ts" x="60" y="82">backend_key=(非MLA,非稀疏,非压缩)——MLA/稀疏/压缩各有专用后端,不在此列</text>
+<path class="flow" d="M320 92 V106" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="110" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="130">条件二 · 机器是 A5（950DT）</text>
+<text class="ts" x="60" y="148">device/ 硬件画像 supports(DEVICE_LENGTH_FLASH_ATTN)——能力位当前仅 A5 开</text>
+<path class="flow" d="M320 158 V172" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="176" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="196">条件三 · 用的是 V1 runner</text>
+<text class="ts" x="60" y="214">use_v2_model_runner 的不走此门——新执行底座另行适配</text>
+<path class="flow" d="M320 224 V238" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="242" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="262">条件四 · 投机解码开着，且本层是 draft</text>
+<text class="ts" x="60" y="280">runner_type="draft"——target(主模型)永远不走此门,照旧 SFA</text>
+<path class="flow" d="M320 290 V304" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="308" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="328">条件五 · draft 是 eager（enforce_eager）</text>
+<text class="ts" x="60" y="346">图模式的元数据路径不同,先只在 eager 生效;target 的图模式保留</text>
+<path class="flow" d="M320 356 V370" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="374" width="560" height="48" rx="8"/>
+<text class="tb" x="60" y="394">条件六 · 主模型是 GLM MoE DSA 家族</text>
+<text class="ts" x="60" y="412">target.hf_text_config.model_type="glm_moe_dsa"——先服务我们这条 GLM 部署线</text>
+<path class="flow" d="M320 422 V436" marker-end="url(#ahT13)"/>
+<rect class="node" x="40" y="440" width="560" height="60" rx="8"/>
+<text class="tb" x="60" y="460">条件七 · draft 是 DFlash2 + FP16/BF16 + KV 未量化，五个未实现特性都不碰</text>
+<text class="ts" x="60" y="478">is_dflash2_draft · dtype ∈ FP16/BF16 · kv_cache_dtype 未量化</text>
+<text class="ts" x="60" y="494">排除:DCP / 多模态前缀 / RSWA / 批不变 / 逐头 KV 量化</text>
+<path class="flow" d="M600 470 C628 470,628 312,640 312" marker-end="url(#ahT13)"/>
+<rect class="ac" x="644" y="268" width="180" height="88" rx="10"/>
+<text class="tb" x="734" y="296" text-anchor="middle">七重全过</text>
+<text class="ts" x="734" y="318" text-anchor="middle">fa_v1 后端</text>
+<text class="ts" x="734" y="338" text-anchor="middle">CANN FlashAttn</text>
+<path class="dash" d="M320 500 V526" marker-end="url(#ahT13)"/>
+<rect class="ghost" x="40" y="530" width="360" height="44" rx="8"/>
+<text class="tb" x="220" y="548" text-anchor="middle">任一"否"：静默回老路</text>
+<text class="ts" x="220" y="566" text-anchor="middle">backend_map 查表,行为与改前一致</text>
+<text class="tm" x="440" y="548">读法:自上而下逐条查,全过走右门;</text>
+<text class="tm" x="440" y="566">窄=可控——每一条都有测试钉死(见 4.10)。</text>
+</svg>
+<div class="figcap">图 13 · 七重条件树：硬件、runner、draft/eager、目标模型、draft 形态与精度、特性排除——窄门的全部内容</div>
+</div>
+
+<p><b>新后端三件套各自干了什么</b>（fa_v1.py，关系化拆解）：</p>
+<div class="kp t">
+<ul>
+<li><b>元数据件（Builder）</b>：干了什么——从 device 侧精确长度建注意力元数据；跟 draft 什么关系——拒绝采样刚淘汰 token，CPU 镜像可能还没同步，draft 每步都踩这个坑，所以只信 device；省什么——算错窗口重来的返工；</li>
+<li><b>计划件（plan 缓存）</b>：干了什么——tiling 计划按几何特征（头数/KV 头数/head_dim/窗口/布局）做 key 缓存在元数据里；跟 draft 什么关系——一步 k 次猜 × N' 层的调用里，同几何的层共用一份计划；省什么——host 侧重建计划的纯开销，TPOT 那 26% 的主力；</li>
+<li><b>算子件（Impl）</b>：干了什么——在 KV 传输窗口内调 CANN flash_attn，结果 copy_ 回 vLLM 的输出缓冲；跟朴素代码什么关系——就是十行示例那几行数学的 CANN 融合版；省什么——融合算子中间结果不落显存（省带宽），且只在用到它的 worker 里 import CANN。</li>
+</ul>
+</div>
+
+<h3>4.8 对照总表：老路 vs 这次 PR，逐项对照</h3>
+<table>
+<tr><th style="width:16%">维度</th><th>老路（改前）</th><th>这次 PR</th></tr>
+<tr><td><b>选路</b></td><td>draft 与普通 dense 层查同一张 backend_map，落格通用后端（Ⓐ）</td><td>查表前先过七重窄门，全过 → fa_v1 专用后端；任一不满足静默回老路</td></tr>
+<tr><td><b>元数据长度</b></td><td>每层自建，长度取 CPU 镜像（拒绝采样后可能过期）</td><td>只信 device 张量：query_start_loc / seq_lens 直接取，clamp+cummax 防 dummy 负边界，惰性算一次</td></tr>
+<tr><td><b>tiling 计划</b></td><td>每层每步各自重建——一步 k 次猜 × N' 层重复 N'×(k+1) 次（Ⓑ）</td><td>按 plan_key 缓存在元数据里，一个 draft step 一建、层间复用</td></tr>
+<tr><td><b>算子</b></td><td>通用 attention 路径，结果另开新张量</td><td>CANN flash_attn 一枪（mask_mode 0/3/4、TND/PA_BNBD），attention_transfer_window 内调用，copy_ 回填</td></tr>
+<tr><td><b>target 主模型</b></td><td>SFA</td><td>SFA——一个字不动，"缓存的 target 选路不变"有测试钉死</td></tr>
+<tr><td><b>数学</b></td><td>十行示例同款</td><td>十行示例同款——一行没动</td></tr>
+</table>
+
+<h3>4.9 PR 落点总表</h3>
+<table>
+<tr><th style="width:34%">文件</th><th>改动</th><th>为什么落在这</th></tr>
+<tr><td><code>attention/fa_v1.py</code>（新增，+114）</td><td>AscendFlashAttention 三件套：元数据（device 长度 + plan 缓存槽）、Builder、Backend/Impl</td><td>新引擎必须是独立后端——③的 attention/ 目录就是放后端的地方，选路返回类名字符串即可生效</td></tr>
+<tr><td><code>platform.py</code>（+52）</td><td>get_attn_backend_cls 查表前插 _validate_flash_attn_backend；七重条件与五特性排除</td><td>选路总闸住 platform——谁上场由平台说了算，draft 专用判断也归它管</td></tr>
+<tr><td><code>device/hardware_profile.py</code>（+3）</td><td>能力位 DEVICE_LENGTH_FLASH_ATTN，A5 画像开启</td><td>硬件门槛要有挂牌处——③的 device/ 就是"哪台机器会什么"的户口本</td></tr>
+</table>
+
+<h3>4.10 测试（6 个文件：精度 + 选路矩阵 + plan 复用三道锁）</h3>
+<table>
+<tr><th style="width:40%">测试文件</th><th>锁住什么</th></tr>
+<tr><td><code>ut/attention/test_flash_attn.py</code>（+240）</td><td>三道锁全在这：精度对金标准（dtype×window×layout×causal 参数化）；选路矩阵——只对 A5 V1 DFlash2 eager drafts 选 fa，其他 drafts/图模式/其他 target 架构/不支持特性全部保留老后端；plan 在 draft step 内复用、不同几何不共享、Builder 不物化精确 device 长度</td></tr>
+<tr><td><code>e2e/test_flash_attn_precision.py</code>（+99）</td><td>16 个 eager NPU 精度用例：FP16/BF16、strided paged KV、causal/non-causal、sliding window、rejection 更新后的长度</td></tr>
+<tr><td><code>ut/spec_decode/test_dflash2_proposer.py</code>（+78）</td><td>draft 侧加载器选 fa 后端时不覆写 causality</td></tr>
+<tr><td><code>ut/device/test_hardware_profile.py</code>（+1）+ CI 配置 ×2</td><td>A5 能力位登记；精度用例路由到 A5 的 CANN 9.2 镜像</td></tr>
+</table>
+
+<h2 id="s5">5. 前后代码对照（带注释）</h2>
+<h3>5.1 选路总闸：查表之前插窄门（platform.py）</h3>
+<p>目录地图（③）里 platform.py 管选路。改前，draft 层走到这就直接查表；改后，先过窄门：</p>
+<pre><span class="c"># platform.py · get_attn_backend_cls（改后，有删节）</span>
+<span class="c"># PCP keeps its distributed backend; eligible local draft layers use CANN FlashAttn.</span>
+if not attn_selector_config.use_pcp and _validate_flash_attn_backend(backend_key, attn_selector_config):
+    <span class="c"># vLLM resolves this import path to the backend class.</span>
+    return "vllm_ascend.attention.fa_v1.AscendFlashAttentionBackend"   <span class="c"># ★ 新窄门：全过 → 新后端</span>
+
+backend_map = {                                                       <span class="c"># 老表原样保留</span>
+    (True, False, False):  "vllm_ascend.attention.mla_v1.AscendMLABackend",
+    (False, False, False): "vllm_ascend.attention.attention_v1.AscendAttentionBackend",  <span class="c"># Ⓐ draft 改前落这格</span>
+    ...
+}</pre>
+<p>窄门本体 _validate_flash_attn_backend 就是图 13 的七重条件直译（backend_key 三元组、硬件能力位、V1 config、spec 存在、runner_type=="draft"、enforce_eager、target 的 model_type、is_dflash2_draft、dtype 与 KV 精度、五特性排除）——每一条"否"都 return False 回老路。</p>
+
+<h3>5.2 新后端核心：备料一次，层间复用（fa_v1.py）</h3>
+<pre><span class="c"># fa_v1.py · AscendFlashAttentionImpl.forward_impl（有删节）</span>
+<span class="c"># 只在用这个后端的 worker 里才 import CANN——别的部署不多背一个依赖</span>
+from cann_ops_transformer.ops import flash_attn, flash_attn_metadata
+
+<span class="c"># Ⓑ 反面一：长度只信 device，惰性算一次，存在 metadata 里</span>
+if metadata.flash_attn_lengths is None:
+    boundaries = metadata.query_start_loc_gpu[: num_reqs + 1].int()
+    boundaries = boundaries.clamp(min=0, max=query.shape[0]).cummax(dim=0).values  <span class="c"># dummy 请求可能有重复/负边界</span>
+    lengths = metadata.seq_lens_gpu[:num_reqs].int().clamp(min=1)
+    metadata.flash_attn_lengths = boundaries, lengths
+
+<span class="c"># Ⓑ 反面二：tiling 计划按几何特征做 key，一个 draft step 内层间复用</span>
+plan_key = (self.num_heads, self.num_kv_heads, query.shape[-1], self.sliding_window, layout_kv)
+cached = metadata.flash_attn_plans.get(plan_key)
+if cached is None:
+    attrs = dict(... mask_mode=4 if ... else 3 if metadata.causal else 0,   <span class="c"># 0 无遮罩/3 因果/4 滑窗</span>
+                 layout_q="TND", layout_kv=layout_kv, layout_out="TND")
+    cached = flash_attn_metadata(...), attrs
+    metadata.flash_attn_plans[plan_key] = cached
+
+with attention_transfer_window():          <span class="c"># KV 池传输窗口内调用</span>
+    result, _ = flash_attn(query, self.key_cache, self.value_cache,
+                           block_table=..., metadata=plan, **attrs)
+    output[: query.shape[0]].copy_(result)  <span class="c"># CANN 返回新张量；vLLM 要自己的输出缓冲——回填</span>
+    return output</pre>
+<p>三个细节值得停一下：<b>clamp+cummax</b>——dummy 请求的边界可能重复甚至为负，不做这两步会算出非法窗口；<b>plan_key 五元组</b>——同几何才共享，换头数/换窗口自动分家（"不同几何不共享 plan"有测试）；<b>copy_ 回填</b>——CANN 的返回是新张量，vLLM 的约定是写进它给的缓冲，一行 copy_ 把两个约定接上。</p>
+
+<h3>5.3 硬件门槛：能力位三行（device/hardware_profile.py）</h3>
+<pre><span class="c"># device/hardware_profile.py（+3）</span>
+class HardwareCapability(Enum):
+    ...
+    <span class="c"># CANN device-side FlashAttn metadata with strided paged GQA K/V.</span>
+    DEVICE_LENGTH_FLASH_ATTN = auto()      <span class="c"># ★ 新能力位</span>
+<span class="c"># A5 的 supports 列表加上它——条件二的"户口"就在这三行里</span></pre>
+
+<h2 id="s6">6. 与我们排查问题的关系</h2>
+<div class="kp">
+<ul>
+<li><b>硬件对上了</b>：门槛条件二的 A5（950DT）就是《Profiling 实战解读》那台机器——本 PR 合入并升 CANN 9.2 后，我们环境里 GLM 家族 + draft + eager 的组合直接受益；</li>
+<li><b>TPOT 拆解多了一个怀疑对象</b>：以前拆每 token 时延，眼睛盯着算子耗时（ DispatchFFNCombine 那类）；这个 PR 提醒还有第四种账——<b>备料</b>（host 侧建元数据/建计划的纯开销）。用姊妹篇的三板斧能直接看：draft 窗口的 op_statistic 里 host 侧 API 计数掉没掉；</li>
+<li><b>eager 不再等于慢</b>：排查时切 enforce_eager 复测是常用手段，以前要付出"draft 变慢"的代价——这条 PR 把代价摘了，手段更干净；</li>
+<li><b>"参数生效了吗"多了一个样本</b>：换引擎属于「换实现」类改动（四分类里的第一类），验证就是 diff op_statistic——draft 的 attention kernel 名换成 CANN FlashAttn 一族即生效（《算子与 vLLM 参数》1 节四分类的实战案例）；</li>
+<li><b>家族延续</b>：#18671 拆布局（PP=1）、#18870 补边界（PP&gt;1）、本篇换引擎（draft）——同一条 GLM 部署线的第三块拼图。</li>
+</ul>
+</div>
+
+<h2 id="s7">7. 收益、风险与待验证</h2>
+<div class="kp g">
+<span class="kp-t"><span class="tag green">收益</span></span>
+上游 #18717 两节点 P/D 实测：mean TPOT 14.90 → 10.97 ms（约 −26%），output throughput 484.39 → 491.31 tok/s——省的是备料不是数学。950DT + CANN 9.2 上 16 个 eager 精度用例全过（FP16/BF16、strided paged KV、causal/non-causal、滑窗、rejection 后长度）。
+</div>
+<div class="kp">
+<span class="kp-t"><span class="tag blue">安全性设计</span></span>
+窄门七重条件 + 静默回退：任一不满足行为与改前一致；target 选路有测试钉死；不同几何不共享 plan；CANN 只在用到它的 worker 里 import。
+</div>
+<div class="kp w">
+<span class="kp-t"><span class="tag amber">待验证（PR 自述）</span></span>
+性能数字出自 #18717 原始修订，本回移植<b>未重新压测</b>；依赖 CANN 9.2 与 A5 能力位；条件不满足是静默回退——不主动验证就会"以为换了其实没换"。PR 开放中，以合入版为准。
+</div>
+<div class="kp w">
+<span class="kp-t">对我们的行动建议</span>
+<ul>
+<li>跟进合入；合入后在 A5 + CANN 9.2 环境用真实 GLM/DFlash2 配置跑一遍 4.10 的选路单测，确认窄门开；</li>
+<li>按《算子与 vLLM 参数》三板斧验生效：diff 前后 op_statistic，draft 的 attention kernel 应换成 CANN FlashAttn 一族；</li>
+<li>再压一轮 TPOT 对比 10.97 ms 这条线——回移植版本值得有自己的数字。</li>
+</ul>
+</div>
+
+<h2 id="s8">8. 术语速查</h2>
+<table>
+<tr><th>术语</th><th>本 PR 语境下的含义</th></tr>
+<tr><td>target / draft</td><td>主模型与它的草稿小模型（①的 MTP 模块）：draft 连猜 k 个 token，target 一次前向验证</td></tr>
+<tr><td>DFlash2</td><td>这代 draft 的方法名——条件七用 is_dflash2_draft 判定（method="dflash" 且架构 DFlash2DraftModel）</td></tr>
+<tr><td>enforce_eager</td><td>逐层即时执行的框架开关（对应朴素写法的执行方式）——条件五，图模式 draft 不走此门</td></tr>
+<tr><td>CANN FlashAttn</td><td>CANN 算子库的融合注意力算子；vllm-ascend 经 cann_ops_transformer.ops 调用，算子本体住在 CANN</td></tr>
+<tr><td>device 长度</td><td>query_start_loc / seq_lens 的 device 侧张量——只信它，不信 rejection 后可能过期的 CPU 镜像</td></tr>
+<tr><td>tiling 计划 / plan</td><td>算子开算前的分块方案；本 PR 按 plan_key（头数/KV 头数/head_dim/窗口/布局）缓存，一个 draft step 内层间复用</td></tr>
+<tr><td>attention_transfer_window</td><td>KV 池传输窗口上下文——flash_attn 在窗口内调用，与 KV 卸载/传输协同</td></tr>
+<tr><td>DEVICE_LENGTH_FLASH_ATTN</td><td>device/ 硬件画像新增的能力位——条件二的挂牌处，当前仅 A5 开启</td></tr>
+<tr><td>mask_mode</td><td>CANN 算子的遮罩模式：0 无遮罩 / 3 因果 / 4 滑动窗口</td></tr>
+</table>
+
+<p class="dim" style="margin-top:36px">来源：github.com/vllm-project/vllm-ascend PR #18961（开放中，base: releases/v0.30.0，+594/−0，9 文件）· 上游 #18717（性能数字出处）· 本页为技术解读，行号与条件以 PR diff 为准</p>
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
