@@ -135,7 +135,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <span class="kp-t">读前须知：五个名词 30 秒（更多缩写见文末第 8 章术语速查）</span>
 <ul>
 <li><b>MTP draft / DFlash2</b>（架构件）：GLM 架构里主模型旁边的那件小模型——推理时先连猜几个 token、再由主模型一次前向验证；dflash 是这代 draft 的方法名；</li>
-<li><b>enforce_eager</b>（框架开关）：对应你自己写 PyTorch 推理时"逐层即时执行"的朴素方式——禁用图捕获、每层现场跑；</li>
+<li><b>enforce_eager</b>（框架开关）：对应手写 PyTorch 推理时"逐层即时执行"的朴素方式——禁用图捕获、每层现场跑；</li>
 <li><b>CANN FlashAttn</b>（算子）：CANN 算子库里的融合注意力算子——QKᵀ、遮罩、softmax、·V 一个算子出齐，算子本体住在 CANN（vllm-ascend 只管喂参数）；</li>
 <li><b>A5（950DT）/ CANN 9.2</b>（硬件与算子库版本）：本 PR 的门槛条件——能力位挂在 device/ 目录的硬件画像里；</li>
 <li><b>SFA</b>（③里的后端）：GLM DSA 主模型现在选的稀疏注意力后端（attention/ 目录）——本 PR <b>不动它</b>，只给 draft 层换引擎。</li>
@@ -452,7 +452,7 @@ draft 层的 attention 数学与主模型一字不差，但"被调用的方式"�
 <p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它，4.1 先摆这块推理的朴素 PyTorch 写法并定位到框架加的壳（图 5 给出全局定位 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10 至图 13），4.8 至 4.10 三张表收拢。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"引擎与备料"——draft 层选哪个后端、元数据怎么建、tiling 计划建几次、调哪个算子。</p>
 
 <h3>4.1 先看这块推理的原始写法：朴素 PyTorch</h3>
-<p>老规矩，先立对比基准——<b>这块推理（draft 层的投机解码一步）用 PyTorch 朴素写出来长什么样</b>。你自己写带草稿模型的推理就会这么写：单卡、没有任何框架概念（有删节）。draft 层的 attention 数学就在 layer 里，与主模型一字不差：</p>
+<p>老规矩，先立对比基准——<b>这块推理（draft 层的投机解码一步）用 PyTorch 朴素写出来长什么样</b>。自己动手写带草稿模型的推理就会这么写：单卡、没有任何框架概念（有删节）。draft 层的 attention 数学就在 layer 里，与主模型一字不差：</p>
 <pre><span class="c"># 朴素 PyTorch 写法：投机解码的一步（单卡，无框架）</span>
 draft_kv = []                                 <span class="c"># draft 层自己的 KV 缓存</span>
 for t in range(k):                            <span class="c"># draft 连猜 k 个 token</span>
