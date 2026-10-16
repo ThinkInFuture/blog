@@ -383,7 +383,7 @@ sequenceDiagram
             <p>1. <strong>vLLM负责什么</strong>：请求调度、资源管理、Worker进程管理、采样策略</p>
             <p>2. <strong>vllm-ascend负责什么</strong>：NPU硬件适配、注意力计算、自定义算子、模型注册</p>
             <p>3. <strong>接口是什么</strong>：Platform接口（硬件抽象）、ModelRegistry（模型注册）、AttentionBackend（注意力后端）</p>
-            <p>4. <strong>数据怎么流动</strong>：用户输入 → Engine → Worker → ModelRunner → Attention/Ops → NPU → 结果返回</p>
+            <p>4. <strong>数据怎么流动</strong>：用户输入 → Engine → Worker → ModelRunner → Attention 后端 → Custom Ops → NPU → 结果返回</p>
         </div>
     </div>
 
