@@ -121,7 +121,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="kp w">
 <span class="kp-t">读前须知：四个名词 30 秒（更多见文末术语速查）</span>
 <ul>
-<li><b>算子（operator/kernel）</b>：NPU 上一次下发的计算任务——你用 PyTorch 写的每一行（矩阵乘、归一化、softmax）到设备上都是一个或一串算子；</li>
+<li><b>算子（operator/kernel）</b>：NPU 上一次下发的计算任务——用 PyTorch 写推理时的每一行（矩阵乘、归一化、softmax）到设备上都是一个或一串算子；</li>
 <li><b>CANN</b>：昇腾的算力栈与算子库——大量算子的"本体"住在这里，版本随 CANN 包走；</li>
 <li><b>_C_ascend</b>：vllm-ascend 插件自己编译安装的原生算子扩展（源码在插件仓库的 csrc/ 目录）——"算子住在哪"三看口诀里的一看；</li>
 <li><b>op_statistic.csv</b>：profiling 导出的算子聚合统计（谁调了多少次、耗时占比）——本文所有实测占比的出处（GLM-5.1，A3，prefill 窗口）。</li>
@@ -129,13 +129,13 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 </div>
 
 <h2 id="s1">1. 全景：三层算子楼</h2>
-<p>从你已经会的地方出发：用 PyTorch 写一层前向（②），LN、attention、残差、MoE 四五行代码——<b>每一行到了 NPU 上都要变成具体的算子</b>。这些算子住在哪、谁管它们？答案是<b>一栋三层楼</b>（③的目录结构就是这栋楼的门牌）：顶层是 vllm-ascend 的 Python 编排层，中间是插件自研的原生算子层，底层是 CANN 算子层。先看全景：</p>
+<p>从基础已知出发：用 PyTorch 写一层前向（②），LN、attention、残差、MoE 四五行代码——<b>每一行到了 NPU 上都要变成具体的算子</b>。这些算子住在哪、谁管它们？答案是<b>一栋三层楼</b>（③的目录结构就是这栋楼的门牌）：顶层是 vllm-ascend 的 Python 编排层，中间是插件自研的原生算子层，底层是 CANN 算子层。先看全景：</p>
 
 <div class="card">
 <svg viewBox="0 0 840 700" role="img" aria-label="三层算子楼全景">
 <defs><marker id="ahO1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">三层算子楼：你写的一层前向（左）→ 每层算子聚集于啥、什么策略、什么特点（右）</text>
-<text class="tm" x="20" y="56" font-weight="700" fill="#6b7280">你写的一层前向（②）</text>
+<text class="th" x="420" y="26" text-anchor="middle">三层算子楼：朴素一层前向（左）→ 每层算子聚集于啥、什么策略、什么特点（右）</text>
+<text class="tm" x="20" y="56" font-weight="700" fill="#6b7280">朴素一层前向（②）</text>
 <rect class="node" x="20" y="66" width="180" height="50" rx="8"/>
 <text class="tb" x="110" y="88" text-anchor="middle">LayerNorm 行</text>
 <text class="ts" x="110" y="106" text-anchor="middle">归一化</text>
@@ -183,16 +183,16 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="figcap">图 1 · 三层算子楼全景：编排层出调用、自研层出特化融合、CANN 层出本体——每层的聚集点、策略与特点</div>
 </div>
 
-<p><b>一栋楼三层的分工一句话</b>：编排层决定"调谁、怎么调"；自研层放"别处没有、必须自己写"的特化算子；CANN 层是"别人早就写好、拿来就用"的算子本体库。你写的一行 <code>torch.matmul</code> 不会经过顶两层的代码，但它最终执行的内核一定住在层三。下面逐层展开——每层先讲这一层的算子聚集于什么、什么策略，再看这一层的族谱。</p>
+<p><b>一栋楼三层的分工一句话</b>：编排层决定"调谁、怎么调"；自研层放"别处没有、必须自己写"的特化算子；CANN 层是"别人早就写好、拿来就用"的算子本体库。写下的一行 <code>torch.matmul</code> 不会经过顶两层的代码，但它最终执行的内核一定住在层三。下面逐层展开——每层先讲这一层的算子聚集于什么、什么策略，再看这一层的族谱。</p>
 
 <h2 id="s2">2. 层一 · 编排层：不出算子，出调用</h2>
-<p>回到你已经认识的十行 attention（②）——它在 vllm-ascend 里被编排层一步步接手（前几篇讲过的九步流水线）。这一层<b>一个算子都不出</b>：它出的是"调用与备料"——选哪个后端、元数据怎么建、张量按什么布局递下去。拿流水线里的五步看编排层每天在干什么：</p>
+<p>回到十行 attention 样例（②）——它在 vllm-ascend 里被编排层一步步接手（前几篇讲过的九步流水线）。这一层<b>一个算子都不出</b>：它出的是"调用与备料"——选哪个后端、元数据怎么建、张量按什么布局递下去。拿流水线里的五步看编排层每天在干什么：</p>
 
 <div class="card">
 <svg viewBox="0 0 840 620" role="img" aria-label="编排层展开">
 <defs><marker id="ahO2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="26" text-anchor="middle">层一 · 编排层：流水线五步里，它干了啥、楼下谁出算子</text>
-<text class="tb" x="140" y="56" text-anchor="middle">流水线步（你认识的链）</text>
+<text class="tb" x="140" y="56" text-anchor="middle">流水线步（已认识的链）</text>
 <text class="tb" x="435" y="56" text-anchor="middle">编排层的活（纯 Python）</text>
 <text class="tb" x="715" y="56" text-anchor="middle">楼下谁出算子</text>
 <rect class="node" x="20" y="74" width="240" height="88" rx="8"/>
@@ -324,7 +324,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <p><b>这一层的策略与特点</b>：聚集于 DSA/MLA 特化与融合大算子；策略是"源码进仓库"——AscendC 内核写在 csrc/ 里、按 CANN 自定义算子格式编译加载，跟插件同版本发布；特点是重量级（MIX_AIC，单次毫秒级）且数量可控（四族几十个）。<b>认它的口诀</b>：代码里看到 <code>torch.ops._C_ascend.xxx</code> 就是这一层。</p>
 
 <h2 id="s4">4. 层三 · CANN 算子层：两户人家，各有族谱</h2>
-<p>最底下一层住着两户人家：<b>3a 标准算子库</b>——torch_npu 暴露的 npu_* 接口、aclnn 前缀的标准算子、以及你写的普通 matmul 自动到达的内核；<b>3b 自定义算子包</b>——libcust_opapi.so 那几个文件（Profiling 排查时对 staticKey 的对象），MoE 的大融合算子住这里。3a 内部再分族：</p>
+<p>最底下一层住着两户人家：<b>3a 标准算子库</b>——torch_npu 暴露的 npu_* 接口、aclnn 前缀的标准算子、以及普通 matmul 自动到达的内核；<b>3b 自定义算子包</b>——libcust_opapi.so 那几个文件（Profiling 排查时对 staticKey 的对象），MoE 的大融合算子住这里。3a 内部再分族：</p>
 
 <div class="card">
 <svg viewBox="0 0 840 780" role="img" aria-label="CANN 层两户族谱">
@@ -362,7 +362,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="figcap">图 4 · CANN 层两户族谱：3a 标准库内分五族（矩阵乘/融合预处理/elementwise/写回/通信），3b 自定义包住 MoE 大融合</div>
 </div>
 
-<p><b>这一层的策略与特点</b>：3a 聚集于通用数学——你的朴素前向里每一行几乎都能在这里找到对应内核，入口有三种（显式 torch_npu 调用、aclnn 标准下发、普通 matmul 自动到达）；3b 聚集于 MoE 大融合——代价是黑盒。两户共同的特点：<b>内核本体随 CANN 包版本走</b>——这正是 Profiling 排查时对 staticKey 而不是对代码的根本原因。</p>
+<p><b>这一层的策略与特点</b>：3a 聚集于通用数学——朴素前向里的每一行几乎都能在这里找到对应内核，入口有三种（显式 torch_npu 调用、aclnn 标准下发、普通 matmul 自动到达）；3b 聚集于 MoE 大融合——代价是黑盒。两户共同的特点：<b>内核本体随 CANN 包版本走</b>——这正是 Profiling 排查时对 staticKey 而不是对代码的根本原因。</p>
 
 <h2 id="s5">5. 认亲：trace 里的名字对回代码</h2>
 <p>拿真实 profiling 数据（GLM-5.1，A3，prefill 窗口 op_statistic.csv）把 top10 逐个对回三层楼——这张表就是"拿到一份 trace 怎么读"的练习：</p>
@@ -401,7 +401,7 @@ lightning indexer（DSA 选块的"闪电索引器"）在 torch_npu（层三 3a�
 <ul>
 <li><b>给 Profiling 三板斧加了"户口"维度</b>：排行→分布→按 shape 拆（姊妹篇《Profiling 实战解读》）之外，先问"这个算子住哪层"——层三的问题对 CANN 版本账（staticKey），层二的问题查插件源码与版本，层一的问题看 Python 调用与配置；</li>
 <li><b>参数四分类的地基</b>：姊妹篇《算子与 vLLM 参数》讲参数怎么改算子清单——本文反过来讲算子清单本身住在哪，两篇合成一张完整地图；</li>
-<li><b>归因要落到物</b>：耗时对比只能定位"谁慢"，本文的三层楼告诉你下一步去哪找"为什么慢"——3b 找算子包版本与算子团队，层二查插件仓库 changelog，层一看调用方式；</li>
+<li><b>归因要落到物</b>：耗时对比只能定位"谁慢"，本文的三层楼给出下一步去哪找"为什么慢"——3b 找算子包版本与算子团队，层二查插件仓库 changelog，层一看调用方式；</li>
 <li><b>硬件代次敏感</b>：层二有 arch32/arch35 两版 tiling、A5 走 kv_quant 变体（#18961 的条件二也是 A5）——换硬件代次时族谱成员会变；</li>
 <li><b>典型闭环案例</b>：TTFT 劣化钉到 DispatchFFNCombine（层三 3b）→ 对 staticKey 全 DIFF → 算子包实现变更——三层楼的地图就是这条排查路径的底图。</li>
 </ul>
