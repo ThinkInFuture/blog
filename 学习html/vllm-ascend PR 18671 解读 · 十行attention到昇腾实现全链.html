@@ -768,7 +768,7 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <h3>4.4 全链时序：谁调用谁，每一棒先自己干再交棒</h3>
 <p>图 7 看的是"数学落在哪"。这份工作是谁发起、又一层层交给谁的？下面把整条调用链按时间拉开——<b>六个类六条泳道，每个函数先标"自己干了啥"，再标"委托给谁"</b>：</p>
 <div class="card">
-<svg viewBox="0 0 920 1880" role="img" aria-label="全链时序图">
+<svg viewBox="0 0 920 2528" role="img" aria-label="全链时序图">
 <defs><marker id="ahSeq" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="460" y="26" text-anchor="middle">vllm-ascend 跑你的 attention:全链时序——每个函数先"自己:"干完,再"委托:"下一棒(文件:行号实测)</text>
 <rect class="node" x="5" y="26" width="140" height="88" rx="10"/>
@@ -800,94 +800,121 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <text class="ts" x="830" y="68" text-anchor="middle">AscendSFADSACPImpl</text>
 <text class="ts" x="830" y="85" text-anchor="middle">sfa_v1.py:1503</text>
 <text class="ts" x="830" y="102" text-anchor="middle">sfa_cp.py:292</text>
-<rect class="ghost" x="85" y="128" width="320" height="62" rx="8"/>
-<text class="ts" x="245" y="143" text-anchor="middle" font-weight="700">自己:组批——调度器把请求</text>
-<text class="ts" x="245" y="167" text-anchor="middle">凑成一个批(core.py:595)</text>
-<text class="ts" x="148" y="206" text-anchor="middle" font-weight="700">委托:execute_model(批)</text>
-<text class="ts" x="148" y="226" text-anchor="middle">交给 Worker 执行</text>
-<path class="flow" d="M83 232 H210" marker-end="url(#ahSeq)"/>
-<rect class="ghost" x="230" y="242" width="320" height="62" rx="8"/>
-<text class="ts" x="390" y="257" text-anchor="middle" font-weight="700">自己:监控统计·PP 收发</text>
-<text class="ts" x="390" y="281" text-anchor="middle">中间张量(worker.py:643)</text>
-<text class="ts" x="292" y="320" text-anchor="middle" font-weight="700">委托:model_runner.</text>
-<text class="ts" x="292" y="340" text-anchor="middle">execute_model(:669)</text>
-<path class="flow" d="M228 346 H355" marker-end="url(#ahSeq)"/>
-<rect class="ghost" x="375" y="356" width="320" height="86" rx="8"/>
-<text class="ts" x="535" y="371" text-anchor="middle" font-weight="700">自己:pad 到 16 倍数(3504)·</text>
-<text class="ts" x="535" y="395" text-anchor="middle">组注意力元数据</text>
-<text class="ts" x="535" y="419" text-anchor="middle">(:2935 pad·builder.build :3294)</text>
-<text class="ts" x="438" y="458" text-anchor="middle" font-weight="700">委托:模型 forward</text>
-<text class="ts" x="438" y="478" text-anchor="middle">(层外壳逐层发起)</text>
-<path class="flow" d="M373 484 H500" marker-end="url(#ahSeq)"/>
-<rect class="ghost" x="520" y="494" width="320" height="62" rx="8"/>
-<text class="ts" x="680" y="509" text-anchor="middle" font-weight="700">自己:rot 权重变换→</text>
-<text class="ts" x="680" y="533" text-anchor="middle">上游 super().forward(deepseek_mtp.py:23)</text>
-<rect class="ghost" x="520" y="566" width="320" height="86" rx="8"/>
-<text class="ts" x="680" y="581" text-anchor="middle" font-weight="700">自己(层外壳):LN→①聚全量→self_attn</text>
-<text class="ts" x="680" y="605" text-anchor="middle">→④散回→postLN→MoE——十行在</text>
-<text class="ts" x="680" y="629" text-anchor="middle">self_attn 里(deepseek_v2.py:1315)</text>
-<text class="ts" x="582" y="668" text-anchor="middle" font-weight="700">委托:self_attn(positions,</text>
-<text class="ts" x="582" y="688" text-anchor="middle">hidden…)——每层一次</text>
-<path class="flow" d="M518 694 H645" marker-end="url(#ahSeq)"/>
-<rect class="ghost" x="665" y="704" width="250" height="62" rx="8"/>
-<text class="ts" x="790" y="719" text-anchor="middle" font-weight="700">自己:建输出张量 output</text>
-<text class="ts" x="790" y="743" text-anchor="middle">(mla.py:151 老入口)</text>
-<rect class="ghost" x="665" y="776" width="250" height="86" rx="8"/>
-<text class="ts" x="790" y="791" text-anchor="middle" font-weight="700">自己:过 custom op 直通车</text>
-<text class="ts" x="790" y="815" text-anchor="middle">torch.ops.vllm.mla_forward(:163)</text>
-<text class="ts" x="790" y="839" text-anchor="middle">——编译器到此止步</text>
-<rect class="ghost" x="665" y="872" width="250" height="62" rx="8"/>
-<text class="ts" x="790" y="887" text-anchor="middle" font-weight="700">自己:取层/KV/元数据</text>
-<text class="ts" x="790" y="911" text-anchor="middle">(mla_forward 函数体)</text>
-<text class="ts" x="742" y="950" text-anchor="middle" font-weight="700">委托:impl.forward(层名,hidden,</text>
-<text class="ts" x="742" y="970" text-anchor="middle">kv,元数据,output)(:181)</text>
-<path class="flow" d="M663 976 H820" marker-end="url(#ahSeq)"/>
-<rect class="ghost" x="500" y="986" width="320" height="86" rx="8"/>
-<text class="ts" x="660" y="1001" text-anchor="middle" font-weight="700">impl 加载期由 resolve_sfa_impl</text>
-<text class="ts" x="660" y="1025" text-anchor="middle">四选一定(:1303);开 DSA-CP 选</text>
-<text class="ts" x="660" y="1049" text-anchor="middle">AscendSFADSACPImpl(sfa_cp.py:292)</text>
-<rect class="ghost" x="500" y="1082" width="320" height="86" rx="8"/>
-<text class="ts" x="660" y="1097" text-anchor="middle" font-weight="700">步准备:上下文 DSACPContext:</text>
-<text class="ts" x="660" y="1121" text-anchor="middle">3504=round_up(3500,16);本卡段</text>
-<text class="ts" x="660" y="1145" text-anchor="middle">local_start=rank×219(:1527/CP:188)</text>
-<rect class="ghost" x="500" y="1178" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1193" text-anchor="middle" font-weight="700">步3:Q/KV 联合低秩投影</text>
-<text class="ts" x="660" y="1217" text-anchor="middle">fused_qkv_a_proj(:1576)</text>
-<rect class="ghost" x="500" y="1250" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1265" text-anchor="middle" font-weight="700">步4:exec_kv 融合算子——投影+</text>
-<text class="ts" x="660" y="1289" text-anchor="middle">rmsnorm+rope+写 cache(:1595)</text>
-<rect class="ghost" x="500" y="1322" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1337" text-anchor="middle" font-weight="700">③:跨卡取命中 KV 拼全量</text>
-<text class="ts" x="660" y="1361" text-anchor="middle">(:1605)</text>
-<rect class="ghost" x="500" y="1394" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1409" text-anchor="middle" font-weight="700">步6:Q 投影+Q 侧 rope</text>
-<text class="ts" x="660" y="1433" text-anchor="middle">(:1614·:1616)</text>
-<rect class="ghost" x="500" y="1466" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1481" text-anchor="middle" font-weight="700">步7:全量写回</text>
-<text class="ts" x="660" y="1505" text-anchor="middle">_store_parallel_kv(:1626)</text>
-<rect class="ghost" x="500" y="1538" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1553" text-anchor="middle" font-weight="700">选块:indexer 选 top-2048 块</text>
-<text class="ts" x="660" y="1577" text-anchor="middle">(:1670 一带)</text>
-<rect class="ghost" x="500" y="1610" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1625" text-anchor="middle" font-weight="700">步8:稀疏注意力算子——QKᵀ/</text>
-<text class="ts" x="660" y="1649" text-anchor="middle">遮罩/softmax/·V(:1683)</text>
-<rect class="ghost" x="500" y="1682" width="320" height="62" rx="8"/>
-<text class="ts" x="660" y="1697" text-anchor="middle" font-weight="700">步9:收口 o_proj(:1695;</text>
-<text class="ts" x="660" y="1721" text-anchor="middle">原路 :1384)</text>
-<text class="ts" x="460" y="1760" text-anchor="middle" font-weight="700">output 原路返回:后端→门卫→层外壳</text>
-<text class="ts" x="460" y="1780" text-anchor="middle">→Runner→Worker→引擎,再进下一层</text>
-<path class="dash" d="M822 1786 H85" marker-end="url(#ahSeq)"/>
-<line class="dash" x1="75" y1="118" x2="75" y2="1806" stroke-dasharray="5 5"/>
-<line class="dash" x1="220" y1="118" x2="220" y2="1806" stroke-dasharray="5 5"/>
-<line class="dash" x1="365" y1="118" x2="365" y2="1806" stroke-dasharray="5 5"/>
-<line class="dash" x1="510" y1="118" x2="510" y2="1806" stroke-dasharray="5 5"/>
-<line class="dash" x1="655" y1="118" x2="655" y2="1806" stroke-dasharray="5 5"/>
-<line class="dash" x1="830" y1="118" x2="830" y2="1806" stroke-dasharray="5 5"/>
-<text class="tm" x="20" y="1838">读法:六条泳道=六个类;"自己:"框=该函数自己干的活,"委托:"箭头=把活交给下一棒;右侧一串自转圈=九步流水线(同图7 中列)的展开。</text>
-<text class="tm" x="20" y="1864">每层都走一遍右半边,本图只画一次;impl 在加载期定死。PR 在门卫加"契约四查"、在后端加 ⑤⑥——本图画的是原本,见 4.7。</text>
+<rect class="ghost" x="85" y="128" width="320" height="110" rx="8"/>
+<text class="ts" x="245" y="143" text-anchor="middle" font-weight="700">自己:组批——调度器把多条请求</text>
+<text class="ts" x="245" y="167" text-anchor="middle">拼成一个批;每条请求的 attention</text>
+<text class="ts" x="245" y="191" text-anchor="middle">各自算各自的(按请求边界遮罩,互不</text>
+<text class="ts" x="245" y="215" text-anchor="middle">串);批越大 NPU 一趟吃越满(core.py:595)</text>
+<text class="ts" x="148" y="254" text-anchor="middle" font-weight="700">委托:execute_model(批)——整批交给 Worker</text>
+<text class="ts" x="148" y="274" text-anchor="middle">引擎此后只收 output,再组下一批</text>
+<path class="flow" d="M83 280 H210" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="230" y="290" width="320" height="110" rx="8"/>
+<text class="ts" x="390" y="305" text-anchor="middle" font-weight="700">自己:不碰 attention 数学——监控统计;</text>
+<text class="ts" x="390" y="329" text-anchor="middle">PP 按层切段部署时,段与段之间收发</text>
+<text class="ts" x="390" y="353" text-anchor="middle">hidden(下一段 attention 就吃这份输入)</text>
+<text class="ts" x="390" y="377" text-anchor="middle">(worker.py:643→669)</text>
+<text class="ts" x="292" y="416" text-anchor="middle" font-weight="700">委托:model_runner.execute_model(:669)</text>
+<text class="ts" x="292" y="436" text-anchor="middle">——喂料员接手,把批变成算子要的形状</text>
+<path class="flow" d="M228 442 H355" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="375" y="452" width="320" height="134" rx="8"/>
+<text class="ts" x="535" y="467" text-anchor="middle" font-weight="700">自己:喂料——pad 3500→3504(16 的倍数,</text>
+<text class="ts" x="535" y="491" text-anchor="middle">昇腾矩阵单元才吃得满);再组注意力</text>
+<text class="ts" x="535" y="515" text-anchor="middle">元数据:每条请求的边界+KV slot 起点</text>
+<text class="ts" x="535" y="539" text-anchor="middle">——attention 算子按它切请求,免造</text>
+<text class="ts" x="535" y="563" text-anchor="middle">整块大 mask 张量(:2935·build :3294)</text>
+<text class="ts" x="438" y="602" text-anchor="middle" font-weight="700">委托:模型 forward——层外壳逐层发起,</text>
+<text class="ts" x="438" y="622" text-anchor="middle">每层一次 attention+MoE</text>
+<path class="flow" d="M373 628 H500" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="520" y="638" width="320" height="110" rx="8"/>
+<text class="ts" x="680" y="653" text-anchor="middle" font-weight="700">自己:MTP 投影层(draft,与主层同构——</text>
+<text class="ts" x="680" y="677" text-anchor="middle">这里也住着一个 attention)——加载期</text>
+<text class="ts" x="680" y="701" text-anchor="middle">rot 一次性把权重排成后端要的形状,</text>
+<text class="ts" x="680" y="725" text-anchor="middle">免得每次 forward 重排(deepseek_mtp.py:23)</text>
+<rect class="ghost" x="520" y="758" width="320" height="110" rx="8"/>
+<text class="ts" x="680" y="773" text-anchor="middle" font-weight="700">自己(层外壳):LN→①聚全量(每卡 219</text>
+<text class="ts" x="680" y="797" text-anchor="middle">hidden 做 AG 拼成 3504——你十行的</text>
+<text class="ts" x="680" y="821" text-anchor="middle">hidden_states 输入,就是聚完的它)→</text>
+<text class="ts" x="680" y="845" text-anchor="middle">self_attn→④散回→postLN→MoE(:1315)</text>
+<text class="ts" x="582" y="884" text-anchor="middle" font-weight="700">委托:self_attn(positions,hidden)——</text>
+<text class="ts" x="582" y="904" text-anchor="middle">你写的十行,从这一行进入框架</text>
+<path class="flow" d="M518 910 H645" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="665" y="920" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="935" text-anchor="middle" font-weight="700">自己:预建输出张量 output——十行</text>
+<text class="ts" x="790" y="959" text-anchor="middle">的 attn_output 落这;预分配免碎片</text>
+<text class="ts" x="790" y="983" text-anchor="middle">(mla.py:151)</text>
+<rect class="ghost" x="665" y="1016" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="1031" text-anchor="middle" font-weight="700">自己:custom op 直通车(:163)——</text>
+<text class="ts" x="790" y="1055" text-anchor="middle">编译器到此止步,防图优化把后端</text>
+<text class="ts" x="790" y="1079" text-anchor="middle">的融合算子拆散——护住省带宽的融合</text>
+<rect class="ghost" x="665" y="1112" width="250" height="86" rx="8"/>
+<text class="ts" x="790" y="1127" text-anchor="middle" font-weight="700">自己:取层权重/KV 句柄/批元数据,</text>
+<text class="ts" x="790" y="1151" text-anchor="middle">凑齐后端开算要的三样再递进去</text>
+<text class="ts" x="790" y="1175" text-anchor="middle">(mla_forward 函数体)</text>
+<text class="ts" x="742" y="1214" text-anchor="middle" font-weight="700">委托:impl.forward(层名,hidden,kv,</text>
+<text class="ts" x="742" y="1234" text-anchor="middle">元数据,output)(:181)——进车间</text>
+<path class="flow" d="M663 1240 H820" marker-end="url(#ahSeq)"/>
+<rect class="ghost" x="500" y="1250" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1265" text-anchor="middle" font-weight="700">impl 谁干活,加载期 resolve_sfa_impl 四</text>
+<text class="ts" x="660" y="1289" text-anchor="middle">选一定死(:1303)——运行时每层直接调,</text>
+<text class="ts" x="660" y="1313" text-anchor="middle">零选路开销;开 DSA-CP 选</text>
+<text class="ts" x="660" y="1337" text-anchor="middle">AscendSFADSACPImpl(sfa_cp.py:292)</text>
+<rect class="ghost" x="500" y="1370" width="320" height="134" rx="8"/>
+<text class="ts" x="660" y="1385" text-anchor="middle" font-weight="700">步准备:DSACPContext 立坐标——本卡管</text>
+<text class="ts" x="660" y="1409" text-anchor="middle">哪段:local_start=rank×219;全量</text>
+<text class="ts" x="660" y="1433" text-anchor="middle">3504=round_up(3500,16)(:1527/CP:188)</text>
+<text class="ts" x="660" y="1457" text-anchor="middle">后面九步全按这套坐标切活:Q 按卡</text>
+<text class="ts" x="660" y="1481" text-anchor="middle">切段(各 219),KV 不切(全量各存)</text>
+<rect class="ghost" x="500" y="1514" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1529" text-anchor="middle" font-weight="700">步3:Q/KV 联合低秩投影(:1576)——十行</text>
+<text class="ts" x="660" y="1553" text-anchor="middle">的 q/k/v_proj 三个矩阵乘合成一枪;</text>
+<text class="ts" x="660" y="1577" text-anchor="middle">KV 压成低秩 latent——cache 按它记账</text>
+<text class="ts" x="660" y="1601" text-anchor="middle">不按头数记,这就是省显存的源头</text>
+<rect class="ghost" x="500" y="1634" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="1649" text-anchor="middle" font-weight="700">步4:exec_kv 融合算子(:1595)——十行</text>
+<text class="ts" x="660" y="1673" text-anchor="middle">里 K/V 侧的投影+rmsnorm+rope+写</text>
+<text class="ts" x="660" y="1697" text-anchor="middle">cache 融成一枪;中间结果不落显存(省带宽)</text>
+<rect class="ghost" x="500" y="1730" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1745" text-anchor="middle" font-weight="700">③:跨卡取命中 KV 拼全量(:1605)——算</text>
+<text class="ts" x="660" y="1769" text-anchor="middle">QKᵀ 要全量历史 K,本卡只存了 1/16;</text>
+<text class="ts" x="660" y="1793" text-anchor="middle">只取 indexer 命中的块,不全搬——</text>
+<text class="ts" x="660" y="1817" text-anchor="middle">通信量按命中块数走,不按历史长度走</text>
+<rect class="ghost" x="500" y="1850" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="1865" text-anchor="middle" font-weight="700">步6:Q 投影+Q 侧 rope(:1614/:1616)——</text>
+<text class="ts" x="660" y="1889" text-anchor="middle">十行的 q_proj+rope(q);Q 不进 cache,</text>
+<text class="ts" x="660" y="1913" text-anchor="middle">随算随转,不占显存</text>
+<rect class="ghost" x="500" y="1946" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="1961" text-anchor="middle" font-weight="700">步7:写回全量 cache(_store_parallel_kv</text>
+<text class="ts" x="660" y="1985" text-anchor="middle">:1626)——本卡算出的 latent KV 每卡</text>
+<text class="ts" x="660" y="2009" text-anchor="middle">各存一份,供别卡日后 ③ 来取——</text>
+<text class="ts" x="660" y="2033" text-anchor="middle">代价 KV×16 份,拿显存换互通</text>
+<rect class="ghost" x="500" y="2066" width="320" height="86" rx="8"/>
+<text class="ts" x="660" y="2081" text-anchor="middle" font-weight="700">选块:indexer 选 top-2048 块(:1670)——</text>
+<text class="ts" x="660" y="2105" text-anchor="middle">十行里没有这步(DSA 加的):长历史里</text>
+<text class="ts" x="660" y="2129" text-anchor="middle">真正相关的只有少数块,先挑后算</text>
+<rect class="ghost" x="500" y="2162" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="2177" text-anchor="middle" font-weight="700">步8:稀疏注意力算子(:1683)——十行的</text>
+<text class="ts" x="660" y="2201" text-anchor="middle">QKᵀ/遮罩/softmax/·V 四步数学在这</text>
+<text class="ts" x="660" y="2225" text-anchor="middle">一个算子里出齐;分数矩阵全程不落</text>
+<text class="ts" x="660" y="2249" text-anchor="middle">显存——省带宽,这正是融合的意义</text>
+<rect class="ghost" x="500" y="2282" width="320" height="110" rx="8"/>
+<text class="ts" x="660" y="2297" text-anchor="middle" font-weight="700">步9:收口 o_proj(:1695)——十行的</text>
+<text class="ts" x="660" y="2321" text-anchor="middle">o_proj 原样;输出只剩本卡的 219 段,</text>
+<text class="ts" x="660" y="2345" text-anchor="middle">交回门卫→层外壳,后面 ④ 散回各卡</text>
+<text class="ts" x="660" y="2369" text-anchor="middle">(原路 :1384)</text>
+<text class="ts" x="460" y="2408" text-anchor="middle" font-weight="700">output 原路返回:后端→门卫→层外壳</text>
+<text class="ts" x="460" y="2428" text-anchor="middle">→Runner→Worker→引擎,再进下一层</text>
+<path class="dash" d="M822 2434 H85" marker-end="url(#ahSeq)"/>
+<line class="dash" x1="75" y1="118" x2="75" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="220" y1="118" x2="220" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="365" y1="118" x2="365" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="510" y1="118" x2="510" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="655" y1="118" x2="655" y2="2454" stroke-dasharray="5 5"/>
+<line class="dash" x1="830" y1="118" x2="830" y2="2454" stroke-dasharray="5 5"/>
+<text class="tm" x="20" y="2486">读法:"自己:"框=自己干的活——每框写清两件事:跟你的十行什么关系、省什么(显存/带宽/算力);"委托:"箭头=交给下一棒;右侧自转圈=九步流水线(同图7 中列)。</text>
+<text class="tm" x="20" y="2512">每层都走一遍右半边,本图只画一次;impl 在加载期定死。PR 在门卫加"契约四查"、在后端加 ⑤⑥——本图画的是原本,见 4.7。</text>
 </svg>
 </div>
-<div class="figcap">图 8 · 全链时序图：从引擎到后端，每个类"自己做什么 / 委托什么"（文件与行号本地实测）</div>
+<div class="figcap">图 8 · 全链时序图：从引擎到后端，每个类"自己做什么 / 委托什么"——每框写明跟十行的关系与省什么（文件与行号本地实测）</div>
 <p><b>读这张图抓三个节奏。</b></p>
 <p><b>一、委托链只有一条，没有岔路。</b>引擎组批 → Worker 接批 → Runner 喂料 → 层外壳发起 → 门卫放行 → 后端开算；每一棒只把活交给下一棒，谁也不越级。</p>
 <p><b>二、"自己干"的都是壳上的杂活，"委托"出去的才是正餐。</b>Worker 自己只做监控与流水线收发；Runner 自己只做 pad 和组元数据；把你的十行真正算出来的，是最右边后端的那串自转圈——九步流水线。</p>
