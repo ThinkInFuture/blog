@@ -61,7 +61,7 @@ td.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;color:#1a4ea8}
 <h1>DeepSeek V4.1 为何回退 V4 的固定窗口压缩？</h1>
 <p class="subtitle">一个 token 位移，召回从 50% 掉到 0：分块 KV 压缩的"相位敏感性"，以及 V4.1 用 CSA2 + SWA 的解法</p>
 <h2>一、先看一个例子：多打一个字，模型就找不到密码了</h2>
-<p>想象一下：你让模型在一篇长文档里找一串 6 位密码。文档内容没变，问题没变，答案也没变，你只是在最前面多打了一个无关紧要的字。结果模型就彻底找不到那串密码了。</p>
+<p>想象一个场景：让模型在一篇长文档里找一串 6 位密码。文档内容没变，问题没变，答案也没变，只是在最前面多打了一个无关紧要的字。结果模型就彻底找不到那串密码了。</p>
 <p>具体来说，实验里的两个文档长这样：</p>
 <p><strong>文档 A（开头不加东西）：</strong></p>
 <p>```</p>
@@ -206,7 +206,7 @@ td.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;color:#1a4ea8}
     style E fill:#ccffcc,color:#000000
 </div></div>
 <h2>二、实验数据：翻译一下，这是什么意思</h2>
-<p>刚才你已经看到了那个“多打一个字就找不到密码”的例子。现在来看完整的实验数据——但这次我们换个方式说。</p>
+<p>刚才已经看到了那个“多打一个字就找不到密码”的例子。现在来看完整的实验数据——但这次我们换个方式说。</p>
 <h3>先看一张“体检报告”</h3>
 <p>我们把模型对 16 个不同密码的检索能力，在 8 种“文档开头插入几个字”的情况下各测了一遍。结果像一张体检报告：</p>
 <table><thead><tr><th>条件</th><th>通俗解释</th><th>gap（最差和最好的差距）</th></tr></thead><tbody><tr><td><strong>Full Attention</strong></td><td>不压缩，原汁原味。挪不挪位置都一样，最高 96.9%，最低 93.8%</td><td><strong>0.031</strong>（只差 3.1 个百分点，几乎没波动）</td></tr><tr><td><strong>8:1 压缩 + 随机相位训练</strong></td><td>压缩了，但训练时见过各种偏移位置。每次考 50 分，稳定但平庸</td><td>≈0（不波动，但也不高）</td></tr><tr><td><strong>8:1 压缩 + 弱训练（60 步）</strong></td><td>压缩了，但没学好。几乎全考 0 分</td><td>≈0（全崩）</td></tr><tr><td><strong>8:1 压缩 + 仅 delta=0 对齐训练</strong></td><td>压缩了，只见过“开头不加字”的情况。不加字考 50 分，<strong>加一个字直接 0 分</strong></td><td><strong>0.500</strong>（差 50 个百分点，断崖）</td></tr></tbody></table>
@@ -222,10 +222,10 @@ td.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;color:#1a4ea8}
 </div></div>
 <h3>为什么？用一个“翻译”来理解</h3>
 <p>把这件事想象成<strong>把中文翻译成英文</strong>：</p>
-<p>- <strong>压缩窗口</strong> = 一个翻译员。你给他 8 个中文词，他翻成一个英文短语。</p>
+<p>- <strong>压缩窗口</strong> = 一个翻译员。给翻译员 8 个中文词，他翻成一个英文短语。</p>
 <p>- <strong>均值池化</strong> = 他只能翻出“大概意思”，不能逐字对应。</p>
 <p>- <strong>关键 token</strong> = 密码 “482915” 这串数字。</p>
-<p>- <strong>文档平移</strong> = 你把整篇文章往后挪了一个字。</p>
+<p>- <strong>文档平移</strong> = 把整篇文章往后挪一个字。</p>
 <p>现在翻译员的工作规则是：<strong>每 8 个字一组，固定分组。</strong> 他每组只翻一个“概括”。</p>
 <p>- <strong>delta=0 时</strong>：“482915” 这组里可能还有 “is” 和句号，翻译员翻出来的概括里“482915”占的比重还行，模型能认出来。</p>
 <p>- <strong>delta=1 时</strong>：整篇文章往后挪了一个字。“482915” 被挤到了另一组，和更多无关的字混在一起。翻译员翻出来的概括里，“482915” 被稀释了，模型就认不出来了。</p>
@@ -273,7 +273,7 @@ td.mono{font-family:"SF Mono",Consolas,monospace;font-size:12.5px;color:#1a4ea8}
 </div></div>
 <h2>三、原理：固定窗口压缩如何制造周期性弱点</h2>
 <h3>1. 窗口边界是固定的</h3>
-<p>固定窗口分块压缩的规则很简单：每 W 个 token 一块，块内 KV 做均值池化，压成一条压缩 KV。窗口边界固定在位置 0、8、16、24……这些整数倍位置。问题在于：<strong>文本不会永远按你训练时的相位排列。</strong></p>
+<p>固定窗口分块压缩的规则很简单：每 W 个 token 一块，块内 KV 做均值池化，压成一条压缩 KV。窗口边界固定在位置 0、8、16、24……这些整数倍位置。问题在于：<strong>文本不会永远按训练时的相位排列。</strong></p>
 <div class="fig-title">图 9：窗口边界固定在整数倍位置，文档平移后块内容改变</div>
 <div class="mermaid-wrap"><div class="mermaid">flowchart LR
     subgraph 文档A["文档 A（delta=0）"]
