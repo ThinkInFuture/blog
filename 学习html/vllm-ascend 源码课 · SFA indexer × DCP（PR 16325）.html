@@ -114,7 +114,7 @@ th{background:#f0f4f8}
     <h1>一次「缓存地址错配」的修复：<br>让 SFA indexer 在 DCP 下独立构建自己的元数据</h1>
     <p>PR <code>#16325</code> — <code>[BugFix][Attention] Build SFA indexer DCP metadata independently</code>（commit <code>8a36237e9</code>，2026-09-17）<br>
     三阶段演进线：<b>业务流程（背景）→ 当前方案 对照 目标方案（方案）→ 目标实现流程（实现）</b>。<br>
-    背景开始前先做<b>概念爬坡</b>（从你懂的普通 attention，五级爬到 SFA / indexer / DCP）；之后每阶段按「<b>概览层 → 细节层</b>」组织，逐节配图、一图一问、图文交替。可对仓库 <code>/root/workspace/vllm-ascend</code> 的 <code>8a36237e9</code> 一起读。</p>
+    背景开始前先做<b>概念爬坡</b>（从普通 attention 出发，五级爬到 SFA / indexer / DCP）；之后每阶段按「<b>概览层 → 细节层</b>」组织，逐节配图、一图一问、图文交替。可对仓库 <code>/root/workspace/vllm-ascend</code> 的 <code>8a36237e9</code> 一起读。</p>
     <div>
       <span class="badge">bugfix</span><span class="badge">20 files · +1548/−303</span><span class="badge">前因 PR #15669</span><span class="badge">浅色主题</span>
     </div>
@@ -134,7 +134,7 @@ th{background:#f0f4f8}
       <summary><span class="arrow">▸</span><span class="layer-label layer-ramp">概念爬坡</span> 从普通 attention 爬到 SFA / indexer / DCP（五级）</summary>
       <div class="inner">
 
-        <h3>爬坡第 1 级 · 普通 attention：每个 token 都要和全部历史算一遍 <span class="en">(普通 LLM 推理，你已懂，我们确认在同一页)</span></h3>
+        <h3>爬坡第 1 级 · 普通 attention：每个 token 都要和全部历史算一遍 <span class="en">(普通 LLM 推理，共同起点，确认在同一页)</span></h3>
         <p>普通大模型推理里有两段：<b>prefill</b> 一次性把整段输入并行算完，<b>decode</b> 一个 token 一个 token 往下生成。生成时当前 query 要「回头看」之前所有 token 的键值对——这些键值对被存在 <b>KV cache</b> 里，attention 用它算当前 token 与每个历史 token 的相关性。序列越长，这一步要关联的历史就越多，成本大致是平方增长（O(n²)）。</p>
         <div class="fig">
           <div class="fig-head"><span class="fig-title">爬坡图 0-1 · 普通 attention：query 对全部历史 key 打分</span><span class="fig-tag">概念爬坡 · 常识锚定（≤5 节点）</span></div>
