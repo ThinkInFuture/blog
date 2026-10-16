@@ -346,7 +346,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </div>
 
 <h2 id="s3">3. 核心思路：本地分片贯穿三个边界</h2>
-<p>PR 立了一条布局契约。DSA-CP attention 后端声明 <code>supports_sequence_parallel_input = True</code>，含义是"我收本地分片，还你本地分片"。对照图 4（业务骨架与图 2 完全一致）：①② 两处冗余直接省掉；② 的防错位职责由新增的 <b>⑤ 输入校验 + padding 清零</b>（纯本地操作）接替；④ 的归约职责并入 attention 内部的 <b>⑥ all-to-all + 单次 reduce-scatter</b>；③ 本职通信原样保留。这样三个边界（DecoderLayer ↔ MLA 包装层 ↔ DSA-CP attention）看到的是同一份连续 TP token 分片。</p>
+<p>PR 立了一条布局契约。DSA-CP attention 后端声明 <code>supports_sequence_parallel_input = True</code>，含义是"我收本地分片，还回本地分片"。对照图 4（业务骨架与图 2 完全一致）：①② 两处冗余直接省掉；② 的防错位职责由新增的 <b>⑤ 输入校验 + padding 清零</b>（纯本地操作）接替；④ 的归约职责并入 attention 内部的 <b>⑥ all-to-all + 单次 reduce-scatter</b>；③ 本职通信原样保留。这样三个边界（DecoderLayer ↔ MLA 包装层 ↔ DSA-CP attention）看到的是同一份连续 TP token 分片。</p>
 
 <div class="card">
 <svg viewBox="0 0 840 1160" role="img" aria-label="改动后：业务主线不动，只动框架线">
@@ -480,8 +480,8 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？分两步。<b>图 5</b> 先把 attention 小块放大——它背后是 vllm-ascend 的 4 层代码，四步执行流、每步收什么做什么交什么。<b>图 6</b> 再回到一条请求的完整旅程：用户请求进入上游 vLLM（Engine 接收、Scheduler 组 batch、Worker 执行），跨过插件边界交给 vllm-ascend（NPUPlatform 平台层、attention/ 注意力层、ops/ 算子层），最后由 NPU 设备计算并原路返回——<b>黄色区是上游 vLLM 的通用代码，绿色区才是 vllm-ascend 插件的代码</b>，并对照「计算」一步的改前 vs 改后。之后 4.1~4.5 的每个细节都挂回图 5 的步骤号。</p>
 
 <h3>先看一行代码：attention 是怎么"变成"代码的</h3>
-<p>你可能一直卡在同一处：<b>attention 是个计算，怎么就"变成代码"了？</b>这不是比喻，是字面意思——程序执行到模型代码里的某一行，就跳进另一段代码，把 Q / K / V 真的算出来，再跳回来继续。把那一行，和它的下探路径，原样摆出来：</p>
-<div class="codetag">模型代码（就是图 2 里 Block 的 forward，你认识的那条链）</div>
+<p>很多人会一直卡在同一处：<b>attention 是个计算，怎么就"变成代码"了？</b>这不是比喻，是字面意思——程序执行到模型代码里的某一行，就跳进另一段代码，把 Q / K / V 真的算出来，再跳回来继续。把那一行，和它的下探路径，原样摆出来：</p>
+<div class="codetag">模型代码（就是图 2 里 Block 的 forward，已认识的那条链）</div>
 <pre><span class="c"># 算 attention,在模型代码里就一行:</span>
 h = self.self_attn(positions, hidden)
 
@@ -764,7 +764,7 @@ h = self.self_attn(positions, hidden)
 <div class="card">
 <svg viewBox="0 0 760 260" role="img" aria-label="o_proj 两条收口路径">
 <defs><marker id="ah3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="380" y="26" text-anchor="middle">_finalize_sequence_parallel_o_proj：两条路，都还你本地 token 分片</text>
+<text class="th" x="380" y="26" text-anchor="middle">_finalize_sequence_parallel_o_proj：两条路，都还回本地 token 分片</text>
 <rect class="node" x="290" y="44" width="180" height="40" rx="8"/>
 <text class="tb" x="380" y="69" text-anchor="middle">attention 输出 attn_output</text>
 <path class="flow" marker-end="url(#ah3)" d="M330 84 C300 100,280 108,262 116"/>
