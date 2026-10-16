@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</title>
+<meta name="description" content="拿 A3 GLM-5.1（1009 vs 0815）排查的真实文件讲 NPU Profiling：短窗口采集、kernel_details.csv 三板斧、把 TTFT 回归钉到 DispatchFFNCombine 大 chunk。">
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:24px}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.65;margin:12px 0}
+pre code{background:none;border:none;padding:0}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+td.dim{color:var(--text-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.dim{color:var(--text-muted);font-size:13.5px}
+.note{color:var(--text-muted);font-size:13px;border-top:1px dashed var(--border);padding-top:10px;margin-top:30px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text-muted);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.4;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none;stroke-linecap:round}
+.flow{stroke:var(--brand);stroke-width:2;fill:none;stroke-linecap:round}
+.garr{stroke:var(--ok);stroke-width:2;fill:none;stroke-linecap:round}
+.rarr{stroke:var(--warn);stroke-width:2;fill:none;stroke-linecap:round}
+
+/* 新增：新手引导条 */
+.guide-bar{background:var(--brand-bg);border:1px solid var(--brand);border-radius:12px;padding:16px 20px;margin:20px 0}
+.guide-bar p{margin:0 0 8px;font-size:14px}
+.guide-bar p:last-child{margin-bottom:0}
+.guide-bar .guide-label{display:inline-block;background:var(--brand);color:#fff;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:700;margin-right:8px;vertical-align:middle}
+.guide-bar ul{margin:6px 0 0;padding-left:20px}
+.guide-bar li{font-size:13.5px;margin:3px 0}
+
+/* 新增：术语小贴士 */
+.term{display:inline-block;background:var(--surface-muted);border:1px dashed var(--border);border-radius:4px;padding:0 6px;font-size:12.5px;color:var(--text-muted);cursor:help;position:relative}
+.term:hover::after{content:attr(data-tip);position:absolute;left:0;top:100%;z-index:10;background:var(--text);color:var(--bg);padding:6px 10px;border-radius:6px;font-size:12px;white-space:nowrap;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+
+/* 新增：步骤导航 */
+.steps{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:13px;display:flex;align-items:center;gap:6px}
+.step .num{background:var(--brand);color:#fff;width:20px;height:20px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.step.active{background:var(--brand-bg);border-color:var(--brand)}
+
+/* 新增：为什么这样做 */
+.why{background:var(--surface-muted);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13.5px;border-left:3px solid var(--text-muted)}
+.why b{color:var(--brand-text)}
+
+/* 新增：结果高亮 */
+.result-hl{background:var(--ok-bg);border:1px solid var(--ok);border-radius:8px;padding:10px 14px;margin:10px 0;font-size:13.5px}
+.result-hl b{color:var(--ok)}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+<h1>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</h1>
+<div class="subtitle">拿这次 A3 GLM-5.1（1009 vs 0815）排查的真实文件讲：怎么采、采完长什么样、kernel_details.csv 怎么读、怎么从“一堆 CSV”走到“DispatchFFNCombine prefill 慢 14%”的归因。</div>
+<p class="dim" style="margin:-14px 0 22px">vLLM 源码 · 2026-10-16 发布 · vllm-ascend NPU Profiling 实战笔记</p>
+
+<!-- ====== 新手引导条 ====== -->
+<div class="guide-bar">
+  <p><span class="guide-label">新手必读</span>这篇文档是一份“从零看懂 Profiling”的实战笔记。如果你第一次接触，建议按以下顺序读：</p>
+  <ul>
+    <li><b>第 0 节</b> — 先搞懂 profiling 能回答什么问题（不用记细节，感受一下它有什么用）。</li>
+    <li><b>第 1 节</b> — 学会怎么“采数据”（这是所有分析的前提，重点看短窗口姿势）。</li>
+    <li><b>第 2 节</b> — 采完的文件长什么样，哪个文件是主战场。</li>
+    <li><b>第 3 节</b> — 核心分析三板斧：排行 → 分布 → 按 shape 拆开。</li>
+    <li><b>第 4 节</b> — 完整实战复盘，看数据怎么一步步“说话”。</li>
+    <li><b>第 5 节</b> — 坑与经验清单，提前避雷。</li>
+  </ul>
+  <p class="dim" style="margin-top:8px">💡 遇到不懂的术语，鼠标悬停在 <span class="term" data-tip="比如：kernel 就是跑在 NPU 上的计算任务">虚线词</span> 上可以看到解释。代码块可以左右滑动。</p>
+</div>
+
+<h2>0. Profiling 能回答什么问题</h2>
+<p>这次排查最终要回答的是“<b>1009 比 0815 的 TTFT 慢，到底慢在哪个算子上</b>”。端侧指标（TTFT/吞吐）只能告诉你“慢了”，profiling 才能告诉你“<b>慢在谁身上、慢多少、什么 shape 下慢</b>”。这次它交出的答案：</p>
+<ul>
+<li><b>阶段判定</b>：decode 相所有 kernel 两版本无差距 → 排除 decode；</li>
+<li><b>算子定位</b>：prefill 相 <b>DispatchFFNCombine</b>（MoE 通信融合算子）的大 chunk 调用变慢——shape [221,6144] P50 <b>3436.9 → 3710.6us（+8%）</b>，且 1009 侧出现 <b>p99 11088us</b> 的长尾（单次最大 14.5ms）；</li>
+<li><b>shape 锁定</b>：慢的调用集中在 <b>220~222 × 6144</b> 的 prefill chunk（decode 形状 1~3 token 无回退）；</li>
+<li><b>归因延伸</b>：顺着算子名去对比两版本 CANN 自定义算子包的 kernel 二进制（staticKey 全 DIFF），把结论钉死在“算子包实现变更”上。</li>
+</ul>
+<div class="why">
+  <b>为什么这些答案重要？</b> 端侧只能看到“TTFT 慢了 15%”，但没法知道是哪个算子、什么形状、什么阶段慢。Profiling 就像给 NPU 装了一个“行车记录仪”，能把每一次 kernel 执行的时间、形状、设备都录下来，让你精确找到瓶颈。
+</div>
+<p>没有 profiling，这个故事到“TTFT 慢 15-20%”就断了。</p>
+
+<h2>1. 怎么采：vllm serve 里的 --profiler-config + 短窗口姿势</h2>
+
+<!-- 步骤导航 -->
+<div class="steps">
+  <span class="step active"><span class="num">1</span> 挂参数</span>
+  <span class="step"><span class="num">2</span> 短窗口采集</span>
+  <span class="step"><span class="num">3</span> 其他要点</span>
+</div>
+
+<h3>1.1 开关：它是 serve 的独立 CLI 参数</h3>
+<p>vllm-ascend 采集 NPU profiling 不用改代码，启动时挂上 <code>--profiler-config</code>（注意：<b>独立参数</b>，不是 additional_config 里的字段——放错位置 pydantic 会报 unexpected keyword）：</p>
+<pre><code>--profiler-config '{"profiler": "torch", "torch_profiler_dir": "/home/ywx1279670/profile", "torch_profiler_with_stack": false}'</code></pre>
+<ul>
+<li><code>profiler: "torch"</code>：走 torch_npu profiler 路线（另有 mstx 等），导出 Ascend 侧解析结果；</li>
+<li><code>torch_profiler_dir</code>：数据落盘目录，<b>确保所在盘有几十 GB 空闲</b>；</li>
+<li><code>torch_profiler_with_stack: false</code>：不采调用栈。带栈的体积和噪声都大，定位 kernel 级问题不需要它。</li>
+</ul>
+
+<h3>1.2 短窗口姿势：这次最重要的一条经验</h3>
+<p>第一次全量采集直接干出 <b>257GB</b>，几乎导不动也析不动。后来固化成“压测中段 + 15 秒短窗口”的姿势，三个窗口 <code>du -sh</code> 实测 <b>13GB / 14GB / 18GB（-93%）</b>，ASCEND 输出解析约 1.5 分钟：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 300" role="img" aria-label="短窗口采集姿势时间线">
+<defs><marker id="pt" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">采集姿势：压测拉起来 → 等流量稳定 → 中段开 12 至 15 秒窗口</text>
+<path class="arr" d="M60 90 H780"/>
+<text class="ts" x="60" y="112">压测开始</text>
+<text class="ts" x="250" y="112">流量稳定（cc8 打满）</text>
+<text class="ts" x="480" y="112">start</text>
+<text class="ts" x="650" y="112">15s 后 stop</text>
+<text class="ts" x="780" y="112" text-anchor="end">压测继续/结束</text>
+<rect x="60" y="70" width="180" height="14" rx="7" fill="var(--surface-muted)" stroke="var(--border)"/>
+<rect x="440" y="70" width="220" height="14" rx="7" fill="var(--brand)"/>
+<path class="flow" d="M480 96 V70" marker-end="url(#pt)"/>
+<path class="flow" d="M660 96 V70" marker-end="url(#pt)"/>
+<rect class="wc" x="60" y="150" width="330" height="72" rx="8"/>
+<text class="tb" x="80" y="176">全量采（压测全程）</text>
+<text class="ts" x="80" y="196">数据 257GB：拷不动、解析小时级、盘随时爆</text>
+<text class="tm" x="80" y="212">这次踩过的坑</text>
+<rect class="ac" x="430" y="150" width="330" height="72" rx="8"/>
+<text class="ts" x="450" y="176">短窗口 12 至 15s</text>
+<text class="ts" x="450" y="196">数据 13~18GB（-93%）· ASCEND 输出约 1.5 分钟出全</text>
+<text class="tm" x="450" y="212">定位 kernel 级问题足够了</text>
+<text class="ts" x="60" y="262">为什么中段采：压测刚起时流量在爬坡（请求没打满），中段稳态才代表真实负载；短窗口数据量小，</text>
+<text class="ts" x="60" y="282">对比两版本时窗口条件也更容易对齐（同压测参数、同窗口长度、同 rank）。</text>
+</svg>
+<div class="figcap">图 1 · 短窗口采集姿势：257GB 教训 → 13~18GB（du -sh 实测：13 / 14 / 18GB）</div>
+</div>
+
+<div class="why">
+  <b>为什么一定要中段采？</b> 压测刚开始时流量还在爬坡，请求没打满，采集到的数据不代表真实负载。等流量稳定后再采，才能反映真实压力下的表现。短窗口则让数据量小到可以快速分析，同时更容易对齐两个版本的采集条件。
+</div>
+
+<h3>1.3 其他实操要点</h3>
+<ul>
+<li><b>只采一个 rank 就够入门</b>：DP/EP 下每 rank 是一份完整 shard 的执行记录，定位单算子慢，先看 rank0（dp0_pp0_tp0），需要看通信对齐再扩到多 rank。</li>
+<li><b>prefill / decode 分窗口采</b>：这次就是分两次采的——decode 窗口 <code>1010_cc8_mlapo</code>、prefill 窗口 <code>1010_cc8_prefill2</code>，天然把阶段分开，省得在一份数据里按 step 猜阶段。</li>
+<li><b>对照组条件对齐</b>：基线（0815 镜像）与劣化（1009 镜像）用<b>同一套压测参数</b>（3.5K+1.5K、32req、cc8、request_rate 0）、同样窗口长度、同 rank，否则对比没有意义。</li>
+</ul>
+
+<h2>2. 采完长什么样：目录结构与每个文件的用途</h2>
+<p>这次的真实路径与体积（<code>du -sh</code> / <code>ls -lh</code> 实测）：</p>
+<pre><code>/home/ywx1279670/profile/
+├── 1010_cc8_mlapo/                                        # 1009 decode 短窗口 · 18GB
+├── 1010_cc8_prefill2/                                     # 1009 prefill 短窗口 · 14GB
+│   └── dp0_pp0_tp0_dcp0_ep0_rank0_289383_20261010221318731_ascend_pt/
+│       ├── ASCEND_PROFILER_OUTPUT/                        # ★ 自动解析结果，分析主要就看这里
+│       │   ├── kernel_details.csv            209M         # ★ 每个 kernel 的每次执行一行（659657 行）
+│       │   ├── ascend_pytorch_profiler_0.db  744M         # 原始时序库（最大的一块）
+│       │   ├── task_time.csv                 138M
+│       │   ├── communication.json             85M         # 通信时序（看重叠时用）
+│       │   ├── operator_details.csv           31M         # host 侧算子明细
+│       │   ├── analysis.db                   8.1M
+│       │   ├── api_statistic.csv             8.1K        # host 侧 API 统计（很小，直接看）
+│       │   ├── op_statistic.csv              4.7K        # ★ 按算子聚合（很小，直接看）
+│       │   ├── communication_matrix.json     10K
+│       │   ├── step_trace_time.csv          295B         # 每个 step 的计算/通信拆解（一行一条）
+│       │   └── analyse.done                  0B          # 解析完成标记
+│       └── PROF_*/ host_info.log / device_*.log           # 原始二进制与日志（一般不动）
+├── 1010_cc8_0815_prefill/                                 # 0815 prefill 短窗口（对照组）· 13GB
+│   └── dp0_pp0_tp0_dcp0_ep0_rank0_165753_20261010232101886_ascend_pt/
+│       └── ASCEND_PROFILER_OUTPUT/  (kernel_details.csv 200M · 636120 行，结构同上)
+└── parsed_r0/k10_rank0.csv                                # 早期一次采集的解析结果（留存对比用）</code></pre>
+<p class="dim">两个细节：①目录名里带 <code>dp0_pp0_tp0_dcp0_ep0_rank0</code>（并行布局与 rank）和采集时刻时间戳（如 <code>20261010221318731</code>），对比两份数据前先对时间戳与 rank；②这套工具链导出里<b>没有</b> profiler_info.json / CHROME_TRACE，不同版本文件清单略有差异，以实际 ls 为准。</p>
+<table>
+<tr><th>文件</th><th>粒度</th><th>什么时候用它</th></tr>
+<tr><td><b>kernel_details.csv</b></td><td>device 上每个 kernel <b>每次执行一行</b></td><td>主力文件：按 kernel 名聚合、看分布（P50/P99）、按 shape 分阶段，全靠它</td></tr>
+<tr><td>op_statistic.csv</td><td>按算子<b>聚合后</b>的统计</td><td>快速看“谁总耗时最大”，但<b>看不到分布和 shape 细节</b>，定位长尾必须回 kernel_details</td></tr>
+<tr><td>step_trace_time.csv</td><td>每个 step 一行</td><td>看计算/通信拆解与重叠（本例全文只有一行，见下方实际数据）；没分窗口采时靠它分阶段</td></tr>
+<tr><td>api_statistic.csv</td><td>host 侧 API 聚合统计，几 KB</td><td>看 CPU 侧谁在烧时间（tiling、拷贝）；与 op_statistic 分工：它看 host，op_statistic 看 device</td></tr>
+<tr><td>communication.json / communication_matrix.json</td><td>通信时序 / 矩阵</td><td>看通信与计算重叠、卡间流量；本例 85M，按需加载</td></tr>
+</table>
+<div class="kp t"><span class="kp-t">解析工具怎么选（本次实测）</span>数据落在 <code>ASCEND_PROFILER_OUTPUT</code> 是<b>自动</b>的（torch 路线导出即解析，约 1.5 分钟）；<code>torch_npu.analyse</code> 接口也可以手动触发；<code>msprof --parse=on</code> 我们试过一次失败——优先用自动产物，别恋战。</div>
+
+<h2>3. kernel_details.csv 怎么读：三板斧</h2>
+
+<div class="steps">
+  <span class="step active"><span class="num">1</span> 列含义</span>
+  <span class="step"><span class="num">2</span> 实际数据</span>
+  <span class="step"><span class="num">3</span> 分析流程</span>
+  <span class="step"><span class="num">4</span> pandas 模板</span>
+</div>
+
+<h3>3.1 列含义（本例真实表头）</h3>
+<p>真实表头（两版本一致）：</p>
+<pre><code>Device_id, Model ID, Task ID, Stream ID, Name, Type, OP State, Accelerator Core,
+Start Time(us), Duration(us), Wait Time(us), Block Num, Mix Block Num, HF32 Eligible,
+Input Shapes, Input Data Types, Input Formats, Output Shapes, Output Data Types, Output Formats,
+Context ID, aicore_time(us), aic_total_cycles, aic_mac_time</code></pre>
+<table>
+<tr><th>列</th><th>本例的样子</th><th>分析时怎么用</th></tr>
+<tr><td><b>Name</b></td><td><code>DispatchFFNCombine</code>、<code>aclnnQuantMatmulWeightNz_QuantBatchMatmulV3_...</code></td><td>聚合维度；str.contains 锁目标算子</td></tr>
+<tr><td><b>Duration(us)</b></td><td>如 3963.123（小数，微秒）</td><td>核心指标：sum 看总量、分位数看分布</td></tr>
+<tr><td><b>Input Shapes</b></td><td><code>"220,6144;8,6144,4096;8,2048,6144;..."</code></td><td><b>本案例的关键钥匙</b>：按它分组才能拆出 prefill 大 chunk 调用</td></tr>
+<tr><td>Start Time(us)</td><td>纳秒级时间戳（如 1791641598803750.295）</td><td>切窗口、看时序（是否与通信重叠）</td></tr>
+<tr><td>Accelerator Core</td><td>AI_CORE / AI_VECTOR_CORE / AI_CPU / MIX_AIC</td><td>区分 cube / vector / cpu kernel； MIX_AIC = 融合大算子</td></tr>
+<tr><td>Device / Stream / Task ID</td><td>0 / 47 / 43982</td><td>多卡多流时区分归属；单 rank 分析基本不用管</td></tr>
+</table>
+
+<h3>3.2 文件里的实际数据（原样摘录）</h3>
+<p><b>kernel_details.csv 前 2 行数据</b>（每行截断，真实内容）——开头都是些 1~3us 的小 kernel：</p>
+<pre><code>0,4294967295,43982,47,aclnnInplaceFillScalar_FillAiCore_Fill,Fill,dynamic,AI_VECTOR_CORE,1791641598803750.295,1.560,0,1,0,NO,"""1;""",INT64;INT32,ND;ND,"""9""",INT32,ND,...
+0,4294967295,43987,47,aclnnIndex_IndexCheck_IndexCheck,IndexCheck,dynamic,AI_VECTOR_CORE,1791641598804008.502,3.120,256.690000,4,0,NO,"""1;4""",INT64;INT64,ND;ND,N/A,N/A,N/A,...</code></pre>
+<p><b>op_statistic.csv（4.7KB，全文可直接看）前几行</b>——30 秒摸底就看它：DispatchFFNCombine 一家占 <b>40.5%</b>：</p>
+<pre><code>Device_id,OP Type,Core Type,Count,Total Time(us),Min Time(us),Avg Time(us),Max Time(us),Ratio(%)
+0,DispatchFFNCombine,MIX_AIC,12007,4574397.762,204.794,380.978,14539.16,40.534
+0,QuantBatchMatmulV3,MIX_AIC,54036,1378404.569,9.162,25.509,290.756,12.214
+0,SparseFlashAttention,MIX_AIC,12469,1284798.358,93.464,103.039,938.124,11.385
+0,TransposeBatchMatMul,AI_CORE,24939,549558.977,18.224,22.036,85.243,4.87
+0,allgatherAicpuKernel,AI_CPU,249,467424.672,279.793,1877.208,65305.219,4.142
+0,MatMulV2,AI_CORE,17212,407542.289,11.863,23.678,223.238,3.611
+0,reduce_scatterAicpuKernel,AI_CPU,171,172385.056,246.744,1008.1,5012.683,1.528</code></pre>
+<p><b>step_trace_time.csv（295B，全文就一行）</b>——这个窗口计算为主、通信大半被重叠：</p>
+<pre><code>Device_id,Step,Computing,Communication(Not Overlapped),Overlapped,Communication,Free,Stage,Bubble,...
+0,,10604437.507,  1318080.581,  38628.661,  1356709.242,  451331.072,  12373849.25, 0,...</code></pre>
+<p class="dim">读法：窗口总时长约 13.9s，其中 Computing 10.6s（76%），不重叠通信 1.32s（9.5%），Overlapped 仅 38.6ms——说明通信几乎都被计算盖住了，<b>瓶颈在 kernel 执行本身</b>，这也是后面敢把矛头指向单算子耗时的依据之一。</p>
+<p><b>api_statistic.csv 前几行</b>——host 侧视角，看 CPU 侧谁在烧时间：</p>
+<pre><code>Device_id,Level,API Name,Time(us),Count,Avg(us),Min(us),Max(us),Variance
+host,communication,AivKernel,157403.46,6271,25.1,18.48,70.74,10.974
+host,acl,Cast_Tiling,20853.01,1232,16.926,5.18,313.13,289.435
+host,acl,ForeachAddList_Tiling,34145.23,1674,20.397,0.63,767.48,1125.884</code></pre>
+
+<h3>3.3 分析流程</h3>
+<div class="card">
+<svg viewBox="0 0 840 190" role="img" aria-label="kernel_details 分析流程">
+<defs><marker id="at" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="24" y="40" width="140" height="60" rx="8"/>
+<text class="tb" x="94" y="62" text-anchor="middle">① 全局排行</text>
+<text class="ts" x="94" y="82" text-anchor="middle">按 kernel 名 sum 排序</text>
+<text class="ts" x="94" y="118" text-anchor="middle">谁总耗时最大</text>
+<path class="flow" d="M164 70 H196" marker-end="url(#at)"/>
+<rect class="bc" x="200" y="40" width="150" height="60" rx="8"/>
+<text class="tb" x="275" y="62" text-anchor="middle">② 锁算子看分布</text>
+<text class="ts" x="275" y="82" text-anchor="middle">count / mean / P50 / P99</text>
+<text class="ts" x="275" y="118" text-anchor="middle">P99 差大=长尾问题</text>
+<path class="flow" d="M350 70 H382" marker-end="url(#at)"/>
+<rect class="bc" x="386" y="40" width="150" height="60" rx="8"/>
+<text class="tb" x="461" y="62" text-anchor="middle">③ 按 shape 分阶段</text>
+<text class="ts" x="461" y="82" text-anchor="middle">220~222×6144=prefill</text>
+<text class="ts" x="461" y="118" text-anchor="middle">1~4 行=decode</text>
+<path class="flow" d="M536 70 H568" marker-end="url(#at)"/>
+<rect class="ac" x="572" y="40" width="120" height="60" rx="8"/>
+<text class="tb" x="632" y="62" text-anchor="middle">④ 两版本对齐比</text>
+<text class="ts" x="632" y="82" text-anchor="middle">同 kernel 同 shape</text>
+<text class="ts" x="632" y="118" text-anchor="middle">0815 vs 1009 逐名对比</text>
+<path class="flow" d="M692 70 H724" marker-end="url(#at)"/>
+<rect class="ac" x="728" y="40" width="88" height="60" rx="8"/>
+<text class="tb" x="772" y="62" text-anchor="middle">⑤ 归因</text>
+<text class="ts" x="772" y="82" text-anchor="middle">算子包/代码</text>
+<text class="ts" x="461" y="160" text-anchor="middle">①②回答“谁慢”，③回答“什么条件下慢”，④⑤回答“为什么慢”——本次按此顺序走通</text>
+</svg>
+<div class="figcap">图 2 · kernel_details.csv 分析五步：排行 → 分布 → shape → 对比 → 归因</div>
+</div>
+
+<div class="why">
+  <b>为什么不能只看均值？</b> 均值会把“偶尔很慢”和“一直有点慢”混在一起。比如这次，全窗口池化后 1009 的 p50 反而更低，因为窗口里混了大量 ~300us 的 decode 小调用，把 prefill 大 chunk 的变慢稀释了。所以必须看 p99（长尾）并且按 shape 拆开。
+</div>
+
+<h3>3.4 pandas 模板（这次分析脚本的骨架，列名按真实文件写）</h3>
+<pre><code>import pandas as pd, glob
+
+# ---- 取文件：递归找 ASCEND_PROFILER_OUTPUT 下的 kernel_details.csv ----
+f = glob.glob("/home/ywx1279670/profile/1010_cc8_prefill2/**/kernel_details.csv",
+              recursive=True)[0]
+df = pd.read_csv(f)          # 本例 209MB / 659657 行，读入约 1~2 分钟
+
+dur, name, shp = "Duration(us)", "Name", "Input Shapes"
+
+# ---- ① 全局排行：谁总耗时最大（等价于看 op_statistic.csv，但可算分位数）----
+top = (df.groupby(name)[dur]
+         .agg(cnt="count", total="sum", mean="mean",
+              p50=lambda s: s.quantile(.5), p99=lambda s: s.quantile(.99))
+         .sort_values("total", ascending=False).head(20))
+print(top)
+
+# ---- ② 锁定目标算子，看分布 ----
+k = df[df[name].str.contains("DispatchFFNCombine", na=False)]
+print(len(k), k[dur].mean(), k[dur].quantile(.5), k[dur].quantile(.99))
+
+# ---- ③ 按 Input Shapes 分组（★关键：不按 shape 拆开看不到真差距）----
+k = k.assign(shapes=k[shp].astype(str))
+g = (k.groupby("shapes")[dur]
+       .agg(cnt="count", mean="mean",
+            p50=lambda s: s.quantile(.5), p99=lambda s: s.quantile(.99))
+       .sort_values("cnt", ascending=False))
+print(g.head(6))
+
+# ---- ④ 两版本对齐对比：同一套聚合分别跑 0815 / 1009 目录后按 shapes 拼表 ----
+# cmp = g0815.join(g1009, lsuffix="_0815", rsuffix="_1009")
+# 只看“大 chunk”那几行（shapes 里首维 220~222），p50/p99 逐行对比</code></pre>
+<p class="dim">服务器上当时的分析脚本（<code>/tmp/analyze_tri2.py</code> 三边对比、<code>/tmp/deep_analyse.py</code> shape/重叠深挖）就是这个骨架加上多目录循环和输出整理。下面的实战复盘全部是按这个模板跑出来的真实数字。</p>
+
+<h2>4. 实战复盘：从两份 CSV 到“FFNCombine 大 chunk 回退”</h2>
+<p>按 3.4 的模板把两份 prefill 窗口各跑一遍，<b>下面所有表都是脚本真实输出</b>（本次复核重跑）。</p>
+
+<div class="steps">
+  <span class="step active"><span class="num">1</span> 全局排行</span>
+  <span class="step"><span class="num">2</span> 看分布</span>
+  <span class="step"><span class="num">3</span> 按 shape 拆</span>
+  <span class="step"><span class="num">4</span> 结论</span>
+</div>
+
+<h3>4.1 第一步：全局排行——两版本 top10（按总耗时）</h3>
+<table>
+<tr><th colspan="4">1009（1010_cc8_prefill2，窗口 kernel 总耗时 13.8s）</th><th colspan="4">0815（1010_cc8_0815_prefill，15.7s）</th></tr>
+<tr><th>kernel</th><th>次数</th><th>总ms</th><th>占比</th><th>kernel</th><th>次数</th><th>总ms</th><th>占比</th></tr>
+<tr><td><b>DispatchFFNCombine</b></td><td>12007</td><td>4574.4</td><td>33.1%</td><td><b>DispatchFFNCombine</b></td><td>10218</td><td>4772.3</td><td>30.4%</td></tr>
+<tr><td>QuantBatchMatmulV3(NZ)</td><td>65970</td><td>1511.0</td><td>10.9%</td><td>QuantBatchMatmulV3(NZ)</td><td>55962</td><td>1651.6</td><td>10.5%</td></tr>
+<tr><td>SparseFlashAttention</td><td>12469</td><td>1284.8</td><td>9.3%</td><td><b>reduce_scatter</b></td><td>400</td><td>1489.0</td><td>9.5%</td></tr>
+<tr><td>AivKernel</td><td>78382</td><td>1174.7</td><td>8.5%</td><td>SparseFlashAttention</td><td>10611</td><td>1267.8</td><td>8.1%</td></tr>
+<tr><td>TransposeBatchMatMul</td><td>24939</td><td>549.6</td><td>4.0%</td><td><b>allgather</b></td><td>412</td><td>1070.4</td><td>6.8%</td></tr>
+<tr><td><b>allgather</b></td><td>249</td><td>467.4</td><td>3.4%</td><td>AivKernel</td><td>34714</td><td>724.9</td><td>4.6%</td></tr>
+<tr><td>MatMulV2</td><td>17212</td><td>407.5</td><td>2.9%</td><td>MatMulV2</td><td>25283</td><td>562.7</td><td>3.6%</td></tr>
+<tr><td>AscendQuantV2</td><td>41104</td><td>356.1</td><td>2.6%</td><td>AscendQuantV2</td><td>34977</td><td>303.4</td><td>1.9%</td></tr>
+<tr><td>ForeachAddList</td><td>12008</td><td>213.6</td><td>1.5%</td><td>ScatterNdUpdate</td><td>10611</td><td>279.1</td><td>1.8%</td></tr>
+<tr><td><b>reduce_scatter</b></td><td>171</td><td>172.4</td><td>1.2%</td><td>BatchMatMulV2</td><td>10611</td><td>220.6</td><td>1.4%</td></tr>
+</table>
+<p>排行本身就有信息量：<b>1009 的集合通信便宜了很多</b>（reduce_scatter 1489→172ms、allgather 1070→467ms，这是 1009 通信优化的收益），FFNCombine 总耗时反而还低了（4772→4574ms，调用次数还多 17%）。<b>单看总量排名，根本发现不了回退</b>——这正是第二步要按分布、第三步要按 shape 拆的原因。</p>
+
+<h3>4.2 第二步：锁 DispatchFFNCombine 看分布（全窗口池化）</h3>
+<pre><code>### DispatchFFNCombine 对比（全窗口池化）
+0815 {'cnt': 10218, 'mean': 467.0, 'p50': 304.8, 'p99': 3971.4, 'sum_s': 4.77}
+1009 {'cnt': 12007, 'mean': 381.0, 'p50': 276.3, 'p99': 4116.7, 'sum_s': 4.57}</code></pre>
+<p>池化口径下 1009 的 p50 / mean <b>反而更低</b>——因为窗口里混着两类调用：~300us 的 <b>decode 形状小调用</b>（1~3 token）和 3~4ms 的 <b>prefill 大 chunk 调用</b>，两个窗口里两类调用的比例不一样（1009 窗口小调用 11622 次 / 0815 窗口 9672 次），直接池化会被稀释甚至比反。<b>必须按 Input Shapes 拆开。</b></p>
+
+<div class="why">
+  <b>这里最容易掉坑：</b> 如果只看到池化后的数字（p50 更低），可能会错误地认为 1009 更快。但真相是：池化把两种完全不同的调用（decode 小调用 vs prefill 大 chunk）混在一起，而两个窗口里它们的比例不同，导致统计结果被“稀释”甚至“比反”。所以一定要按 Input Shapes 分组。
+</div>
+
+<h3>4.3 第三步：按 Input Shapes 分组（真实输出，本案例的转折点）</h3>
+<pre><code>### 1009 prefill（按 shape 分组，Duration(us)）
+shapes                                                        cnt   mean     p50      p99
+1,6144;8,6144,4096;...（decode 形状）                        9672   276.8   275.7    334.0
+2,6144;8,6144,4096;...（decode 形状）                        1950   276.6   274.5    385.2
+220,6144;8,6144,4096;...（prefill 大 chunk）                  234  4117.6  3972.5  11088.4
+221,6144;8,6144,4096;...（prefill 大 chunk）                  151  2613.4  3710.6   4819.7
+
+### 0815 prefill
+shapes                                                        cnt   mean     p50      p99
+2,6144;8,6144,4096;...（decode 形状）                        7020   303.6   303.8    334.4
+3,6144;8,6144,4096;...（decode 形状）                        2652   307.5   305.3    435.7
+221,6144;8,6144,4096;...（prefill 大 chunk）                  468  3249.2  3436.9   5544.6
+222,6144;8,6144,4096;...（prefill 大 chunk）                   78  3909.8  3623.0   8034.6</code></pre>
+
+<div class="result-hl">
+  <b>🔍 拆开立刻现形：</b>
+  <ul style="margin:6px 0 0;padding-left:20px">
+    <li><b>decode 形状（1~3 token）</b>：0815 p50 303.8 / 1009 p50 275.7——<b>1009 甚至更快，decode 无回退</b>（端侧 TPOT 持平的微观证据）；</li>
+    <li><b>prefill 大 chunk（220~222 token）</b>：同 shape 可比的 [221,6144]：<b>3436.9 → 3710.6us（+8%）</b>；1009 独有的 [220,6144] 更是 <b>p50 3972.5、p99 11088</b>（对应 op_statistic 里的 Max 14539us）；</li>
+    <li>两个窗口的 chunk 尺寸分布不同（0815 以 221/222 为主，1009 以 220/221 为主），所以当年分析把 220~222 池化后报的是 <b>+14%（P50 3469→3963）</b>——口径不同数字不同，<b>方向一致：大 chunk 路径在 1009 上更慢、长尾更差</b>。</li>
+  </ul>
+</div>
+
+<div class="card">
+<svg viewBox="0 0 840 300" role="img" aria-label="DispatchFFNCombine 按 shape 的真实对比">
+<text class="th" x="420" y="24" text-anchor="middle">DispatchFFNCombine P50 对比（真实数据，按 Input Shapes 分组）</text>
+<text class="ts" x="270" y="66" text-anchor="end">[221,6144] · 0815</text>
+<rect x="280" y="48" width="369" height="26" rx="6" fill="#16a34a"/>
+<text class="tb" x="657" y="66">3436.9 us</text>
+<text class="ts" x="270" y="102" text-anchor="end">[221,6144] · 1009</text>
+<rect x="280" y="84" width="398" height="26" rx="6" fill="var(--brand)"/>
+<text class="tb" x="686" y="102">3710.6 us　+8%</text>
+<text class="ts" x="270" y="138" text-anchor="end">[220,6144] · 1009</text>
+<rect x="280" y="120" width="426" height="26" rx="6" fill="var(--warn)"/>
+<text class="tb" x="698" y="138" text-anchor="end" style="fill:#fff">3972.5 us（p99 11088）</text>
+<text class="ts" x="270" y="174" text-anchor="end">[220,6144] · 0815</text>
+<rect x="280" y="156" width="426" height="26" rx="6" fill="var(--surface)" stroke="var(--border)" stroke-dasharray="5 4"/>
+<text class="ts" x="290" y="174">本窗口无该 shape 调用（0815 的 chunk 以 221/222 为主）</text>
+<path class="arr" d="M280 216 H706"/>
+<text class="ts" x="270" y="232" text-anchor="end">decode 形状 [2,6144] · 0815</text>
+<rect x="280" y="218" width="33" height="18" rx="4" fill="#16a34a"/>
+<text class="ts" x="321" y="232">303.8</text>
+<text class="ts" x="270" y="262" text-anchor="end">decode 形状 [1,6144] · 1009</text>
+<rect x="280" y="248" width="30" height="18" rx="4" fill="var(--brand)"/>
+<text class="ts" x="318" y="262">275.7 —— decode 无回退</text>
+<text class="tm" x="60" y="292">条长按 us 等比；数据来自两份 kernel_details.csv 按 Input Shapes 分组的真实统计。</text>
+</svg>
+<div class="figcap">图 3 · 同算子按 shape 拆开后的真实对比：大 chunk +8%、长尾 p99 11088us、decode 无回退</div>
+</div>
+
+<table>
+<tr><th>步骤</th><th>做了什么</th><th>看到什么</th><th>结论推进</th></tr>
+<tr><td>窗口准备</td><td>0815 / 1009 各采 15s prefill 窗口（同压测参数：3.5K+1.5K、32req、cc8）</td><td>两份 <code>..._ascend_pt/ASCEND_PROFILER_OUTPUT/</code>（14GB / 13GB）</td><td>可比对的前提成立</td></tr>
+<tr><td>① 排行</td><td>两份各跑 groupby total 排行</td><td>FFNCombine 均为第一（30~33%）；通信算子 1009 明显变便宜；FFNCombine 总耗时看不出回退</td><td>排除 decode 窗口嫌疑；<b>总量口径失效，转分布</b></td></tr>
+<tr><td>② 分布</td><td>锁 DispatchFFNCombine 看 P50/P99（池化）</td><td>p50 反而 304.8→276.3——池化被两类调用比例稀释</td><td><b>池化口径失效，转 shape 分组</b></td></tr>
+<tr><td>③ shape</td><td>按 Input Shapes 分组统计</td><td>[221,6144] 3436.9→3710.6（+8%）；[220,6144] p99 11088；decode 形状无回退</td><td>锁定“prefill 大 chunk 路径”，decode 无关</td></tr>
+<tr><td>④ 干扰排除</td><td>step_trace 看重叠、shape 同分布检查</td><td>Computing 76% / 不重叠通信 9.5%，大 chunk 调用与 decode 通信无重叠</td><td>排除调度/重叠干扰，慢是“纯执行”慢</td></tr>
+<tr><td>⑤ 归因</td><td>对比两版本 CANN 自定义算子包</td><td><code>libcust_opapi.so</code> / <code>libcust_opsproto_rt2.0.so</code> / <code>binary_info_config.json</code> / <code>dispatch_ffn_combine_bf16.json</code> 的 <b>staticKey 全部 DIFF</b></td><td>0815→1009 间算子包更新了 kernel 实现 → 提单算子团队</td></tr>
+</table>
+
+<div class="kp"><span class="kp-t">交叉验证别忘了端侧指标</span>profiling 结论要能解释端侧：TTFT 差距约 15-20%，而 DispatchFFNCombine 占窗口 kernel 总耗时的 30~40%、大 chunk 调用慢 8~14%（池化口径），两者量级吻合；后来 <code>enable_prefill_mc2</code> 开关验证 TTFT 持平（753-768 vs 739-759）、mlapo 无收益，也都与“瓶颈在这个融合算子实现”自洽。<b>profiling 证据 + 开关实验 + 端侧指标三方对上，结论才算闭环。</b></div>
+
+<h2>5. 坑与经验清单（都是这次交过学费的）</h2>
+<ul>
+<li><b>数据量失控</b>：全量采集 257GB——务必短窗口（12~15s）、关 with_stack、先查盘空间。</li>
+<li><b>窗口没对齐就开比</b>：两份 profile 必须同压测参数、同窗口长度、同 rank；本例没有 profiler_info.json，就核对目录名里的时间戳。</li>
+<li><b>只看均值/总量会漏案，池化还会稀释差距</b>：这次 FFNCombine 总耗时 4772→4574ms 反而更低、池化 p50 304.8→276.3 也是更低——直到按 Input Shapes 拆开才看到大 chunk +8%、p99 11088 的长尾。窗口里混着 decode 小调用和 prefill 大 chunk 时，<b>比例不同就会把差距洗掉甚至比反</b>，分布必须带 p50/p99、分组必须到 shape。</li>
+<li><b>op_statistic.csv 看不到长尾</b>：它是预聚合的，定位分布问题必须回到 kernel_details.csv 明细。</li>
+<li><b>阶段不分离会误判</b>：prefill/decode 混在一份数据里，慢算子可能只是 decode 拖尾；分窗口采集（这次的做法）最省心，退而求其次用 shape/step_trace 分。</li>
+<li><b>归因要落到物</b>：耗时对比只能说明“哪个算子慢”，要回答“为什么慢”得继续往下挖——对比 kernel 二进制（staticKey / md5）、翻算子包版本变更，或提单给算子团队带上两份 kernel_details.csv。</li>
+<li><b>解析工具别恋战</b>：ASCEND_PROFILER_OUTPUT 自动产物优先；msprof --parse=on 失败就换路，别卡死一条道。</li>
+</ul>
+
+<p class="note">注：文中目录名、文件体积、行数与全部统计数字（257GB / 13~18GB / 659657 行 / op_statistic 占比 40.5% / [221,6144] P50 3436.9→3710.6us / [220,6144] p99 11088us / staticKey DIFF 等）为本次排查实测与复核重跑的真实输出；当年报告口径为 220~222 池化 P50 3469→3963us（+14%），两者方向一致、幅度随分组口径略有差异。</p>
+
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
