@@ -402,7 +402,7 @@ next_token = sample(probs)
             <div class="fig-caption">图2 · 从概率到 Logits 的「展开」过程</div>
 
             <h3>🧪 一个具体的例子</h3>
-            <p>假设猫的概率 p = 0.8，那么 Odds = 0.8/0.2 = 4，Logits = ln(4) ≈ 1.386。如果 p = 0.99，Odds = 99，Logits ≈ 4.595。你看，<strong>越接近 1，Logits 就越大</strong>，模型就越「自信」。反过来 p = 0.1，Logits ≈ −2.197，表示模型觉得这事儿不靠谱。</p>
+            <p>假设猫的概率 p = 0.8，那么 Odds = 0.8/0.2 = 4，Logits = ln(4) ≈ 1.386。如果 p = 0.99，Odds = 99，Logits ≈ 4.595。可见，<strong>越接近 1，Logits 就越大</strong>，模型就越「自信」。反过来 p = 0.1，Logits ≈ −2.197，表示模型觉得这事儿不靠谱。</p>
             <div class="code-label">🐍 从概率到 Logits 的转换</div>
             <div class="code-block">
                 <pre>
@@ -623,7 +623,7 @@ logits = linear_layer(hidden)           <span class="comment"># 形状: (1, 1, 5
             <div class="fig-caption">最终 · 完整流程再回顾</div>
             <p style="margin-top: 1.2rem;"><strong>记住这句话：</strong> 概率是给人类看的，<strong>Logits 才是模型真正「爱」的</strong>。而 Temperature 和采样，则决定了这个模型是 <strong>「严肃的专家」</strong> 还是 <strong>「天马行空的诗人」</strong>。</p>
             <div class="tip" style="border-left-color: #8b5cf6; background: #f5f3ff;">
-                <span class="emoji">🚀</span> <strong>最后的小彩蛋：</strong> 下次你问 AI 同一个问题两次得到不同答案，别觉得它「精分」—— 它只是按照你给的 Temperature，在转盘上重新抽了一次签而已！
+                <span class="emoji">🚀</span> <strong>最后的小彩蛋：</strong> 下次问 AI 同一个问题两次得到不同答案，别觉得它「精分」—— 它只是按照给出的 Temperature，在转盘上重新抽了一次签而已！
             </div>
         </section>
 
