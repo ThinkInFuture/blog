@@ -142,12 +142,12 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 </div>
 
 <h2 id="s0">0. 三层视角：参数、路径、算子</h2>
-<p class="lead">同一次推理可以从三层看：<b>配置层</b>（你敲的参数）、<b>框架层</b>（vllm / vllm-ascend 据此组织的执行路径）、<b>算子层</b>（NPU 上真正跑的 kernel）。<b>profiling</b>（op_statistic.csv / kernel_details.csv）就是算子层的观测窗口。</p>
+<p class="lead">同一次推理可以从三层看：<b>配置层</b>（启动敲进的参数）、<b>框架层</b>（vllm / vllm-ascend 据此组织的执行路径）、<b>算子层</b>（NPU 上真正跑的 kernel）。<b>profiling</b>（op_statistic.csv / kernel_details.csv）就是算子层的观测窗口。</p>
 <div class="card">
 <svg viewBox="0 0 840 260" role="img" aria-label="三层视角">
 <defs><marker id="m0" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <rect class="bc" x="40" y="30" width="240" height="66" rx="8"/>
-<text class="tb" x="160" y="54" text-anchor="middle">配置层 · 你敲的参数</text>
+<text class="tb" x="160" y="54" text-anchor="middle">配置层 · 敲进的参数</text>
 <text class="ts" x="160" y="74" text-anchor="middle">--quantization ascend · enable_fused_mc2</text>
 <text class="ts" x="160" y="90" text-anchor="middle">--enable-chunked-prefill · mtp ...</text>
 <path class="flow" d="M160 96 V124" marker-end="url(#m0)"/>
@@ -284,7 +284,7 @@ reduce_scatterAicpu  AI_CPU           171      172.4   1008.1     1.5   ← TP16
 <path class="arr" d="M680 176 V204" marker-end="url(#m2)"/>
 <rect class="node" x="20" y="208" width="800" height="60" rx="8"/>
 <text class="ts" x="420" y="230" text-anchor="middle">第二步看 kernel_details 的 Input Shapes：首维 220 至 222 → prefill 大 chunk（3.5K 输入 + CP16 + chunked prefill）；</text>
-<text class="ts" x="420" y="250" text-anchor="middle">首维 1 至 4 → decode（MTP num=3 → 最多 4）。shape 分布还能告诉你窗口里 prefill/decode 的比例</text>
+<text class="ts" x="420" y="250" text-anchor="middle">首维 1 至 4 → decode（MTP num=3 → 最多 4）。shape 分布还能反映窗口里 prefill/decode 的比例</text>
 <rect class="wc" x="20" y="292" width="800" height="72" rx="8"/>
 <text class="tb" x="420" y="316" text-anchor="middle">第三步查通信算子占比：allgather / reduce_scatter / all_to_all 高 → 并行度大或通信没被计算盖住</text>
 <text class="ts" x="420" y="338" text-anchor="middle">（我们 0815→1009：reduce_scatter 1489→172ms，是通信优化的痕迹，不是负载变了）</text>
