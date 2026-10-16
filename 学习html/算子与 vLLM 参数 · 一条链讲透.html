@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>算子与 vLLM 参数：一条链讲透</title>
+<meta name="description" content="用 GLM-5.1 真实启动参数与 op_statistic.csv 讲清参数 → 框架执行路径 → 算子 → profiling 这条链：四种影响方式、fused_mc2 开关实例、shape 里的配置信息、三步反推配置。">
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:920px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border);scroll-margin-top:20px}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text);scroll-margin-top:20px}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:24px}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.5px;line-height:1.65;margin:12px 0}
+pre code{background:none;border:none;padding:0}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.dim{color:var(--text-muted);font-size:13.5px}
+.note{color:var(--text-muted);font-size:13px;border-top:1px dashed var(--border);padding-top:10px;margin-top:30px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text-muted);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.4;stroke-dasharray:5 4}
+.oc{fill:#fff7ed;stroke:#ea580c;stroke-width:1.5}
+@media (prefers-color-scheme: dark){ .oc{fill:#3a2613} }
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none;stroke-linecap:round}
+.flow{stroke:var(--brand);stroke-width:2;fill:none;stroke-linecap:round}
+
+/* ---- 新手友好相关新增 ---- */
+.summary{
+  background:linear-gradient(135deg, var(--brand-bg), var(--accent-bg));
+  border:1px solid var(--border);border-radius:12px;padding:16px 20px;margin:20px 0;
+  font-size:14.5px;line-height:1.75;
+}
+.summary b{color:var(--brand-text)}
+.summary .lbl{display:inline-block;font-weight:700;color:var(--accent-text);margin-right:6px}
+
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 24px;margin:24px 0}
+.toc h2{font-size:15px;margin:0 0 10px;padding:0;border:none;color:var(--text-muted);font-weight:600;letter-spacing:.5px}
+.toc ol{margin:0;padding-left:22px;columns:2;column-gap:36px}
+.toc li{margin:6px 0;font-size:14px;break-inside:avoid}
+.toc a{color:var(--brand-text);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+@media (max-width:640px){ .toc ol{columns:1} }
+
+.tip{
+  background:var(--surface);border:1px dashed var(--border);border-radius:8px;
+  padding:10px 14px;margin:14px 0;font-size:13.5px;color:var(--text-muted);
+}
+.tip b{color:var(--text)}
+
+.lead{margin:12px 0 14px;font-size:14.5px;color:var(--text);padding-left:12px;border-left:3px solid var(--surface-muted)}
+.lead b{color:var(--brand-text)}
+
+.backtop{
+  display:inline-block;margin-top:20px;font-size:13px;color:var(--text-muted);
+  text-decoration:none;border:1px solid var(--border);border-radius:6px;
+  padding:4px 10px;background:var(--surface);
+}
+.backtop:hover{color:var(--brand-text);border-color:var(--brand)}
+
+.tag{
+  display:inline-block;font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:5px;
+  margin-right:6px;vertical-align:middle;
+}
+.tag.b{background:var(--brand-bg);color:var(--brand-text)}
+.tag.t{background:var(--accent-bg);color:var(--accent-text)}
+.tag.w{background:var(--warn-bg);color:var(--warn)}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap" id="top">
+
+<h1>算子与 vLLM 参数：一条链讲透</h1>
+<div class="subtitle">启动命令里的每个参数，最终都落到 device 上一串具体的 kernel。这篇用 GLM-5.1 的真实启动参数 + 真实 op_statistic.csv，讲清"参数 → 框架执行路径 → 算子 → profiling"这条链，以及怎么反向从算子排行反推配置。</div>
+<p class="dim" style="margin:-14px 0 22px">vLLM 源码 · 2026-10-16 发布 · 参数→算子链路实战笔记</p>
+
+<div class="summary">
+  <span class="lbl">一句话总结：</span>启动命令里的每个参数，最终都会变成 NPU 上一串具体的 kernel。读懂 <b>参数 → 框架路径 → 算子 → profiling</b> 这条链，就能<b>正向预测</b>一个参数会动哪些算子，也能<b>反向</b>从算子排行反推它跑的是什么配置。
+</div>
+
+<nav class="toc" aria-label="目录">
+  <h2>目 录</h2>
+  <ol>
+    <li><a href="#s0">三层视角：参数、路径、算子</a></li>
+    <li><a href="#s1">参数影响算子的四种方式</a></li>
+    <li><a href="#s2">实测对照：参数 → 算子清单</a></li>
+    <li><a href="#s3">① 换实现：fused_mc2 开关前后</a></li>
+    <li><a href="#s4">② 换 shape：shape 里藏着配置</a></li>
+    <li><a href="#s5">反向：从 csv 反推配置</a></li>
+    <li><a href="#s6">验证参数生效的三板斧</a></li>
+    <li><a href="#s7">常见疑问 FAQ</a></li>
+  </ol>
+</nav>
+
+<div class="tip">
+  <b>新手提示：</b>本文出现的 <code>op_statistic.csv</code> 是算子级的聚合统计（每个算子一共调用了多少次、耗时多少），<code>kernel_details.csv</code> 是每一次调用的明细。阅读时可以按"先看第 1 节的四种影响方式 → 再看第 3、4 节的例子 → 最后看第 5 节的反推"这个顺序，跳过第 2 节的大表也不影响理解。
+</div>
+
+<h2 id="s0">0. 三层视角：参数、路径、算子</h2>
+<p class="lead">同一次推理可以从三层看：<b>配置层</b>（你敲的参数）、<b>框架层</b>（vllm / vllm-ascend 据此组织的执行路径）、<b>算子层</b>（NPU 上真正跑的 kernel）。<b>profiling</b>（op_statistic.csv / kernel_details.csv）就是算子层的观测窗口。</p>
+<div class="card">
+<svg viewBox="0 0 840 260" role="img" aria-label="三层视角">
+<defs><marker id="m0" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="40" y="30" width="240" height="66" rx="8"/>
+<text class="tb" x="160" y="54" text-anchor="middle">配置层 · 你敲的参数</text>
+<text class="ts" x="160" y="74" text-anchor="middle">--quantization ascend · enable_fused_mc2</text>
+<text class="ts" x="160" y="90" text-anchor="middle">--enable-chunked-prefill · mtp ...</text>
+<path class="flow" d="M160 96 V124" marker-end="url(#m0)"/>
+<rect class="ac" x="40" y="128" width="240" height="66" rx="8"/>
+<text class="tb" x="160" y="152" text-anchor="middle">框架层 · 执行路径</text>
+<text class="ts" x="160" y="172" text-anchor="middle">模型的 forward 组织：走哪条分支、</text>
+<text class="ts" x="160" y="188" text-anchor="middle">调哪些算子、batch/shape 怎么切</text>
+<path class="flow" d="M160 194 V222" marker-end="url(#m0)"/>
+<rect class="oc" x="360" y="30" width="240" height="66" rx="8"/>
+<text class="tb" x="480" y="54" text-anchor="middle">算子层 · device kernel</text>
+<text class="ts" x="480" y="74" text-anchor="middle">DispatchFFNCombine · QuantBatchMatmulV3</text>
+<text class="ts" x="480" y="90" text-anchor="middle">SparseFlashAttention · allgather ...</text>
+<path class="arr" d="M280 63 H356" marker-end="url(#m0)"/>
+<path class="arr" d="M280 161 H356" stroke-dasharray="5 4" marker-end="url(#m0)"/>
+<rect class="node" x="620" y="30" width="190" height="66" rx="8"/>
+<text class="tb" x="715" y="54" text-anchor="middle">profiling 观测窗口</text>
+<text class="ts" x="715" y="74" text-anchor="middle">op_statistic.csv（聚合）</text>
+<text class="ts" x="715" y="90" text-anchor="middle">kernel_details.csv（逐次）</text>
+<path class="flow" d="M600 63 H616" marker-end="url(#m0)"/>
+<path class="flow" d="M600 161 H616" stroke-dasharray="5 4" marker-end="url(#m0)"/>
+<text class="tm" x="40" y="236">实线：prefill 一次 MoE 调用的链；虚线：同一链路在不同层的投影。改参数 = 改框架路径 = 改算子清单。</text>
+</svg>
+<div class="figcap">图 1 · 三层视角：参数改的是框架路径，profiling 看到的是路径的最终投影</div>
+</div>
+<div class="kp t"><span class="kp-t">为什么要打通这条链</span><ul>
+<li><b>正向</b>：改一个参数前，能预测哪些 kernel 会变——验证开关是否生效、评估收益来源；</li>
+<li><b>反向</b>：拿到任何一份 op_statistic.csv，能反推它是什么配置、什么模型跑出来的——排查线上问题、看别人环境的第一步。</li>
+</ul></div>
+
+<h2 id="s1">1. 参数影响算子的四种方式</h2>
+<p class="lead">所有参数对算子的影响，归纳起来就<b>四种</b>，每种都能在这次的真实数据里找到例子。先记住这四个分类，后面所有排查都会用到它。</p>
+<table>
+<tr><th>方式</th><th>含义</th><th>真实例子（GLM-5.1）</th></tr>
+<tr><td><b>① 换实现</b></td><td>同一份计算逻辑，换不同 kernel（甚至融合成一个大算子）</td><td><code>enable_fused_mc2=1</code>：MoE 的 dispatch+FFN+combine 融合成 <b>DispatchFFNCombine</b> 一个 kernel（占 40.5%）；关掉则变成 MoeDistributeDispatchV2 + 专家 MatMul + CombineV2 三个</td></tr>
+<tr><td><b>② 换 shape</b></td><td>kernel 名不变，但调用的 shape / 次数变了</td><td><code>--enable-chunked-prefill</code> + CP 切片：3.5K prompt 的 MoE 调用 shape 是 <b>220~222×6144</b> 的 chunk，不是整条 3.5K；<code>num_speculative_tokens=3</code>：decode 每 step 1~4 个 token（shape [1~4,6144]）</td></tr>
+<tr><td><b>③ 增删算子</b></td><td>开了新路径，出现原本没有的 kernel</td><td><code>enable_dsa_cp</code>（DSA 稀疏注意力）→ 出现 <b>SparseFlashAttention</b>（9.3%）+ Indexer 相关小 kernel（IndexCheck 等）；<code>--quantization ascend</code> → 出现 <b>QuantBatchMatmulV3</b>（10.9%）+ <b>AscendQuantV2</b>（2.6%）</td></tr>
+<tr><td><b>④ 改执行方式</b></td><td>kernel 清单不变，改的是怎么调度执行</td><td><code>cudagraph_mode FULL_DECODE_ONLY</code>：decode 走图模式，<b>kernel 名一个不变</b>，变的是 host 侧 launch 方式（间隔更密、CPU 开销小）；<code>--async-scheduling</code>、multi stream 同理</td></tr>
+</table>
+<div class="kp"><span class="kp-t">推论</span>排查"改了参数为什么没效果"时先归类：如果是 ①③ 类参数，op_statistic.csv 里<b>必须能看到 kernel 清单变化</b>——看不到就是参数没生效（没被解析、名字不匹配、走了回退分支）；如果是 ② 类，要去看 kernel_details 的 Input Shapes；如果是 ④ 类，kernel 层面根本看不出差别，得看 host 侧（api_statistic）或端侧指标。</div>
+
+<h2 id="s2">2. 实测对照：GLM-5.1 参数 → 算子清单</h2>
+<p class="lead">先把我们环境的 op_statistic.csv（1009 prefill 窗口，15 秒）摆出来，再做逐行归因。看不懂的可以只扫一眼第一列和最后一列，主要看<b>谁占大头</b>。</p>
+<pre><code>OP Type              Core Type       Count  Total(ms)  Avg(us)  Ratio(%)
+DispatchFFNCombine   MIX_AIC        12007     4574.4    380.9    40.5   ← enable_fused_mc2
+QuantBatchMatmulV3   MIX_AIC        54036     1378.4     25.5    12.2   ← --quantization ascend (W8A8)
+SparseFlashAttention MIX_AIC        12469     1284.8    103.0    11.4   ← enable_dsa_cp (DSA)
+AivKernel            (vector聚合)   78382     1174.7     15.0     8.5   ← 各类 vector 小算子聚合名
+TransposeBatchMatMul AI_CORE        24939      549.6     22.0     4.9   ← 注意力里的矩阵变换
+allgatherAicpuKernel AI_CPU           249      467.4   1877.2     4.1   ← TP16 / SP 通信
+MatMulV2             AI_CORE        17212      407.5     23.7     3.6   ← 未融合的普通矩阵乘
+AscendQuantV2        AI_VECTOR_CORE 41104      356.1      8.7     3.2   ← W8A8 的激活量化
+ForeachAddList       AI_VECTOR_CORE 12008      213.6     17.8     1.9   ← MoE 残差加(见 4.2)
+reduce_scatterAicpu  AI_CPU           171      172.4   1008.1     1.5   ← TP16 / SP 通信</code></pre>
+<table>
+<tr><th>启动参数</th><th>落到的算子</th><th>本窗口占比</th></tr>
+<tr><td><code>enable_fused_mc2: 1</code>（additional_config）</td><td>DispatchFFNCombine（MC2 融合：dispatch + 专家 FFN + combine）</td><td><b>40.5%</b></td></tr>
+<tr><td><code>--quantization ascend</code>（W8A8C8 权重）</td><td>QuantBatchMatmulV3（A8×W8 矩阵乘）+ AscendQuantV2（激活量化）+ 名字里带 <b>WeightNz</b>（NZ 权重格式）</td><td>12.2% + 3.2%</td></tr>
+<tr><td><code>enable_dsa_cp: true</code>（DSA 稀疏注意力 + CP）</td><td>SparseFlashAttention + Indexer 系列（IndexCheck 等小 kernel，未进 top10）</td><td>11.4%</td></tr>
+<tr><td><code>--tensor-parallel-size 16</code> + SP / <code>--enable-expert-parallel</code></td><td>allgather / reduce_scatter AicpuKernel（EP 的 all-to-all 在 communication.json 里看）</td><td>5.6%</td></tr>
+<tr><td><code>--enable-chunked-prefill</code> + CP 切片</td><td>不新增算子，决定 FFNCombine / attention 的 <b>Input Shapes</b>（220~222×6144）</td><td>—（②换 shape）</td></tr>
+<tr><td><code>--speculative-config deepseek_mtp num=3</code></td><td>decode 每 step 1+3 个 token 并行验证 → shape [1~4,6144]；本窗口 FFNCombine decode 形状调用 11622 次</td><td>—（②换 shape）</td></tr>
+<tr><td><code>--compilation-config cudagraph_mode FULL_DECODE_ONLY</code></td><td>kernel 清单不变，decode 的 host launch 走图模式</td><td>—（④改执行）</td></tr>
+</table>
+<p class="dim">一个细节：kernel 名里的前缀也有信息量——<code>aclnn</code> 开头是经 AscendC 算子库下发的标准算子，无前缀的（DispatchFFNCombine、SparseFlashAttention）是自定义融合算子包里的，对应 CANN 自定义算子包（我们对比 staticKey 的那几个文件）。</p>
+
+<h2 id="s3">3. ① 换实现的实例：enable_fused_mc2 开关前后</h2>
+<p class="lead">这是最能说明"参数 = 算子清单开关"的例子。MoE 一层 FFN 前后有<b>两套实现</b>：拆开的 3 个算子，或者融合成的 1 个大算子。</p>
+<div class="card">
+<svg viewBox="0 0 840 300" role="img" aria-label="fused_mc2 开关的算子变化">
+<defs><marker id="m1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="24" text-anchor="middle">MoE 层 FFN 段：同一份计算，两种算子清单</text>
+<rect class="wc" x="30" y="44" width="360" height="200" rx="10"/>
+<text class="tb" x="210" y="68" text-anchor="middle">enable_fused_mc2 = 0（拆分）</text>
+<rect class="node" x="60" y="84" width="130" height="42" rx="7"/>
+<text class="ts" x="125" y="102" text-anchor="middle">MoeDistribute</text>
+<text class="ts" x="125" y="118" text-anchor="middle">DispatchV2（通信）</text>
+<path class="arr" d="M190 105 H216" marker-end="url(#m1)"/>
+<rect class="node" x="220" y="84" width="140" height="42" rx="7"/>
+<text class="ts" x="290" y="102" text-anchor="middle">专家 FFN</text>
+<text class="ts" x="290" y="118" text-anchor="middle">MatMul/GMM（计算）</text>
+<path class="arr" d="M290 126 V148"/>
+<rect class="node" x="220" y="152" width="140" height="42" rx="7"/>
+<text class="ts" x="290" y="170" text-anchor="middle">MoeCombineV2（通信）</text>
+<text class="ts" x="210" y="222" text-anchor="middle">3 个 kernel · 2 次算子间往返 · 通信算子单独计时</text>
+<rect class="ac" x="450" y="44" width="360" height="200" rx="10"/>
+<text class="tb" x="630" y="68" text-anchor="middle">enable_fused_mc2 = 1（融合，我们的配置）</text>
+<rect class="ac" x="510" y="96" width="240" height="56" rx="8"/>
+<text class="tb" x="630" y="118" text-anchor="middle">DispatchFFNCombine</text>
+<text class="ts" x="630" y="137" text-anchor="middle">MIX_AIC · dispatch+FFN+combine 一体</text>
+<text class="ts" x="630" y="222" text-anchor="middle">1 个 kernel · 占窗口总耗时 40.5%（实测）</text>
+<text class="tm" x="30" y="272">代价：黑盒大算子——它慢了没法在框架层再拆优化，只能找算子团队（我们这次 TTFT 劣化正是它的大 chunk 路径回退）。</text>
+</svg>
+<div class="figcap">图 2 · 融合开关直接改写 op_statistic 的第一行：从三个中算子变成一个 40.5% 的大算子</div>
+</div>
+
+<h2 id="s4">4. ② 换 shape 的实例：shape 里藏着配置信息</h2>
+<h3>4.1 prefill 的 220~222 是怎么来的</h3>
+<p>压测输入 3.5K token，经 CP=16 切片（每卡约 219 token）+ chunked prefill 按块组 batch 后，落到每卡单次 MoE 调用就是 <b>[220~222, 6144]</b> 的 chunk。所以看到 FFNCombine 的 Input Shapes 首维在 220 附近，就能反推：输入约 3.5K、CP=16、chunked prefill 开着。<b>反过来，decode 的 shape 首维 = 1 + draft 数</b>：mtp num=3 时每 step 最多 4 个 token（1 个真实 + 3 个 draft 并行验证），窗口里看到的是 [1~3, 6144]。</p>
+
+<h3>4.2 用"调用次数对齐"认亲：谁跟着谁走</h3>
+<p>kernel 之间的<b>次数关系</b>能暴露它们的归属路径，这次窗口里有两对精准对齐：</p>
+<table>
+<tr><th>对齐关系</th><th>说明什么</th></tr>
+<tr><td>ForeachAddList 12008 次 ≈ DispatchFFNCombine 12007 次</td><td>每次 MoE 调用后跟一次残差/列表加法——ForeachAddList 是 <b>MoE 路径的随从</b>，FFNCombine 走融合路径，它就同步存在</td></tr>
+<tr><td>0815 窗口：ScatterNdUpdate 10611 次 == SparseFlashAttention 10611 次</td><td>每次注意力计算后一次 KV cache 散射写入——<b>KV 写入跟着 attention 走</b>，次数一致说明每层每 chunk 写一次</td></tr>
+</table>
+<p class="dim">方法：把候选 kernel 的 Count 列放一起比，成对出现的就在同一条执行路径上。版本升级后某个 kernel 从 top10 消失（如 1009 窗口 ScatterNdUpdate 不在了），先查它是不是被融合/改名，再看调用次数去哪了——不要直接当成"优化掉了"。</p>
+
+<h2 id="s5">5. 反向：从 op_statistic.csv 反推配置</h2>
+<p class="lead">拿到一份陌生环境的 profile，按下面的<b>三步决策树</b>走：先认头部 kernel 认模型和路径，再看 shape 认输入和阶段，最后看通信算子认并行布局。</p>
+<div class="card">
+<svg viewBox="0 0 840 400" role="img" aria-label="反推配置决策树">
+<defs><marker id="m2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="300" y="24" width="240" height="44" rx="8"/>
+<text class="tb" x="420" y="51" text-anchor="middle">top kernel 是什么？</text>
+<path class="flow" d="M420 68 V96" marker-end="url(#m2)"/>
+<rect class="ac" x="60" y="100" width="200" height="76" rx="8"/>
+<text class="ts" x="160" y="122" text-anchor="middle">DispatchFFNCombine /</text>
+<text class="ts" x="160" y="140" text-anchor="middle">MoeDistributeDispatch / Combine</text>
+<text class="tb" x="160" y="164" text-anchor="middle" style="font-size:12px">→ MoE 模型，fused_mc2 开/关</text>
+<rect class="ac" x="320" y="100" width="200" height="76" rx="8"/>
+<text class="ts" x="420" y="122" text-anchor="middle">QuantBatchMatmulV3</text>
+<text class="ts" x="420" y="140" text-anchor="middle">(+WeightNz / AscendQuant)</text>
+<text class="tb" x="420" y="164" text-anchor="middle" style="font-size:12px">→ 量化 W8A8（+NZ 权重）</text>
+<rect class="ac" x="580" y="100" width="200" height="76" rx="8"/>
+<text class="ts" x="680" y="122" text-anchor="middle">SparseFlashAttention</text>
+<text class="ts" x="680" y="140" text-anchor="middle">+ Indexer 系列</text>
+<text class="tb" x="680" y="164" text-anchor="middle" style="font-size:12px">→ DSA 稀疏注意力路径</text>
+<path class="flow" d="M300 62 C200 62, 160 70, 160 96" marker-end="url(#m2)"/>
+<path class="flow" d="M420 68 V96" marker-end="url(#m2)"/>
+<path class="flow" d="M540 62 C640 62, 680 70, 680 96" marker-end="url(#m2)"/>
+<path class="arr" d="M160 176 V204" marker-end="url(#m2)"/>
+<path class="arr" d="M420 176 V204" marker-end="url(#m2)"/>
+<path class="arr" d="M680 176 V204" marker-end="url(#m2)"/>
+<rect class="node" x="20" y="208" width="800" height="60" rx="8"/>
+<text class="ts" x="420" y="230" text-anchor="middle">第二步看 kernel_details 的 Input Shapes：首维 220 至 222 → prefill 大 chunk（3.5K 输入 + CP16 + chunked prefill）；</text>
+<text class="ts" x="420" y="250" text-anchor="middle">首维 1 至 4 → decode（MTP num=3 → 最多 4）。shape 分布还能告诉你窗口里 prefill/decode 的比例</text>
+<rect class="wc" x="20" y="292" width="800" height="72" rx="8"/>
+<text class="tb" x="420" y="316" text-anchor="middle">第三步查通信算子占比：allgather / reduce_scatter / all_to_all 高 → 并行度大或通信没被计算盖住</text>
+<text class="ts" x="420" y="338" text-anchor="middle">（我们 0815→1009：reduce_scatter 1489→172ms，是通信优化的痕迹，不是负载变了）</text>
+<text class="tm" x="60" y="390">口诀：先认头部 kernel 认模型和路径，再看 shape 认输入和阶段，最后看通信算子认并行布局</text>
+</svg>
+<div class="figcap">图 3 · 三步反推：认 kernel → 看 shape → 查通信</div>
+</div>
+<div class="kp t"><span class="kp-t">练习（可直接拿我们文件验证）</span>打开 <code>/home/ywx1279670/profile/1010_cc8_prefill2/**/op_statistic.csv</code>：第一行 DispatchFFNCombine 40.5% → MoE + fused_mc2；第二行 QuantBatchMatmulV3 + 第三行 SparseFlashAttention → W8A8 量化 + DSA；去 kernel_details 按 Input Shapes 分组，首维 220~222 和 1~3 两簇 → prefill 窗口里混着 decode 调用。三个结论全是配置层事实，没用任何额外信息。</div>
+
+<h2 id="s6">6. 验证"参数真的生效"：三板斧</h2>
+<p class="lead">改完参数不确定有没有生效？按成本从低到高，依次用这三招验证：</p>
+<table>
+<tr><th>手段</th><th>看什么</th><th>本例</th></tr>
+<tr><td>① 服务日志回显</td><td>启动日志 <code>non-default args</code> 段有没有新参数（最快，零成本）</td><td><code>enable_prefill_mc2: True</code> 回显确认配置进去了</td></tr>
+<tr><td>② kernel 清单 diff</td><td>开关前后各采 15s，diff op_statistic 的 OP Type 清单与占比（①③ 类参数必变；② 类看 shape；④ 类不变）</td><td>fused_mc2 关/开 → DispatchFFNCombine 行消失/出现；<code>enable_prefill_mc2</code> 开后 TTFT 753-768 持平 → 生效但无收益</td></tr>
+<tr><td>③ 端侧指标交叉</td><td>TTFT / TPOT 方向与算子变化自洽</td><td>FFNCombine 大 chunk +8% ↔ TTFT 差 15-20%（它占 40.5%，量级吻合）</td></tr>
+</table>
+<p class="dim">注意 ② 的坑：有的开关生效后 kernel 名不变（改 shape/调度），diff 清单会一无所获——先判断参数属于第 1 节的哪一类，再决定看哪张表。</p>
+
+<h2 id="s7">7. 常见疑问</h2>
+<ul>
+<li><b>Q：AivKernel 是什么？</b><br>A：AI Vector Core 上一类 vector 小算子的聚合名（foreach、index、cast 等 elementwise 操作会归到这类名字），单个 15us 左右但次数多（7.8 万次），靠次数堆出 8.5%。分析时把它当"vector 杂项池"，要看明细得回 kernel_details 按 Name+shape 拆。</li>
+<li><b>Q：MIX_AIC 是什么？</b><br>A：Cube+Vector 混合执行的大算子（融合算子多为 MIX_AIC），通常单次耗时长，是 top10 里的重量级选手。</li>
+<li><b>Q：为什么有些代码里的算子在 profiling 里找不到同名？</b><br>A：图融合 pass / 静态图会把多个小算子合成一个（名字变成融合后的），或 aten 层算子最终下发的 aclnn kernel 名和 Python 层名字不同。对不上时用 shape + 调用次数去认，不要死磕名字。</li>
+<li><b>Q：通信算子去哪看？</b><br>A：op_statistic 里 AicpuKernel 结尾的（allgather/reduce_scatter）是通信；EP 的 all-to-all、卡间矩阵在 communication.json / communication_matrix.json 里，按需加载。</li>
+</ul>
+
+<p class="dim">姊妹篇：<a href="Profiling 实战解读 · 从采集读数到算子归因.html">《Profiling 实战解读：从采集、读数到把变慢钉到单个算子》</a>——本篇引用的 op_statistic.csv 怎么采、怎么逐行读、怎么归因，姊妹篇逐步拆过。</p>
+
+<p class="note">注：本篇所有 kernel 名、次数、占比均来自 GLM-5.1（TP16×DP2、EP32、W8A8C8、MTP=3、DSA-CP）2026-10 排查时 1009 prefill 窗口 op_statistic.csv 真实数据；0815 对照数据来自 1010_cc8_0815_prefill。不同模型/配置的算子清单会有差异，映射关系（哪个参数出哪个 kernel）以实际 profile 为准。</p>
+
+<a class="backtop" href="#top">↑ 回到顶部</a>
+
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
