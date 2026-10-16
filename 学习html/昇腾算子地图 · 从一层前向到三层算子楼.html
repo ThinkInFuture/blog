@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>昇腾算子地图：从你写的一层前向到三层算子楼</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --del:#c2410c;--code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --del:#f87171;--code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+h4{font-size:15px;margin:20px 0 6px;color:var(--accent-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:20px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 28px;font-size:14px}
+nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--brand-text);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.cnum{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--brand);font-weight:700}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.8px;line-height:1.6}
+pre .c{color:var(--text-muted)}
+pre .a{color:var(--ok);font-weight:700}
+pre .d{color:var(--del);text-decoration:line-through}
+.codetag{font-size:13px;font-weight:700;margin:14px 0 4px}
+.codetag.before{color:var(--del)}
+.codetag.after{color:var(--ok)}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.figgrid{display:grid;grid-template-columns:1fr;gap:20px}
+@media (min-width:1200px){.figgrid{grid-template-columns:1fr 1fr}.figgrid .card{overflow-x:auto}}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp.g{border-color:var(--ok);background:var(--ok-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12.5px;font-weight:600;margin-right:6px}
+.tag.blue{background:var(--brand-bg);color:var(--brand-text)}
+.tag.teal{background:var(--accent-bg);color:var(--accent-text)}
+.tag.amber{background:var(--warn-bg);color:var(--warn)}
+.tag.green{background:var(--ok-bg);color:var(--ok)}
+.dim{color:var(--text-muted);font-size:13.5px}
+.quote{border-left:3px solid var(--border);padding:2px 14px;margin:12px 0;color:var(--text-muted);font-size:13.5px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:8}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none}
+.flow{stroke:var(--brand);stroke-width:2;fill:none}
+.dash{stroke:var(--accent);stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+.ghost{fill:var(--surface);stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4}
+.grpA{fill:var(--brand-bg);stroke:var(--brand);stroke-width:2}
+.grpB{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+.frame{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:6 5}
+.gbadge{fill:var(--surface-muted);stroke:var(--border);stroke-width:1.5}
+.nb{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.cb{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.bdg{fill:var(--text);font-size:17px;font-weight:700}
+.garr{stroke:var(--border);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+
+<h1>昇腾算子地图：从你写的一层前向到三层算子楼</h1>
+<div class="subtitle">一层前向的每一行，到了 NPU 上都是一个或一串算子——这些算子不是散沙，它们分三层住：编排层不出算子、插件自研层藏着 DSA 特化、CANN 层有两户人家。先看全景，再逐层展开族谱，最后拿真实 profiling 数据认亲</div>
+
+<nav class="toc">
+<b>目录</b>
+<ol>
+<li><a href="#s1">全景：三层算子楼</a></li>
+<li><a href="#s2">层一 · 编排层：不出算子，出调用</a></li>
+<li><a href="#s3">层二 · 插件自研算子层：_C_ascend 族谱</a></li>
+<li><a href="#s4">层三 · CANN 算子层：两户人家，各有族谱</a></li>
+<li><a href="#s5">认亲：trace 里的名字对回代码</a></li>
+<li><a href="#s6">与我们排查问题的关系</a></li>
+<li><a href="#s7">术语速查</a></li>
+</ol>
+</nav>
+
+<div class="kp w">
+<span class="kp-t">读前须知：四个名词 30 秒（更多见文末术语速查）</span>
+<ul>
+<li><b>算子（operator/kernel）</b>：NPU 上一次下发的计算任务——你用 PyTorch 写的每一行（矩阵乘、归一化、softmax）到设备上都是一个或一串算子；</li>
+<li><b>CANN</b>：昇腾的算力栈与算子库——大量算子的"本体"住在这里，版本随 CANN 包走；</li>
+<li><b>_C_ascend</b>：vllm-ascend 插件自己编译安装的原生算子扩展（源码在插件仓库的 csrc/ 目录）——"算子住在哪"三看口诀里的一看；</li>
+<li><b>op_statistic.csv</b>：profiling 导出的算子聚合统计（谁调了多少次、耗时占比）——本文所有实测占比的出处（GLM-5.1，A3，prefill 窗口）。</li>
+</ul>
+</div>
+
+<h2 id="s1">1. 全景：三层算子楼</h2>
+<p>从你已经会的地方出发：用 PyTorch 写一层前向（②），LN、attention、残差、MoE 四五行代码——<b>每一行到了 NPU 上都要变成具体的算子</b>。这些算子住在哪、谁管它们？答案是<b>一栋三层楼</b>（③的目录结构就是这栋楼的门牌）：顶层是 vllm-ascend 的 Python 编排层，中间是插件自研的原生算子层，底层是 CANN 算子层。先看全景：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 700" role="img" aria-label="三层算子楼全景">
+<defs><marker id="ahO1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">三层算子楼：你写的一层前向（左）→ 每层算子聚集于啥、什么策略、什么特点（右）</text>
+<text class="tm" x="20" y="56" font-weight="700" fill="#6b7280">你写的一层前向（②）</text>
+<rect class="node" x="20" y="66" width="180" height="50" rx="8"/>
+<text class="tb" x="110" y="88" text-anchor="middle">LayerNorm 行</text>
+<text class="ts" x="110" y="106" text-anchor="middle">归一化</text>
+<path class="flow" d="M110 116 V132" marker-end="url(#ahO1)"/>
+<rect class="node" x="20" y="136" width="180" height="50" rx="8"/>
+<text class="tb" x="110" y="158" text-anchor="middle">attention 行</text>
+<text class="ts" x="110" y="176" text-anchor="middle">十行示例这一段</text>
+<path class="flow" d="M110 186 V202" marker-end="url(#ahO1)"/>
+<rect class="node" x="20" y="206" width="180" height="50" rx="8"/>
+<text class="tb" x="110" y="228" text-anchor="middle">残差行</text>
+<text class="ts" x="110" y="246" text-anchor="middle">h = h + x</text>
+<path class="flow" d="M110 256 V272" marker-end="url(#ahO1)"/>
+<rect class="node" x="20" y="276" width="180" height="50" rx="8"/>
+<text class="tb" x="110" y="298" text-anchor="middle">MoE 行</text>
+<text class="ts" x="110" y="316" text-anchor="middle">路由选专家+合并</text>
+<path class="dash" d="M200 91 C230 91,230 130,258 130" marker-end="url(#ahO1)"/>
+<path class="dash" d="M200 161 C230 161,230 161,258 161" marker-end="url(#ahO1)"/>
+<path class="dash" d="M200 231 C230 231,230 420,258 420" marker-end="url(#ahO1)"/>
+<path class="dash" d="M200 301 C230 301,230 560,258 560" marker-end="url(#ahO1)"/>
+<rect class="bc" x="262" y="60" width="558" height="176" rx="10"/>
+<text class="tb" x="282" y="84">顶 · 编排层（vllm-ascend Python：attention/ 与 ops/ 分工）</text>
+<text class="ts" x="282" y="108">聚集于：调度与备料——选路（配哪个引擎）、元数据、布局坐标；<b>不出算子，只出调用</b></text>
+<text class="ts" x="282" y="132">策略：数学全部下沉给楼下，自己只管"怎么调、按什么形状调"</text>
+<text class="ts" x="282" y="156">特点：纯 Python——看得见、改得动、每次改不用重编译</text>
+<text class="ts" x="282" y="180">代表调用点：fused_qkv_a_proj（nn.Linear）、ops/mla.py 的 custom op 注册</text>
+<text class="ts" x="282" y="204">attention/ 管注意力怎么算；ops/ 管算子怎么接进昇腾——两回事，分开认</text>
+<rect class="ac" x="262" y="252" width="558" height="176" rx="10"/>
+<text class="tb" x="282" y="276">中 · 插件自研算子层（_C_ascend：源码在插件仓库 csrc/）</text>
+<text class="ts" x="282" y="300">聚集于：DSA/MLA 特化与融合大算子——稀疏注意力、索引器、动态量化</text>
+<text class="ts" x="282" y="324">策略：AscendC 内核源码写在插件仓库（csrc/*/op_host），按 CANN 自定义格式编译加载</text>
+<text class="ts" x="282" y="348">特点：MIX_AIC 重量级——单次毫秒级，是 top 榜常客</text>
+<text class="ts" x="282" y="372">代表：npu_sparse_attn_sharedkv、npu_vllm_quant_lightning_indexer、</text>
+<text class="ts" x="282" y="396">npu_rms_norm_dynamic_quant、compressor 一族</text>
+<rect class="wc" x="262" y="444" width="558" height="176" rx="10"/>
+<text class="tb" x="282" y="468">底 · CANN 算子层（两户人家）</text>
+<text class="ts" x="282" y="492">3a 标准算子库（torch_npu 暴露 / aclnn / 普通 matmul 自动到达）：</text>
+<text class="ts" x="282" y="516">　聚集于通用数学——矩阵乘、归一化+rope+写 cache 融合、elementwise、通信</text>
+<text class="ts" x="282" y="540">3b 自定义算子包（libcust_opapi.so，staticKey 那几个文件）：</text>
+<text class="ts" x="282" y="564">　聚集于 MoE 大融合——DispatchFFNCombine 一家占实测窗口四成</text>
+<text class="ts" x="282" y="588">特点：内核本体随 CANN 包版本走——实现变更要对版本账（staticKey 对比）</text>
+<text class="ts" x="282" y="612">代表：MatMulV2、npu_kv_rmsnorm_rope_cache、AivKernel、DispatchFFNCombine</text>
+<text class="tm" x="20" y="652">读法：左列=②的一层前向四行；虚线=每行最终落到哪层出算子；三个楼层框=本文第 2/3/4 章逐层展开的顺序。</text>
+<text class="tm" x="20" y="676">三层的判断口诀（三看）：torch_npu.npu_x 或普通 matmul → 层三 3a；torch.ops._C_ascend → 层二；纯 Python 流程 → 层一。</text>
+</svg>
+<div class="figcap">图 1 · 三层算子楼全景：编排层出调用、自研层出特化融合、CANN 层出本体——每层的聚集点、策略与特点</div>
+</div>
+
+<p><b>一栋楼三层的分工一句话</b>：编排层决定"调谁、怎么调"；自研层放"别处没有、必须自己写"的特化算子；CANN 层是"别人早就写好、拿来就用"的算子本体库。你写的一行 <code>torch.matmul</code> 不会经过顶两层的代码，但它最终执行的内核一定住在层三。下面逐层展开——每层先讲这一层的算子聚集于什么、什么策略，再看这一层的族谱。</p>
+
+<h2 id="s2">2. 层一 · 编排层：不出算子，出调用</h2>
+<p>回到你已经认识的十行 attention（②）——它在 vllm-ascend 里被编排层一步步接手（前几篇讲过的九步流水线）。这一层<b>一个算子都不出</b>：它出的是"调用与备料"——选哪个后端、元数据怎么建、张量按什么布局递下去。拿流水线里的五步看编排层每天在干什么：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 620" role="img" aria-label="编排层展开">
+<defs><marker id="ahO2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">层一 · 编排层：流水线五步里，它干了啥、楼下谁出算子</text>
+<text class="tb" x="140" y="56" text-anchor="middle">流水线步（你认识的链）</text>
+<text class="tb" x="435" y="56" text-anchor="middle">编排层的活（纯 Python）</text>
+<text class="tb" x="715" y="56" text-anchor="middle">楼下谁出算子</text>
+<rect class="node" x="20" y="74" width="240" height="88" rx="8"/>
+<text class="tb" x="140" y="98" text-anchor="middle">步3 · Q/KV 低秩投影</text>
+<text class="ts" x="140" y="120" text-anchor="middle">fused_qkv_a_proj</text>
+<text class="ts" x="140" y="142" text-anchor="middle">一次矩阵乘出 Q 路和 KV latent</text>
+<rect class="bc" x="310" y="74" width="250" height="88" rx="8"/>
+<text class="tb" x="435" y="98" text-anchor="middle">只是调 nn.Linear</text>
+<text class="ts" x="435" y="120" text-anchor="middle">编排层递张量、管权重,</text>
+<text class="ts" x="435" y="142" text-anchor="middle">矩阵乘不在自己手里</text>
+<rect class="node" x="610" y="74" width="210" height="88" rx="8"/>
+<text class="ts" x="715" y="98" text-anchor="middle">层三 3a</text>
+<text class="ts" x="715" y="120" text-anchor="middle">MatMulV2 一族</text>
+<text class="ts" x="715" y="142" text-anchor="middle">(trace 里按形状认)</text>
+<path class="dash" d="M262 118 H302" marker-end="url(#ahO2)"/>
+<path class="dash" d="M562 118 H602" marker-end="url(#ahO2)"/>
+<rect class="node" x="20" y="182" width="240" height="88" rx="8"/>
+<text class="tb" x="140" y="206" text-anchor="middle">步4 · KV 侧融合</text>
+<text class="ts" x="140" y="228" text-anchor="middle">投影+norm+rope+写 cache</text>
+<text class="ts" x="140" y="250" text-anchor="middle">一枪出</text>
+<rect class="bc" x="310" y="182" width="250" height="88" rx="8"/>
+<text class="tb" x="435" y="206" text-anchor="middle">组参数、递句柄</text>
+<text class="ts" x="435" y="228" text-anchor="middle">调 torch_npu 的融合接口,</text>
+<text class="ts" x="435" y="250" text-anchor="middle">融合本体不在自己手里</text>
+<rect class="node" x="610" y="182" width="210" height="88" rx="8"/>
+<text class="ts" x="715" y="206" text-anchor="middle">层三 3a</text>
+<text class="ts" x="715" y="228" text-anchor="middle">npu_kv_rmsnorm_</text>
+<text class="ts" x="715" y="250" text-anchor="middle">rope_cache</text>
+<path class="dash" d="M262 226 H302" marker-end="url(#ahO2)"/>
+<path class="dash" d="M562 226 H602" marker-end="url(#ahO2)"/>
+<rect class="node" x="20" y="290" width="240" height="88" rx="8"/>
+<text class="tb" x="140" y="314" text-anchor="middle">选块 · indexer</text>
+<text class="ts" x="140" y="336" text-anchor="middle">长历史里选 top-2048 块</text>
+<text class="ts" x="140" y="358" text-anchor="middle">先挑后算</text>
+<rect class="bc" x="310" y="290" width="250" height="88" rx="8"/>
+<text class="tb" x="435" y="314" text-anchor="middle">双家二选一</text>
+<text class="ts" x="435" y="336" text-anchor="middle">GLM(glm_moe_dsa)走</text>
+<text class="ts" x="435" y="358" text-anchor="middle">torch_npu 那份索引器</text>
+<rect class="node" x="610" y="290" width="210" height="88" rx="8"/>
+<text class="ts" x="715" y="314" text-anchor="middle">层三 3a 或层二</text>
+<text class="ts" x="715" y="336" text-anchor="middle">(lightning indexer</text>
+<text class="ts" x="715" y="358" text-anchor="middle">两个家各一份)</text>
+<path class="dash" d="M262 334 H302" marker-end="url(#ahO2)"/>
+<path class="dash" d="M562 334 H602" marker-end="url(#ahO2)"/>
+<rect class="node" x="20" y="398" width="240" height="88" rx="8"/>
+<text class="tb" x="140" y="422" text-anchor="middle">步8 · 稀疏注意力</text>
+<text class="ts" x="140" y="444" text-anchor="middle">QKᵀ/遮罩/softmax/·V</text>
+<text class="ts" x="140" y="466" text-anchor="middle">在选中块上算</text>
+<rect class="bc" x="310" y="398" width="250" height="88" rx="8"/>
+<text class="tb" x="435" y="422" text-anchor="middle">调自研注册算子</text>
+<text class="ts" x="435" y="444" text-anchor="middle">torch.ops._C_ascend</text>
+<text class="ts" x="435" y="466" text-anchor="middle">.npu_sparse_attn_sharedkv</text>
+<rect class="node" x="610" y="398" width="210" height="88" rx="8"/>
+<text class="ts" x="715" y="422" text-anchor="middle">层二</text>
+<text class="ts" x="715" y="444" text-anchor="middle">trace 里叫</text>
+<text class="ts" x="715" y="466" text-anchor="middle">SparseFlashAttention</text>
+<path class="dash" d="M262 442 H302" marker-end="url(#ahO2)"/>
+<path class="dash" d="M562 442 H602" marker-end="url(#ahO2)"/>
+<rect class="node" x="20" y="506" width="240" height="88" rx="8"/>
+<text class="tb" x="140" y="530" text-anchor="middle">步9 · o_proj 收口</text>
+<text class="ts" x="140" y="552" text-anchor="middle">输出投影交回层外壳</text>
+<rect class="bc" x="310" y="506" width="250" height="88" rx="8"/>
+<text class="tb" x="435" y="530" text-anchor="middle">又是 nn.Linear</text>
+<text class="ts" x="435" y="552" text-anchor="middle">编排层管收口与归约</text>
+<text class="ts" x="435" y="574" text-anchor="middle">开关(归约权归谁)</text>
+<rect class="node" x="610" y="506" width="210" height="88" rx="8"/>
+<text class="ts" x="715" y="530" text-anchor="middle">层三 3a</text>
+<text class="ts" x="715" y="552" text-anchor="middle">MatMulV2 一族</text>
+<path class="dash" d="M262 550 H302" marker-end="url(#ahO2)"/>
+<path class="dash" d="M562 550 H602" marker-end="url(#ahO2)"/>
+<text class="tm" x="20" y="608">读法:五步里编排层(中列,蓝)只做调用与备料;右列=每步真正出算子的家。三列虚线=行行对应。</text>
+</svg>
+<div class="figcap">图 2 · 编排层展开：五步流水线里它只出调用——投影走 3a 矩阵乘、KV 融合走 3a、稀疏注意力走层二、索引器双家二选一</div>
+</div>
+
+<p><b>这一层的策略与特点</b>：聚集于调度与备料，策略是"数学全部下沉"——所以它的改动（选路、开关、元数据）都是纯 Python，看得见、改得动、不用重编译；前两篇 PR 解读（#18870 的选路窄门、#18961 的备料复用）改的全是这一层。<b>顺带把一件容易混的事拆开</b>：attention/ 目录管"注意力怎么算"（编排注意力的调用链），ops/ 目录管"算子怎么接进昇腾"（custom op 注册与分发）——两回事，别合成一个框记。</p>
+
+<h2 id="s3">3. 层二 · 插件自研算子层：_C_ascend 族谱</h2>
+<p>有些算子别处没有、必须自己写：DSA 的稀疏注意力语义、索引器的量化选块、Q 侧动态量化——CANN 标准库里没有现成对应物。vllm-ascend 把它们写在自己的 csrc/ 里，编译成 _C_ascend 扩展随插件安装。<b>按功能分四族</b>：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 680" role="img" aria-label="_C_ascend 族谱">
+<text class="th" x="420" y="26" text-anchor="middle">层二 · 插件自研算子（_C_ascend）：按功能分四族</text>
+<rect class="bc" x="20" y="48" width="395" height="270" rx="10"/>
+<text class="tb" x="40" y="74">族A · 稀疏注意力族</text>
+<text class="ts" x="40" y="100">npu_sparse_attn_sharedkv（DSA 主算子）</text>
+<text class="ts" x="40" y="124">npu_kv_quant_sparse_attn_sharedkv（A5 走这份）</text>
+<text class="ts" x="40" y="148">npu_sparse_attn_sharedkv_metadata（配套元数据）</text>
+<text class="ts" x="40" y="172">npu_sparse_flash_attention / score_prefill 一组</text>
+<text class="ts" x="40" y="200">为什么自研：top-2048 稀疏语义标准库没有；</text>
+<text class="ts" x="40" y="224">trace 里叫 SparseFlashAttention（占实测 11.4%）</text>
+<text class="ts" x="40" y="248">执行形态：MIX_AIC——Cube+Vector 混合大算子</text>
+<text class="ts" x="40" y="272">选路由 device/device_op.py 按硬件代次分发</text>
+<rect class="bc" x="425" y="48" width="395" height="270" rx="10"/>
+<text class="tb" x="445" y="74">族B · 索引器族</text>
+<text class="ts" x="445" y="100">npu_vllm_quant_lightning_indexer（量化选块）</text>
+<text class="ts" x="445" y="124">npu_vllm_quant_lightning_indexer_metadata</text>
+<text class="ts" x="445" y="148">npu_lightning_indexer（非量化的那份）</text>
+<text class="ts" x="445" y="176">为什么自研：长历史里先挑相关块再算——</text>
+<text class="ts" x="445" y="200">索引器是 DSA"省算力"的源头</text>
+<text class="ts" x="445" y="224">双家实例：torch_npu 也有一份同名能力；</text>
+<text class="ts" x="445" y="248">代码按模型二选一——GLM(glm_moe_dsa)走</text>
+<text class="ts" x="445" y="272">torch_npu 那份，其余走 _C_ascend 这份</text>
+<rect class="ac" x="20" y="338" width="395" height="270" rx="10"/>
+<text class="tb" x="40" y="364">族C · 归一化·旋转·量化族</text>
+<text class="ts" x="40" y="390">npu_rms_norm_dynamic_quant（Q 侧动态量化）</text>
+<text class="ts" x="40" y="414">inplace_partial_rotary_mul（原地部分旋转）</text>
+<text class="ts" x="40" y="438">npu_gemma_rms_norm / npu_add_rms_norm_bias</text>
+<text class="ts" x="40" y="466">为什么自研：动态量化+原地旋转省中间张量；</text>
+<text class="ts" x="40" y="490">融合掉的都是"小而高频"的活</text>
+<text class="ts" x="40" y="514">对应朴素写法：norm(x)、rope(q) 两行</text>
+<text class="ts" x="40" y="538">高频小算子融合——省的是带宽与 launch 次数</text>
+<text class="ts" x="40" y="562">名字带 inplace：直接改输入，不另开缓冲</text>
+<rect class="ac" x="425" y="338" width="395" height="270" rx="10"/>
+<text class="tb" x="445" y="364">族D · 融合特化族（AscendC 源码同仓库）</text>
+<text class="ts" x="445" y="390">compressor / compressor_metadata（DSA 压缩）</text>
+<text class="ts" x="445" y="414">fused_sparse_attention_overlap（计算通信重叠）</text>
+<text class="ts" x="445" y="438">indexer_compress_epilog_v2（索引压缩收尾）</text>
+<text class="ts" x="445" y="462">kv_compress_epilog（A5：量化+压缩+散射一体）</text>
+<text class="ts" x="445" y="490">为什么自研：多步合一+与执行流协同，</text>
+<text class="ts" x="445" y="514">csrc/attention/*/op_host/ 有 AscendC 源码</text>
+<text class="ts" x="445" y="538">(arch32/arch35 两版 tiling 按硬件适配)</text>
+<text class="tm" x="20" y="640">读法:注册表全在 csrc/torch_binding.cpp(两个 TORCH_LIBRARY 块);这一层="源码在插件、执行靠 CANN"——按 CANN 自定义格式编译加载。</text>
+<text class="tm" x="20" y="664">改这层的算子=改插件源码重编译;另有一部分 _C_ascend op 只是薄适配,转发到 CANN 的 aclnn 接口(内核仍在层三)。</text>
+</svg>
+<div class="figcap">图 3 · _C_ascend 族谱：稀疏注意力、索引器、归一化·旋转·量化、融合特化四族——每族"住着谁、为什么自研"</div>
+</div>
+
+<p><b>这一层的策略与特点</b>：聚集于 DSA/MLA 特化与融合大算子；策略是"源码进仓库"——AscendC 内核写在 csrc/ 里、按 CANN 自定义算子格式编译加载，跟插件同版本发布；特点是重量级（MIX_AIC，单次毫秒级）且数量可控（四族几十个）。<b>认它的口诀</b>：代码里看到 <code>torch.ops._C_ascend.xxx</code> 就是这一层。</p>
+
+<h2 id="s4">4. 层三 · CANN 算子层：两户人家，各有族谱</h2>
+<p>最底下一层住着两户人家：<b>3a 标准算子库</b>——torch_npu 暴露的 npu_* 接口、aclnn 前缀的标准算子、以及你写的普通 matmul 自动到达的内核；<b>3b 自定义算子包</b>——libcust_opapi.so 那几个文件（Profiling 排查时对 staticKey 的对象），MoE 的大融合算子住这里。3a 内部再分族：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 780" role="img" aria-label="CANN 层两户族谱">
+<defs><marker id="ahO4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">层三 · CANN 算子层：3a 标准库（内分五族）+ 3b 自定义算子包</text>
+<rect class="bc" x="20" y="44" width="800" height="470" rx="10"/>
+<text class="tb" x="40" y="70">3a · 标准算子库（torch_npu 暴露 / aclnn / 普通 matmul 自动到达）</text>
+<rect class="node" x="40" y="86" width="760" height="64" rx="8"/>
+<text class="tb" x="56" y="110">矩阵乘族——普通 matmul 的家</text>
+<text class="ts" x="56" y="134">MatMulV2（3.6%）· QuantBatchMatmulV3（12.2%，NZ 权重）· TransposeBatchMatMul（4.9%）· BatchMatMulV2</text>
+<rect class="node" x="40" y="162" width="760" height="64" rx="8"/>
+<text class="tb" x="56" y="186">融合预处理族——把朴素写法的多行合到一枪</text>
+<text class="ts" x="56" y="210">npu_kv_rmsnorm_rope_cache（投影+norm+rope+写 cache）· npu_quant_matmul（量化矩阵乘）</text>
+<rect class="node" x="40" y="238" width="760" height="64" rx="8"/>
+<text class="tb" x="56" y="262">elementwise 族——trace 里的聚合名 AivKernel（8.5%）</text>
+<text class="ts" x="56" y="286">Fill · IndexCheck · ForeachAddList（1.9%，残差/列表加）· AscendQuantV2（3.2%，W8A8 激活量化）· cast 一类</text>
+<rect class="node" x="40" y="314" width="760" height="64" rx="8"/>
+<text class="tb" x="56" y="338">写回族——KV cache 的落笔</text>
+<text class="ts" x="56" y="362">npu_scatter_nd_update_（按 slot 页表散写）· ScatterNdUpdate（trace 名）——每层每 chunk 写一次</text>
+<rect class="node" x="40" y="390" width="760" height="64" rx="8"/>
+<text class="tb" x="56" y="414">通信族——AI_CPU 上执行（不走 AI Core）</text>
+<text class="ts" x="56" y="438">allgatherAicpuKernel（4.1%）· reduce_scatterAicpu（1.5%）——torch.distributed 集合通信下发</text>
+<text class="ts" x="40" y="486">五族覆盖了窗口实测 top10 里的九席——普通一层前向的数学，几乎全落在 3a。</text>
+<rect class="wc" x="20" y="530" width="800" height="130" rx="10"/>
+<text class="tb" x="40" y="556">3b · 自定义算子包（libcust_opapi.so / libcust_opsproto_rt2.0.so，staticKey 对比的对象）</text>
+<text class="ts" x="40" y="582">MoE 通信融合族：DispatchFFNCombine——dispatch+专家 FFN+combine 一体，</text>
+<text class="ts" x="40" y="606">实测一家占窗口总耗时 40.5%（12007 次）；fused_mc2 开关的产物，拆开则变三个中算子</text>
+<text class="ts" x="40" y="630">黑盒大算子：慢了没法在框架层再拆——只能对版本账（staticKey）或找算子团队</text>
+<path class="flow" d="M420 512 V528" marker-end="url(#ahO4)"/>
+<text class="tm" x="20" y="690">读法:上大框=3a 标准库(内分五族,每族带 GLM-5.1 prefill 窗口实测占比);下框=3b 自定义包(MoE 大融合)。</text>
+<text class="tm" x="20" y="714">占比口径:op_statistic.csv 自带 Ratio 列;3a+3b 的 top10 合计约九成——剩余是长尾小算子。</text>
+<text class="tm" x="20" y="738">3a 的入口三种:torch_npu.npu_xxx(显式)/aclnn 前缀(标准下发)/普通 torch.matmul(自动到达)。</text>
+<text class="tm" x="20" y="762">3b 的入口:框架组参调用——版本实现变更看 staticKey(Profiling 文章的归因案例)。</text>
+</svg>
+<div class="figcap">图 4 · CANN 层两户族谱：3a 标准库内分五族（矩阵乘/融合预处理/elementwise/写回/通信），3b 自定义包住 MoE 大融合</div>
+</div>
+
+<p><b>这一层的策略与特点</b>：3a 聚集于通用数学——你的朴素前向里每一行几乎都能在这里找到对应内核，入口有三种（显式 torch_npu 调用、aclnn 标准下发、普通 matmul 自动到达）；3b 聚集于 MoE 大融合——代价是黑盒。两户共同的特点：<b>内核本体随 CANN 包版本走</b>——这正是 Profiling 排查时对 staticKey 而不是对代码的根本原因。</p>
+
+<h2 id="s5">5. 认亲：trace 里的名字对回代码</h2>
+<p>拿真实 profiling 数据（GLM-5.1，A3，prefill 窗口 op_statistic.csv）把 top10 逐个对回三层楼——这张表就是"拿到一份 trace 怎么读"的练习：</p>
+<table>
+<tr><th>trace 名（op_statistic）</th><th>代码里的名字 / 来源</th><th>住哪层</th><th>占比</th></tr>
+<tr><td><b>DispatchFFNCombine</b></td><td>同名（fused_mc2 开关选的融合形态）</td><td>层三 · 3b 自定义包</td><td><b>40.5%</b></td></tr>
+<tr><td>QuantBatchMatmulV3</td><td>量化矩阵乘下发（名字常带 WeightNz——NZ 权重布局）</td><td>层三 · 3a 矩阵乘族</td><td>12.2%</td></tr>
+<tr><td>SparseFlashAttention</td><td><code>torch.ops._C_ascend.npu_sparse_attn_sharedkv</code></td><td>层二 · 稀疏注意力族</td><td>11.4%</td></tr>
+<tr><td>AivKernel</td><td>聚合名：Fill / IndexCheck / foreach / cast 一类 vector 小算子</td><td>层三 · 3a elementwise 族</td><td>8.5%</td></tr>
+<tr><td>TransposeBatchMatMul</td><td>普通 torch.matmul 的转置形态</td><td>层三 · 3a 矩阵乘族</td><td>4.9%</td></tr>
+<tr><td>allgatherAicpuKernel</td><td>torch.distributed 集合通信下发</td><td>层三 · 3a 通信族（AI_CPU）</td><td>4.1%</td></tr>
+<tr><td>MatMulV2</td><td>nn.Linear → torch.matmul</td><td>层三 · 3a 矩阵乘族</td><td>3.6%</td></tr>
+<tr><td>AscendQuantV2</td><td>W8A8 的激活量化下发</td><td>层三 · 3a elementwise 族</td><td>3.2%</td></tr>
+<tr><td>ForeachAddList</td><td>残差/列表加（torch foreach 下发）</td><td>层三 · 3a elementwise 族</td><td>1.9%</td></tr>
+<tr><td>reduce_scatterAicpu</td><td>torch.distributed 集合通信下发</td><td>层三 · 3a 通信族（AI_CPU）</td><td>1.5%</td></tr>
+</table>
+<div class="kp t">
+<span class="kp-t">三看口诀（判断一个算子住哪）</span>
+<ul>
+<li>看 <code>torch_npu.npu_xxx</code> 或普通 matmul → <b>层三 3a</b>（CANN 标准库）；</li>
+<li>看 <code>torch.ops._C_ascend.xxx</code> → <b>层二</b>（插件自研；其中薄适配的内核仍在层三）；</li>
+<li>看纯 Python 流程 → <b>层一</b>（编排，不下内核）。</li>
+</ul>
+</div>
+<div class="kp w">
+<span class="kp-t">名字对不上怎么办（trace 名 ≠ 代码名是常态）</span>
+图融合会把多个小算子合成一个名字（AivKernel 就是这么来的）；aten 层算子下发的 kernel 名也和 Python 名不同。对不上时用 <b>shape + 调用次数</b>去认：ForeachAddList 12008 次 ≈ DispatchFFNCombine 12007 次——成对出现的就在同一条执行路径上（MoE 的随从）；ScatterNdUpdate 10611 次 == SparseFlashAttention 10611 次——KV 写入跟着 attention 走。别死磕名字。
+</div>
+<div class="kp">
+<span class="kp-t">同一算子两个家的实例</span>
+lightning indexer（DSA 选块的"闪电索引器"）在 torch_npu（层三 3a）和 _C_ascend（层二）各有一份；代码按模型二选一——GLM（glm_moe_dsa）走 torch_npu 那份，其余走 _C_ascend 那份。所以"这个算子住哪"有时要加一句：住哪家还看跑的是什么模型。
+</div>
+
+<h2 id="s6">6. 与我们排查问题的关系</h2>
+<div class="kp">
+<ul>
+<li><b>给 Profiling 三板斧加了"户口"维度</b>：排行→分布→按 shape 拆（姊妹篇《Profiling 实战解读》）之外，先问"这个算子住哪层"——层三的问题对 CANN 版本账（staticKey），层二的问题查插件源码与版本，层一的问题看 Python 调用与配置；</li>
+<li><b>参数四分类的地基</b>：姊妹篇《算子与 vLLM 参数》讲参数怎么改算子清单——本文反过来讲算子清单本身住在哪，两篇合成一张完整地图；</li>
+<li><b>归因要落到物</b>：耗时对比只能定位"谁慢"，本文的三层楼告诉你下一步去哪找"为什么慢"——3b 找算子包版本与算子团队，层二查插件仓库 changelog，层一看调用方式；</li>
+<li><b>硬件代次敏感</b>：层二有 arch32/arch35 两版 tiling、A5 走 kv_quant 变体（#18961 的条件二也是 A5）——换硬件代次时族谱成员会变；</li>
+<li><b>典型闭环案例</b>：TTFT 劣化钉到 DispatchFFNCombine（层三 3b）→ 对 staticKey 全 DIFF → 算子包实现变更——三层楼的地图就是这条排查路径的底图。</li>
+</ul>
+</div>
+
+<h2 id="s7">7. 术语速查</h2>
+<table>
+<tr><th>术语</th><th>本文语境下的含义</th></tr>
+<tr><td>三层楼</td><td>编排层（vllm-ascend Python）/ 插件自研算子层（_C_ascend）/ CANN 算子层（3a 标准库 + 3b 自定义包）</td></tr>
+<tr><td>_C_ascend</td><td>vllm-ascend 编译安装的原生算子扩展；注册表在 csrc/torch_binding.cpp，调用形如 torch.ops._C_ascend.xxx</td></tr>
+<tr><td>torch_npu</td><td>PyTorch 的昇腾适配层——npu_* 接口的绑定在此，内核本体在 CANN</td></tr>
+<tr><td>3a / 3b</td><td>CANN 标准算子库 / CANN 自定义算子包（libcust_opapi.so）——后者是 staticKey 对比的对象</td></tr>
+<tr><td>MIX_AIC</td><td>Cube+Vector 混合执行的大算子核心类型——融合算子多为它，top 榜重量级</td></tr>
+<tr><td>AivKernel</td><td>trace 里 vector 小算子的聚合名（Fill/IndexCheck/foreach/cast 一类），看明细要回 kernel_details 按 Name+shape 拆</td></tr>
+<tr><td>staticKey</td><td>自定义算子包里标识 kernel 实现版本的键——两版本全 DIFF 即实现变更</td></tr>
+<tr><td>NZ 布局</td><td>矩阵单元友好的权重存放格式——量化矩阵乘名字里常带 WeightNz</td></tr>
+<tr><td>AscendC</td><td>写昇腾内核的语言/工具链——层二的 op_host 源码与 3b 的内核都是它写的</td></tr>
+</table>
+
+<p class="dim" style="margin-top:36px">来源：算子名单与调用点以本地 vllm-ascend 源码实测（torch_npu 调用、csrc/torch_binding.cpp 注册表、device_op.py 选路）；占比为 GLM-5.1（A3）prefill 窗口 op_statistic.csv 实测（姊妹篇《Profiling 实战解读》的数据同源）· 行号以当期源码为准</p>
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+</body>
+</html>
