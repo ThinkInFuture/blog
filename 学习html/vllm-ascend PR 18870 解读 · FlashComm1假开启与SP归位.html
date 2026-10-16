@@ -435,57 +435,57 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <svg viewBox="0 0 840 750" role="img" aria-label="架构框架图">
 <defs><marker id="ahArc" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="26" text-anchor="middle">模型架构 → 框架流程:模型的每一件,在 vllm-ascend 里住哪、谁调它</text>
-<text class="tm" x="160" y="48" text-anchor="middle" font-weight="700">模型架构(自上而下)</text>
+<text class="tm" x="145" y="48" text-anchor="middle" font-weight="700">模型架构(自上而下)</text>
 <text class="tm" x="570" y="48" text-anchor="middle" font-weight="700">框架落点 · 调用者(文件:行号实测)</text>
-<rect class="node" x="20" y="60" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="90" text-anchor="middle" font-weight="700">Token 嵌入</text>
-<text class="ts" x="160" y="112" text-anchor="middle">词表 128k · hidden 8192</text>
-<rect class="bc" x="320" y="60" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="80" text-anchor="start" font-weight="700">上游 runner 喂 ids [1,3500],嵌入成 [1,3500,8192];</text>
-<text class="ts" x="334" y="102" text-anchor="start">pad 到 3504 在 Runner 做(model_runner_v1.py:2935)</text>
-<path class="flow" d="M160 138 V157" marker-end="url(#ahArc)"/>
-<path class="dash" d="M300 104 C312 104,312 120,317 120" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="160" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="190" text-anchor="middle" font-weight="700">× N 层 DecoderLayer</text>
-<text class="ts" x="160" y="212" text-anchor="middle">每层≈1.1B,外壳串四件</text>
-<rect class="bc" x="320" y="160" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="180" text-anchor="start" font-weight="700">层外壳 forward:input LN → self_attn → post LN → MoE</text>
-<text class="ts" x="334" y="202" text-anchor="start">(deepseek_v2.py:1315);★ 运行时补丁 patch/ 在这重开 SP、</text>
-<text class="ts" x="334" y="224" text-anchor="start">o_proj 交出归约权(patch_deepseek_v2.py)</text>
-<path class="flow" d="M160 238 V257" marker-end="url(#ahArc)"/>
-<path class="dash" d="M300 204 C312 204,312 220,317 220" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="260" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="290" text-anchor="middle" font-weight="700">└ self_attn(十行示例)</text>
-<text class="ts" x="160" y="312" text-anchor="middle">MLA/DSA:latent KV+top-2048</text>
-<rect class="bc" x="320" y="260" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="280" text-anchor="start" font-weight="700">门卫 ops/mla.py:151 放行 → 后端 sfa_v1.py:1503</text>
-<text class="ts" x="334" y="302" text-anchor="start">九步流水线开算;GLM 与 DeepSeek 共用这条实现链</text>
-<path class="flow" d="M160 338 V357" marker-end="url(#ahArc)"/>
-<path class="dash" d="M300 304 C312 304,312 320,317 320" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="360" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="390" text-anchor="middle" font-weight="700">└ MoE(路由+共享)</text>
-<text class="ts" x="160" y="412" text-anchor="middle">SwiGLU,≈0.8B/层</text>
-<rect class="bc" x="320" y="360" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="380" text-anchor="start" font-weight="700">SP MoE:各卡各算自己 219 个 token 的分片,天然免通信</text>
-<text class="ts" x="334" y="402" text-anchor="start">(mlp 收 already_sequence_parallel=True,不再整理布局)</text>
-<path class="flow" d="M160 438 V457" marker-end="url(#ahArc)"/>
-<path class="dash" d="M300 404 C312 404,312 420,317 420" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="460" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="490" text-anchor="middle" font-weight="700">MTP 模块(投机解码)</text>
-<text class="ts" x="160" y="512" text-anchor="middle">环境 MTP=3</text>
-<rect class="bc" x="320" y="460" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="480" text-anchor="start" font-weight="700">vllm_ascend/models/deepseek_mtp.py:投机解码模块,</text>
-<text class="ts" x="334" y="502" text-anchor="start">本 PR 不动;</text>
-<text class="ts" x="334" y="524" text-anchor="start">改的落点在层外壳与 PP 边界(见 ★)</text>
-<path class="flow" d="M160 538 V557" marker-end="url(#ahArc)"/>
-<path class="dash" d="M300 504 C312 504,312 520,317 520" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="560" width="280" height="78" rx="10"/>
-<text class="ts" x="160" y="590" text-anchor="middle" font-weight="700">LM Head(与嵌入共享)</text>
-<text class="ts" x="160" y="612" text-anchor="middle">logits [1,128k]</text>
-<rect class="bc" x="320" y="560" width="500" height="78" rx="10"/>
-<text class="ts" x="334" y="580" text-anchor="start" font-weight="700">Runner 收回输出送采样;decode 每出一个 token,</text>
-<text class="ts" x="334" y="602" text-anchor="start">再从第 2 行整条链走一遍(KV 从页表缓存取)</text>
-<path class="dash" d="M300 604 C312 604,312 620,317 620" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="60" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="90" text-anchor="middle" font-weight="700">Token 嵌入</text>
+<text class="ts" x="145" y="112" text-anchor="middle">词表 128k · hidden 8192</text>
+<rect class="bc" x="330" y="60" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="80" text-anchor="start" font-weight="700">上游 runner 喂 ids [1,3500],嵌入成 [1,3500,8192];</text>
+<text class="ts" x="344" y="102" text-anchor="start">pad 到 3504 在 Runner 做(model_runner_v1.py:2935)</text>
+<path class="flow" d="M145 138 V157" marker-end="url(#ahArc)"/>
+<path class="dash" d="M270 104 C295 104,295 120,326 120" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="160" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="190" text-anchor="middle" font-weight="700">× N 层 DecoderLayer</text>
+<text class="ts" x="145" y="212" text-anchor="middle">每层≈1.1B,外壳串四件</text>
+<rect class="bc" x="330" y="160" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="180" text-anchor="start" font-weight="700">层外壳 forward:input LN → self_attn → post LN → MoE</text>
+<text class="ts" x="344" y="202" text-anchor="start">(deepseek_v2.py:1315);★ 运行时补丁 patch/ 在这重开 SP、</text>
+<text class="ts" x="344" y="224" text-anchor="start">o_proj 交出归约权(patch_deepseek_v2.py)</text>
+<path class="flow" d="M145 238 V257" marker-end="url(#ahArc)"/>
+<path class="dash" d="M270 204 C295 204,295 220,326 220" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="260" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="290" text-anchor="middle" font-weight="700">└ self_attn(十行示例)</text>
+<text class="ts" x="145" y="312" text-anchor="middle">MLA/DSA:latent KV+top-2048</text>
+<rect class="bc" x="330" y="260" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="280" text-anchor="start" font-weight="700">门卫 ops/mla.py:151 放行 → 后端 sfa_v1.py:1503</text>
+<text class="ts" x="344" y="302" text-anchor="start">九步流水线开算;GLM 与 DeepSeek 共用这条实现链</text>
+<path class="flow" d="M145 338 V357" marker-end="url(#ahArc)"/>
+<path class="dash" d="M270 304 C295 304,295 320,326 320" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="360" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="390" text-anchor="middle" font-weight="700">└ MoE(路由+共享)</text>
+<text class="ts" x="145" y="412" text-anchor="middle">SwiGLU,≈0.8B/层</text>
+<rect class="bc" x="330" y="360" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="380" text-anchor="start" font-weight="700">SP MoE:各卡各算自己 219 个 token 的分片,天然免通信</text>
+<text class="ts" x="344" y="402" text-anchor="start">(mlp 收 already_sequence_parallel=True,不再整理布局)</text>
+<path class="flow" d="M145 438 V457" marker-end="url(#ahArc)"/>
+<path class="dash" d="M270 404 C295 404,295 420,326 420" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="460" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="490" text-anchor="middle" font-weight="700">MTP 模块(投机解码)</text>
+<text class="ts" x="145" y="512" text-anchor="middle">环境 MTP=3</text>
+<rect class="bc" x="330" y="460" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="480" text-anchor="start" font-weight="700">vllm_ascend/models/deepseek_mtp.py:投机解码模块,</text>
+<text class="ts" x="344" y="502" text-anchor="start">本 PR 不动;</text>
+<text class="ts" x="344" y="524" text-anchor="start">改的落点在层外壳与 PP 边界(见 ★)</text>
+<path class="flow" d="M145 538 V557" marker-end="url(#ahArc)"/>
+<path class="dash" d="M270 504 C295 504,295 520,326 520" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="560" width="250" height="78" rx="10"/>
+<text class="ts" x="145" y="590" text-anchor="middle" font-weight="700">LM Head(与嵌入共享)</text>
+<text class="ts" x="145" y="612" text-anchor="middle">logits [1,128k]</text>
+<rect class="bc" x="330" y="560" width="490" height="78" rx="10"/>
+<text class="ts" x="344" y="580" text-anchor="start" font-weight="700">Runner 收回输出送采样;decode 每出一个 token,</text>
+<text class="ts" x="344" y="602" text-anchor="start">再从第 2 行整条链走一遍(KV 从页表缓存取)</text>
+<path class="dash" d="M270 604 C295 604,295 620,326 620" marker-end="url(#ahArc)"/>
 <text class="tm" x="20" y="690">读法:左列=模型自上而下的架构件;右列=它在框架里的落点与调用者;★=本 PR(18870)落点:运行时补丁 patch/ 重开 SP。链子:Runner→层外壳→门卫→后端九步。</text>
 <text class="tm" x="20" y="716">下一步:先认目录分工(图 6),再从十行示例进流水线(图 7);完整调用时序见时序图(图 8),每步为什么这么实现见展开图(图 9)。</text>
 </svg>
