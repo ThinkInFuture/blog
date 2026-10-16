@@ -182,8 +182,6 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <svg viewBox="0 0 840 1300" role="img" aria-label="改动前：左业务主线右guard归约">
 <defs><marker id="ahA2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">改动前 · PP&gt;1：左＝业务主线（原样），右＝框架线（guard 与归约）</text>
-<text class="tm" x="240" y="52" text-anchor="middle" font-weight="700">业务主线（与并行无关）</text>
-<text class="tm" x="690" y="52" text-anchor="middle" font-weight="700">框架线</text>
 <rect class="node" x="110" y="40" width="260" height="40" rx="8"/>
 <text class="tb" x="240" y="65" text-anchor="middle">用户输入：3500 字 prompt</text>
 <path class="flow" d="M240 80 V96" marker-end="url(#{ahA2})"/>
@@ -327,8 +325,6 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <svg viewBox="0 0 840 1300" role="img" aria-label="改动后：左业务主线不动右三处变化">
 <defs><marker id="ahC2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">改动后 · 业务主线与图 2 完全一致；只动框架线：灰＝消失的白归约、绿＝新增、蓝＝变化</text>
-<text class="tm" x="240" y="52" text-anchor="middle" font-weight="700">业务主线（与并行无关）</text>
-<text class="tm" x="690" y="52" text-anchor="middle" font-weight="700">框架线</text>
 <rect class="node" x="110" y="40" width="260" height="40" rx="8"/>
 <text class="tb" x="240" y="65" text-anchor="middle">用户输入：3500 字 prompt</text>
 <path class="flow" d="M240 80 V96" marker-end="url(#{ahC2})"/>
@@ -722,34 +718,34 @@ def forward(self, positions, hidden_states, residual):   <span class="c"># Deeps
 <defs><marker id="ahSeq" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="460" y="26" text-anchor="middle">vllm-ascend 跑十行 attention 示例:全链时序——每个函数先"自己:"干完,再"委托:"下一棒(文件:行号实测)</text>
 <rect class="node" x="5" y="26" width="140" height="88" rx="10"/>
-<text class="ts" x="75" y="51" text-anchor="middle" font-weight="700">上游 vLLM 引擎</text>
-<text class="ts" x="75" y="68" text-anchor="middle">组批·调度</text>
-<text class="ts" x="75" y="85" text-anchor="middle">core.py:595</text>
+<text class="ts" x="75" y="54" text-anchor="middle" font-weight="700">上游 vLLM 引擎</text>
+<text class="ts" x="75" y="69" text-anchor="middle">组批·调度</text>
+<text class="ts" x="75" y="84" text-anchor="middle">core.py:595</text>
 <rect class="node" x="150" y="26" width="140" height="88" rx="10"/>
-<text class="ts" x="220" y="51" text-anchor="middle" font-weight="700">Worker 昇腾插件</text>
-<text class="ts" x="220" y="68" text-anchor="middle">NPUWorker</text>
-<text class="ts" x="220" y="85" text-anchor="middle">worker.py:643→669</text>
+<text class="ts" x="220" y="54" text-anchor="middle" font-weight="700">Worker 昇腾插件</text>
+<text class="ts" x="220" y="69" text-anchor="middle">NPUWorker</text>
+<text class="ts" x="220" y="84" text-anchor="middle">worker.py:643→669</text>
 <rect class="node" x="290" y="26" width="150" height="88" rx="10"/>
-<text class="ts" x="365" y="42" text-anchor="middle" font-weight="700">执行器·喂料</text>
-<text class="ts" x="365" y="60" text-anchor="middle">NPUModelRunner</text>
+<text class="ts" x="365" y="46" text-anchor="middle" font-weight="700">执行器·喂料</text>
+<text class="ts" x="365" y="62" text-anchor="middle">NPUModelRunner</text>
 <text class="ts" x="365" y="76" text-anchor="middle">model_runner_v1.py</text>
-<text class="ts" x="365" y="94" text-anchor="middle">:2035 主入口</text>
+<text class="ts" x="365" y="92" text-anchor="middle">:2035 主入口</text>
 <rect class="node" x="435" y="26" width="150" height="88" rx="10"/>
-<text class="ts" x="510" y="42" text-anchor="middle" font-weight="700">模型层 models/</text>
-<text class="ts" x="510" y="60" text-anchor="middle">AscendDeepSeekMTP</text>
+<text class="ts" x="510" y="46" text-anchor="middle" font-weight="700">模型层 models/</text>
+<text class="ts" x="510" y="62" text-anchor="middle">AscendDeepSeekMTP</text>
 <text class="ts" x="510" y="76" text-anchor="middle">deepseek_mtp.py:23</text>
-<text class="ts" x="510" y="94" text-anchor="middle">层外壳上游 :1315</text>
+<text class="ts" x="510" y="92" text-anchor="middle">层外壳上游 :1315</text>
 <rect class="ac" x="580" y="26" width="150" height="88" rx="10"/>
-<text class="ts" x="655" y="42" text-anchor="middle" font-weight="700">门卫 ops/mla.py</text>
-<text class="ts" x="655" y="60" text-anchor="middle">AscendMultiHead</text>
+<text class="ts" x="655" y="46" text-anchor="middle" font-weight="700">门卫 ops/mla.py</text>
+<text class="ts" x="655" y="62" text-anchor="middle">AscendMultiHead</text>
 <text class="ts" x="655" y="76" text-anchor="middle">LatentAttention</text>
-<text class="ts" x="655" y="94" text-anchor="middle">:151/:163/:181</text>
+<text class="ts" x="655" y="92" text-anchor="middle">:151/:163/:181</text>
 <rect class="bc" x="755" y="26" width="150" height="88" rx="10"/>
-<text class="ts" x="830" y="34" text-anchor="middle" font-weight="700">后端 attention/</text>
-<text class="ts" x="830" y="51" text-anchor="middle">AscendSFAImpl /</text>
-<text class="ts" x="830" y="68" text-anchor="middle">AscendSFADSACPImpl</text>
-<text class="ts" x="830" y="85" text-anchor="middle">sfa_v1.py:1503</text>
-<text class="ts" x="830" y="102" text-anchor="middle">sfa_cp.py:292</text>
+<text class="ts" x="830" y="39" text-anchor="middle" font-weight="700">后端 attention/</text>
+<text class="ts" x="830" y="54" text-anchor="middle">AscendSFAImpl /</text>
+<text class="ts" x="830" y="69" text-anchor="middle">AscendSFADSACPImpl</text>
+<text class="ts" x="830" y="84" text-anchor="middle">sfa_v1.py:1503</text>
+<text class="ts" x="830" y="99" text-anchor="middle">sfa_cp.py:292</text>
 <rect class="ghost" x="85" y="128" width="320" height="110" rx="8"/>
 <text class="ts" x="245" y="143" text-anchor="middle" font-weight="700">自己:组批——调度器把多条请求</text>
 <text class="ts" x="245" y="167" text-anchor="middle">拼成一个批;每条请求的 attention</text>
