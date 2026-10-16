@@ -544,8 +544,9 @@ graph LR
     A[vLLM Engine] --> B[Scheduler]
     B --> C[Worker]
     C --> D[NPUPlatform]
-    D --> E[Attention/Ops]
-    E --> F[NPU]
+    D --> E[Attention 后端]
+    E --> F[Custom Ops]
+    F --> G[NPU]
                 </pre>
             </div>
         </div>
@@ -583,9 +584,10 @@ sequenceDiagram
     end
     box rgb(212,237,218) 本项目vllm-ascend
     participant E as NPUPlatform
-    participant F as Attention/Ops
+    participant F as Attention 后端
+    participant G as Custom Ops
     end
-    participant G as NPU设备
+    participant H as NPU设备
 
     A->>B: 发送请求（模型名+输入）
     B->>C: 调度：决定谁先跑
@@ -593,11 +595,14 @@ sequenceDiagram
     C->>D: 分配：KV 与显存资源
     Note over D: 缓存族：prefix cache 前缀复用<br/>kv offload 下沉 DRAM · KV 池化与块管理
     D->>E: 执行：每 step 前向
-    E->>F: 计算调度
-    Note over F: 模型特性5族（GLM 驱动）：<br/>并行切分 · W8A8 量化 · weight NZ<br/>融合算子 · multi stream 双流<br/>执行族：绑核 · ACL Graph · model_runner v2
-    F->>G: NPU 执行
-    Note over B,G: decode 侧：MTP 投机解码 · Sample 分片去重 · PD 分离<br/>横切：EPLB 专家均衡 · 启动期：权重加载 多线程/lazy 与 NZ 转换
-    G-->>F: 结果
+    E->>F: attention 计算
+    Note over F: 模型特性5族（GLM 驱动）：<br/>并行切分 · W8A8 量化 · weight NZ<br/>融合算子 · multi stream 双流
+    F->>G: 算子调用
+    Note over G: 自定义算子：RMSNorm · 激活<br/>量化等 NPU 优化算子
+    G->>H: NPU 执行
+    Note over B,H: decode 侧：MTP 投机解码 · Sample 分片去重 · PD 分离<br/>执行：CPU 绑核 · ACL Graph 图捕获回放 · model_runner v2<br/>横切：EPLB 专家均衡 · 启动期：权重加载 多线程/lazy 与 NZ 转换
+    H-->>G: 结果
+    G-->>F: 回传
     F-->>D: 输出
     D-->>A: 返回
                 </pre>
