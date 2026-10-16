@@ -455,6 +455,8 @@ shapes                                                        cnt   mean     p50
 <li><b>解析工具别恋战</b>：ASCEND_PROFILER_OUTPUT 自动产物优先；msprof --parse=on 失败就换路，别卡死一条道。</li>
 </ul>
 
+<p class="dim">姊妹篇：<a href="算子与 vLLM 参数 · 一条链讲透.html">《算子与 vLLM 参数：一条链讲透》</a>——本篇的 profiling 数据反过来用：从算子清单反推启动配置，参数影响算子的四种方式。</p>
+
 <p class="note">注：文中目录名、文件体积、行数与全部统计数字（257GB / 13~18GB / 659657 行 / op_statistic 占比 40.5% / [221,6144] P50 3436.9→3710.6us / [220,6144] p99 11088us / staticKey DIFF 等）为本次排查实测与复核重跑的真实输出；当年报告口径为 220~222 池化 P50 3469→3963us（+14%），两者方向一致、幅度随分组口径略有差异。</p>
 
 </div>
