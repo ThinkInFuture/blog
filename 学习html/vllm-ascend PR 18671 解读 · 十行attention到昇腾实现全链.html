@@ -164,7 +164,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="30" y="264">车间：契约声明 + ⑤ 输入校验 + ⑥ o_proj 收口</text>
 <rect class="ac" x="20" y="282" width="430" height="48" rx="8"/>
 <text class="tb" x="30" y="301">attention/sfa_kv_offload.py</text>
-<text class="ts" x="30" y="320">KV offload：透传两个新参数（小改）</text>
+<text class="ts" x="30" y="320">KV offload：透传两个新参数（小改，与门卫/九步无接触）</text>
 <text class="tm" x="470" y="50" font-weight="700" fill="#6b7280">测试 ×5（回归网）</text>
 <rect class="ghost" x="470" y="58" width="350" height="48" rx="8"/>
 <text class="tb" x="480" y="77">test_deepseek_dsa_cp.py（新增）</text>
@@ -180,7 +180,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text class="ts" x="480" y="264">本地 SFA 分发 / 索引缓存所有权 / nope 组合</text>
 <rect class="ghost" x="470" y="282" width="350" height="48" rx="8"/>
 <text class="tb" x="480" y="301">test_glm_moe_dsa.py（新增）</text>
-<text class="ts" x="480" y="320">GLM MoE DSA 模型选择 / 回归</text>
+<text class="ts" x="480" y="320">GLM MoE DSA 模型选择 / 换装回归（PR 新增）</text>
 <text class="tm" x="20" y="362">五个源码文件按调用顺序排布；测试覆盖明细见第 4 章测试表</text>
 </svg>
 </div>
