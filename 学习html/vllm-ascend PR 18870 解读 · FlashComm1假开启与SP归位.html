@@ -428,7 +428,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="figcap">图 4 · 改动后：业务主线一个框都没动；五条件开 SP（蓝）、Ⓐ 白归约消失（灰）、PP 出口聚全量上移（绿）</div>
 
 <h2 id="s4">4. 主线讲解：从架构全貌到这次 PR</h2>
-<p>先对齐地基。本章沿一条固定路线走，小节对应六步：4.1 架构全貌（图 5）→ 4.2 目录地图（图 6）→ 4.3 十行示例怎么被完成（流水线图 7）→ 4.4 全链时序（图 8）→ 4.5 为什么这么实现·逐步收益（图 9）→ 4.6 问题 → 4.7 这次 PR（图 11~14），4.8~4.10 三张表收拢，每张图配一段讲解。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"开关与边界"——层的 SP 开关、o_proj 的归约权、PP 出口的布局。</p>
+<p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它（4.1 架构全貌·图 5 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10~14），4.8~4.10 三张表收拢，每张图配一段讲解。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"开关与边界"——层的 SP 开关、o_proj 的归约权、PP 出口的布局。</p>
 
 <h3>4.1 先看全貌：模型架构 → 框架流程</h3>
 <div class="card">
@@ -534,7 +534,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <p><b>四个目录，一条链，外加一个补丁层。</b>worker/ 管执行与喂料，models/ 管模型结构，ops/ 管算子门面，attention/ 管注意力实现，patch/ 管运行时补丁——<b>本 PR 的两个源码文件恰好一个在 patch/、一个在 worker/</b>：它不改结构、不改算子，改的是"结构与算子被怎么组装、边界按什么口径喂"。</p>
 
 <h3>4.3 十行示例，vllm-ascend 原本是怎么完成的</h3>
-<p>先摆出锚点代码——一份典型的 attention 推理实现，矩阵乘、RoPE、KV Cache、softmax，十来行（GQA + KV Cache 写法，batch 维省略）：</p>
+<p>架构线走完，现在切到实现线。先摆出锚点代码——一份典型的 attention 推理实现，矩阵乘、RoPE、KV Cache、softmax，十来行（GQA + KV Cache 写法，batch 维省略）：</p>
 <pre><span class="c"># 十行 attention 示例（推理版，等价于典型的 GQA+KVCache 教程实现）</span>
 def forward(x, is_prefill):                            <span class="c"># x: [1, seq, hidden]</span>
     q = x @ wq                                         <span class="c"># L1  Q 投影</span>
@@ -1079,7 +1079,7 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 </svg>
 </div>
 <div class="figcap">图 10 · 改前户口：模块 → 类 → 方法（patch_deepseek_v2.py 的 _patched_forward，层 SP 关、Ⓐ 白归约）</div>
-<p>把问题钉在代码上。上游的 guard 长在层外壳的组装处：PP&gt;1 时 <code>use_sequence_parallel_moe</code> 不会被置真，decoder SP 整段关闭；而 o_proj 是 RowParallelLinear，<code>reduce_results=True</code> 意味着<b>每层投影后各自做一次归约</b>——这在与 FlashComm1 语义（归约收归 decoder 统一做）组合时就是纯白做：</p>
+<p>两条线在这里交汇：架构线上是 Ⓑ 开关问题，落到实现线上，它打在层外壳与 PP 边界——十行示例本身无恙。把问题钉在代码上。上游的 guard 长在层外壳的组装处：PP&gt;1 时 <code>use_sequence_parallel_moe</code> 不会被置真，decoder SP 整段关闭；而 o_proj 是 RowParallelLinear，<code>reduce_results=True</code> 意味着<b>每层投影后各自做一次归约</b>——这在与 FlashComm1 语义（归约收归 decoder 统一做）组合时就是纯白做：</p>
 <pre><span class="c"># 改前状态（上游 guard 生效时，有删节）</span>
 layer.use_sequence_parallel_moe = False        <span class="c"># Ⓑ guard：PP&gt;1 时 decoder SP 被关</span>
 layer.self_attn.o_proj.reduce_results = True   <span class="c"># Ⓐ 每层投影后各归各的——白付一次集合通信</span>
