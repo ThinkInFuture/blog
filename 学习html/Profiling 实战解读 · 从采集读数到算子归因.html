@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</title>
-<meta name="description" content="拿 A3 GLM-5.1（1009 vs 0815）排查的真实文件讲 NPU Profiling：短窗口采集、kernel_details.csv 三板斧、把 TTFT 回归钉到 DispatchFFNCombine 大 chunk。">
+<meta name="description" content="拿 A3（昇腾）GLM-5.1 两个推理镜像（1009 vs 0815）排查的真实文件讲 NPU Profiling：短窗口采集、kernel_details.csv 三板斧、把 TTFT 回归钉到 DispatchFFNCombine 大 chunk。">
 <style>
 :root{
   --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
@@ -102,7 +102,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <div class="wrap">
 
 <h1>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</h1>
-<div class="subtitle">拿这次 A3 GLM-5.1（1009 vs 0815）排查的真实文件讲：怎么采、采完长什么样、kernel_details.csv 怎么读、怎么从“一堆 CSV”走到“DispatchFFNCombine prefill 慢 14%”的归因。</div>
+<div class="subtitle">拿这次 A3（昇腾）GLM-5.1 排查的真实文件讲——同一套服务的两个推理镜像：新的 1009、旧的 0815（按构建日期代称）：怎么采、采完长什么样、kernel_details.csv 怎么读、怎么从“一堆 CSV”走到“DispatchFFNCombine prefill 慢 14%”的归因。</div>
 <p class="dim" style="margin:-14px 0 22px">vLLM 源码 · 2026-10-16 发布 · vllm-ascend NPU Profiling 实战笔记</p>
 
 <!-- ====== 新手引导条 ====== -->
@@ -120,7 +120,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 </div>
 
 <h2>0. Profiling 能回答什么问题</h2>
-<p>这次排查最终要回答的是“<b>1009 比 0815 的 TTFT 慢，到底慢在哪个算子上</b>”。端侧指标（TTFT/吞吐）只能告诉你“慢了”，profiling 才能告诉你“<b>慢在谁身上、慢多少、什么 shape 下慢</b>”。这次它交出的答案：</p>
+<p>排查的起点很朴素：同一套 GLM-5.1 服务换了推理镜像后变慢——新镜像（10-09 构建，下文简称 <b>1009</b>）比老镜像（08-15 构建，下文简称 <b>0815</b>）的 <b>TTFT（首 token 时延，用户发出请求到收到第一个字）慢了 15% 至 20%</b>，到底慢在哪个算子上？端侧指标（TTFT/吞吐）只能告诉你“慢了”，profiling 才能告诉你“<b>慢在谁身上、慢多少、什么 shape 下慢</b>”。这次它交出的答案：</p>
 <ul>
 <li><b>阶段判定</b>：decode 相所有 kernel 两版本无差距 → 排除 decode；</li>
 <li><b>算子定位</b>：prefill 相 <b>DispatchFFNCombine</b>（MoE 通信融合算子）的大 chunk 调用变慢——shape [221,6144] P50 <b>3436.9 → 3710.6us（+8%）</b>，且 1009 侧出现 <b>p99 11088us</b> 的长尾（单次最大 14.5ms）；</li>
@@ -159,7 +159,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <text class="th" x="420" y="24" text-anchor="middle">采集姿势：压测拉起来 → 等流量稳定 → 中段开 12 至 15 秒窗口</text>
 <path class="arr" d="M60 90 H780"/>
 <text class="ts" x="60" y="112">压测开始</text>
-<text class="ts" x="250" y="112">流量稳定（cc8 打满）</text>
+<text class="ts" x="250" y="112">流量稳定（并发 8 打满）</text>
 <text class="ts" x="480" y="112">start</text>
 <text class="ts" x="630" y="112">15s 后 stop</text>
 <text class="ts" x="780" y="112" text-anchor="end">压测继续/结束</text>
@@ -188,8 +188,8 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <h3>1.3 其他实操要点</h3>
 <ul>
 <li><b>只采一个 rank 就够入门</b>：DP/EP 下每 rank 是一份完整 shard 的执行记录，定位单算子慢，先看 rank0（dp0_pp0_tp0），需要看通信对齐再扩到多 rank。</li>
-<li><b>prefill / decode 分窗口采</b>：这次就是分两次采的——decode 窗口 <code>1010_cc8_mlapo</code>、prefill 窗口 <code>1010_cc8_prefill2</code>，天然把阶段分开，省得在一份数据里按 step 猜阶段。</li>
-<li><b>对照组条件对齐</b>：基线（0815 镜像）与劣化（1009 镜像）用<b>同一套压测参数</b>（3.5K+1.5K、32req、cc8、request_rate 0）、同样窗口长度、同 rank，否则对比没有意义。</li>
+<li><b>prefill / decode 分窗口采</b>：这次就是分两次采的——decode 窗口 <code>1010_cc8_mlapo</code>、prefill 窗口 <code>1010_cc8_prefill2</code>（目录名＝采集日期_压测档_用途），天然把阶段分开，省得在一份数据里按 step 猜阶段。</li>
+<li><b>对照组条件对齐</b>：基线（0815 镜像）与劣化（1009 镜像）用<b>同一套压测参数</b>（输入 3.5K + 输出 1.5K token、32 个请求、并发 8、不限发送速率）、同样窗口长度、同 rank，否则对比没有意义。</li>
 </ul>
 
 <h2>2. 采完长什么样：目录结构与每个文件的用途</h2>
@@ -434,7 +434,7 @@ shapes                                                        cnt   mean     p50
 
 <table>
 <tr><th>步骤</th><th>做了什么</th><th>看到什么</th><th>结论推进</th></tr>
-<tr><td>窗口准备</td><td>0815 / 1009 各采 15s prefill 窗口（同压测参数：3.5K+1.5K、32req、cc8）</td><td>两份 <code>..._ascend_pt/ASCEND_PROFILER_OUTPUT/</code>（14GB / 13GB）</td><td>可比对的前提成立</td></tr>
+<tr><td>窗口准备</td><td>0815 / 1009 各采 15s prefill 窗口（同压测参数：输入 3.5K+输出 1.5K、32 请求、并发 8）</td><td>两份 <code>..._ascend_pt/ASCEND_PROFILER_OUTPUT/</code>（14GB / 13GB）</td><td>可比对的前提成立</td></tr>
 <tr><td>① 排行</td><td>两份各跑 groupby total 排行</td><td>FFNCombine 均为第一（30~33%）；通信算子 1009 明显变便宜；FFNCombine 总耗时看不出回退</td><td>排除 decode 窗口嫌疑；<b>总量口径失效，转分布</b></td></tr>
 <tr><td>② 分布</td><td>锁 DispatchFFNCombine 看 P50/P99（池化）</td><td>p50 反而 304.8→276.3——池化被两类调用比例稀释</td><td><b>池化口径失效，转 shape 分组</b></td></tr>
 <tr><td>③ shape</td><td>按 Input Shapes 分组统计</td><td>[221,6144] 3436.9→3710.6（+8%）；[220,6144] p99 11088；decode 形状无回退</td><td>锁定“prefill 大 chunk 路径”，decode 无关</td></tr>
@@ -442,7 +442,7 @@ shapes                                                        cnt   mean     p50
 <tr><td>⑤ 归因</td><td>对比两版本 CANN 自定义算子包</td><td><code>libcust_opapi.so</code> / <code>libcust_opsproto_rt2.0.so</code> / <code>binary_info_config.json</code> / <code>dispatch_ffn_combine_bf16.json</code> 的 <b>staticKey 全部 DIFF</b></td><td>0815→1009 间算子包更新了 kernel 实现 → 提单算子团队</td></tr>
 </table>
 
-<div class="kp"><span class="kp-t">交叉验证别忘了端侧指标</span>profiling 结论要能解释端侧：TTFT 差距约 15-20%，而 DispatchFFNCombine 占窗口 kernel 总耗时的 30~40%、大 chunk 调用慢 8~14%（池化口径），两者量级吻合；后来 <code>enable_prefill_mc2</code> 开关验证 TTFT 持平（753-768 vs 739-759）、mlapo 无收益，也都与“瓶颈在这个融合算子实现”自洽。<b>profiling 证据 + 开关实验 + 端侧指标三方对上，结论才算闭环。</b></div>
+<div class="kp"><span class="kp-t">交叉验证别忘了端侧指标</span>profiling 结论要能解释端侧：TTFT 差距约 15-20%，而 DispatchFFNCombine 占窗口 kernel 总耗时的 30~40%、大 chunk 调用慢 8~14%（池化口径），两者量级吻合；后来 <code>enable_prefill_mc2</code> 开关验证 TTFT 持平（753-768 vs 739-759）、mlapo（MLA 前处理融合开关）无收益，也都与“瓶颈在这个融合算子实现”自洽。<b>profiling 证据 + 开关实验 + 端侧指标三方对上，结论才算闭环。</b></div>
 
 <h2>5. 坑与经验清单（都是这次交过学费的）</h2>
 <ul>
