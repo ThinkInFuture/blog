@@ -104,7 +104,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <h1>vllm-ascend PR #18671 解读 · B 版（改前改后逐行对照）</h1>
 <div style="background:#f0f7ff;border:1px solid #d6e4ff;border-radius:8px;padding:10px 16px;margin:10px 0;font-size:14px"><strong>PR 地址：</strong><a href="https://github.com/vllm-project/vllm-ascend/pull/18671" target="_blank" rel="nofollow" style="color:#2f6feb;font-weight:600">vllm-project/vllm-ascend · Pull Request #18671</a>（[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP）</div>
 <div class="subtitle">[Performance][Model] Preserve GLM V1 SP token layout through DSA-CP —— 让 SP 的 token 分片布局一路贯穿 DSA-CP，消掉重复的 AllGather / ReduceScatter</div>
-<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（三版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · 十行attention到昇腾实现全链.html">C 版（从你认识的 attention 十行代码出发）</a>。现役版未动，选定后以所选版本替换。</div>
+<div class="kp t"><span class="kp-t">B 版试稿 · 改前改后逐行对照（三版对比中，二选一转正）</span>第 4 章把改前、改后两份真实代码并排逐行走：上游 forward（①④ 在哪两行）→ PR 新层（怎么绕开）→ 三道闸门 → 九步流水线两条路的形态。对照另外两版：<a href="vllm-ascend PR 18671 解读 · A版六层下探.html">A 版（六层下探（按执行顺序逐层放大））</a> · <a href="vllm-ascend PR 18671 解读 · 十行attention到昇腾实现全链.html">C 版（从 attention 十行样例出发）</a>。现役版未动，选定后以所选版本替换。</div>
 
 <nav class="toc">
 <b>目录</b>
@@ -352,7 +352,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 </div>
 
 <h2 id="s3">3. 核心思路：本地分片贯穿三个边界</h2>
-<p>PR 立了一条布局契约。DSA-CP attention 后端声明 <code>supports_sequence_parallel_input = True</code>，含义是"我收本地分片，还你本地分片"。对照图 4（业务骨架与图 2 完全一致）：①② 两处冗余直接省掉；② 的防错位职责由新增的 <b>⑤ 输入校验 + padding 清零</b>（纯本地操作）接替；④ 的归约职责并入 attention 内部的 <b>⑥ all-to-all + 单次 reduce-scatter</b>；③ 本职通信原样保留。这样三个边界（DecoderLayer ↔ MLA 包装层 ↔ DSA-CP attention）看到的是同一份连续 TP token 分片。</p>
+<p>PR 立了一条布局契约。DSA-CP attention 后端声明 <code>supports_sequence_parallel_input = True</code>，含义是"我收本地分片，还回本地分片"。对照图 4（业务骨架与图 2 完全一致）：①② 两处冗余直接省掉；② 的防错位职责由新增的 <b>⑤ 输入校验 + padding 清零</b>（纯本地操作）接替；④ 的归约职责并入 attention 内部的 <b>⑥ all-to-all + 单次 reduce-scatter</b>；③ 本职通信原样保留。这样三个边界（DecoderLayer ↔ MLA 包装层 ↔ DSA-CP attention）看到的是同一份连续 TP token 分片。</p>
 
 <div class="card">
 <svg viewBox="0 0 840 1160" role="img" aria-label="改动后：业务主线不动，只动框架线">
@@ -745,7 +745,7 @@ def resolve_sfa_impl(vllm_config=None):
 <div class="card">
 <svg viewBox="0 0 760 260" role="img" aria-label="o_proj 两条收口路径">
 <defs><marker id="ah3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="380" y="26" text-anchor="middle">_finalize_sequence_parallel_o_proj：两条路，都还你本地 token 分片</text>
+<text class="th" x="380" y="26" text-anchor="middle">_finalize_sequence_parallel_o_proj：两条路，都还回本地 token 分片</text>
 <rect class="node" x="290" y="44" width="180" height="40" rx="8"/>
 <text class="tb" x="380" y="69" text-anchor="middle">attention 输出 attn_output</text>
 <path class="flow" marker-end="url(#ah3)" d="M330 84 C300 100,280 108,262 116"/>
