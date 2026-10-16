@@ -107,7 +107,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 
 <!-- ====== 新手引导条 ====== -->
 <div class="guide-bar">
-  <p><span class="guide-label">新手必读</span>这篇文档是一份“从零看懂 Profiling”的实战笔记。如果你第一次接触，建议按以下顺序读：</p>
+  <p><span class="guide-label">新手必读</span>这篇文档是一份“从零看懂 Profiling”的实战笔记。第一次接触的读者，建议按以下顺序读：</p>
   <ul>
     <li><b>第 0 节</b> — 先搞懂 profiling 能回答什么问题（不用记细节，感受一下它有什么用）。</li>
     <li><b>第 1 节</b> — 学会怎么“采数据”（这是所有分析的前提，重点看短窗口姿势）。</li>
@@ -120,7 +120,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 </div>
 
 <h2>0. Profiling 能回答什么问题</h2>
-<p>排查的起点很朴素：同一套 GLM-5.1 服务换了推理镜像后变慢——新镜像（10-09 构建，下文简称 <b>1009</b>）比老镜像（08-15 构建，下文简称 <b>0815</b>）的 <b>TTFT（首 token 时延，用户发出请求到收到第一个字）慢了 15% 至 20%</b>，到底慢在哪个算子上？端侧指标（TTFT/吞吐）只能告诉你“慢了”，profiling 才能告诉你“<b>慢在谁身上、慢多少、什么 shape 下慢</b>”。这次它交出的答案：</p>
+<p>排查的起点很朴素：同一套 GLM-5.1 服务换了推理镜像后变慢——新镜像（10-09 构建，下文简称 <b>1009</b>）比老镜像（08-15 构建，下文简称 <b>0815</b>）的 <b>TTFT（首 token 时延，用户发出请求到收到第一个字）慢了 15% 至 20%</b>，到底慢在哪个算子上？端侧指标（TTFT/吞吐）只能说明“慢了”，profiling 才能回答“<b>慢在谁身上、慢多少、什么 shape 下慢</b>”。这次它交出的答案：</p>
 <ul>
 <li><b>阶段判定</b>：decode 相所有 kernel 两版本无差距 → 排除 decode；</li>
 <li><b>算子定位</b>：prefill 相 <b>DispatchFFNCombine</b>（MoE 通信融合算子）的大 chunk 调用变慢——shape [221,6144] P50 <b>3436.9 → 3710.6us（+8%）</b>，且 1009 侧出现 <b>p99 11088us</b> 的长尾（单次最大 14.5ms）；</li>
@@ -128,7 +128,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <li><b>归因延伸</b>：顺着算子名去对比两版本 CANN 自定义算子包的 kernel 二进制（staticKey 全 DIFF），把结论钉死在“算子包实现变更”上。</li>
 </ul>
 <div class="why">
-  <b>为什么这些答案重要？</b> 端侧只能看到“TTFT 慢了 15%”，但没法知道是哪个算子、什么形状、什么阶段慢。Profiling 就像给 NPU 装了一个“行车记录仪”，能把每一次 kernel 执行的时间、形状、设备都录下来，让你精确找到瓶颈。
+  <b>为什么这些答案重要？</b> 端侧只能看到“TTFT 慢了 15%”，但没法知道是哪个算子、什么形状、什么阶段慢。Profiling 就像给 NPU 装了一个“行车记录仪”，能把每一次 kernel 执行的时间、形状、设备都录下来，据此精确锁定瓶颈。
 </div>
 <p>没有 profiling，这个故事到“TTFT 慢 15-20%”就断了。</p>
 
