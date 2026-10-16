@@ -427,7 +427,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <p>先对齐地基。本章走<b>两条线</b>：<b>线一·模型架构线</b>——从模型架构看到 vllm-ascend 框架，看模型的每一件住哪、谁调它，4.1 先摆这块推理的朴素 PyTorch 写法、定位到框架加的壳（图 5 给出全局定位 + 4.2 目录地图·图 6）；<b>线二·PyTorch 实现线</b>——从十行示例的 PyTorch 实现看到框架实现，看它被谁一步步算出来、每步为什么（4.3 流水线·图 7 → 4.4 全链时序·图 8 → 4.5 逐步收益·图 9）；两条线在 4.6 的问题处交汇，4.7 讲这次 PR（图 10~14），4.8~4.10 三张表收拢，每张图配一段讲解。先说结论：<b>attention 的数学一行没动</b>；本 PR 改的全是"开关与边界"——层的 SP 开关、o_proj 的归约权、PP 出口的布局。</p>
 
 <h3>4.1 先看这块推理的原始写法：朴素 PyTorch</h3>
-<p>老规矩，先立对比基准——<b>这块推理（一层 Transformer 的前向）用 PyTorch 朴素写出来长什么样</b>。你自己写模型推理就会这么写：单卡、没有任何并行概念（有删节）。十行示例管的是 attention 这一小块；这里把整层摆出来，MoE 一并看：</p>
+<p>老规矩，先立对比基准——<b>这块推理（一层 Transformer 的前向）用 PyTorch 朴素写出来长什么样</b>。自己动手写模型推理就会这么写：单卡、没有任何并行概念（有删节）。十行示例管的是 attention 这一小块；这里把整层摆出来，MoE 一并看：</p>
 <pre><span class="c"># 朴素 PyTorch 写法：一层 Transformer 的前向（单卡，无框架）</span>
 def layer_forward(hidden_states):
     h = input_layernorm(hidden_states)          <span class="c"># 进层先归一化</span>
@@ -1082,7 +1082,7 @@ def layer_forward(hidden_states):
 <text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
 <text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
 <text class="tm" x="539" y="46" text-anchor="middle">类</text>
-<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
+<text class="tm" x="743" y="46" text-anchor="middle">方法 · 在这</text>
 <rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
 <text class="ts" x="115" y="102" text-anchor="middle">照常组批调执行</text>
@@ -1117,7 +1117,7 @@ layer.self_attn.o_proj.reduce_results = True   <span class="c"># Ⓐ 每层投�
 <text class="tm" x="115" y="46" text-anchor="middle">引擎</text>
 <text class="tm" x="327" y="46" text-anchor="middle">模块（定位）</text>
 <text class="tm" x="539" y="46" text-anchor="middle">类</text>
-<text class="tm" x="743" y="46" text-anchor="middle">方法 · 你在这</text>
+<text class="tm" x="743" y="46" text-anchor="middle">方法 · 在这</text>
 <rect class="node" x="20" y="54" width="190" height="64" rx="10"/>
 <text class="tb" x="115" y="80" text-anchor="middle">上游 vLLM · 引擎</text>
 <text class="ts" x="115" y="102" text-anchor="middle">照常调到这一层</text>
