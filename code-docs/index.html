@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>vLLM Ascend 架构总览</title>
-    <script src="https://cdn.jsdmirror.com/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="https://cdn.jsdmirror.com/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         
@@ -571,7 +571,7 @@ graph LR
         <p>10. <strong>推理结果</strong>：将生成的文本返回给用户</p>
 
         <div class="mermaid-box">
-            <div class="chart-label">图5：请求处理流程（上游vLLM → 本项目vllm-ascend）</div>
+            <div class="chart-label">图5：请求处理流程 × 20 个特性族落位（上游vLLM → 本项目vllm-ascend）</div>
             <div class="chart-content">
                 <pre class="mermaid">
 sequenceDiagram
@@ -586,19 +586,25 @@ sequenceDiagram
     participant F as Attention/Ops
     end
     participant G as NPU设备
-    
-    A->>B: 发送请求
-    B->>C: 调度
-    C->>D: 分配
-    D->>E: 执行
-    E->>F: 计算
-    F->>G: NPU执行
+
+    A->>B: 发送请求（模型名+输入）
+    B->>C: 调度：决定谁先跑
+    Note over C: 调度族：chunkPrefill 长输入切块<br/>异步调度两步流水 · DPLB 实例均衡
+    C->>D: 分配：KV 与显存资源
+    Note over D: 缓存族：prefix cache 前缀复用<br/>kv offload 下沉 DRAM · KV 池化与块管理
+    D->>E: 执行：每 step 前向
+    E->>F: 计算调度
+    Note over F: 模型特性5族（GLM 驱动）：<br/>并行切分 · W8A8 量化 · weight NZ<br/>融合算子 · multi stream 双流<br/>执行族：绑核 · ACL Graph · model_runner v2
+    F->>G: NPU 执行
+    Note over B,G: decode 侧：MTP 投机解码 · Sample 分片去重 · PD 分离<br/>横切：EPLB 专家均衡 · 启动期：权重加载 多线程/lazy 与 NZ 转换
     G-->>F: 结果
     F-->>D: 输出
     D-->>A: 返回
                 </pre>
             </div>
         </div>
+
+        <p style="font-size:13px;color:#6b7280;margin:6px 0 0">读法：20 个特性族已按流程位置标注在链路上——调度 3 + 缓存 4 + 执行 3 + 模型 5 + 解码部署 3 + 横切 1 + 加载 1；各族职责与代码落点见 <a href="../学习html/vLLM-Ascend 特性地图解读 · L0L1L2划分与源码对照.html" style="color:#667eea;font-weight:bold">《vLLM-Ascend 特性地图解读》</a>。</p>
 
         <div class="code-block">
 <div class="filename">关键源码位置</div>
