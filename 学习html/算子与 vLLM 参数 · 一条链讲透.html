@@ -155,7 +155,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <text class="tb" x="160" y="152" text-anchor="middle">框架层 · 执行路径</text>
 <text class="ts" x="160" y="172" text-anchor="middle">模型的 forward 组织：走哪条分支、</text>
 <text class="ts" x="160" y="188" text-anchor="middle">调哪些算子、batch/shape 怎么切</text>
-<path class="flow" d="M160 194 V222" marker-end="url(#m0)"/>
+
 <rect class="oc" x="360" y="30" width="240" height="66" rx="8"/>
 <text class="tb" x="480" y="54" text-anchor="middle">算子层 · device kernel</text>
 <text class="ts" x="480" y="74" text-anchor="middle">DispatchFFNCombine · QuantBatchMatmulV3</text>
@@ -167,8 +167,8 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <text class="ts" x="715" y="74" text-anchor="middle">op_statistic.csv（聚合）</text>
 <text class="ts" x="715" y="90" text-anchor="middle">kernel_details.csv（逐次）</text>
 <path class="flow" d="M600 63 H616" marker-end="url(#m0)"/>
-<path class="flow" d="M600 161 H616" stroke-dasharray="5 4" marker-end="url(#m0)"/>
-<text class="tm" x="40" y="236">实线：prefill 一次 MoE 调用的链；虚线：同一链路在不同层的投影。改参数 = 改框架路径 = 改算子清单。</text>
+<path class="flow" d="M280 148 C430 148,570 120,612 94" stroke-dasharray="5 4" marker-end="url(#m0)"/>
+<text class="tm" x="40" y="236">实线：参数落到算子的主链（配置→框架→算子→profiling）；虚线：框架路径在算子层与 profiling 里的投影。改参数 = 改框架路径 = 改算子清单。</text>
 </svg>
 <div class="figcap">图 1 · 三层视角：参数改的是框架路径，profiling 看到的是路径的最终投影</div>
 </div>
