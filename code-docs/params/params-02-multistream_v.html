@@ -126,7 +126,7 @@ flowchart TD
 
 <h2 id="s3">③ 概念爬坡：从"排队"走到"三个开关"</h2>
 <div class="card">
-<p><strong>级 1 · NPU 的任务不是"立刻执行"，是"提交进队列"。</strong>你写 <code>c = a + b</code> 这样的
+<p><strong>级 1 · NPU 的任务不是"立刻执行"，是"提交进队列"。</strong>写下 <code>c = a + b</code> 这样的
 张量运算，程序并没当场算完——它只是把一条"做一次加法"的指令<strong>提交</strong>到了芯片的任务队列里，
 真正的执行由芯片异步完成。这个队列在昇腾/英伟达的编程模型里叫 <strong>stream（流）</strong>：
 同一流里的任务<strong>严格按提交顺序串行</strong>执行；不同流之间<strong>不保证顺序，可以并行</strong>。
@@ -388,7 +388,7 @@ flowchart TD
 <ul>
 <li><span class="warn">静默互斥</span>：<code>enable_fused_mc2=1</code> 时
 <code>multistream_overlap_shared_expert</code> 被<strong>强制改回 false</strong>（ascend_config.py:705-706）——
-你配了也白配，日志无 error。排查"共享专家重叠为什么没生效"先查 mc2。</li>
+配了也白配，日志无 error。排查"共享专家重叠为什么没生效"先查 mc2。</li>
 <li><span class="warn">HCCL 死锁坑</span>：shared_experts 注释原话——TP 的 all-gather
 <strong>必须留在默认流</strong>；若挪到共享专家流而 routed 侧 EP 集合通信在默认流，
 两个进程组进度不一致可能<strong>死锁 HCCL</strong>。双流与集合通信混排时要问一句"这个集合操作在哪个进程组、哪条流"。</li>
