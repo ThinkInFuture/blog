@@ -329,7 +329,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <text x="726" y="68" text-anchor="middle" font-size="11" fill="#60a5fa" font-weight="400">卡14</text><rect x="751" y="44" width="44" height="40" rx="4" fill="#eff6ff" stroke="#93c5fd" stroke-width="1"/>
 <text x="773" y="68" text-anchor="middle" font-size="11" fill="#60a5fa" font-weight="400">卡15</text>
 <text x="420" y="104" text-anchor="middle" font-size="11" fill="#cf222e">第 16 段的尾部含 4 个 padding（3500 对齐到 16 的倍数 = 3504）</text>
-<text class="tm" x="46" y="140" font-weight="700" fill="#1d4ed8">放大卡 0 ↓</text>
+<text class="tm" x="20" y="100" font-weight="700" fill="#1d4ed8">放大 ↓</text>
 <path d="M68 88 C68 108,105 108,105 124" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="5 4" fill="none" marker-end="url(#ah7)"/>
 <rect class="bc" x="46" y="128" width="240" height="44" rx="8"/>
 <text class="tb" x="166" y="148" text-anchor="middle">卡 0 的本地分片 [219, 8192]</text>
@@ -477,7 +477,7 @@ GLM 在 V1 runner + 序列并行 MoE（SP）+ DSA-CP 的组合下，模型层进
 <p>因为它的活儿已经有人干了。跨卡归约（把各卡的部分和加起来）这件事必须做、且只能做一次：改动后由 ⑥ 在 attention 内部完成——all_to_all 换完 head 后，数据正好是"每卡一段 token 的部分和"，紧接着一次 reduce_scatter 同时完成求和和按卡散射，一步到位。模型层原来那个 ④ 如果保留，要么重复归约（结果就错了），要么得先把数据倒腾回旧布局再散一次（通信翻倍）。所以它不是简单删掉，而是职责移进了唯一正确的位置。至于正确性：⑤ 的边界校验保证布局不可能悄悄错（错就当场抛错），FP16 的 scale 放在归约前乘，与上游语义逐位对齐——4.5 节的单测验证了新旧路径结果一致。</p>
 
 <h2 id="s4">4. 逐文件解读</h2>
-<p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？分两步。<b>图 5</b> 先把 attention 小块放大——它背后是 vllm-ascend 的 4 层代码，四步执行流、每步收什么做什么交什么。<b>图 6</b> 再回到一条请求的完整旅程：用户请求进入上游 vLLM（Engine 接收、Scheduler 组 batch、Worker 执行），跨过插件边界交给 vllm-ascend（NPUPlatform 平台层、Attention/Ops 算子层），最后由 NPU 设备计算并原路返回——<b>黄色区是上游 vLLM 的通用代码，绿色区才是 vllm-ascend 插件的代码</b>，并对照「计算」一步的改前 vs 改后。之后 4.1~4.5 的每个细节都挂回图 5 的步骤号。</p>
+<p>第 2、3 章站在模型层视角。PR 改的 4 个文件在哪？分两步。<b>图 5</b> 先把 attention 小块放大——它背后是 vllm-ascend 的 4 层代码，四步执行流、每步收什么做什么交什么。<b>图 6</b> 再回到一条请求的完整旅程：用户请求进入上游 vLLM（Engine 接收、Scheduler 组 batch、Worker 执行），跨过插件边界交给 vllm-ascend（NPUPlatform 平台层、attention/ 注意力层、ops/ 算子层），最后由 NPU 设备计算并原路返回——<b>黄色区是上游 vLLM 的通用代码，绿色区才是 vllm-ascend 插件的代码</b>，并对照「计算」一步的改前 vs 改后。之后 4.1~4.5 的每个细节都挂回图 5 的步骤号。</p>
 
 <h3>先看一行代码：attention 是怎么"变成"代码的</h3>
 <p>你可能一直卡在同一处：<b>attention 是个计算，怎么就"变成代码"了？</b>这不是比喻，是字面意思——程序执行到模型代码里的某一行，就跳进另一段代码，把 Q / K / V 真的算出来，再跳回来继续。把那一行，和它的下探路径，原样摆出来：</p>
@@ -516,7 +516,7 @@ h = self.self_attn(positions, hidden)
 <p>对照图 3:门卫/调度员/车间就是图 3 第 3 层的那三框,模型层就是步骤 1——下面把每一步的<b>收什么、做什么、交什么</b>摆出来。</p>
 
 <div class="card">
-<svg viewBox="0 0 840 797" role="img" aria-label="放大 attention 小块:4 层 vllm-ascend 代码的四步执行流">
+<svg viewBox="0 0 840 816" role="img" aria-label="放大 attention 小块:4 层 vllm-ascend 代码的四步执行流">
 <defs><marker id="ah5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
 <text class="th" x="420" y="24" text-anchor="middle">放大 attention 小块：它背后是 4 层 vllm-ascend 代码</text>
 <text class="tm" x="50" y="46">第 1 层 · vLLM 推理主流程（每条请求都走这条）</text>
@@ -616,7 +616,8 @@ h = self.self_attn(positions, hidden)
 <tr><td><b>Scheduler</b></td><td>调度器</td><td>把请求组成 batch、管排队与抢占(chunkPrefill/DPLB 都在这一层,见特性地图)</td><td>上游 vLLM</td></tr>
 <tr><td><b>Worker</b></td><td>执行器(每卡一个进程)</td><td>加载模型、执行模型前向——<b>跑的模型代码来自 vllm-ascend</b>(图 3 步骤 1)</td><td>进程属上游,模型代码属 vllm-ascend</td></tr>
 <tr><td><b>NPUPlatform</b></td><td>平台注册层</td><td>告诉 vLLM「我是昇腾」:设备初始化、内存管理、平台/Worker 类注册</td><td>vllm-ascend(PR 未动)</td></tr>
-<tr><td><b>Attention/Ops</b></td><td>注意力实现 + 算子封装</td><td><code>attention/</code> 管注意力怎么算,<code>ops/</code> 管算子怎么接进昇腾(区别见 4.3)</td><td>vllm-ascend</td></tr>
+<tr><td><b>attention/</b></td><td>注意力实现</td><td>管注意力怎么算（门卫接入口 + 后端计算，区别见 4.3）</td><td>vllm-ascend</td></tr>
+<tr><td><b>ops/</b></td><td>算子封装</td><td>管算子怎么接进昇腾（custom op 注册与分发，见 4.3）</td><td>vllm-ascend</td></tr>
 <tr><td><b>NPU 设备</b></td><td>昇腾硬件</td><td>真正执行算子</td><td>硬件</td></tr>
 </table>
 
@@ -628,38 +629,42 @@ h = self.self_attn(positions, hidden)
 </defs>
 <text class="th" x="420" y="24" text-anchor="middle">这条链怎么读：请求经过谁 → 每处是谁的代码 → 「计算」一步改前改后</text>
 <!-- 行1:请求旅程 -->
-<text class="tm" x="15" y="48">① 一条请求经过谁（框从左到右 = 上表 7 行；框底色 = 代码归属）</text>
-<rect class="node" x="15" y="56" width="120" height="56" rx="8"/>
-<text class="tb" x="75" y="78" text-anchor="middle">用户</text>
-<text class="ts" x="75" y="98" text-anchor="middle">prompt 3500 字</text>
-<rect x="153" y="56" width="120" height="56" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="1.5"/>
-<text class="tb" x="213" y="78" text-anchor="middle">Engine</text>
-<text class="ts" x="213" y="98" text-anchor="middle">接收请求</text>
-<rect x="291" y="56" width="120" height="56" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="1.5"/>
-<text class="tb" x="351" y="78" text-anchor="middle">Scheduler</text>
-<text class="ts" x="351" y="98" text-anchor="middle">组 batch</text>
-<rect x="429" y="56" width="120" height="70" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="2"/>
-<text class="tb" x="489" y="76" text-anchor="middle">Worker</text>
-<text class="ts" x="489" y="94" text-anchor="middle">执行模型前向</text>
-<text class="ts" x="489" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 图 5 四步在此</text>
-<rect class="ac" x="567" y="56" width="120" height="70" rx="8"/>
-<text class="tb" x="627" y="76" text-anchor="middle">Attention/Ops</text>
-<text class="ts" x="627" y="94" text-anchor="middle">注意力 + 算子</text>
-<text class="ts" x="627" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 步骤 2-4</text>
-<rect class="node" x="705" y="56" width="120" height="56" rx="8"/>
-<text class="tb" x="765" y="78" text-anchor="middle">NPU 设备</text>
-<text class="ts" x="765" y="98" text-anchor="middle">真正执行</text>
-<path class="flow" d="M135 84 H149" marker-end="url(#ah6)"/>
-<path class="flow" d="M273 84 H287" marker-end="url(#ah6)"/>
-<path class="flow" d="M411 84 H425" marker-end="url(#ah6)"/>
-<path class="flow" d="M549 84 H563" marker-end="url(#ah6)"/>
-<path class="flow" d="M687 84 H701" marker-end="url(#ah6)"/>
+<text class="tm" x="15" y="48">① 一条请求经过谁（框从左到右 = 上表顺序；框底色 = 代码归属，绿框 = vllm-ascend 插件）</text>
+<rect class="node" x="15" y="56" width="100" height="56" rx="8"/>
+<text class="tb" x="65" y="78" text-anchor="middle">用户</text>
+<text class="ts" x="65" y="98" text-anchor="middle">3500 字输入</text>
+<rect x="133" y="56" width="100" height="56" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="1.5"/>
+<text class="tb" x="183" y="78" text-anchor="middle">Engine</text>
+<text class="ts" x="183" y="98" text-anchor="middle">接收请求</text>
+<rect x="251" y="56" width="100" height="56" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="1.5"/>
+<text class="tb" x="301" y="78" text-anchor="middle">Scheduler</text>
+<text class="ts" x="301" y="98" text-anchor="middle">组 batch</text>
+<rect x="369" y="56" width="100" height="70" rx="8" fill="#fffbe6" stroke="#d97706" stroke-width="2"/>
+<text class="tb" x="419" y="76" text-anchor="middle">Worker</text>
+<text class="ts" x="419" y="94" text-anchor="middle">执行模型前向</text>
+<text class="ts" x="419" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 图 5 四步在此</text>
+<rect class="ac" x="487" y="56" width="100" height="70" rx="8"/>
+<text class="tb" x="537" y="76" text-anchor="middle">attention/</text>
+<text class="ts" x="537" y="94" text-anchor="middle">注意力计算</text>
+<text class="ts" x="537" y="112" text-anchor="middle" font-size="10.5" font-weight="700" fill="#1d4ed8">★ 步骤 2-4</text>
+<rect class="ac" x="605" y="56" width="100" height="56" rx="8"/>
+<text class="tb" x="655" y="78" text-anchor="middle">ops/</text>
+<text class="ts" x="655" y="98" text-anchor="middle">算子接入昇腾</text>
+<rect class="node" x="723" y="56" width="100" height="56" rx="8"/>
+<text class="tb" x="773" y="78" text-anchor="middle">NPU 设备</text>
+<text class="ts" x="773" y="98" text-anchor="middle">真正执行</text>
+<path class="flow" d="M115 84 H131" marker-end="url(#ah6)"/>
+<path class="flow" d="M233 84 H249" marker-end="url(#ah6)"/>
+<path class="flow" d="M351 84 H367" marker-end="url(#ah6)"/>
+<path class="flow" d="M469 84 H485" marker-end="url(#ah6)"/>
+<path class="flow" d="M587 84 H603" marker-end="url(#ah6)"/>
+<path class="flow" d="M705 84 H721" marker-end="url(#ah6)"/>
 <!-- 归属色带 -->
 <rect x="153" y="132" width="396" height="20" rx="5" fill="#fffbe6" stroke="#d97706" stroke-width="1"/>
 <text x="351" y="146" text-anchor="middle" font-size="11" fill="#7a5800">上游 vLLM 的进程</text>
 <rect x="567" y="132" width="120" height="20" rx="5" fill="#eafaf0" stroke="#1a7f37" stroke-width="1"/>
 <text x="627" y="146" text-anchor="middle" font-size="11" fill="#15803d">vllm-ascend 代码</text>
-<text class="ts" x="15" y="176" font-size="12.5">注意：Worker 是上游的进程，但它加载并执行的模型代码来自 vllm-ascend——所以 ★ 步骤 1 在这里</text>
+<text class="ts" x="15" y="170" font-size="12.5">注意：Worker 是上游的进程，但它加载并执行的模型代码来自 vllm-ascend——所以 ★ 步骤 1 在这里</text>
 <!-- 放大线1 -->
 <path d="M489 130 C489 152,420 152,420 172" stroke="#3b82f6" stroke-width="1.8" stroke-dasharray="5 4" fill="none" marker-end="url(#ah6)"/>
 <text class="tm" x="500" y="152">放大 ↓</text>
