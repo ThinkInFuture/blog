@@ -268,7 +268,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <path class="dash" d="M370 288 C430 288,470 306,527 306" marker-end="url(#ahA2)"/>
 <circle class="gbadge" cx="545" cy="306" r="16"/>
 <text class="bdg" x="545" y="312" text-anchor="middle" style="fill:var(--text-muted)">Ⓑ</text>
-<rect class="wc" x="545" y="372" width="270" height="64" rx="8"/>
+<rect class="wc" x="545" y="372" width="270" height="72" rx="8"/>
 <text class="tb" x="690" y="394" text-anchor="middle">FlashComm1 上报＝开启</text>
 <text class="ts" x="690" y="416" text-anchor="middle">名实不符:配置开着,</text>
 <text class="ts" x="690" y="438" text-anchor="middle">decoder SP 实际被关</text>
@@ -415,7 +415,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <text class="ts" x="690" y="312" text-anchor="middle">V1·glm_moe_dsa·moe_freq=1·PP&gt;1·SP</text>
 <text class="ts" x="690" y="334" text-anchor="middle">仅本 stage 的 MoE+MLA 层动手(图 13)</text>
 <path class="dash" d="M370 288 C430 288,470 306,527 306" marker-end="url(#ahC2)"/>
-<rect class="ghost" x="545" y="372" width="270" height="64" rx="8"/>
+<rect class="ghost" x="545" y="372" width="270" height="72" rx="8"/>
 <text class="tb" x="690" y="394" text-anchor="middle">灰 · Ⓐ 消失:o_proj 不再每层归约</text>
 <text class="ts" x="690" y="416" text-anchor="middle">reduce_results=False,</text>
 <text class="ts" x="690" y="438" text-anchor="middle">归约权收归 decoder 统一收口</text>
@@ -445,54 +445,54 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <text class="th" x="420" y="26" text-anchor="middle">模型架构 → 框架流程:模型的每一件,在 vllm-ascend 里住哪、谁调它</text>
 <text class="tm" x="160" y="48" text-anchor="middle" font-weight="700">模型架构(自上而下)</text>
 <text class="tm" x="570" y="48" text-anchor="middle" font-weight="700">框架落点 · 调用者(文件:行号实测)</text>
-<rect class="node" x="20" y="60" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="96" text-anchor="middle" font-weight="700">Token 嵌入</text>
-<text class="ts" x="160" y="120" text-anchor="middle">词表 128k · hidden 8192</text>
-<rect class="bc" x="320" y="60" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="86" text-anchor="start" font-weight="700">上游 runner 喂 ids [1,3500],嵌入成 [1,3500,8192];</text>
-<text class="ts" x="334" y="110" text-anchor="start">pad 到 3504 在 Runner 做(model_runner_v1.py:2935)</text>
-<path class="flow" d="M160 148 V157" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="60" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="90" text-anchor="middle" font-weight="700">Token 嵌入</text>
+<text class="ts" x="160" y="112" text-anchor="middle">词表 128k · hidden 8192</text>
+<rect class="bc" x="320" y="60" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="80" text-anchor="start" font-weight="700">上游 runner 喂 ids [1,3500],嵌入成 [1,3500,8192];</text>
+<text class="ts" x="334" y="102" text-anchor="start">pad 到 3504 在 Runner 做(model_runner_v1.py:2935)</text>
+<path class="flow" d="M160 138 V157" marker-end="url(#ahArc)"/>
 <path class="dash" d="M300 104 C312 104,312 120,317 120" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="160" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="196" text-anchor="middle" font-weight="700">× N 层 DecoderLayer</text>
-<text class="ts" x="160" y="220" text-anchor="middle">每层≈1.1B,外壳串四件</text>
-<rect class="bc" x="320" y="160" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="186" text-anchor="start" font-weight="700">层外壳 forward:input LN → self_attn → post LN → MoE</text>
-<text class="ts" x="334" y="210" text-anchor="start">(deepseek_v2.py:1315);★ 运行时补丁 patch/ 在这重开 SP、</text>
-<text class="ts" x="334" y="234" text-anchor="start">o_proj 交出归约权(patch_deepseek_v2.py)</text>
-<path class="flow" d="M160 248 V257" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="160" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="190" text-anchor="middle" font-weight="700">× N 层 DecoderLayer</text>
+<text class="ts" x="160" y="212" text-anchor="middle">每层≈1.1B,外壳串四件</text>
+<rect class="bc" x="320" y="160" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="180" text-anchor="start" font-weight="700">层外壳 forward:input LN → self_attn → post LN → MoE</text>
+<text class="ts" x="334" y="202" text-anchor="start">(deepseek_v2.py:1315);★ 运行时补丁 patch/ 在这重开 SP、</text>
+<text class="ts" x="334" y="224" text-anchor="start">o_proj 交出归约权(patch_deepseek_v2.py)</text>
+<path class="flow" d="M160 238 V257" marker-end="url(#ahArc)"/>
 <path class="dash" d="M300 204 C312 204,312 220,317 220" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="260" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="296" text-anchor="middle" font-weight="700">└ self_attn(十行示例)</text>
-<text class="ts" x="160" y="320" text-anchor="middle">MLA/DSA:latent KV+top-2048</text>
-<rect class="bc" x="320" y="260" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="286" text-anchor="start" font-weight="700">门卫 ops/mla.py:151 放行 → 后端 sfa_v1.py:1503</text>
-<text class="ts" x="334" y="310" text-anchor="start">九步流水线开算;GLM 与 DeepSeek 共用这条实现链</text>
-<path class="flow" d="M160 348 V357" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="260" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="290" text-anchor="middle" font-weight="700">└ self_attn(十行示例)</text>
+<text class="ts" x="160" y="312" text-anchor="middle">MLA/DSA:latent KV+top-2048</text>
+<rect class="bc" x="320" y="260" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="280" text-anchor="start" font-weight="700">门卫 ops/mla.py:151 放行 → 后端 sfa_v1.py:1503</text>
+<text class="ts" x="334" y="302" text-anchor="start">九步流水线开算;GLM 与 DeepSeek 共用这条实现链</text>
+<path class="flow" d="M160 338 V357" marker-end="url(#ahArc)"/>
 <path class="dash" d="M300 304 C312 304,312 320,317 320" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="360" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="396" text-anchor="middle" font-weight="700">└ MoE(路由+共享)</text>
-<text class="ts" x="160" y="420" text-anchor="middle">SwiGLU,≈0.8B/层</text>
-<rect class="bc" x="320" y="360" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="386" text-anchor="start" font-weight="700">SP MoE:各卡各算自己 219 个 token 的分片,天然免通信</text>
-<text class="ts" x="334" y="410" text-anchor="start">(mlp 收 already_sequence_parallel=True,不再整理布局)</text>
-<path class="flow" d="M160 448 V457" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="360" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="390" text-anchor="middle" font-weight="700">└ MoE(路由+共享)</text>
+<text class="ts" x="160" y="412" text-anchor="middle">SwiGLU,≈0.8B/层</text>
+<rect class="bc" x="320" y="360" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="380" text-anchor="start" font-weight="700">SP MoE:各卡各算自己 219 个 token 的分片,天然免通信</text>
+<text class="ts" x="334" y="402" text-anchor="start">(mlp 收 already_sequence_parallel=True,不再整理布局)</text>
+<path class="flow" d="M160 438 V457" marker-end="url(#ahArc)"/>
 <path class="dash" d="M300 404 C312 404,312 420,317 420" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="460" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="496" text-anchor="middle" font-weight="700">MTP 模块(投机解码)</text>
-<text class="ts" x="160" y="520" text-anchor="middle">环境 MTP=3</text>
-<rect class="bc" x="320" y="460" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="486" text-anchor="start" font-weight="700">vllm_ascend/models/deepseek_mtp.py:投机解码模块,</text>
-<text class="ts" x="334" y="510" text-anchor="start">本 PR 不动;</text>
-<text class="ts" x="334" y="534" text-anchor="start">改的落点在层外壳与 PP 边界(见 ★)</text>
-<path class="flow" d="M160 548 V557" marker-end="url(#ahArc)"/>
+<rect class="node" x="20" y="460" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="490" text-anchor="middle" font-weight="700">MTP 模块(投机解码)</text>
+<text class="ts" x="160" y="512" text-anchor="middle">环境 MTP=3</text>
+<rect class="bc" x="320" y="460" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="480" text-anchor="start" font-weight="700">vllm_ascend/models/deepseek_mtp.py:投机解码模块,</text>
+<text class="ts" x="334" y="502" text-anchor="start">本 PR 不动;</text>
+<text class="ts" x="334" y="524" text-anchor="start">改的落点在层外壳与 PP 边界(见 ★)</text>
+<path class="flow" d="M160 538 V557" marker-end="url(#ahArc)"/>
 <path class="dash" d="M300 504 C312 504,312 520,317 520" marker-end="url(#ahArc)"/>
-<rect class="node" x="20" y="560" width="280" height="88" rx="10"/>
-<text class="ts" x="160" y="596" text-anchor="middle" font-weight="700">LM Head(与嵌入共享)</text>
-<text class="ts" x="160" y="620" text-anchor="middle">logits [1,128k]</text>
-<rect class="bc" x="320" y="560" width="500" height="88" rx="10"/>
-<text class="ts" x="334" y="586" text-anchor="start" font-weight="700">Runner 收回输出送采样;decode 每出一个 token,</text>
-<text class="ts" x="334" y="610" text-anchor="start">再从第 2 行整条链走一遍(KV 从页表缓存取)</text>
+<rect class="node" x="20" y="560" width="280" height="78" rx="10"/>
+<text class="ts" x="160" y="590" text-anchor="middle" font-weight="700">LM Head(与嵌入共享)</text>
+<text class="ts" x="160" y="612" text-anchor="middle">logits [1,128k]</text>
+<rect class="bc" x="320" y="560" width="500" height="78" rx="10"/>
+<text class="ts" x="334" y="580" text-anchor="start" font-weight="700">Runner 收回输出送采样;decode 每出一个 token,</text>
+<text class="ts" x="334" y="602" text-anchor="start">再从第 2 行整条链走一遍(KV 从页表缓存取)</text>
 <path class="dash" d="M300 604 C312 604,312 620,317 620" marker-end="url(#ahArc)"/>
 <text class="tm" x="20" y="690">读法:左列=模型自上而下的架构件;右列=它在框架里的落点与调用者;★=本 PR(18870)落点:运行时补丁 patch/ 重开 SP。链子:Runner→层外壳→门卫→后端九步。</text>
 <text class="tm" x="20" y="716">下一步:先认目录分工(图 6),再从十行示例进流水线(图 7);完整调用时序见时序图(图 8),每步为什么这么实现见展开图(图 9)。</text>
@@ -633,64 +633,64 @@ def forward(x, is_prefill):                            <span class="c"># x: [1, 
 <rect class="node" x="380" y="1240" width="250" height="96" rx="10"/>
 <text class="ts" x="505.0" y="1285" text-anchor="middle" font-weight="700">步9 收口(o_proj)→交回层外壳</text>
 <rect class="node" x="690" y="70" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="76" text-anchor="middle" font-weight="700">attention/ 步3:1576</text>
-<text class="ts" x="795.0" y="102" text-anchor="middle">(Q 低秩段)· 步6:1614</text>
-<text class="ts" x="795.0" y="128" text-anchor="middle">Q 上投影</text>
-<text class="ts" x="795.0" y="154" text-anchor="middle">矩阵乘原样,拆低秩两段</text>
+<text class="ts" x="795.0" y="84" text-anchor="middle" font-weight="700">attention/ 步3:1576</text>
+<text class="ts" x="795.0" y="110" text-anchor="middle">(Q 低秩段)· 步6:1614</text>
+<text class="ts" x="795.0" y="136" text-anchor="middle">Q 上投影</text>
+<text class="ts" x="795.0" y="162" text-anchor="middle">矩阵乘原样,拆低秩两段</text>
 <path class="flow" d="M795 166 V196" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="200" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="206" text-anchor="middle" font-weight="700">attention/ 步3(KV 段)</text>
-<text class="ts" x="795.0" y="232" text-anchor="middle">步4 :1595 exec_kv</text>
-<text class="ts" x="795.0" y="258" text-anchor="middle">投影+rmsnorm+写cache</text>
-<text class="ts" x="795.0" y="284" text-anchor="middle">融成一个昇腾算子</text>
+<text class="ts" x="795.0" y="214" text-anchor="middle" font-weight="700">attention/ 步3(KV 段)</text>
+<text class="ts" x="795.0" y="240" text-anchor="middle">步4 :1595 exec_kv</text>
+<text class="ts" x="795.0" y="266" text-anchor="middle">投影+rmsnorm+写cache</text>
+<text class="ts" x="795.0" y="292" text-anchor="middle">融成一个昇腾算子</text>
 <path class="flow" d="M795 296 V326" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="330" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="336" text-anchor="middle" font-weight="700">attention/ :1595(K 侧)</text>
-<text class="ts" x="795.0" y="362" text-anchor="middle">:1616(Q 侧)</text>
-<text class="ts" x="795.0" y="388" text-anchor="middle">同一旋转,没变</text>
-<text class="ts" x="795.0" y="414" text-anchor="middle">融进算子,数学一致</text>
+<text class="ts" x="795.0" y="344" text-anchor="middle" font-weight="700">attention/ :1595(K 侧)</text>
+<text class="ts" x="795.0" y="370" text-anchor="middle">:1616(Q 侧)</text>
+<text class="ts" x="795.0" y="396" text-anchor="middle">同一旋转,没变</text>
+<text class="ts" x="795.0" y="422" text-anchor="middle">融进算子,数学一致</text>
 <path class="flow" d="M795 426 V456" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="460" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="466" text-anchor="middle" font-weight="700">attention/ :1626</text>
-<text class="ts" x="795.0" y="492" text-anchor="middle">reshape_and_cache</text>
-<text class="ts" x="795.0" y="518" text-anchor="middle">slot 页表逐 token 定位</text>
-<text class="ts" x="795.0" y="544" text-anchor="middle">代替整块 cat 追加</text>
+<text class="ts" x="795.0" y="474" text-anchor="middle" font-weight="700">attention/ :1626</text>
+<text class="ts" x="795.0" y="500" text-anchor="middle">reshape_and_cache</text>
+<text class="ts" x="795.0" y="526" text-anchor="middle">slot 页表逐 token 定位</text>
+<text class="ts" x="795.0" y="552" text-anchor="middle">代替整块 cat 追加</text>
 <path class="flow" d="M795 556 V586" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="590" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="596" text-anchor="middle" font-weight="700">attention/ MLA·DSA 特性</text>
-<text class="ts" x="795.0" y="622" text-anchor="middle">latent KV 全头共享</text>
-<text class="ts" x="795.0" y="648" text-anchor="middle">目的相同(省 KV)</text>
-<text class="ts" x="795.0" y="674" text-anchor="middle">手段不同,无独立步骤</text>
+<text class="ts" x="795.0" y="604" text-anchor="middle" font-weight="700">attention/ MLA·DSA 特性</text>
+<text class="ts" x="795.0" y="630" text-anchor="middle">latent KV 全头共享</text>
+<text class="ts" x="795.0" y="656" text-anchor="middle">目的相同(省 KV)</text>
+<text class="ts" x="795.0" y="682" text-anchor="middle">手段不同,无独立步骤</text>
 <path class="flow" d="M795 686 V716" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="720" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="726" text-anchor="middle" font-weight="700">attention/ 步8 :1683 内</text>
-<text class="ts" x="795.0" y="752" text-anchor="middle">QKᵀ/√dk 原样</text>
-<text class="ts" x="795.0" y="778" text-anchor="middle">只在 top-2048 块上算</text>
-<text class="ts" x="795.0" y="804" text-anchor="middle">稀疏,不扫全量历史</text>
+<text class="ts" x="795.0" y="734" text-anchor="middle" font-weight="700">attention/ 步8 :1683 内</text>
+<text class="ts" x="795.0" y="760" text-anchor="middle">QKᵀ/√dk 原样</text>
+<text class="ts" x="795.0" y="786" text-anchor="middle">只在 top-2048 块上算</text>
+<text class="ts" x="795.0" y="812" text-anchor="middle">稀疏,不扫全量历史</text>
 <path class="flow" d="M795 816 V846" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="850" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="856" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
-<text class="ts" x="795.0" y="882" text-anchor="middle">causal 遮罩由算子处理</text>
-<text class="ts" x="795.0" y="908" text-anchor="middle">prefill 生效</text>
-<text class="ts" x="795.0" y="934" text-anchor="middle">decode 无需遮罩</text>
+<text class="ts" x="795.0" y="864" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="890" text-anchor="middle">causal 遮罩由算子处理</text>
+<text class="ts" x="795.0" y="916" text-anchor="middle">prefill 生效</text>
+<text class="ts" x="795.0" y="942" text-anchor="middle">decode 无需遮罩</text>
 <path class="flow" d="M795 946 V976" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="980" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="986" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
-<text class="ts" x="795.0" y="1012" text-anchor="middle">softmax 原样</text>
-<text class="ts" x="795.0" y="1038" text-anchor="middle">归一化没变</text>
-<text class="ts" x="795.0" y="1064" text-anchor="middle">数值在算子内部完成</text>
+<text class="ts" x="795.0" y="994" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1020" text-anchor="middle">softmax 原样</text>
+<text class="ts" x="795.0" y="1046" text-anchor="middle">归一化没变</text>
+<text class="ts" x="795.0" y="1072" text-anchor="middle">数值在算子内部完成</text>
 <path class="flow" d="M795 1076 V1106" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="1110" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="1116" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
-<text class="ts" x="795.0" y="1142" text-anchor="middle">·V 加权原样</text>
-<text class="ts" x="795.0" y="1168" text-anchor="middle">输出 [219,全头]</text>
-<text class="ts" x="795.0" y="1194" text-anchor="middle">等待收口</text>
+<text class="ts" x="795.0" y="1124" text-anchor="middle" font-weight="700">attention/ 步8 算子内</text>
+<text class="ts" x="795.0" y="1150" text-anchor="middle">·V 加权原样</text>
+<text class="ts" x="795.0" y="1176" text-anchor="middle">输出 [219,全头]</text>
+<text class="ts" x="795.0" y="1202" text-anchor="middle">等待收口</text>
 <path class="flow" d="M795 1206 V1236" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="1240" width="210" height="96" rx="10"/>
-<text class="ts" x="795.0" y="1246" text-anchor="middle" font-weight="700">attention/ :1695</text>
-<text class="ts" x="795.0" y="1272" text-anchor="middle">o_proj 原路:直接投影</text>
-<text class="ts" x="795.0" y="1298" text-anchor="middle">本 PR:归约权转移</text>
-<text class="ts" x="795.0" y="1324" text-anchor="middle">(reduce_results,见 4.7)</text>
+<text class="ts" x="795.0" y="1254" text-anchor="middle" font-weight="700">attention/ :1695</text>
+<text class="ts" x="795.0" y="1280" text-anchor="middle">o_proj 原路:直接投影</text>
+<text class="ts" x="795.0" y="1306" text-anchor="middle">本 PR:归约权转移</text>
+<text class="ts" x="795.0" y="1332" text-anchor="middle">(reduce_results,见 4.7)</text>
 <path class="dash" d="M250 104 C310 104,320 122,376 122" marker-end="url(#ahQ)"/>
 <path class="dash" d="M630 122 C652 122,658 138,686 138" marker-end="url(#ahQ)"/>
 <path class="dash" d="M250 234 C310 234,320 252,376 252" marker-end="url(#ahQ)"/>
@@ -1199,26 +1199,26 @@ def _enable_glm_pp_sequence_parallel(self, vllm_config) -&gt; None:
 <text class="ts" x="505" y="752" text-anchor="middle" font-weight="700">闸门:任一条件不满足</text>
 <text class="ts" x="505" y="778" text-anchor="middle">整段 return,行为=改前</text>
 <rect class="node" x="690" y="70" width="210" height="96" rx="10"/>
-<text class="ts" x="795" y="89" text-anchor="middle" font-weight="700">guard 的担忧是对的</text>
-<text class="ts" x="795" y="115" text-anchor="middle">transport 确实只认全量;</text>
-<text class="ts" x="795" y="141" text-anchor="middle">错在一刀切,不是错在约束</text>
-<text class="ts" x="795" y="163" text-anchor="middle">(patch_deepseek_v2.py :326)</text>
+<text class="ts" x="795" y="82" text-anchor="middle" font-weight="700">guard 的担忧是对的</text>
+<text class="ts" x="795" y="106" text-anchor="middle">transport 确实只认全量;</text>
+<text class="ts" x="795" y="130" text-anchor="middle">错在一刀切,不是错在约束</text>
+<text class="ts" x="795" y="154" text-anchor="middle">(patch_deepseek_v2.py :326)</text>
 <path class="flow" d="M795 166 V196" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="200" width="210" height="96" rx="10"/>
-<text class="ts" x="795" y="219" text-anchor="middle" font-weight="700">这就是 FlashComm1 的</text>
-<text class="ts" x="795" y="245" text-anchor="middle">本意:投影不归约,</text>
-<text class="ts" x="795" y="271" text-anchor="middle">decoder 统一收口</text>
-<text class="ts" x="795" y="297" text-anchor="middle">每层省一次集合通信</text>
+<text class="ts" x="795" y="212" text-anchor="middle" font-weight="700">这就是 FlashComm1 的</text>
+<text class="ts" x="795" y="236" text-anchor="middle">本意:投影不归约,</text>
+<text class="ts" x="795" y="260" text-anchor="middle">decoder 统一收口</text>
+<text class="ts" x="795" y="284" text-anchor="middle">每层省一次集合通信</text>
 <path class="flow" d="M795 296 V326" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="330" width="210" height="96" rx="10"/>
-<text class="ts" x="795" y="349" text-anchor="middle" font-weight="700">敢开 SP 的底气:</text>
-<text class="ts" x="795" y="375" text-anchor="middle">自己兑现上游的前提;</text>
-<text class="ts" x="795" y="401" text-anchor="middle">同一段聚散 #16819 已用,</text>
-<text class="ts" x="795" y="427" text-anchor="middle">本 PR 把它搬到每个出口</text>
+<text class="ts" x="795" y="342" text-anchor="middle" font-weight="700">敢开 SP 的底气:</text>
+<text class="ts" x="795" y="366" text-anchor="middle">自己兑现上游的前提;</text>
+<text class="ts" x="795" y="390" text-anchor="middle">同一段聚散 #16819 已用,</text>
+<text class="ts" x="795" y="414" text-anchor="middle">本 PR 把它搬到每个出口</text>
 <path class="flow" d="M795 426 V456" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="460" width="210" height="96" rx="10"/>
-<text class="ts" x="795" y="492" text-anchor="middle" font-weight="700">三处硬编码替换:</text>
-<text class="ts" x="795" y="518" text-anchor="middle">sync_and_slice 接收切片 /</text>
+<text class="ts" x="795" y="496" text-anchor="middle" font-weight="700">三处硬编码替换:</text>
+<text class="ts" x="795" y="520" text-anchor="middle">sync_and_slice 接收切片 /</text>
 <text class="ts" x="795" y="544" text-anchor="middle">_dummy_run 估显存 /</text>
 <text class="ts" x="795" y="570" text-anchor="middle">最大 buffer(model_runner_v1.py)</text>
 <path class="flow" d="M795 556 V586" marker-end="url(#ahQ)"/>
@@ -1228,8 +1228,8 @@ def _enable_glm_pp_sequence_parallel(self, vllm_config) -&gt; None:
 <text class="ts" x="795" y="674" text-anchor="middle">交错 dense/MoE 保持原行为</text>
 <path class="flow" d="M795 686 V716" marker-end="url(#ahQ)"/>
 <rect class="node" x="690" y="720" width="210" height="96" rx="10"/>
-<text class="ts" x="795" y="752" text-anchor="middle" font-weight="700">任何一级不满足:</text>
-<text class="ts" x="795" y="778" text-anchor="middle">回左列老路;</text>
+<text class="ts" x="795" y="756" text-anchor="middle" font-weight="700">任何一级不满足:</text>
+<text class="ts" x="795" y="780" text-anchor="middle">回左列老路;</text>
 <text class="ts" x="795" y="804" text-anchor="middle">选路矩阵单测钉死</text>
 <path class="dash" d="M250 104 C310 104,320 122,376 122" marker-end="url(#ahQ)"/>
 <path class="dash" d="M630 122 C652 122,658 138,686 138" marker-end="url(#ahQ)"/>
