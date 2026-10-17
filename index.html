@@ -154,7 +154,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">41</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">42</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -162,21 +162,22 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">41 篇 · 8 个专题</div>
+<div class="sec-badge">42 篇 · 8 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">40</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">41</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">7</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">11</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">12</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
 <button class="chip" data-topic="theory">基础理论<span class="count">7</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="vllm" data-ts="20261017"><a href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html"><span class="li-date">2026-10-17</span><span class="li-main"><span class="li-title">DeepSeek V4.1 全链路主时序：一条请求从压测端到首字返回的 56 步<span class="li-tag">vLLM 源码</span></span><span class="li-desc">启动加载、prefill、decode、后台横切四阶段 56 步一张时序走完；补上时序里没画的一步——models/__init__ 24 条模型注册表，载入权重前就定下哪个模型用哪套实现</span></span></a></li>
 <li class="li" data-topic="ops" data-ts="20261016"><a href="学习html/昇腾算子地图 · 从一层前向到三层算子楼.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开<span class="li-tag">算子与编程</span></span><span class="li-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——逐层展开每层的族谱与实测占比，附 trace 名对回代码的认亲表与三看口诀</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261016"><a href="学习html/vllm-ascend PR 18961 解读 · draft层attention换CANN FlashAttn.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">vllm-ascend PR 18961 解读：给 GLM 的 draft 层 attention 换上 CANN FlashAttn<span class="li-tag">vLLM 源码</span></span><span class="li-desc">target 一根手指不动：七重条件窄门给 draft 换引擎——device 长度一次、tiling 计划层间复用，TPOT 14.90→10.97ms</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261016"><a href="学习html/算子与 vLLM 参数 · 一条链讲透.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">算子与 vLLM 参数：一条链讲透<span class="li-tag">vLLM 源码</span></span><span class="li-desc">参数 → 框架路径 → 算子 → profiling：四种影响方式、fused_mc2 开关实例、shape 里藏着的配置、从 op_statistic.csv 三步反推配置</span></span></a></li>
