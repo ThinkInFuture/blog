@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>vllm-ascend PR #18671 解读：GLM V1 SP 布局贯穿 DSA-CP——十行 attention 到昇腾实现全链</title>
+<title>vllm-ascend PR #18870 解读：FlashComm1 的"假开启"与 SP 归位</title>
 <style>
 :root{
   --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
@@ -1284,6 +1284,7 @@ def _enable_glm_pp_sequence_parallel(self, vllm_config) -&gt; None:
 <rect class="node" x="30" y="304" width="330" height="52" rx="8"/>
 <text class="ts" x="195" y="326" text-anchor="middle" font-weight="700">条件5 · 全局开关</text>
 <text class="ts" x="195" y="346" text-anchor="middle">use_sequence_parallel_moe == True</text>
+<rect class="bc" x="424" y="170" width="92" height="56" rx="8"/>
 <path class="flow" d="M360 74 H430" marker-end="url(#ahD)"/>
 <path class="flow" d="M360 138 H430" marker-end="url(#ahD)"/>
 <path class="flow" d="M360 202 H430" marker-end="url(#ahD)"/>
