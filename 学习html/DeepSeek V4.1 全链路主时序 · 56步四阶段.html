@@ -346,21 +346,34 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 .seqfs-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;flex-shrink:0}
 .seqfs-x{padding:5px 14px;border-radius:8px;border:1px solid #d5dbe5;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:inherit;flex-shrink:0}
 .seqfs-x:hover{border-color:#3b82f6;color:#3b82f6}
-.seqfs-body{flex:1;overflow:auto;padding:12px}
-.seqfs-body svg{display:block}
+.seqfs-body{flex:1;overflow:auto;padding:0 12px 12px}
+.seqfs-body > svg{display:block;margin-top:12px}
+.seqfs-sticky{position:sticky;top:0;z-index:3;margin:0 -12px;background:#f8fafc;border-bottom:1px solid #dbe2ea;box-shadow:0 2px 8px rgba(15,23,42,.10);max-height:0;overflow:hidden;transition:max-height .2s ease}
+.seqfs-sticky.show{max-height:132px}
+.seqfs-sticky svg{display:block}
 @media print{.seqfs-mask{display:none}}
 </style>
 <div class="seqfs-mask" id="seqFsMask">
 <div class="seqfs-bar"><span>全链路主时序 · 全屏视图——滚动查看全图；Esc 或点右侧按钮退出</span><button class="seqfs-x" id="seqFsClose" type="button">✕ 退出全屏</button></div>
-<div class="seqfs-body" id="seqFsBody"></div>
+<div class="seqfs-body" id="seqFsBody"><div class="seqfs-sticky" id="seqFsSticky"></div></div>
 </div>
 <script>
 (function(){
 var btn=document.getElementById('seqFsBtn'),mask=document.getElementById('seqFsMask'),
 body=document.getElementById('seqFsBody'),wrap=document.getElementById('seqFigWrap'),
 svg=wrap.querySelector('svg');
-function open(){body.appendChild(svg);mask.classList.add('open');document.body.style.overflow='hidden';body.scrollTop=0;body.scrollLeft=0;}
-function close(){wrap.appendChild(svg);mask.classList.remove('open');document.body.style.overflow='';}
+var sticky=document.getElementById('seqFsSticky');
+function open(){
+body.appendChild(svg);mask.classList.add('open');document.body.style.overflow='hidden';
+body.scrollTop=0;body.scrollLeft=0;
+var c=svg.cloneNode(true);                       // 泳道表头吸顶:克隆整图裁到表头条(y 0~128),横向随内容滚动,纵向 sticky 钉顶
+c.removeAttribute('style');c.setAttribute('viewBox','0 0 2240 128');c.setAttribute('height','128');
+var d=c.querySelector('defs');if(d)d.remove();   // 防 marker id 重复
+sticky.innerHTML='';sticky.appendChild(c);sync();
+}
+function close(){sticky.innerHTML='';wrap.appendChild(svg);mask.classList.remove('open');document.body.style.overflow='';}
+function sync(){sticky.classList.toggle('show',body.scrollTop>110);}   // 真表头滚出视野(>110px)才显示吸顶条
+body.addEventListener('scroll',sync);
 btn.addEventListener('click',open);
 document.getElementById('seqFsClose').addEventListener('click',close);
 document.addEventListener('keydown',function(e){if(e.key==='Escape'&&mask.classList.contains('open'))close();});
