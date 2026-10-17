@@ -333,7 +333,7 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <rect x="14" y="1288.0" width="427" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="1309.0" font-size="16" font-weight="700" fill="#445">阶段 1 · 执行 prefill（TTFT 主体，层内细节后续篇展开）</text>
 <rect x="14" y="2932.0" width="294" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="2953.0" font-size="16" font-weight="700" fill="#445">阶段 2 · decode 循环（细节后续篇展开）</text>
 <rect x="14" y="3684.0" width="272" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="3705.0" font-size="16" font-weight="700" fill="#445">阶段 3 · 后台横切（与前台并行）</text>
-<rect x="460" y="294" width="500" height="58" fill="#eef4fb" opacity="0.95" rx="4"/><text x="710" y="312" font-size="18" text-anchor="middle" fill="#24292f">3. 认模型：24 条架构名→实现类，注册进上游表</text><text x="710" y="330" font-size="13" text-anchor="middle" fill="#57606a">vllm_ascend:register_model ← setup.py:524 入口点</text><text x="710" y="348" font-size="13" text-anchor="middle" fill="#57606a">DeepseekV4ForCausalLM→AscendDeepseekV4ForCausalLM（步4 查表取）</text><line x1="960" y1="316" x2="1657" y2="316" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/></svg>
+<rect x="460" y="294" width="500" height="58" fill="#eef4fb" opacity="0.95" rx="4"/><text x="710" y="312" font-size="18" text-anchor="middle" fill="#24292f">3. 认模型：24 条架构名→实现类，注册进上游表</text><text x="710" y="330" font-size="13" text-anchor="middle" fill="#57606a">models/__init__.py：24 条登记 ← setup.py:524 入口点</text><text x="710" y="348" font-size="13" text-anchor="middle" fill="#57606a">DeepseekV4ForCausalLM→AscendDeepseekV4ForCausalLM（步4 查表取）</text><line x1="960" y1="316" x2="1657" y2="316" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/></svg>
 </div>
 <div class="figcap">图 1 · 全链路主时序：启动加载 → prefill → decode → 后台横切，57 步——认模型入编为步骤 3（宽图可左右滑动，点右上「全屏查看」整幅浏览）</div>
 </div>
@@ -387,7 +387,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'&&mask.classL
 <text class="tb" x="40" y="204">步骤 3 · 认模型（图 1 同名步骤）</text>
 <text class="ts" x="40" y="232">vLLM 扫 vllm.general_plugins 入口点</text>
 <text class="ts" x="40" y="258">（setup.py:524 登记 ascend_model 钩子）</text>
-<text class="ts" x="40" y="284">→ 24 条架构名→实现类，注册进上游</text>
+<text class="ts" x="40" y="284">→ models/__init__.py 24 条，注册进上游</text>
 <path class="flow" d="M190 304 V328" marker-end="url(#ahS)"/>
 <rect class="node" x="20" y="328" width="340" height="168" rx="8"/>
 <text class="tb" x="40" y="356">步骤 4 · 载入权重</text>
