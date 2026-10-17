@@ -12,7 +12,7 @@
 
 ## 部署通道技巧（重要）
 
-- **ESA 只监听 Gitee 的 master 分支**（conanfans/blog，默认分支必须是 master）：推送命令 `git push gitee main:master`。推 main 分支不会触发部署，这是踩过的坑。
+- **一键发布（凡改动必走，零记忆依赖，2026-10-15 立规）**：`python 功能代码/publish_all.py "提交说明" [--new "学习html/新文章.html"]` —— 自动串全链：site_sweep 自检 → dom_fig_audit 体检改动页 → `git add -u`（**仅已跟踪文件，草稿永远上不去**）→ 提交 → 推 gitee main:master → **线上逐 html 与本地整文件字节比对**（轮询至一致，不是抽特征）→ sync_gh → 邮件 + mail/timely 归档；任何一环失败即停并发告警邮件。新文章首次发布用 `--new` 显式点名；无改动时自动空载退出零副作用。禁止再手工分步走发布链（起因：算子地图重画版漏提交部署，线上挂旧图数轮——模板 v3.15 坑 12）。
 - **GitHub 固定走 API 补文件（用户拍板的固定策略）**：GitHub main 的 git 历史已与本地分叉，**不要再尝试 `git push origin main`**。凡 GitHub 需要同步的文件，一律用仓库根目录的 `sync_gh.py`：`python sync_gh.py <相对路径1> [路径2...] [-m "说明"]`（Contents API PUT，base64 + sha，二进制通用，自动重试）。Gitee master 仍正常 git push 触发部署。
 - GitHub API 上传与本地 git 历史各自独立（文件内容保持一致即可，不追求 commit 历史对齐）。
 
