@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>vllm-ascend PR #18671 解读：GLM V1 SP 布局贯穿 DSA-CP——十行 attention 到昇腾实现全链</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --del:#c2410c;--code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --del:#f87171;--code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+h4{font-size:15px;margin:20px 0 6px;color:var(--accent-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:20px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 28px;font-size:14px}
+nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--brand-text);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.cnum{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--brand);font-weight:700}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.8px;line-height:1.6}
+pre .c{color:var(--text-muted)}
+pre .a{color:var(--ok);font-weight:700}
+pre .d{color:var(--del);text-decoration:line-through}
+.codetag{font-size:13px;font-weight:700;margin:14px 0 4px}
+.codetag.before{color:var(--del)}
+.codetag.after{color:var(--ok)}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.figgrid{display:grid;grid-template-columns:1fr;gap:20px}
+@media (min-width:1200px){.figgrid{grid-template-columns:1fr 1fr}.figgrid .card{overflow-x:auto}}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp.g{border-color:var(--ok);background:var(--ok-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12.5px;font-weight:600;margin-right:6px}
+.tag.blue{background:var(--brand-bg);color:var(--brand-text)}
+.tag.teal{background:var(--accent-bg);color:var(--accent-text)}
+.tag.amber{background:var(--warn-bg);color:var(--warn)}
+.tag.green{background:var(--ok-bg);color:var(--ok)}
+.dim{color:var(--text-muted);font-size:13.5px}
+.quote{border-left:3px solid var(--border);padding:2px 14px;margin:12px 0;color:var(--text-muted);font-size:13.5px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:8}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none}
+.flow{stroke:var(--brand);stroke-width:2;fill:none}
+.dash{stroke:var(--accent);stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+.ghost{fill:var(--surface);stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4}
+.grpA{fill:var(--brand-bg);stroke:var(--brand);stroke-width:2}
+.grpB{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+.frame{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:6 5}
+.gbadge{fill:var(--surface-muted);stroke:var(--border);stroke-width:1.5}
+.nb{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.cb{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.bdg{fill:var(--text);font-size:17px;font-weight:700}
+.garr{stroke:var(--border);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+<h1>DeepSeek V4.1 全链路主时序：一条请求从压测端到首字返回的 56 步（四阶段）</h1>
+<div class="subtitle">从 aisbench 打出第一条请求，到首字返回、decode 循环、后台横切——启动加载、prefill、decode、后台四阶段 56 步一张时序图走完；并补上时序里没画出的一步：models/__init__ 的 24 条模型注册表，在载入权重之前就定下哪个模型用哪套实现</div>
+
+<nav class="toc">
+<b>目录</b>
+<ol>
+<li><a href="#s1">全景：56 步四阶段主时序</a></li>
+<li><a href="#s2">阶段 0 的隐藏一步：模型注册表（补充）</a></li>
+<li><a href="#s3">术语速查</a></li>
+</ol>
+</nav>
+
+<div class="kp w">
+<span class="kp-t">读前须知：八个名词 30 秒（更多见文末术语速查）</span>
+<ul>
+<li><b>EngineCore / NPUWorker / NPUModelRunner</b>：vLLM 上游的执行三级——引擎核心进程→每卡执行进程→每卡运行器；插件里对应 worker/ 与 model_runner 两层目录；</li>
+<li><b>BalanceScheduler（DPLB）</b>：排班员——决定本轮算哪些请求（DP 侧的负载均衡器）；</li>
+<li><b>DSA-CP</b>：DeepSeek 稀疏注意力在多卡间的序列并行通信模式（attention 的输入按序列切片、算前聚算后散）；</li>
+<li><b>MTP / dspark / dflash</b>：模型架构里的投机解码草稿头（MTP）；dspark、dflash 是两种草稿实现的名字；</li>
+<li><b>EPLB</b>：MoE 专家并行的负载均衡——按专家热度重摆专家副本；</li>
+<li><b>prefix cache / chunkPrefill</b>：算过的前缀直接复用 KV 块；长 prefill 切成多块分轮算；</li>
+<li><b>TTFT / TPOT</b>：首字延迟 / 每字延迟——压测两端的两个核心读数；</li>
+<li><b>C8 / MLAPO</b>：两个内部开关代号——C8=SFA 稀疏的 KV 存储块模式（enable_sparse_sfa_c8，随模型是否走 SFA 派生），MLAPO=MLA 相关融合优化开关（enable_mlapo，默认开）。</li>
+</ul>
+</div>
+
+<h2 id="s1">1. 全景：56 步四阶段主时序</h2>
+<p>这张图回答一个问题：<b>一条请求从压测端打进来，到首字返回、再到流式吐完，路上每一步发生了什么、发生在哪个角色手里</b>。横向是十条泳道——从最左的压测客户端，穿过 tokenizer、引擎（EngineCore）、排班（BalanceScheduler）、KV 块管理，到 Worker、运行器、模型实现，最后落在 parallel_state（HCCL 通信）与 torch_npu（CANN 算子）两件底座上；纵向按时间推进，分四个阶段。</p>
+
+<div class="card">
+<div style="overflow-x:auto">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2240 4000" width="2240" height="4000" font-family="Microsoft YaHei,PingFang SC,sans-serif" style="background:#fff">
+<defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7.5" markerHeight="7.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#57606a"/></marker></defs>
+<rect x="270" y="8" width="839" height="40" fill="#f0f5fb" stroke="#c9d8ea" rx="8"/>
+<text x="690" y="35" font-size="16" font-weight="700" fill="#52708f" text-anchor="middle">上游 vLLM</text>
+<rect x="1130" y="8" width="624" height="40" fill="#f0f5fb" stroke="#c9d8ea" rx="8"/>
+<text x="1442" y="35" font-size="16" font-weight="700" fill="#52708f" text-anchor="middle">vllm-ascend</text>
+<rect x="1775" y="8" width="409" height="40" fill="#f0f5fb" stroke="#c9d8ea" rx="8"/>
+<text x="1980" y="35" font-size="16" font-weight="700" fill="#52708f" text-anchor="middle">底座</text>
+<rect x="53" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="152" y="106" font-size="11.5" text-anchor="middle" fill="#57606a">aisbench 压测端</text>
+<text x="152" y="83" font-size="18" font-weight="700" text-anchor="middle" fill="#24292f">用户/压测客户端</text>
+<rect x="268" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="367" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">mm_preprocess.py L348</text>
+<text x="367" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">Tokenizer(ge</text>
+<text x="367" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">t_tokenizer)</text>
+<rect x="483" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="582" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">vllm/v1/engine/core.py</text>
+<text x="582" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">EngineCore(v1</text>
+<text x="582" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">.engine.core)</text>
+<rect x="698" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="797" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">patch_balance_schedule.py L103</text>
+<text x="797" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">BalanceSche</text>
+<text x="797" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">duler(DPLB)</text>
+<rect x="913" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="1012" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">vllm/v1/core/kv_cache_manager.py</text>
+<text x="1012" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">KVCacheMana</text>
+<text x="1012" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">ger(v1.core)</text>
+<rect x="1128" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="1227" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">worker/worker.py L122</text>
+<text x="1227" y="83" font-size="18" font-weight="700" text-anchor="middle" fill="#24292f">NPUWorker 执行进程</text>
+<rect x="1343" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="1442" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">model_runner_v1.py L363</text>
+<text x="1442" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">NPUModelR</text>
+<text x="1442" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">unner 运行器</text>
+<rect x="1558" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="1657" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">deepseek_v4/model.py L1041</text>
+<text x="1657" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">AscendDeepseekV4</text>
+<text x="1657" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">ForCausalLM</text>
+<rect x="1773" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="1872" y="111" font-size="11.5" text-anchor="middle" fill="#57606a">distributed/parallel_state.py</text>
+<text x="1872" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">parallel_s</text>
+<text x="1872" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">tate(HCCL)</text>
+<rect x="1988" y="56" width="199" height="58" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.5" rx="8"/>
+<text x="2087" y="112" font-size="11.5" text-anchor="middle" fill="#57606a">torch-npu 包(CANN)</text>
+<text x="2087" y="74" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">torch_np</text>
+<text x="2087" y="93" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">u(CANN算子)</text>
+<line x1="152" y1="96" x2="152" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="367" y1="96" x2="367" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="582" y1="96" x2="582" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="797" y1="96" x2="797" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="1012" y1="96" x2="1012" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="1227" y1="96" x2="1227" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="1442" y1="96" x2="1442" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="1657" y1="96" x2="1657" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="1872" y1="96" x2="1872" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<line x1="2087" y1="96" x2="2087" y2="3954" stroke="#6e7b8a" stroke-width="2.0" stroke-dasharray="6,5"/>
+<rect x="53" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="152" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">用户/压测客户端</text>
+<rect x="268" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="367" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">Tokenizer(ge</text>
+<rect x="483" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="582" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">EngineCore(v</text>
+<rect x="698" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="797" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">BalanceSched</text>
+<rect x="913" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="1012" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">KVCacheManag</text>
+<rect x="1128" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="1227" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">NPUWorker</text>
+<rect x="1343" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="1442" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">NPUModelRunn</text>
+<rect x="1558" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="1657" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">AscendDeepse</text>
+<rect x="1773" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="1872" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">parallel_sta</text>
+<rect x="1988" y="3956" width="199" height="30" fill="#eef4fb" stroke="#2d6a9f" stroke-width="1.2" rx="7"/>
+<text x="2087" y="3977" font-size="16" font-weight="700" text-anchor="middle" fill="#24292f">torch_npu(CA</text>
+<text x="24" y="1522" font-size="16" font-weight="700" fill="#3a5f8f">loop · 每层 DecoderLayer.forward L755</text>
+<text x="24" y="2928" font-size="16" font-weight="700" fill="#3a5f8f">loop · 每步 decode（含 MTP 投机）</text>
+<rect x="0" y="96" width="2240" height="606" fill="#f4f4f4" opacity="0.55"/>
+<rect x="0" y="1216" width="2240" height="1644" fill="#fdeeee" opacity="0.55"/>
+<rect x="0" y="2860" width="2240" height="752" fill="#e9f4ea" opacity="0.55"/>
+<rect x="0" y="3612" width="2240" height="338" fill="#f4f4f4" opacity="0.55"/>
+<line x1="1872" y1="176" x2="2087" y2="176" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="244" x2="1227" y2="244" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="312" x2="1657" y2="312" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="380" x2="1872" y2="380" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1446,448 1508,448 1508,474 1452,474" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1661,516 1723,516 1723,542 1667,542" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="584" x2="1012" y2="584" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="152" y1="652" x2="582" y2="652" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="152" y1="720" x2="367" y2="720" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="371,788 433,788 433,814 377,814" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="367" y1="856" x2="582" y2="856" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="924" x2="797" y2="924" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="797" y1="992" x2="1012" y2="992" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1012" y1="1060" x2="797" y2="1060" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<polyline points="801,1128 863,1128 863,1154 807,1154" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="797" y1="1196" x2="1012" y2="1196" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="1264" x2="1227" y2="1264" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="1332" x2="1442" y2="1332" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1446,1400 1508,1400 1508,1426 1452,1426" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1442" y1="1468" x2="1657" y2="1468" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1661,1536 1723,1536 1723,1562 1667,1562" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1661,1604 1723,1604 1723,1630 1667,1630" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="1672" x2="1872" y2="1672" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="1740" x2="2087" y2="1740" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="1808" x2="1872" y2="1808" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="1876" x2="2087" y2="1876" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="1944" x2="1872" y2="1944" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1661,2012 1723,2012 1723,2038 1667,2038" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="2080" x2="1872" y2="2080" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="2148" x2="2087" y2="2148" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="2216" x2="2087" y2="2216" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="2284" x2="1442" y2="2284" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<polyline points="1446,2352 1508,2352 1508,2378 1452,2378" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1446,2420 1508,2420 1508,2446 1452,2446" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1442" y1="2488" x2="1227" y2="2488" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="1227" y1="2556" x2="582" y2="2556" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="582" y1="2624" x2="367" y2="2624" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="371,2692 433,2692 433,2718 377,2718" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="367" y1="2760" x2="152" y2="2760" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="586,2828 648,2828 648,2854 592,2854" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="2896" x2="1012" y2="2896" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="2964" x2="1227" y2="2964" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="3032" x2="1442" y2="3032" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1442" y1="3100" x2="1657" y2="3100" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="1661,3168 1723,3168 1723,3194 1667,3194" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="3236" x2="1442" y2="3236" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="1442" y1="3304" x2="1227" y2="3304" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="1227" y1="3372" x2="582" y2="3372" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<line x1="582" y1="3440" x2="367" y2="3440" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="367" y1="3508" x2="152" y2="3508" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="582" y1="3576" x2="1012" y2="3576" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="3644" x2="1872" y2="3644" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1657" y1="3712" x2="1872" y2="3712" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="1227" y1="3780" x2="582" y2="3780" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<polyline points="586,3848 648,3848 648,3874 592,3874" fill="none" stroke="#57606a" stroke-width="2.2" marker-end="url(#ar)"/>
+<line x1="152" y1="3916" x2="582" y2="3916" stroke="#57606a" stroke-width="2.2" stroke-dasharray="7,5" marker-end="url(#ar)"/>
+<rect x="6" y="1496" width="9" height="760" fill="#7ea6d1" rx="3"/>
+<rect x="6" y="2902" width="9" height="680" fill="#7ea6d1" rx="3"/>
+<rect x="1810" y="158" width="340" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1980" y="172" font-size="18" text-anchor="middle" fill="#24292f">1. 初始化 torch_npu/CANN 与 HCCL 建链</text><text x="1980" y="192" font-size="13" text-anchor="middle" fill="#57606a">torch_npu.npu.set_device() [device/HCCL]</text>
+<rect x="704" y="226" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="240" font-size="18" text-anchor="middle" fill="#24292f">2. 拉起 API Server 与 EngineCore→Worker 进程组</text><text x="904" y="260" font-size="13" text-anchor="middle" fill="#57606a">EngineCoreProc.launch_workers() [ZMQ·DP2×TP16 拓扑]</text>
+<rect x="1240" y="294" width="404" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1442" y="308" font-size="18" text-anchor="middle" fill="#24292f">3. 载入权重(多线程/lazy·NZ·W8A8)+细粒度切分</text><text x="1442" y="328" font-size="13" text-anchor="middle" fill="#57606a">NPUWorker.load_model() [FinegrainedTPConfig]</text>
+<rect x="1390" y="362" width="318" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1549" y="376" font-size="18" text-anchor="middle" fill="#24292f">4. 建16卡通信组(TP16xDP2/EP32/SP)</text><text x="1549" y="396" font-size="13" text-anchor="middle" fill="#57606a">parallel_state [V2演进:PCP+DCP替代DSA-CP]</text>
+<rect x="1360" y="430" width="320" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1520" y="444" font-size="18" text-anchor="middle" fill="#24292f">5. 预编译+静态内核+CPU绑核</text><text x="1520" y="464" font-size="13" text-anchor="middle" fill="#57606a">[ACL Graph](V1运行器,V2=新执行底座)</text>
+<rect x="1580" y="498" width="310" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1735" y="512" font-size="18" text-anchor="middle" fill="#24292f">6. 专家初始摆放</text><text x="1735" y="532" font-size="13" text-anchor="middle" fill="#57606a">EplbWorker.get_init_expert_maps() [EPLB]</text>
+<rect x="939" y="566" width="360" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1119" y="580" font-size="18" text-anchor="middle" fill="#24292f">7. 显存 profiling → KV 块池与块表初始化</text><text x="1119" y="600" font-size="13" text-anchor="middle" fill="#57606a">determine_available_memory()+kv_cache_config</text>
+<rect x="177" y="634" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="367" y="648" font-size="18" text-anchor="middle" fill="#24292f">8. 探活 /health → 服务就绪(等待请求)</text><text x="367" y="668" font-size="13" text-anchor="middle" fill="#57606a">[ready·warmup 完成]</text>
+<rect x="109" y="702.0" width="300" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="259" y="722" font-size="18" text-anchor="middle" fill="#24292f">9. HTTP 请求（3.5K 长文）</text><text x="259" y="743" font-size="13" text-anchor="middle" fill="#57606a">POST /v1/chat/completions [OpenAI 兼容]</text>
+<rect x="275" y="770.0" width="340" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="445" y="790" font-size="18" text-anchor="middle" fill="#24292f">10. 文本转 token·并行分块+前缀缓存</text><text x="445" y="811" font-size="13" text-anchor="middle" fill="#57606a">AutoTokenizer.encode() [FastToken]</text>
+<rect x="284" y="838.0" width="380" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="474" y="858" font-size="18" text-anchor="middle" fill="#24292f">11. token 序列进引擎队列·分配 request_id</text><text x="474" y="879" font-size="13" text-anchor="middle" fill="#57606a">AsyncLLMEngine.add_request() [WAITING 状态]</text>
+<rect x="499" y="906.0" width="380" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="689" y="926" font-size="18" text-anchor="middle" fill="#24292f">12. 排班：本轮算哪些请求</text><text x="689" y="947" font-size="13" text-anchor="middle" fill="#57606a">BalanceScheduler.schedule() [DPLB]</text>
+<rect x="714" y="974.0" width="380" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="994" font-size="18" text-anchor="middle" fill="#24292f">13. 前缀算过没有·命中即复用块</text><text x="904" y="1015" font-size="13" text-anchor="middle" fill="#57606a">get_computed_blocks() [prefix cache·块复用]</text>
+<rect x="754" y="1042.0" width="300" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="1062" font-size="18" text-anchor="middle" fill="#24292f">14. 没算过 → 全量 prefill</text><text x="904" y="1083" font-size="13" text-anchor="middle" fill="#57606a">[未命中·从 0 开始算]</text>
+<rect x="725" y="1110.0" width="300" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="875" y="1130" font-size="18" text-anchor="middle" fill="#24292f">15. 长文切块分轮算(4块·块大小可调)</text><text x="875" y="1151" font-size="13" text-anchor="middle" fill="#57606a">[chunkPrefill]</text>
+<rect x="714" y="1178.0" width="380" height="46" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="1198" font-size="18" text-anchor="middle" fill="#24292f">16. 分配 KV 块·写块表(命中块直接引用)</text><text x="904" y="1219" font-size="13" text-anchor="middle" fill="#57606a">allocate_slots() [block_table·水位检查]</text>
+<rect x="714" y="1246" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="1260" font-size="18" text-anchor="middle" fill="#24292f">17. 下发本批任务</text><text x="904" y="1280" font-size="13" text-anchor="middle" fill="#57606a">EngineCore.execute_model() [异步两步流水]</text>
+<rect x="1184" y="1314" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1334" y="1328" font-size="18" text-anchor="middle" fill="#24292f">18. 转交运行器</text><text x="1334" y="1348" font-size="13" text-anchor="middle" fill="#57606a">NPUWorker.execute_model() L753</text>
+<rect x="1330" y="1382" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1520" y="1396" font-size="18" text-anchor="middle" fill="#24292f">19. 组装输入张量·attn_metadata·slot_mapping</text><text x="1520" y="1416" font-size="13" text-anchor="middle" fill="#57606a">input_batch [positions·block_table]</text>
+<rect x="1359" y="1450" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1549" y="1464" font-size="18" text-anchor="middle" fill="#24292f">20. 开始前向（每卡只拿220行）</text><text x="1549" y="1484" font-size="13" text-anchor="middle" fill="#57606a">DeepseekV4Model.forward L1094→L908 [SP]</text>
+<rect x="1545" y="1518" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1735" y="1532" font-size="18" text-anchor="middle" fill="#24292f">21. 归一化+位置编码一次算完</text><text x="1735" y="1552" font-size="13" text-anchor="middle" fill="#57606a">rms_norm_cast L732 [MLAPO]</text>
+<rect x="1535" y="1586" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1735" y="1600" font-size="18" text-anchor="middle" fill="#24292f">22. 进入稀疏注意力·prolog三段流水</text><text x="1735" y="1620" font-size="13" text-anchor="middle" fill="#57606a">AscendDSACPImpl.forward L1699 [DSA-CP·record/wait]</text>
+<rect x="1584" y="1654" width="360" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="1668" font-size="18" text-anchor="middle" fill="#24292f">23. 把每卡220行拼成全量3520(❶)</text><text x="1764" y="1688" font-size="13" text-anchor="middle" fill="#57606a">sp_all_gather L25</text>
+<rect x="1666" y="1722" width="412" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1872" y="1736" font-size="18" text-anchor="middle" fill="#24292f">24. 压缩+索引写KV·层间池化·下沉DRAM·topk常驻</text><text x="1872" y="1756" font-size="13" text-anchor="middle" fill="#57606a">[KV池·kv offload·分配器·C8派生]</text>
+<rect x="1599" y="1790" width="330" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="1804" font-size="18" text-anchor="middle" fill="#24292f">25. 互换 head 归属(❷)</text><text x="1764" y="1824" font-size="13" text-anchor="middle" fill="#57606a">restore_tp_heads L77</text>
+<rect x="1672" y="1858" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1872" y="1872" font-size="18" text-anchor="middle" fill="#24292f">26. 注意力只算 topk 相关块</text><text x="1872" y="1892" font-size="13" text-anchor="middle" fill="#57606a">[SFA·KV打包C8·cache_dtype派生sfa_c8]</text>
+<rect x="1594" y="1926" width="340" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="1940" font-size="18" text-anchor="middle" fill="#24292f">27. 求和后各取回本卡220行(❸)</text><text x="1764" y="1960" font-size="13" text-anchor="middle" fill="#57606a">sp_reduce_scatter L99</text>
+<rect x="1585" y="1994" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1735" y="2008" font-size="18" text-anchor="middle" fill="#24292f">28. 轮到 MoE（220行）</text><text x="1735" y="2028" font-size="13" text-anchor="middle" fill="#57606a">DeepseekV4MoE.forward L383</text>
+<rect x="1584" y="2062" width="360" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="2076" font-size="18" text-anchor="middle" fill="#24292f">29. token 送专家算完取回（一笔融合）</text><text x="1764" y="2096" font-size="13" text-anchor="middle" fill="#57606a">dispatch_ffn_combine [fused_mc2·DFFC]</text>
+<rect x="1672" y="2130" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1872" y="2144" font-size="18" text-anchor="middle" fill="#24292f">30. 路由专家FFN(gmm+SwiGLU融合·Triton下沉)</text><text x="1872" y="2164" font-size="13" text-anchor="middle" fill="#57606a">[W8A8·gmmswigluquant]</text>
+<rect x="1672" y="2198" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1872" y="2212" font-size="18" text-anchor="middle" fill="#24292f">31. 共享专家·完整副本零通信·双流并行</text><text x="1872" y="2232" font-size="13" text-anchor="middle" fill="#57606a">[shared_expert_dp]</text>
+<rect x="1419" y="2266" width="260" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1549" y="2280" font-size="18" text-anchor="middle" fill="#24292f">32. N 层走完 → logits</text><text x="1549" y="2300" font-size="13" text-anchor="middle" fill="#57606a">[hidden_states → lm_head]</text>
+<rect x="1330" y="2334" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1520" y="2348" font-size="18" text-anchor="middle" fill="#24292f">33. logits 处理(惩罚/温度/logit_bias)</text><text x="1520" y="2368" font-size="13" text-anchor="middle" fill="#57606a">[logits_processor·分片归并]</text>
+<rect x="1340" y="2402" width="360" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1520" y="2416" font-size="18" text-anchor="middle" fill="#24292f">34. 挑出首token</text><text x="1520" y="2436" font-size="13" text-anchor="middle" fill="#57606a">_sample() L3057 [reduce_sample·分片去重]</text>
+<rect x="1184" y="2470" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1334" y="2484" font-size="18" text-anchor="middle" fill="#24292f">35. 首 token + 块表状态回传</text><text x="1334" y="2504" font-size="13" text-anchor="middle" fill="#57606a">[KV 块落位确认]</text>
+<rect x="764" y="2538" width="280" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="2552" font-size="18" text-anchor="middle" fill="#24292f">36. 首 token 上交 EngineCore</text><text x="904" y="2572" font-size="13" text-anchor="middle" fill="#57606a">[异步输出队列]</text>
+<rect x="334" y="2606" width="280" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="474" y="2620" font-size="18" text-anchor="middle" fill="#24292f">37. RequestOutput·首 token</text><text x="474" y="2640" font-size="13" text-anchor="middle" fill="#57606a">[detokenize 前]</text>
+<rect x="295" y="2674" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="445" y="2688" font-size="18" text-anchor="middle" fill="#24292f">38. token 转文字（流式）</text><text x="445" y="2708" font-size="13" text-anchor="middle" fill="#57606a">[FastToken·增量解码]</text>
+<rect x="99" y="2742" width="320" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="259" y="2756" font-size="18" text-anchor="middle" fill="#24292f">39. 首字到手（TTFT 终点）</text><text x="259" y="2776" font-size="13" text-anchor="middle" fill="#57606a">[TTFT 结束·进入 decode]</text>
+<rect x="470" y="2810" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="660" y="2824" font-size="18" text-anchor="middle" fill="#24292f">40. stop 条件检查(EOS/长度)→是否进 decode</text><text x="660" y="2844" font-size="13" text-anchor="middle" fill="#57606a">[stop_checker·请求收尾判定]</text>
+<rect x="597" y="2878" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="797" y="2892" font-size="18" text-anchor="middle" fill="#24292f">41. 每步 KV 追加：为新 token 分配槽位</text><text x="797" y="2912" font-size="13" text-anchor="middle" fill="#57606a">allocate_slots()/append_slots [block_table]</text>
+<rect x="754" y="2946" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="2960" font-size="18" text-anchor="middle" fill="#24292f">42. 下发 decode 批</text><text x="904" y="2980" font-size="13" text-anchor="middle" fill="#57606a">EngineCore.execute_model()</text>
+<rect x="1184" y="3014" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1334" y="3028" font-size="18" text-anchor="middle" fill="#24292f">43. 转交运行器</text><text x="1334" y="3048" font-size="13" text-anchor="middle" fill="#57606a">NPUWorker.execute_model L753→L2313</text>
+<rect x="1399" y="3082" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1549" y="3096" font-size="18" text-anchor="middle" fill="#24292f">44. 前向+草稿连猜3字</text><text x="1549" y="3116" font-size="13" text-anchor="middle" fill="#57606a">[MTP·dspark·dflash]</text>
+<rect x="1575" y="3150" width="320" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1735" y="3164" font-size="18" text-anchor="middle" fill="#24292f">45. 验证草稿·留正确前缀</text><text x="1735" y="3184" font-size="13" text-anchor="middle" fill="#57606a">AscendRejectionSampler</text>
+<rect x="1399" y="3218" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1549" y="3232" font-size="18" text-anchor="middle" fill="#24292f">46. 一步出 1 至 4 token</text><text x="1549" y="3252" font-size="13" text-anchor="middle" fill="#57606a">[accept 数 = 本轮产出]</text>
+<rect x="1184" y="3286" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1334" y="3300" font-size="18" text-anchor="middle" fill="#24292f">47. 采样结果回传 Worker</text><text x="1334" y="3320" font-size="13" text-anchor="middle" fill="#57606a">[token_ids·block 状态]</text>
+<rect x="754" y="3354" width="300" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="3368" font-size="18" text-anchor="middle" fill="#24292f">48. RequestOutput</text><text x="904" y="3388" font-size="13" text-anchor="middle" fill="#57606a">[增量 token 批次]</text>
+<rect x="334" y="3422" width="280" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="474" y="3436" font-size="18" text-anchor="middle" fill="#24292f">49. 输出 token</text><text x="474" y="3456" font-size="13" text-anchor="middle" fill="#57606a">[增量]</text>
+<rect x="99" y="3490" width="320" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="259" y="3504" font-size="18" text-anchor="middle" fill="#24292f">50. 增量文字（流式）</text><text x="259" y="3524" font-size="13" text-anchor="middle" fill="#57606a">[FastToken·SSE 推送]</text>
+<rect x="597" y="3558" width="400" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="797" y="3572" font-size="18" text-anchor="middle" fill="#24292f">51. EOS/达上限 → 释放 KV 块·请求收尾</text><text x="797" y="3592" font-size="13" text-anchor="middle" fill="#57606a">free_blocks() [块回收·metrics 打点]</text>
+<rect x="1599" y="3626" width="330" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="3640" font-size="18" text-anchor="middle" fill="#24292f">52. 每600步统计专家热度</text><text x="1764" y="3660" font-size="13" text-anchor="middle" fill="#57606a">EplbWorker.do_update() L46</text>
+<rect x="1594" y="3694" width="340" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="1764" y="3708" font-size="18" text-anchor="middle" fill="#24292f">53. 热专家加副本重摆+搬权重</text><text x="1764" y="3728" font-size="13" text-anchor="middle" fill="#57606a">[FlashLB·D2D]</text>
+<rect x="714" y="3762" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="904" y="3776" font-size="18" text-anchor="middle" fill="#24292f">54. KV 跨实例搬运(PD 分离时)</text><text x="904" y="3796" font-size="13" text-anchor="middle" fill="#57606a">[mooncake/RD2H·kv_role·未启用即空转]</text>
+<rect x="470" y="3830" width="380" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="660" y="3844" font-size="18" text-anchor="middle" fill="#24292f">55. 指标/日志上报(TTFT/TPOT)</text><text x="660" y="3864" font-size="13" text-anchor="middle" fill="#57606a">[Prometheus·profiler·落盘]</text>
+<rect x="197" y="3898" width="340" height="38" fill="#ffffff" opacity="0.95" rx="4"/><text x="367" y="3912" font-size="18" text-anchor="middle" fill="#24292f">56. 周期性探活 /health</text><text x="367" y="3932" font-size="13" text-anchor="middle" fill="#57606a">[keepalive·超时熔断]</text>
+<text x="24" y="34" font-size="16" font-weight="700" fill="#445">阶段 0 · 启动加载(PD分离 kv_role/mooncake/RD2H 未启用)</text>
+<rect x="14" y="1216" width="427" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="1237" font-size="16" font-weight="700" fill="#445">阶段 1 · 执行 prefill（TTFT 主体，层内细节后续篇展开）</text>
+<rect x="14" y="2860" width="294" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="2881" font-size="16" font-weight="700" fill="#445">阶段 2 · decode 循环（细节后续篇展开）</text>
+<rect x="14" y="3612" width="272" height="30" fill="#ffffff" stroke="#b8c4cf" rx="7" stroke-width="1.2"/><text x="24" y="3633" font-size="16" font-weight="700" fill="#445">阶段 3 · 后台横切（与前台并行）</text>
+</svg>
+</div>
+<div class="figcap">图 1 · 全链路主时序：启动加载 → prefill → decode → 后台横切，56 步（宽图，可左右滑动）</div>
+</div>
+
+<p><b>阶段 0 · 启动加载（步 1 至 8）</b>：把"能算"准备好——torch_npu/HCCL 初始化、进程组拉起、权重载入（多线程/lazy·NZ·W8A8·细粒度切分）、16 卡通信组、预编译与绑核、专家初始摆放、显存 profiling 建 KV 块池，最后探活就绪。这一阶段的关键产物是 KV 池与块表——后面 prefill/decode 都在它上面分配。</p>
+<p><b>阶段 1 · prefill（步 9 至 39）</b>：TTFT 的主体。HTTP 请求进来→文本转 token→引擎排队→排班→前缀缓存查命中（命中即复用 KV 块）→未命中则全量 prefill，长文切块分轮（图里 3.5K 长文切 4 块）→分配 KV 块写块表→下发执行→每卡只算 220 行的前向（步 20 至 32：SP 聚散、DSA-CP 三段流水、SFA 只算 topk 相关块、MoE 一笔融合、logits 分片归并）→采样挑首 token→一路回传→步 39 首字到手，TTFT 到此为止。</p>
+<p><b>阶段 2 · decode 循环（步 40 至 51）</b>：每步先查 stop 条件，再为新 token 追加 KV 槽位；decode 批下发后，MTP 草稿连猜 3 字、验证器留正确前缀，一步产出 1 至 4 个 token；增量结果流式回传，EOS 或达上限时释放 KV 块收尾。</p>
+<p><b>阶段 3 · 后台横切（步 52 至 56）</b>：与前台并行的几条侧线——每 600 步统计专家热度、热专家加副本重摆并搬权重（EPLB）；PD 分离部署时 KV 跨实例搬运（本链路未启用即空转）；指标上报与周期探活。</p>
+
+<h2 id="s2">2. 阶段 0 的隐藏一步：模型注册表（补充）</h2>
+<p>时序图阶段 0 的步骤 3 写着"载入权重"——但权重还没载之前，有一件图里没画的事已经发生：<b>哪个模型用哪套实现，早在引擎装配时就登记定死了</b>。翻 vllm-ascend 源码的 models/__init__.py，会看到 24 条"架构名→实现类"的登记——这正是"哪个模型、应该用哪个配置"的答案所在：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 550" role="img" aria-label="模型注册表落位">
+<defs><marker id="ahS" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">阶段 0 的隐藏一步：模型注册表——哪个模型用哪套实现，载入权重前就定了</text>
+<rect class="node" x="20" y="56" width="340" height="96" rx="8"/>
+<text class="tb" x="40" y="84">步骤 2 · 拉起进程组</text>
+<text class="ts" x="40" y="112">EngineCore→Worker（ZMQ·DP2×TP16）</text>
+<path class="flow" d="M190 152 V176" marker-end="url(#ahS)"/>
+<rect class="bc" x="20" y="176" width="340" height="128" rx="8"/>
+<text class="tb" x="40" y="204">步骤 2.5 · 认模型（时序图未画出）</text>
+<text class="ts" x="40" y="232">vLLM 扫 vllm.general_plugins 入口点</text>
+<text class="ts" x="40" y="258">（setup.py:524 登记 ascend_model 钩子）</text>
+<text class="ts" x="40" y="284">→ 24 条架构名→实现类，注册进上游</text>
+<path class="flow" d="M190 304 V328" marker-end="url(#ahS)"/>
+<rect class="node" x="20" y="328" width="340" height="168" rx="8"/>
+<text class="tb" x="40" y="356">步骤 3 · 载入权重</text>
+<text class="ts" x="40" y="384">NPUWorker.load_model()</text>
+<text class="ts" x="40" y="410">按 config.json 的 architectures 字段</text>
+<text class="ts" x="40" y="436">查上游 ModelRegistry 注册表</text>
+<text class="ts" x="40" y="462">→ AscendDeepseekV4ForCausalLM</text>
+<text class="ts" x="40" y="486">实现类定，步骤 20 至 32 算子路径才定</text>
+<rect class="wc" x="400" y="56" width="420" height="440" rx="8"/>
+<text class="tb" x="420" y="84">models/__init__.py 注册表（24 条，节选）</text>
+<text class="ts" x="420" y="112">DeepseekV4ForCausalLM</text>
+<text class="ts" x="436" y="134">→ deepseek_v4.model:AscendDeepseekV4ForCausalLM</text>
+<text class="ts" x="420" y="158">GlmMoeDsaForCausalLM</text>
+<text class="ts" x="436" y="180">→ deepseek_mtp:AscendGlmMoeDsaForCausalLM</text>
+<text class="ts" x="420" y="204">Qwen3DSparkModel</text>
+<text class="ts" x="436" y="226">→ qwen3_dspark:AscendQwen3DSparkForCausalLM</text>
+<text class="ts" x="420" y="250">KimiLinearForCausalLM（别名 KimiK3 同指）</text>
+<text class="ts" x="436" y="272">→ kimi_k3:AscendKimiLinearForCausalLM</text>
+<text class="ts" x="420" y="296">DeepSeekV4MTPModel / DeepSeekMTPModel</text>
+<text class="ts" x="436" y="318">→ deepseek_v4.mtp / deepseek_mtp 的 MTP 实现</text>
+<text class="ts" x="420" y="342">全表 24 条：Kimi、Qwen、GLM、DeepSeek 各系</text>
+<line x1="410" y1="362" x2="810" y2="362" stroke="#d1d5db" stroke-dasharray="4 4"/>
+<text class="tb" x="420" y="388">登记之后还有第二层选择</text>
+<text class="ts" x="420" y="414">attention 后端：platform.py 按</text>
+<text class="ts" x="420" y="438">hf_text_config 字段（如 index_topk）</text>
+<text class="ts" x="420" y="462">决定注意力走哪套实现</text>
+<path class="dash" d="M400 412 H360" marker-end="url(#ahS)"/>
+<text class="tm" x="20" y="536">读法：左列=阶段 0 的三步（2.5 为补画的一步）；右框=注册表节选与第二层选择；登记是一次性的，步骤 3 只查表。</text>
+</svg>
+<div class="figcap">图 2 · 阶段 0 放大：认模型一步（步 2.5）在载入权重之前——入口点→24 条注册表→查表取实现类</div>
+</div>
+
+<pre><span class="c"># setup.py:519-526 —— 插件把自己挂进 vLLM 的两排钩子</span>
+entry_points={
+    "vllm.platform_plugins": ["ascend = vllm_ascend:register"],
+    "vllm.general_plugins": [
+        "ascend_kv_connector = vllm_ascend:register_connector",
+        "ascend_model_loader = vllm_ascend:register_model_loader",
+        "ascend_service_profiling = vllm_ascend:register_service_profiling",
+        "ascend_model = vllm_ascend:register_model",   <span class="c"># ← 认模型挂在这</span>
+    ],
+}
+
+<span class="c"># vllm_ascend/__init__.py:100-105 —— 入口点进来后的包装</span>
+def register_model():
+    from .models import register_model
+    register_model()
+
+<span class="c"># vllm_ascend/models/__init__.py —— 24 条登记（节选）</span>
+ModelRegistry.register_model(
+    "DeepseekV4ForCausalLM",
+    "vllm_ascend.models.deepseek_v4.model:AscendDeepseekV4ForCausalLM")
+ModelRegistry.register_model(
+    "KimiLinearForCausalLM",
+    "vllm_ascend.models.kimi_k3:AscendKimiLinearForCausalLM")
+ModelRegistry.register_model(
+    "GlmMoeDsaForCausalLM",
+    "vllm_ascend.models.deepseek_mtp:AscendGlmMoeDsaForCausalLM")
+ModelRegistry.register_model(
+    "Qwen3DSparkModel",
+    "vllm_ascend.models.qwen3_dspark:AscendQwen3DSparkForCausalLM")
+ModelRegistry.register_model(
+    "DeepSeekV4MTPModel", "vllm_ascend.models.deepseek_v4.mtp:DeepSeekV4MTP")
+<span class="c"># 全表 24 条；KimiK3ForCausalLM 是 KimiLinear 的兼容别名，指同一实现</span></pre>
+
+<p><b>机制链条四步</b>：①插件安装时 setup.py 把 <code>ascend_model = vllm_ascend:register_model</code> 登记进 vLLM 的 general_plugins 入口点；②vLLM 启动装配时扫入口点、调 vllm_ascend 的包装函数；③包装函数执行 models/__init__.py 里的 24 条 <code>ModelRegistry.register_model</code>，把插件自己的实现类按架构名<b>覆盖注册</b>进上游注册表；④时序图步骤 3 载入权重时，上游按权重 config.json 的 <code>architectures</code> 字段查这张表——查到 <code>AscendDeepseekV4ForCausalLM</code>，后续步骤 20 至 32 的算子路径由此定型。登记之后还有<b>第二层选择</b>：attention 后端由 platform.py 按 hf_text_config 的字段（如 index_topk）决定走哪套注意力实现。</p>
+
+<div class="kp w">
+<span class="kp-t">排查提示：模型没走上预期优化路径时，先查这两层</span>
+<ul>
+<li>第一层查注册表：权重 config.json 的 architectures 名是否在 24 条里——不在表里，上游走默认实现，算子路径完全不同（DeepSeek V4.1 走的是 <code>AscendDeepseekV4ForCausalLM</code> 这条登记）；</li>
+<li>第二层查后端条件：platform.py 的选路按模型字段判定（如 index_topk 决定稀疏注意力），字段对不上就走通用后端；</li>
+<li>两层都过了，才回到时序图对应步骤看执行路径——排查顺序与图的顺序一致：先认模型，再看执行。</li>
+</ul>
+</div>
+
+<h2 id="s3">3. 术语速查</h2>
+<table>
+<tr><th>术语</th><th>本文语境下的含义</th></tr>
+<tr><td>EngineCore / Worker / ModelRunner</td><td>vLLM 上游执行三级：引擎核心进程→每卡执行进程（NPUWorker）→每卡运行器（NPUModelRunner）</td></tr>
+<tr><td>BalanceScheduler（DPLB）</td><td>排班器——DP 侧负载均衡，决定本轮算哪些请求</td></tr>
+<tr><td>DSA-CP</td><td>DeepSeek 稀疏注意力 + 序列并行的通信模式（算前聚、算后散、head 归属互换）</td></tr>
+<tr><td>MTP / dspark / dflash</td><td>投机解码草稿头（MTP）；dspark、dflash 为两种草稿实现名</td></tr>
+<tr><td>EPLB</td><td>专家并行负载均衡——按热度给热专家加副本并重摆</td></tr>
+<tr><td>prefix cache / chunkPrefill</td><td>前缀 KV 块复用 / 长 prefill 切块分轮执行</td></tr>
+<tr><td>C8</td><td>SFA 稀疏的 KV 存储块模式（enable_sparse_sfa_c8 / li_c8，随模型是否走 SFA 派生，ascend_config.py）</td></tr>
+<tr><td>MLAPO</td><td>MLA 相关融合优化开关（enable_mlapo，默认开）——图中步 21 归一化+cast 融合属它</td></tr>
+<tr><td>fused_mc2 / DFFC</td><td>MoE 大融合开关 / DispatchFFNCombine 算子（dispatch+专家 FFN+combine 一体）</td></tr>
+<tr><td>TTFT / TPOT</td><td>首字延迟 / 每字延迟——压测两端的两个核心读数</td></tr>
+</table>
+
+<p class="dim" style="margin-top:36px">来源：时序主图为方案 B 稿件经口径与悬挂引用清理后收录；补充节与名词定义以本地 vllm-ascend 源码实测为准——setup.py:519-526（入口点）、vllm_ascend/__init__.py:100-105（包装）、vllm_ascend/models/__init__.py（24 条注册表）、ascend_config.py:481 与 753-758（MLAPO、C8）· 行号以当期源码为准</p>
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
