@@ -120,8 +120,8 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-10-18</span></div>
-<div class="cc-title">KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</div>
-<div class="cc-desc">从多头注意力出发讲透 KV Cache：839 万行重算账、每 token 16KB 的显存膨胀、prefill/decode 两种写入、块池与块表管理，以及 MQA/GQA/MLA/KDA 四条压缩路线——全程统一数字基线</div>
+<div class="cc-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</div>
+<div class="cc-desc">Q/K/V 怎么算、causal mask 挡什么、无缓存为什么平方级重算、Prefill 与 Decode 怎么写缓存、逐层缓存与显存公式、以及 GQA/MLA/量化怎么省——11 张图配 10 段可运行 PyTorch</div>
 <a class="cc-link" href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
@@ -177,7 +177,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
-<li class="li" data-topic="theory" data-ts="20261018"><a href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html"><span class="li-date">2026-10-18</span><span class="li-main"><span class="li-title">KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法<span class="li-tag">基础理论</span></span><span class="li-desc">没有缓存是 839 万行重算、有缓存每 token 每层 16KB——64 层两个抽屉的显存账、prefill 与 decode 两种写法、块池与块表怎么管、MQA/GQA/MLA/KDA 四条省法；图复用自多头注意力精读，数字基线统一</span></span></a></li>
+<li class="li" data-topic="theory" data-ts="20261018"><a href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html"><span class="li-date">2026-10-18</span><span class="li-main"><span class="li-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）<span class="li-tag">基础理论</span></span><span class="li-desc">从一行注意力的 PyTorch 源码走到推理缓存：causal mask 在挡什么、无缓存每步重算的平方代价、Prefill/Decode 两阶段与逐层缓存、显存公式 2·L·B·S·H_kv·dh·bytes 的具体账、两条推理路径对照与 MQA/GQA/MLA 优化——11 图配 10 段可运行代码</span></span></a></li>
 
 <li class="li" data-topic="vllm" data-ts="20261017"><a href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html"><span class="li-date">2026-10-17</span><span class="li-main"><span class="li-title">DeepSeek V4.1 全链路主时序：一条请求从压测端到首字返回的 57 步<span class="li-tag">vLLM 源码</span></span><span class="li-desc">启动加载、prefill、decode、后台横切四阶段 57 步一张时序走完，认模型入编为步骤 3——models/__init__ 24 条模型注册表，载入权重前就定下哪个模型用哪套实现</span></span></a></li>
 <li class="li" data-topic="ops" data-ts="20261016"><a href="学习html/昇腾算子地图 · 从一层前向到三层算子楼.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开<span class="li-tag">算子与编程</span></span><span class="li-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——逐层展开每层的族谱与实测占比，附 trace 名对回代码的认亲表与三看口诀</span></span></a></li>
