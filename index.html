@@ -119,6 +119,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-10-18</span></div>
+<div class="cc-title">KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</div>
+<div class="cc-desc">从多头注意力出发讲透 KV Cache：839 万行重算账、每 token 16KB 的显存膨胀、prefill/decode 两种写入、块池与块表管理，以及 MQA/GQA/MLA/KDA 四条压缩路线——全程统一数字基线</div>
+<a class="cc-link" href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">算子与编程</span><span class="cc-date">2026-10-16</span></div>
 <div class="cc-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开</div>
 <div class="cc-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——三层全景逐层展开族谱，拿真实 profiling 数据认亲</div>
@@ -142,19 +148,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">从模型选型期到交付流程期 20 条问题全收录：对话版当 Base 重大更正、数据泄漏与评测口径教训、v3 重训进行中</div>
 <a class="cc-link" href="实验html/Kev复现全周期问题总账-20260927.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-09-26</span></div>
-<div class="cc-title">Kev 架构详解（含源码）</div>
-<div class="cc-desc">为什么不用自回归：整体架构、数据格式与指针头、训练与推理流程，以及 act 覆盖率的结构性短板</div>
-<a class="cc-link" href="学习html/Kev 架构详解（含源码）.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">42</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">43</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -162,11 +162,11 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">42 篇 · 8 个专题</div>
+<div class="sec-badge">43 篇 · 8 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">42</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">43</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">7</span></button>
@@ -174,9 +174,11 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
-<button class="chip" data-topic="theory">基础理论<span class="count">7</span></button>
+<button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="theory" data-ts="20261018"><a href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html"><span class="li-date">2026-10-18</span><span class="li-main"><span class="li-title">KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法<span class="li-tag">基础理论</span></span><span class="li-desc">没有缓存是 839 万行重算、有缓存每 token 每层 16KB——64 层两个抽屉的显存账、prefill 与 decode 两种写法、块池与块表怎么管、MQA/GQA/MLA/KDA 四条省法；图复用自多头注意力精读，数字基线统一</span></span></a></li>
+
 <li class="li" data-topic="vllm" data-ts="20261017"><a href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html"><span class="li-date">2026-10-17</span><span class="li-main"><span class="li-title">DeepSeek V4.1 全链路主时序：一条请求从压测端到首字返回的 57 步<span class="li-tag">vLLM 源码</span></span><span class="li-desc">启动加载、prefill、decode、后台横切四阶段 57 步一张时序走完，认模型入编为步骤 3——models/__init__ 24 条模型注册表，载入权重前就定下哪个模型用哪套实现</span></span></a></li>
 <li class="li" data-topic="ops" data-ts="20261016"><a href="学习html/昇腾算子地图 · 从一层前向到三层算子楼.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开<span class="li-tag">算子与编程</span></span><span class="li-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——逐层展开每层的族谱与实测占比，附 trace 名对回代码的认亲表与三看口诀</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261016"><a href="学习html/vllm-ascend PR 18961 解读 · draft层attention换CANN FlashAttn.html"><span class="li-date">2026-10-16</span><span class="li-main"><span class="li-title">vllm-ascend PR 18961 解读：给 GLM 的 draft 层 attention 换上 CANN FlashAttn<span class="li-tag">vLLM 源码</span></span><span class="li-desc">target 一根手指不动：七重条件窄门给 draft 换引擎——device 长度一次、tiling 计划层间复用，TPOT 14.90→10.97ms</span></span></a></li>
