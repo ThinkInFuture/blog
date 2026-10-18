@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --del:#c2410c;--code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --del:#f87171;--code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+h4{font-size:15px;margin:20px 0 6px;color:var(--accent-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:20px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 28px;font-size:14px}
+nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--brand-text);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.cnum{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--brand);font-weight:700}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.8px;line-height:1.6}
+pre .c{color:var(--text-muted)}
+pre .a{color:var(--ok);font-weight:700}
+pre .d{color:var(--del);text-decoration:line-through}
+.codetag{font-size:13px;font-weight:700;margin:14px 0 4px}
+.codetag.before{color:var(--del)}
+.codetag.after{color:var(--ok)}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.figgrid{display:grid;grid-template-columns:1fr;gap:20px}
+@media (min-width:1200px){.figgrid{grid-template-columns:1fr 1fr}.figgrid .card{overflow-x:auto}}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp.g{border-color:var(--ok);background:var(--ok-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12.5px;font-weight:600;margin-right:6px}
+.tag.blue{background:var(--brand-bg);color:var(--brand-text)}
+.tag.teal{background:var(--accent-bg);color:var(--accent-text)}
+.tag.amber{background:var(--warn-bg);color:var(--warn)}
+.tag.green{background:var(--ok-bg);color:var(--ok)}
+.dim{color:var(--text-muted);font-size:13.5px}
+.quote{border-left:3px solid var(--border);padding:2px 14px;margin:12px 0;color:var(--text-muted);font-size:13.5px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:8}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none}
+.flow{stroke:var(--brand);stroke-width:2;fill:none}
+.dash{stroke:var(--accent);stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+.ghost{fill:var(--surface);stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4}
+.grpA{fill:var(--brand-bg);stroke:var(--brand);stroke-width:2}
+.grpB{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+.frame{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:6 5}
+.gbadge{fill:var(--surface-muted);stroke:var(--border);stroke-width:1.5}
+.nb{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.cb{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.bdg{fill:var(--text);font-size:17px;font-weight:700}
+.garr{stroke:var(--border);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+<h1>KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</h1>
+<div class="subtitle">从已经认识的多头注意力出发：Q 每步只来 1 个新 token，注意力却要扫全部 L 个 K——把历史 K/V 存下来就是 KV Cache。这篇沿着「存什么 → 多大账 → 两阶段怎么写 → 块池怎么管 → 怎么省」走完全程，数字基线与《多头注意力机制精读》统一：d_model=4096、32 头、每头 128 维、fp16</div>
+
+<nav class="toc">
+<b>目录</b>
+<a href="#s1">1 出发点：注意力每步要什么</a>
+<a href="#s2">2 没有缓存会怎样：839 万行重算账</a>
+<a href="#s3">3 缓存里存的是什么：64 层 × K/V 两个抽屉</a>
+<a href="#s4">4 显存账：16KB 怎么胀成 100GB</a>
+<a href="#s5">5 prefill 与 decode：两种写法</a>
+<a href="#s6">6 块池管理：逻辑连续、物理散放</a>
+<a href="#s7">7 四条省法：MQA / GQA / MLA / KDA（外加量化）</a>
+<a href="#s8">8 与站内文章的关系</a>
+<a href="#s9">9 术语速查</a>
+</nav>
+
+<h2 id="s1">1. 出发点：注意力每步要什么</h2>
+<p>从已经认识的标准多头注意力（MHA）看起。生成第 N 个 token 时，输入只有 1 个新 token，但注意力公式要求这个新 token 的 Q 与<b>前面全部 N 个 token 的 K/V</b> 做点积——新的是 Q，要用的却是历史。历史的 K/V 从哪来？要么每步重算，要么存下来。存下来的那两个张量，就是 KV Cache：</p>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+            X["输入 x<br>d_model = 4096"] --> Proj["Q/K/V 三个投影<br>每个都输出 32 个头（4096 维）"]
+            Proj --> Cache["KV 缓存<br>每 token 追加 2·H·d = 8192 元素 = 16KB"]
+            Proj --> Q["Q（新 token 的 32 个头）"]
+            Cache --> Attn["注意力计算<br>Q 与缓存里全部 L 个 K 点积 → softmax → ×V"]
+            Q --> Attn
+            Attn --> Out["输出（加权和）"]
+            Note["每个 Q 头都要扫过全部历史<br>→ 算力 O(L)、缓存 O(L)"] -.-> Attn
+</div>
+<div class="figcap">图 1 · 标准多头注意力的宏观流程（复用自《多头注意力机制精读》图 MHA-1）：Q/K/V 三个投影各自独立，K/V 追加进缓存，注意力用新 Q 扫缓存里全部 L 个 K</div>
+</div>
+<p><b>读图 1 的三个要点</b>：一，Q/K/V 投影每个 token 都要做，但<b>只有 Q 是一次性的</b>——用完就扔；二，K/V 是历史的公共财产，后面的每个 token 都要来读，所以值得存；三，缓存每 token 每层追加 2·H·d = 2×32×128 = 8192 个 fp16 元素，正好 16KB——这个数字后面全程要用。</p>
+
+<h2 id="s2">2. 没有缓存会怎样：839 万行重算账</h2>
+<p>如果坚持不存，代价是<b>每一步都把整个前缀重新过一遍投影</b>。生成第 1 个 token 投影 1 行，第 2 个 token 重算 2 行（第 1、第 2 个），第 4096 个 token 要重算 4096 行。把生成 4096 个 token 的投影行数加起来：</p>
+<div class="card">
+<svg viewBox="0 0 840 560" role="img" aria-label="无缓存重算账对比">
+<defs><marker id="ahK2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">没有缓存的代价：步步重算全部前缀（左） vs 只算新行（右）</text>
+<rect class="wc" x="20" y="48" width="390" height="396" rx="10"/>
+<text class="tb" x="40" y="76">无缓存 · 生成第 N 个 token 重算前 N 个</text>
+<rect class="node" x="40" y="92" width="350" height="64" rx="8"/>
+<text class="tb" x="56" y="118">第 1 个 token</text>
+<text class="ts" x="56" y="142">投影 1 行 K/V</text>
+<path class="flow" d="M115 156 V168" marker-end="url(#ahK2)"/>
+<rect class="node" x="40" y="168" width="350" height="64" rx="8"/>
+<text class="tb" x="56" y="194">第 2 个 token</text>
+<text class="ts" x="56" y="218">重算 2 行（第 1 + 第 2 个）</text>
+<path class="flow" d="M115 232 V244" marker-end="url(#ahK2)"/>
+<rect class="node" x="40" y="244" width="350" height="64" rx="8"/>
+<text class="tb" x="56" y="270">第 4096 个 token</text>
+<text class="ts" x="56" y="294">重算 4096 行（全部历史）</text>
+<path class="flow" d="M115 308 V336" marker-end="url(#ahK2)"/>
+<rect class="node" x="40" y="336" width="350" height="72" rx="8"/>
+<text class="tb" x="56" y="364">合计 1+2+…+4096 = 8,390,656 行</text>
+<text class="ts" x="56" y="390">约 839 万行投影 / 每层</text>
+<rect class="bc" x="430" y="48" width="390" height="396" rx="10"/>
+<text class="tb" x="450" y="76">有缓存 · 历史行直接读缓存</text>
+<rect class="node" x="450" y="92" width="350" height="64" rx="8"/>
+<text class="tb" x="466" y="118">第 1 个 token</text>
+<text class="ts" x="466" y="142">投影 1 行，写入缓存</text>
+<path class="flow" d="M525 156 V168" marker-end="url(#ahK2)"/>
+<rect class="node" x="450" y="168" width="350" height="64" rx="8"/>
+<text class="tb" x="466" y="194">第 2 个 token</text>
+<text class="ts" x="466" y="218">只投影第 2 行，第 1 行读缓存</text>
+<path class="flow" d="M525 232 V244" marker-end="url(#ahK2)"/>
+<rect class="node" x="450" y="244" width="350" height="64" rx="8"/>
+<text class="tb" x="466" y="270">第 4096 个 token</text>
+<text class="ts" x="466" y="294">只投影第 4096 行</text>
+<path class="flow" d="M525 308 V336" marker-end="url(#ahK2)"/>
+<rect class="node" x="450" y="336" width="350" height="72" rx="8"/>
+<text class="tb" x="466" y="364">合计 4096 行 / 每层</text>
+<text class="ts" x="466" y="390">每一行历史只投影一次</text>
+<path class="dash" d="M410 372 H430" marker-end="url(#ahK2)"/>
+<text class="tm" x="20" y="484">投影计算量：839 万行 → 4096 行，省 2048 倍；换来的代价是显存要放下全部历史 K/V（第 3、4 章的账）。</text>
+<text class="tm" x="20" y="508">点积没有省：每一步 Q 仍要与全部 L 个 K 做点积，注意力本身依旧是 O(L)——缓存省的是「投影重算」，不是「注意力扫描」。</text>
+<text class="tm" x="20" y="532">数字口径：32 头 × 每头 128 维（与《多头注意力机制精读》统一基线一致）。</text>
+</svg>
+<div class="figcap">图 2 · 无缓存的投影量是 O(L²)：生成 4096 个 token 需要 839 万行投影；有缓存后每行历史只投影一次</div>
+</div>
+
+<h2 id="s3">3. 缓存里存的是什么：64 层 × K/V 两个抽屉</h2>
+<p>KV Cache 不是一个大数组，而是<b>每一层各存各的</b>：输入每穿过一个 Block，就把该 token 在这一层的 K 和 V 追加进这一层自己的缓存。以 64 层模型为例，全模型共有 64 对「K 抽屉 + V 抽屉」：</p>
+<div class="card">
+<svg viewBox="0 0 840 620" role="img" aria-label="缓存内容结构">
+<defs><marker id="ahK3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">KV 缓存存什么：64 层，每层 K/V 两个张量（fp16）</text>
+<rect class="bc" x="20" y="48" width="440" height="440" rx="10"/>
+<text class="tb" x="40" y="76">每层两个抽屉，形状同构</text>
+<rect class="node" x="40" y="92" width="400" height="56" rx="8"/>
+<text class="tb" x="56" y="115">Layer 0</text>
+<text class="ts" x="150" y="115">K [L · 32 · 128] · V [L · 32 · 128]</text>
+<rect class="node" x="40" y="156" width="400" height="56" rx="8"/>
+<text class="tb" x="56" y="179">Layer 1</text>
+<text class="ts" x="150" y="179">同上 · 本层自己的 K/V</text>
+<line x1="220" y1="224" x2="206" y2="252" stroke="#6e7b8a" stroke-width="2"/>
+<line x1="252" y1="224" x2="238" y2="252" stroke="#6e7b8a" stroke-width="2"/>
+<text class="ts" x="286" y="244">共 64 层 · 其余 60 层同构</text>
+<rect class="node" x="40" y="262" width="400" height="56" rx="8"/>
+<text class="tb" x="56" y="285">Layer 62</text>
+<text class="ts" x="150" y="285">同上 · 本层自己的 K/V</text>
+<rect class="node" x="40" y="326" width="400" height="56" rx="8"/>
+<text class="tb" x="56" y="349">Layer 63</text>
+<text class="ts" x="150" y="349">同上 · 本层自己的 K/V</text>
+<rect class="wc" x="480" y="48" width="340" height="440" rx="10"/>
+<text class="tb" x="500" y="76">显存账（fp16）</text>
+<text class="ts" x="500" y="108">1 token · 1 层：2 × 32 × 128 × 2B = 16KB</text>
+<text class="ts" x="500" y="136">× 64 层 = 1 MB / token</text>
+<text class="ts" x="500" y="164">L = 4096 → 全模型 4 GB</text>
+<text class="ts" x="500" y="192">L = 100k → 约 100 GB（MHA）</text>
+<text class="tb" x="500" y="240">不进缓存的</text>
+<text class="ts" x="500" y="272">Q：当步用完即弃（新 token 自己的问题）</text>
+<text class="ts" x="500" y="300">O 投影输出、logits：逐层逐步行进，不驻留</text>
+<text class="ts" x="500" y="328">进缓存的只有 K/V（历史给出的答案）</text>
+<path class="dash" d="M460 130 H480" marker-end="url(#ahK3)"/>
+<text class="tm" x="20" y="524">[L, 32, 128] 的读法：L 行历史，每行 32 个头、每头 128 维；K 与 V 各一份，元素数再乘 2。</text>
+<text class="tm" x="20" y="548">同一行 token 在 64 层里各有一份缓存——输入每穿过一个 Block，就往那一层的抽屉追加一行。</text>
+</svg>
+<div class="figcap">图 3 · 缓存的组织：64 层 ×（K + V）两个张量；Q 用完即弃不存，K/V 逐层逐行追加</div>
+</div>
+
+<h2 id="s4">4. 显存账：16KB 怎么胀成 100GB</h2>
+<p>把第 3 章的「每 token 16KB / 层」放进长序列里，膨胀速度是线性的、感觉是爆炸的——这是姊妹篇里已经画过的一笔账，直接搬来作为本篇的显存压力基线：</p>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+            T1["第 1 个 token<br>存 16KB"] --> T2["第 2 个 token<br>追加 16KB → 共 32KB"]
+            T2 --> T3["第 3 个 token<br>追加 → 共 48KB"]
+            T3 --> TL["第 4096 个 token<br>共 4096 × 16KB = 64MB / 层"]
+            TL --> B1["L = 100k 时<br>单层就 1.6GB"]
+            B1 --> B2["64 层合计 ≈ 100GB<br>显存放不下 ❌"]
+            style B2 fill:#fee2e2,stroke:#ef4444
+</div>
+<div class="figcap">图 4 · KV 缓存随序列长度线性膨胀（复用自《多头注意力机制精读》图 MHA-3）：4096 token 单层 64MB，100k 序列 64 层合计约 100GB</div>
+</div>
+<table>
+<tr><th>序列长度 L</th><th>单层缓存</th><th>64 层合计</th><th>参照物</th></tr>
+<tr><td>4096</td><td>64 MB</td><td>4 GB</td><td>一张消费级显卡的显存</td></tr>
+<tr><td>32768</td><td>512 MB</td><td>32 GB</td><td>一张训练卡的全部显存</td></tr>
+<tr><td>100000</td><td>1.6 GB</td><td>约 100 GB</td><td>权重之外的最大显存黑洞</td></tr>
+</table>
+<p>注意这份账只算了<b>一条请求</b>。并发 8 条 32k 请求，缓存就要 256GB——比模型权重本身大得多。所以工程上的两个问题自然浮出来：怎么把零散的缓存<b>管起来不浪费</b>（第 6 章），怎么把每 token 的 16KB<b>压下去</b>（第 7 章）。</p>
+
+<h2 id="s5">5. prefill 与 decode：两种写法</h2>
+<p>生成过程分两段，缓存的写入方式完全不同——<b>prefill 一次写满，decode 每步追加一行</b>：</p>
+<div class="card">
+<svg viewBox="0 0 840 620" role="img" aria-label="prefill 与 decode 的缓存写入">
+<defs><marker id="ahK5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">两阶段写缓存：prefill 一次写满 · decode 每步 +1 行</text>
+<rect class="bc" x="20" y="48" width="800" height="210" rx="10"/>
+<text class="tb" x="40" y="78">prefill · 提示词一次算完（并行）</text>
+<text class="ts" x="40" y="106">prompt 512 token 一次前向：512 行 K/V 全部投影完成</text>
+<rect class="node" x="40" y="126" width="760" height="48" rx="8"/>
+<text class="ts" x="56" y="155">缓存 0 行 → 512 行，一次写满 · 单层 8MB · 64 层 512MB</text>
+<text class="ts" x="40" y="202">TTFT（首字延迟）由这一步决定——提示词越长，这一步越重</text>
+<path class="flow" d="M420 258 V286" marker-end="url(#ahK5)"/>
+<rect class="ac" x="20" y="286" width="800" height="210" rx="10"/>
+<text class="tb" x="40" y="316">decode · 每步生成 1 个 token（串行）</text>
+<rect class="node" x="40" y="336" width="52" height="36" rx="6"/>
+<text class="ts" x="47" y="359" text-anchor="middle">+1</text>
+<rect class="node" x="100" y="336" width="52" height="36" rx="6"/>
+<text class="ts" x="126" y="359" text-anchor="middle">+1</text>
+<rect class="node" x="160" y="336" width="52" height="36" rx="6"/>
+<text class="ts" x="186" y="359" text-anchor="middle">+1</text>
+<rect class="node" x="220" y="336" width="52" height="36" rx="6"/>
+<text class="ts" x="246" y="359" text-anchor="middle">+1</text>
+<rect class="node" x="280" y="336" width="52" height="36" rx="6"/>
+<text class="ts" x="306" y="359" text-anchor="middle">+1</text>
+<rect class="node" x="350" y="336" width="180" height="36" rx="6"/>
+<text class="ts" x="440" y="359" text-anchor="middle">共 1000 步 · 每步 +1 行</text>
+<text class="ts" x="40" y="406">每步只投影 1 行新 token 的 K/V；新 Q 与缓存里全部行做点积</text>
+<text class="ts" x="40" y="434">每步缓存 +1 行 = 全模型 +1MB → 同卡能并发几条请求，先看缓存显存</text>
+<text class="tm" x="20" y="536">终态：512 + 1000 = 1512 行。prefill 是大块写入（吃显存带宽），decode 是小步追加（吃访存延迟）。</text>
+<text class="tm" x="20" y="560">读法：上框=提示词把缓存一次垫高到 512 行；下框=生成阶段缓存逐步长高到 1512 行。</text>
+</svg>
+<div class="figcap">图 5 · prefill 一次并行写满 512 行，decode 每步串行追加 1 行（全模型 1MB）——TTFT 与吞吐分别卡在两段上</div>
+</div>
+<p><b>为什么两段要分开对待</b>：prefill 是计算密集的大矩阵（512 行一起算，算力打满），decode 是访存密集的小向量（每步 1 行，显存带宽决定速度）——推理引擎的调度、 batching、块预分配全部围绕这个差异设计。</p>
+
+<h2 id="s6">6. 块池管理：逻辑连续、物理散放</h2>
+<p>缓存按需长高，那显存怎么分配？最朴素的办法是<b>按最大长度整段预留</b>——序列最长可能 4096 行，就先留 4GB。问题是绝大多数序列用不满：预留的显存大量闲置，还无法给别的请求复用。<b>块池</b>（PagedAttention 的思路）把缓存切成固定小块，按需领取、用完归还，物理上不必连续，靠一张<b>块表</b>把逻辑序列拼回来：</p>
+<div class="card">
+<svg viewBox="0 0 840 680" role="img" aria-label="块池管理">
+<defs><marker id="ahK6" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="420" y="26" text-anchor="middle">块池管理：逻辑连续 · 物理散放 · 块表翻译</text>
+<rect class="bc" x="20" y="48" width="800" height="104" rx="10"/>
+<text class="tb" x="40" y="78">逻辑视图 · 序列眼里的缓存：第 0 行 → 第 4095 行，连续不断</text>
+<rect class="node" x="40" y="94" width="760" height="40" rx="6"/>
+<text class="ts" x="56" y="120">第 0 行起 · 连续 4096 行 · 第 4095 行止（序列看到的永远是一整条）</text>
+<rect class="wc" x="20" y="172" width="800" height="150" rx="10"/>
+<text class="tb" x="40" y="200">块表 · 每序列一张：每 16 token 一块（MHA 下 16MB/块）</text>
+<rect class="node" x="40" y="220" width="180" height="56" rx="6"/>
+<text class="tb" x="130" y="244" text-anchor="middle">slot 0 → 块 7</text>
+<text class="ts" x="130" y="264" text-anchor="middle">第 0 至 15 行</text>
+<rect class="node" x="230" y="220" width="180" height="56" rx="6"/>
+<text class="tb" x="320" y="244" text-anchor="middle">slot 1 → 块 3</text>
+<text class="ts" x="320" y="264" text-anchor="middle">第 16 至 31 行</text>
+<rect class="node" x="420" y="220" width="180" height="56" rx="6"/>
+<text class="tb" x="510" y="244" text-anchor="middle">slot 2 → 块 9</text>
+<text class="ts" x="510" y="264" text-anchor="middle">第 32 至 47 行</text>
+<rect class="node" x="610" y="220" width="180" height="56" rx="6"/>
+<text class="tb" x="700" y="244" text-anchor="middle">slot 3 → 块 5</text>
+<text class="ts" x="700" y="264" text-anchor="middle">第 48 至 63 行</text>
+<rect class="ac" x="20" y="342" width="800" height="190" rx="10"/>
+<text class="tb" x="40" y="372">物理视图 · 块池全卡共享：块在哪都行，按块表拼回序列</text>
+<rect x="60" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="100" y="421" text-anchor="middle">块 1</text>
+<rect x="170" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="210" y="421" text-anchor="middle">块 2</text>
+<rect x="280" y="396" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+<text class="ts" x="320" y="421" text-anchor="middle">块 3</text>
+<rect x="390" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="430" y="421" text-anchor="middle">块 4</text>
+<rect x="500" y="396" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+<text class="ts" x="540" y="421" text-anchor="middle">块 5</text>
+<rect x="610" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="650" y="421" text-anchor="middle">块 6</text>
+<rect x="60" y="452" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+<text class="ts" x="100" y="477" text-anchor="middle">块 7</text>
+<rect x="170" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="210" y="477" text-anchor="middle">块 8</text>
+<rect x="280" y="452" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
+<text class="ts" x="320" y="477" text-anchor="middle">块 9</text>
+<rect x="390" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="430" y="477" text-anchor="middle">块 10</text>
+<rect x="500" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="540" y="477" text-anchor="middle">块 11</text>
+<rect x="610" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
+<text class="ts" x="650" y="477" text-anchor="middle">块 12</text>
+<path class="dash" d="M130 276 C 120 360, 100 400, 100 448" marker-end="url(#ahK6)"/>
+<path class="dash" d="M320 276 C 320 340, 320 360, 320 392" marker-end="url(#ahK6)"/>
+<path class="dash" d="M510 276 C 500 350, 330 380, 320 448" marker-end="url(#ahK6)"/>
+<path class="dash" d="M700 276 C 690 340, 560 370, 545 392" marker-end="url(#ahK6)"/>
+<rect class="node" x="20" y="552" width="800" height="76" rx="8"/>
+<text class="tb" x="36" y="580">静态预留 vs 块池：三条并发请求，实际分别用 800 / 1500 / 3000 行</text>
+<text class="ts" x="36" y="608">静态按 4096 行各留 4GB = 12GB（实占 5.3GB，闲置 6.7GB）；块池按需领块共 5.3GB，碎片最多每序列 1 块 = 16MB</text>
+</svg>
+<div class="figcap">图 6 · 块池三视图：逻辑连续（上）→ 块表翻译（中）→ 物理散放（下，蓝色为该序列领到的块）；按块分配让闲置显存可共享</div>
+</div>
+<div class="kp t">
+<span class="kp-t">块池的三个直接收益</span>
+<ul>
+<li><b>按需领用</b>：写多少行领多少块，不用为「可能的最长」预付整段显存；</li>
+<li><b>碎片可控</b>：外部碎片消失（块随便放），内部碎片封顶每序列最后半个块（本例 16 token / 16MB）；</li>
+<li><b>前缀共享</b>：两条请求的前缀相同，前缀块在块表里指向同一物理块——多轮对话里系统提示词只存一份。</li>
+</ul>
+</div>
+
+<h2 id="s7">7. 四条省法：MQA / GQA / MLA / KDA（外加量化）</h2>
+<p>第 6 章解决「不浪费」，这一章解决「每 token 16KB 本身太大」。四条路线在姊妹篇里逐个精读过，这里收拢成一张演进图——数字全部沿用统一基线（每 token 每层的缓存体积）：</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+            MHA["MHA<br>每头独立 K/V<br>16KB/token"] --> MQA["MQA<br>全共享 1 份<br>0.5KB/token"]
+            MQA --> GQA["GQA<br>分组共享 G=4 份<br>2KB/token"]
+            GQA --> MLA["MLA<br>latent 压缩<br>1KB/token"]
+            GQA -. "换条路：连 KV 列表都不想存" .-> KDA["KDA<br>固定状态机<br>~8MB 恒定 与 L 无关"]
+            style MHA fill:#dbeafe,stroke:#3b82f6
+            style MQA fill:#fef3c7,stroke:#f59e0b
+            style GQA fill:#d1fae5,stroke:#10b981
+            style MLA fill:#fce7f3,stroke:#ec4899
+            style KDA fill:#e0e7ff,stroke:#6366f1
+</div>
+<div class="figcap">图 7 · 缓存压缩的演进路线（复用自《多头注意力机制精读》图 1-2）：MHA 16KB → MQA 0.5KB / GQA 2KB / MLA 1KB，KDA 换路线改存固定状态</div>
+</div>
+<table>
+<tr><th>方案</th><th>每 token 每层</th><th>L = 100k · 64 层</th><th>一句话原理</th></tr>
+<tr><td>MHA（基线）</td><td>16 KB</td><td>约 100 GB</td><td>32 个头各存各的 K/V</td></tr>
+<tr><td>MQA</td><td>0.5 KB</td><td>3.2 GB</td><td>全部头共享 1 份 K/V（缩 32 倍，质量受损）</td></tr>
+<tr><td>GQA</td><td>2 KB</td><td>12.8 GB</td><td>32 头分 4 组，每组共享 1 份（缩 8 倍，质量近 MHA）</td></tr>
+<tr><td>MLA</td><td>1 KB</td><td>6.4 GB</td><td>K/V 压成 256 维 latent 存储，解压吸收进 Q/O</td></tr>
+<tr><td>KDA</td><td>与 L 无关</td><td>约 8 MB 恒定</td><td>不存列表，改存固定大小的循环状态</td></tr>
+</table>
+<p>其中 MLA 的「存压缩形态、用时再展开」最值得单独看一眼——它不是减少头的个数，而是<b>换了存储的内容</b>：</p>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+            X["输入 x"] --> Wkv["W_kv 压缩层<br>4096 → 512<br>一次投影同时压 K、V"]
+            Wkv --> CK["c_K：256 维<br>（K 的 latent）"]
+            Wkv --> CV["c_V：256 维<br>（V 的 latent）"]
+            CK --> Ca["缓存 c_K<br>L × 256"]
+            CV --> Cb["缓存 c_V<br>L × 256"]
+            Ca --> UpK["解压 W_k_up<br>256 → 32×128 展开成 K"]
+            Cb --> UpV["解压 W_v_up<br>256 → 32×128 展开成 V"]
+            UpK --> A["与 Q 计算注意力"]
+            UpV --> A
+            Note["对比 MHA：<br>MHA 缓存存 32×128 完整 K/V<br>MLA 只存压缩后的 256 维 latent"] -.-> Ca
+</div>
+<div class="figcap">图 8 · MLA 的缓存形态（复用自《多头注意力机制精读》图 MLA-2）：缓存里存 256 维 latent，而不是 32×128 的完整 K/V</div>
+</div>
+<div class="kp w">
+<span class="kp-t">第五条省法：KV 量化（与前四条正交）</span>
+存储精度从 fp16 降到 fp8 或 int8，16KB 直接砍半到 8KB，任何架构都能叠加；代价是数值容差——精度敏感的场景要做逐位验证（站内《精度一致性类参数》篇展开的就是这类开关）。
+</div>
+
+<h2 id="s8">8. 与站内文章的关系</h2>
+<div class="kp">
+<ul>
+<li><b>《<a href="多头注意力_v0.2_精读版.html">多头注意力机制精读</a>》</b>：本篇图 1、4、7、8 的出处；MHA → MQA → GQA → MLA → KDA 五族的结构与数字在那里逐个展开；</li>
+<li><b>《<a href="DeepSeek V4.1 全链路主时序 · 56步四阶段.html">DeepSeek V4.1 全链路主时序</a>》</b>：真实推理引擎里的块池长什么样——步骤 14 前缀命中、步骤 17 allocate_slots 分配 KV 块写块表，就是本篇图 6 的工程现场；</li>
+<li><b>《<a href="昇腾算子地图 · 从一层前向到三层算子楼.html">昇腾算子地图</a>》</b>：缓存写入在 NPU 上的算子形态——投影+归一化+写 cache 的融合算子、按页表散写的写回算子，都住在三层算子楼里。</li>
+</ul>
+</div>
+
+<h2 id="s9">9. 术语速查</h2>
+<table>
+<tr><th>术语</th><th>本篇语境下的含义</th></tr>
+<tr><td>KV Cache</td><td>每层各存的两个历史张量 K [L,32,128] / V [L,32,128]，fp16 下每 token 每层 16KB</td></tr>
+<tr><td>prefill / decode</td><td>提示词阶段一次并行写满缓存 / 生成阶段每步串行追加 1 行（全模型 1MB）</td></tr>
+<tr><td>TTFT</td><td>首字延迟，由 prefill 段决定</td></tr>
+<tr><td>块池 / PagedAttention</td><td>缓存按固定块（本例 16 token / 16MB）切开管理：按需领用、物理散放、块表翻译</td></tr>
+<tr><td>块表</td><td>每序列一张 slot → 物理块号的映射表，把散放的块拼回逻辑连续序列</td></tr>
+<tr><td>前缀共享</td><td>相同前缀的请求在块表里指向同一物理块，多轮对话的系统提示只存一份</td></tr>
+<tr><td>MQA / GQA / MLA</td><td>共享 1 份 / 分组共享 4 份 / latent 压缩存储——每 token 每层 0.5KB / 2KB / 1KB</td></tr>
+<tr><td>KDA</td><td>Key-Dependent Attention：不存 KV 列表，改存固定大小循环状态（约 8MB 恒定）</td></tr>
+<tr><td>KV 量化</td><td>缓存精度 fp16 → fp8/int8，体积减半，与前四条路线可叠加</td></tr>
+</table>
+
+<p class="dim" style="margin-top:36px">来源：数字基线（d_model=4096、32 头、每头 128、fp16、64 层）与图 1/4/7/8 沿用《多头注意力机制精读》；块池账、两阶段写入与重算账为本篇按同基线推得 · 块大小 16 token 为 vLLM 系引擎常用默认</p>
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
