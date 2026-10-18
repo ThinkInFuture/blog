@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</title>
+<title>QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</title>
 <style>
 :root{
   --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
@@ -104,325 +104,755 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 
 <script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
 
-<h1>KV Cache 讲解：存什么、16KB 怎么胀成 100GB、块池怎么管、四条省法</h1>
-<div class="subtitle">从已经认识的多头注意力出发：Q 每步只来 1 个新 token，注意力却要扫全部 L 个 K——把历史 K/V 存下来就是 KV Cache。这篇沿着「存什么 → 多大账 → 两阶段怎么写 → 块池怎么管 → 怎么省」走完全程，数字基线与《多头注意力机制精读》统一：d_model=4096、32 头、每头 128 维、fp16</div>
+<h1>QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</h1>
+<div class="subtitle">从一行注意力的 PyTorch 源码出发，走到推理时为什么必须缓存、缓存怎么逐层逐行长高、占多少显存、又能怎么省——11 张图配 10 段可直接运行的代码，形状与数字全程标注（基线：32 层、8 个 KV 头、每头 128 维、fp16）</div>
 
 <nav class="toc">
 <b>目录</b>
-<a href="#s1">1 出发点：注意力每步要什么</a>
-<a href="#s2">2 没有缓存会怎样：839 万行重算账</a>
-<a href="#s3">3 缓存里存的是什么：64 层 × K/V 两个抽屉</a>
-<a href="#s4">4 显存账：16KB 怎么胀成 100GB</a>
-<a href="#s5">5 prefill 与 decode：两种写法</a>
-<a href="#s6">6 块池管理：逻辑连续、物理散放</a>
-<a href="#s7">7 四条省法：MQA / GQA / MLA / KDA（外加量化）</a>
-<a href="#s8">8 与站内文章的关系</a>
-<a href="#s9">9 术语速查</a>
+<a href="#s1">1 QKV 总流程：一次注意力的六步源码</a>
+<a href="#s2">2 单个 token 的视角：causal mask 在挡什么</a>
+<a href="#s3">3 多头注意力：拆头不是循环 32 次</a>
+<a href="#s4">4 没有 KV Cache：每步都在重算</a>
+<a href="#s5">5 有 KV Cache：Prefill 一次写满，Decode 每步追加</a>
+<a href="#s6">6 Decode 单步的内部数据流</a>
+<a href="#s7">7 缓存是逐层存在的</a>
+<a href="#s8">8 Cache 随序列增长与显存账</a>
+<a href="#s9">9 两条推理路径对照：平方重算 vs 线性追加</a>
+<a href="#s10">10 优化路线与一页记忆卡</a>
+<a href="#s11">11 与站内文章的关系</a>
+<a href="#s12">12 术语速查</a>
 </nav>
 
-<h2 id="s1">1. 出发点：注意力每步要什么</h2>
-<p>从已经认识的标准多头注意力（MHA）看起。生成第 N 个 token 时，输入只有 1 个新 token，但注意力公式要求这个新 token 的 Q 与<b>前面全部 N 个 token 的 K/V</b> 做点积——新的是 Q，要用的却是历史。历史的 K/V 从哪来？要么每步重算，要么存下来。存下来的那两个张量，就是 KV Cache：</p>
+<h2 id="s1">1. QKV 总流程：一次注意力的六步源码</h2>
 <div class="card">
 <div class="mermaid">
 flowchart TD
-            X["输入 x<br>d_model = 4096"] --> Proj["Q/K/V 三个投影<br>每个都输出 32 个头（4096 维）"]
-            Proj --> Cache["KV 缓存<br>每 token 追加 2·H·d = 8192 元素 = 16KB"]
-            Proj --> Q["Q（新 token 的 32 个头）"]
-            Cache --> Attn["注意力计算<br>Q 与缓存里全部 L 个 K 点积 → softmax → ×V"]
-            Q --> Attn
-            Attn --> Out["输出（加权和）"]
-            Note["每个 Q 头都要扫过全部历史<br>→ 算力 O(L)、缓存 O(L)"] -.-> Attn
-</div>
-<div class="figcap">图 1 · 标准多头注意力的宏观流程（复用自《多头注意力机制精读》图 MHA-1）：Q/K/V 三个投影各自独立，K/V 追加进缓存，注意力用新 Q 扫缓存里全部 L 个 K</div>
-</div>
-<p><b>读图 1 的三个要点</b>：一，Q/K/V 投影每个 token 都要做，但<b>只有 Q 是一次性的</b>——用完就扔；二，K/V 是历史的公共财产，后面的每个 token 都要来读，所以值得存；三，缓存每 token 每层追加 2·H·d = 2×32×128 = 8192 个 fp16 元素，正好 16KB——这个数字后面全程要用。</p>
+    X["输入 X<br/>[B, S, d_model]"] --> WQ["× Wq"]
+    X --> WK["× Wk"]
+    X --> WV["× Wv"]
 
-<h2 id="s2">2. 没有缓存会怎样：839 万行重算账</h2>
-<p>如果坚持不存，代价是<b>每一步都把整个前缀重新过一遍投影</b>。生成第 1 个 token 投影 1 行，第 2 个 token 重算 2 行（第 1、第 2 个），第 4096 个 token 要重算 4096 行。把生成 4096 个 token 的投影行数加起来：</p>
-<div class="card">
-<svg viewBox="0 0 840 560" role="img" aria-label="无缓存重算账对比">
-<defs><marker id="ahK2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">没有缓存的代价：步步重算全部前缀（左） vs 只算新行（右）</text>
-<rect class="wc" x="20" y="48" width="390" height="396" rx="10"/>
-<text class="tb" x="40" y="76">无缓存 · 生成第 N 个 token 重算前 N 个</text>
-<rect class="node" x="40" y="92" width="350" height="64" rx="8"/>
-<text class="tb" x="56" y="118">第 1 个 token</text>
-<text class="ts" x="56" y="142">投影 1 行 K/V</text>
-<path class="flow" d="M115 156 V168" marker-end="url(#ahK2)"/>
-<rect class="node" x="40" y="168" width="350" height="64" rx="8"/>
-<text class="tb" x="56" y="194">第 2 个 token</text>
-<text class="ts" x="56" y="218">重算 2 行（第 1 + 第 2 个）</text>
-<path class="flow" d="M115 232 V244" marker-end="url(#ahK2)"/>
-<rect class="node" x="40" y="244" width="350" height="64" rx="8"/>
-<text class="tb" x="56" y="270">第 4096 个 token</text>
-<text class="ts" x="56" y="294">重算 4096 行（全部历史）</text>
-<path class="flow" d="M115 308 V336" marker-end="url(#ahK2)"/>
-<rect class="node" x="40" y="336" width="350" height="72" rx="8"/>
-<text class="tb" x="56" y="364">合计 1+2+…+4096 = 8,390,656 行</text>
-<text class="ts" x="56" y="390">约 839 万行投影 / 每层</text>
-<rect class="bc" x="430" y="48" width="390" height="396" rx="10"/>
-<text class="tb" x="450" y="76">有缓存 · 历史行直接读缓存</text>
-<rect class="node" x="450" y="92" width="350" height="64" rx="8"/>
-<text class="tb" x="466" y="118">第 1 个 token</text>
-<text class="ts" x="466" y="142">投影 1 行，写入缓存</text>
-<path class="flow" d="M525 156 V168" marker-end="url(#ahK2)"/>
-<rect class="node" x="450" y="168" width="350" height="64" rx="8"/>
-<text class="tb" x="466" y="194">第 2 个 token</text>
-<text class="ts" x="466" y="218">只投影第 2 行，第 1 行读缓存</text>
-<path class="flow" d="M525 232 V244" marker-end="url(#ahK2)"/>
-<rect class="node" x="450" y="244" width="350" height="64" rx="8"/>
-<text class="tb" x="466" y="270">第 4096 个 token</text>
-<text class="ts" x="466" y="294">只投影第 4096 行</text>
-<path class="flow" d="M525 308 V336" marker-end="url(#ahK2)"/>
-<rect class="node" x="450" y="336" width="350" height="72" rx="8"/>
-<text class="tb" x="466" y="364">合计 4096 行 / 每层</text>
-<text class="ts" x="466" y="390">每一行历史只投影一次</text>
-<path class="dash" d="M410 372 H430" marker-end="url(#ahK2)"/>
-<text class="tm" x="20" y="484">投影计算量：839 万行 → 4096 行，省 2048 倍；换来的代价是显存要放下全部历史 K/V（第 3、4 章的账）。</text>
-<text class="tm" x="20" y="508">点积没有省：每一步 Q 仍要与全部 L 个 K 做点积，注意力本身依旧是 O(L)——缓存省的是「投影重算」，不是「注意力扫描」。</text>
-<text class="tm" x="20" y="532">数字口径：32 头 × 每头 128 维（与《多头注意力机制精读》统一基线一致）。</text>
-</svg>
-<div class="figcap">图 2 · 无缓存的投影量是 O(L²)：生成 4096 个 token 需要 839 万行投影；有缓存后每行历史只投影一次</div>
-</div>
+    WQ --> Q["Q 查询<br/>[B, H, S, dh]"]
+    WK --> K["K 钥匙<br/>[B, H, S, dh]"]
+    WV --> V["V 内容<br/>[B, H, S, dh]"]
 
-<h2 id="s3">3. 缓存里存的是什么：64 层 × K/V 两个抽屉</h2>
-<p>KV Cache 不是一个大数组，而是<b>每一层各存各的</b>：输入每穿过一个 Block，就把该 token 在这一层的 K 和 V 追加进这一层自己的缓存。以 64 层模型为例，全模型共有 64 对「K 抽屉 + V 抽屉」：</p>
-<div class="card">
-<svg viewBox="0 0 840 620" role="img" aria-label="缓存内容结构">
-<defs><marker id="ahK3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">KV 缓存存什么：64 层，每层 K/V 两个张量（fp16）</text>
-<rect class="bc" x="20" y="48" width="440" height="440" rx="10"/>
-<text class="tb" x="40" y="76">每层两个抽屉，形状同构</text>
-<rect class="node" x="40" y="92" width="400" height="56" rx="8"/>
-<text class="tb" x="56" y="115">Layer 0</text>
-<text class="ts" x="150" y="115">K [L · 32 · 128] · V [L · 32 · 128]</text>
-<rect class="node" x="40" y="156" width="400" height="56" rx="8"/>
-<text class="tb" x="56" y="179">Layer 1</text>
-<text class="ts" x="150" y="179">同上 · 本层自己的 K/V</text>
-<line x1="220" y1="224" x2="206" y2="252" stroke="#6e7b8a" stroke-width="2"/>
-<line x1="252" y1="224" x2="238" y2="252" stroke="#6e7b8a" stroke-width="2"/>
-<text class="ts" x="286" y="244">共 64 层 · 其余 60 层同构</text>
-<rect class="node" x="40" y="262" width="400" height="56" rx="8"/>
-<text class="tb" x="56" y="285">Layer 62</text>
-<text class="ts" x="150" y="285">同上 · 本层自己的 K/V</text>
-<rect class="node" x="40" y="326" width="400" height="56" rx="8"/>
-<text class="tb" x="56" y="349">Layer 63</text>
-<text class="ts" x="150" y="349">同上 · 本层自己的 K/V</text>
-<rect class="wc" x="480" y="48" width="340" height="440" rx="10"/>
-<text class="tb" x="500" y="76">显存账（fp16）</text>
-<text class="ts" x="500" y="108">1 token · 1 层：2 × 32 × 128 × 2B = 16KB</text>
-<text class="ts" x="500" y="136">× 64 层 = 1 MB / token</text>
-<text class="ts" x="500" y="164">L = 4096 → 全模型 4 GB</text>
-<text class="ts" x="500" y="192">L = 100k → 约 100 GB（MHA）</text>
-<text class="tb" x="500" y="240">不进缓存的</text>
-<text class="ts" x="500" y="272">Q：当步用完即弃（新 token 自己的问题）</text>
-<text class="ts" x="500" y="300">O 投影输出、logits：逐层逐步行进，不驻留</text>
-<text class="ts" x="500" y="328">进缓存的只有 K/V（历史给出的答案）</text>
-<path class="dash" d="M460 130 H480" marker-end="url(#ahK3)"/>
-<text class="tm" x="20" y="524">[L, 32, 128] 的读法：L 行历史，每行 32 个头、每头 128 维；K 与 V 各一份，元素数再乘 2。</text>
-<text class="tm" x="20" y="548">同一行 token 在 64 层里各有一份缓存——输入每穿过一个 Block，就往那一层的抽屉追加一行。</text>
-</svg>
-<div class="figcap">图 3 · 缓存的组织：64 层 ×（K + V）两个张量；Q 用完即弃不存，K/V 逐层逐行追加</div>
-</div>
+    Q --> SC["Scores = QKᵀ / √dh<br/>+ causal mask"]
+    K --> SC
 
-<h2 id="s4">4. 显存账：16KB 怎么胀成 100GB</h2>
-<p>把第 3 章的「每 token 16KB / 层」放进长序列里，膨胀速度是线性的、感觉是爆炸的——这是姊妹篇里已经画过的一笔账，直接搬来作为本篇的显存压力基线：</p>
-<div class="card">
-<div class="mermaid">
-flowchart TD
-            T1["第 1 个 token<br>存 16KB"] --> T2["第 2 个 token<br>追加 16KB → 共 32KB"]
-            T2 --> T3["第 3 个 token<br>追加 → 共 48KB"]
-            T3 --> TL["第 4096 个 token<br>共 4096 × 16KB = 64MB / 层"]
-            TL --> B1["L = 100k 时<br>单层就 1.6GB"]
-            B1 --> B2["64 层合计 ≈ 100GB<br>显存放不下 ❌"]
-            style B2 fill:#fee2e2,stroke:#ef4444
-</div>
-<div class="figcap">图 4 · KV 缓存随序列长度线性膨胀（复用自《多头注意力机制精读》图 MHA-3）：4096 token 单层 64MB，100k 序列 64 层合计约 100GB</div>
-</div>
-<table>
-<tr><th>序列长度 L</th><th>单层缓存</th><th>64 层合计</th><th>参照物</th></tr>
-<tr><td>4096</td><td>64 MB</td><td>4 GB</td><td>一张消费级显卡的显存</td></tr>
-<tr><td>32768</td><td>512 MB</td><td>32 GB</td><td>一张训练卡的全部显存</td></tr>
-<tr><td>100000</td><td>1.6 GB</td><td>约 100 GB</td><td>权重之外的最大显存黑洞</td></tr>
-</table>
-<p>注意这份账只算了<b>一条请求</b>。并发 8 条 32k 请求，缓存就要 256GB——比模型权重本身大得多。所以工程上的两个问题自然浮出来：怎么把零散的缓存<b>管起来不浪费</b>（第 6 章），怎么把每 token 的 16KB<b>压下去</b>（第 7 章）。</p>
+    SC --> SM["softmax → 注意力权重 A"]
+    SM --> O["O = A × V"]
+    V --> O
 
-<h2 id="s5">5. prefill 与 decode：两种写法</h2>
-<p>生成过程分两段，缓存的写入方式完全不同——<b>prefill 一次写满，decode 每步追加一行</b>：</p>
-<div class="card">
-<svg viewBox="0 0 840 620" role="img" aria-label="prefill 与 decode 的缓存写入">
-<defs><marker id="ahK5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">两阶段写缓存：prefill 一次写满 · decode 每步 +1 行</text>
-<rect class="bc" x="20" y="48" width="800" height="210" rx="10"/>
-<text class="tb" x="40" y="78">prefill · 提示词一次算完（并行）</text>
-<text class="ts" x="40" y="106">prompt 512 token 一次前向：512 行 K/V 全部投影完成</text>
-<rect class="node" x="40" y="126" width="760" height="48" rx="8"/>
-<text class="ts" x="56" y="155">缓存 0 行 → 512 行，一次写满 · 单层 8MB · 64 层 512MB</text>
-<text class="ts" x="40" y="202">TTFT（首字延迟）由这一步决定——提示词越长，这一步越重</text>
-<path class="flow" d="M420 258 V286" marker-end="url(#ahK5)"/>
-<rect class="ac" x="20" y="286" width="800" height="210" rx="10"/>
-<text class="tb" x="40" y="316">decode · 每步生成 1 个 token（串行）</text>
-<rect class="node" x="40" y="336" width="52" height="36" rx="6"/>
-<text class="ts" x="47" y="359" text-anchor="middle">+1</text>
-<rect class="node" x="100" y="336" width="52" height="36" rx="6"/>
-<text class="ts" x="126" y="359" text-anchor="middle">+1</text>
-<rect class="node" x="160" y="336" width="52" height="36" rx="6"/>
-<text class="ts" x="186" y="359" text-anchor="middle">+1</text>
-<rect class="node" x="220" y="336" width="52" height="36" rx="6"/>
-<text class="ts" x="246" y="359" text-anchor="middle">+1</text>
-<rect class="node" x="280" y="336" width="52" height="36" rx="6"/>
-<text class="ts" x="306" y="359" text-anchor="middle">+1</text>
-<rect class="node" x="350" y="336" width="180" height="36" rx="6"/>
-<text class="ts" x="440" y="359" text-anchor="middle">共 1000 步 · 每步 +1 行</text>
-<text class="ts" x="40" y="406">每步只投影 1 行新 token 的 K/V；新 Q 与缓存里全部行做点积</text>
-<text class="ts" x="40" y="434">每步缓存 +1 行 = 全模型 +1MB → 同卡能并发几条请求，先看缓存显存</text>
-<text class="tm" x="20" y="536">终态：512 + 1000 = 1512 行。prefill 是大块写入（吃显存带宽），decode 是小步追加（吃访存延迟）。</text>
-<text class="tm" x="20" y="560">读法：上框=提示词把缓存一次垫高到 512 行；下框=生成阶段缓存逐步长高到 1512 行。</text>
-</svg>
-<div class="figcap">图 5 · prefill 一次并行写满 512 行，decode 每步串行追加 1 行（全模型 1MB）——TTFT 与吞吐分别卡在两段上</div>
+    O --> CAT["concat 多头 → [B, S, d_model]"]
+    CAT --> OUT["× Wo → 输出"]
 </div>
-<p><b>为什么两段要分开对待</b>：prefill 是计算密集的大矩阵（512 行一起算，算力打满），decode 是访存密集的小向量（每步 1 行，显存带宽决定速度）——推理引擎的调度、 batching、块预分配全部围绕这个差异设计。</p>
+<div class="figcap">图 1 · QKV 总流程：投影 → 缩放点积 + causal mask → softmax 加权 V → 拼头输出投影</div>
+</div>
+<p><b>读图 1</b>：注意力前向就三件事——X 分别乘三个矩阵得到 Q（查询）、K（钥匙）、V（内容）；Q 与全部 K 做缩放点积并遮住未来；softmax 得到的权重对 V 加权求和。d_h = d_model / H，多头维度是切出来的，不是新参数。下面六步源码与图一一对应：</p>
+<pre>
+import math
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-<h2 id="s6">6. 块池管理：逻辑连续、物理散放</h2>
-<p>缓存按需长高，那显存怎么分配？最朴素的办法是<b>按最大长度整段预留</b>——序列最长可能 4096 行，就先留 4GB。问题是绝大多数序列用不满：预留的显存大量闲置，还无法给别的请求复用。<b>块池</b>（PagedAttention 的思路）把缓存切成固定小块，按需领取、用完归还，物理上不必连续，靠一张<b>块表</b>把逻辑序列拼回来：</p>
-<div class="card">
-<svg viewBox="0 0 840 680" role="img" aria-label="块池管理">
-<defs><marker id="ahK6" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
-<text class="th" x="420" y="26" text-anchor="middle">块池管理：逻辑连续 · 物理散放 · 块表翻译</text>
-<rect class="bc" x="20" y="48" width="800" height="104" rx="10"/>
-<text class="tb" x="40" y="78">逻辑视图 · 序列眼里的缓存：第 0 行 → 第 4095 行，连续不断</text>
-<rect class="node" x="40" y="94" width="760" height="40" rx="6"/>
-<text class="ts" x="56" y="120">第 0 行起 · 连续 4096 行 · 第 4095 行止（序列看到的永远是一整条）</text>
-<rect class="wc" x="20" y="172" width="800" height="150" rx="10"/>
-<text class="tb" x="40" y="200">块表 · 每序列一张：每 16 token 一块（MHA 下 16MB/块）</text>
-<rect class="node" x="40" y="220" width="180" height="56" rx="6"/>
-<text class="tb" x="130" y="244" text-anchor="middle">slot 0 → 块 7</text>
-<text class="ts" x="130" y="264" text-anchor="middle">第 0 至 15 行</text>
-<rect class="node" x="230" y="220" width="180" height="56" rx="6"/>
-<text class="tb" x="320" y="244" text-anchor="middle">slot 1 → 块 3</text>
-<text class="ts" x="320" y="264" text-anchor="middle">第 16 至 31 行</text>
-<rect class="node" x="420" y="220" width="180" height="56" rx="6"/>
-<text class="tb" x="510" y="244" text-anchor="middle">slot 2 → 块 9</text>
-<text class="ts" x="510" y="264" text-anchor="middle">第 32 至 47 行</text>
-<rect class="node" x="610" y="220" width="180" height="56" rx="6"/>
-<text class="tb" x="700" y="244" text-anchor="middle">slot 3 → 块 5</text>
-<text class="ts" x="700" y="264" text-anchor="middle">第 48 至 63 行</text>
-<rect class="ac" x="20" y="342" width="800" height="190" rx="10"/>
-<text class="tb" x="40" y="372">物理视图 · 块池全卡共享：块在哪都行，按块表拼回序列</text>
-<rect x="60" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="100" y="421" text-anchor="middle">块 1</text>
-<rect x="170" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="210" y="421" text-anchor="middle">块 2</text>
-<rect x="280" y="396" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
-<text class="ts" x="320" y="421" text-anchor="middle">块 3</text>
-<rect x="390" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="430" y="421" text-anchor="middle">块 4</text>
-<rect x="500" y="396" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
-<text class="ts" x="540" y="421" text-anchor="middle">块 5</text>
-<rect x="610" y="396" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="650" y="421" text-anchor="middle">块 6</text>
-<rect x="60" y="452" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
-<text class="ts" x="100" y="477" text-anchor="middle">块 7</text>
-<rect x="170" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="210" y="477" text-anchor="middle">块 8</text>
-<rect x="280" y="452" width="80" height="40" rx="6" fill="#dbeafe" stroke="#3b82f6"/>
-<text class="ts" x="320" y="477" text-anchor="middle">块 9</text>
-<rect x="390" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="430" y="477" text-anchor="middle">块 10</text>
-<rect x="500" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="540" y="477" text-anchor="middle">块 11</text>
-<rect x="610" y="452" width="80" height="40" rx="6" fill="#eef1f5" stroke="#b8860b"/>
-<text class="ts" x="650" y="477" text-anchor="middle">块 12</text>
-<path class="dash" d="M130 276 C 120 360, 100 400, 100 448" marker-end="url(#ahK6)"/>
-<path class="dash" d="M320 276 C 320 340, 320 360, 320 392" marker-end="url(#ahK6)"/>
-<path class="dash" d="M510 276 C 500 350, 330 380, 320 448" marker-end="url(#ahK6)"/>
-<path class="dash" d="M700 276 C 690 340, 560 370, 545 392" marker-end="url(#ahK6)"/>
-<rect class="node" x="20" y="552" width="800" height="76" rx="8"/>
-<text class="tb" x="36" y="580">静态预留 vs 块池：三条并发请求，实际分别用 800 / 1500 / 3000 行</text>
-<text class="ts" x="36" y="608">静态按 4096 行各留 4GB = 12GB（实占 5.3GB，闲置 6.7GB）；块池按需领块共 5.3GB，碎片最多每序列 1 块 = 16MB</text>
-</svg>
-<div class="figcap">图 6 · 块池三视图：逻辑连续（上）→ 块表翻译（中）→ 物理散放（下，蓝色为该序列领到的块）；按块分配让闲置显存可共享</div>
-</div>
-<div class="kp t">
-<span class="kp-t">块池的三个直接收益</span>
-<ul>
-<li><b>按需领用</b>：写多少行领多少块，不用为「可能的最长」预付整段显存；</li>
-<li><b>碎片可控</b>：外部碎片消失（块随便放），内部碎片封顶每序列最后半个块（本例 16 token / 16MB）；</li>
-<li><b>前缀共享</b>：两条请求的前缀相同，前缀块在块表里指向同一物理块——多轮对话里系统提示词只存一份。</li>
-</ul>
-</div>
+class SimpleAttention(nn.Module):
+    """对应图 1：一次完整的 QKV 注意力前向。"""
+    def __init__(self, d_model: int, n_heads: int):
+        super().__init__()
+        assert d_model % n_heads == 0
+        self.h = n_heads
+        self.dh = d_model // n_heads
+        # 三个投影矩阵，分别得到 Q、K、V
+        self.Wq = nn.Linear(d_model, d_model, bias=False)
+        self.Wk = nn.Linear(d_model, d_model, bias=False)
+        self.Wv = nn.Linear(d_model, d_model, bias=False)
+        # 输出投影
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
 
-<h2 id="s7">7. 四条省法：MQA / GQA / MLA / KDA（外加量化）</h2>
-<p>第 6 章解决「不浪费」，这一章解决「每 token 16KB 本身太大」。四条路线在姊妹篇里逐个精读过，这里收拢成一张演进图——数字全部沿用统一基线（每 token 每层的缓存体积）：</p>
+    def forward(self, x: torch.Tensor, causal: bool = True):
+        # x: [B, S, d_model]
+        B, S, _ = x.shape
+
+        # 1) 线性投影：X -&gt; Q, K, V
+        q = self.Wq(x)  # [B, S, d_model]
+        k = self.Wk(x)
+        v = self.Wv(x)
+
+        # 2) 拆多头：[B, S, d_model] -&gt; [B, H, S, dh]
+        q = q.view(B, S, self.h, self.dh).transpose(1, 2)  # [B, H, S, dh]
+        k = k.view(B, S, self.h, self.dh).transpose(1, 2)
+        v = v.view(B, S, self.h, self.dh).transpose(1, 2)
+
+        # 3) 相似度：Q Kᵀ / √dh -&gt; [B, H, S, S]
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.dh)
+
+        # 4) causal mask：上三角（不含对角线）置 -inf，禁止看未来
+        if causal:
+            mask = torch.triu(
+                torch.ones(S, S, dtype=torch.bool, device=x.device), diagonal=1
+            )
+            scores = scores.masked_fill(mask, float("-inf"))
+
+        # 5) softmax -&gt; 注意力权重，再乘 V
+        attn = F.softmax(scores, dim=-1)        # [B, H, S, S]
+        out = attn @ v                          # [B, H, S, dh]
+
+        # 6) 拼回多头 + 输出投影
+        out = out.transpose(1, 2).contiguous().view(B, S, -1)  # [B, S, d_model]
+        return self.Wo(out)
+</pre>
+
+<h2 id="s2">2. 单个 token 的视角：causal mask 在挡什么</h2>
 <div class="card">
 <div class="mermaid">
 flowchart LR
-            MHA["MHA<br>每头独立 K/V<br>16KB/token"] --> MQA["MQA<br>全共享 1 份<br>0.5KB/token"]
-            MQA --> GQA["GQA<br>分组共享 G=4 份<br>2KB/token"]
-            GQA --> MLA["MLA<br>latent 压缩<br>1KB/token"]
-            GQA -. "换条路：连 KV 列表都不想存" .-> KDA["KDA<br>固定状态机<br>~8MB 恒定 与 L 无关"]
-            style MHA fill:#dbeafe,stroke:#3b82f6
-            style MQA fill:#fef3c7,stroke:#f59e0b
-            style GQA fill:#d1fae5,stroke:#10b981
-            style MLA fill:#fce7f3,stroke:#ec4899
-            style KDA fill:#e0e7ff,stroke:#6366f1
+    Q5["当前查询 q₅"]
+
+    subgraph 可见历史["可见历史 token"]
+        K1["k₁"]
+        K2["k₂"]
+        K3["k₃"]
+        K4["k₄"]
+    end
+
+    Q5 --> S1["q₅·k₁"]
+    Q5 --> S2["q₅·k₂"]
+    Q5 --> S3["q₅·k₃"]
+    Q5 --> S4["q₅·k₄"]
+
+    K1 --> S1
+    K2 --> S2
+    K3 --> S3
+    K4 --> S4
+
+    Q5 -. "mask: 未来不可见 (-∞)" .-> S5["k₅ 及以后 被屏蔽"]
+
+    S1 --> SM["softmax<br/>[a₁,a₂,a₃,a₄]"]
+    S2 --> SM
+    S3 --> SM
+    S4 --> SM
+
+    SM --> OUT["o₅ = a₁v₁ + a₂v₂ + a₃v₃ + a₄v₄"]
 </div>
-<div class="figcap">图 7 · 缓存压缩的演进路线（复用自《多头注意力机制精读》图 1-2）：MHA 16KB → MQA 0.5KB / GQA 2KB / MLA 1KB，KDA 换路线改存固定状态</div>
+<div class="figcap">图 2 · 第 5 个 token 的注意力：q₅ 只与 k₁ 至 k₄ 点积，未来位置被 mask 置 -∞、softmax 后权重为 0</div>
 </div>
-<table>
-<tr><th>方案</th><th>每 token 每层</th><th>L = 100k · 64 层</th><th>一句话原理</th></tr>
-<tr><td>MHA（基线）</td><td>16 KB</td><td>约 100 GB</td><td>32 个头各存各的 K/V</td></tr>
-<tr><td>MQA</td><td>0.5 KB</td><td>3.2 GB</td><td>全部头共享 1 份 K/V（缩 32 倍，质量受损）</td></tr>
-<tr><td>GQA</td><td>2 KB</td><td>12.8 GB</td><td>32 头分 4 组，每组共享 1 份（缩 8 倍，质量近 MHA）</td></tr>
-<tr><td>MLA</td><td>1 KB</td><td>6.4 GB</td><td>K/V 压成 256 维 latent 存储，解压吸收进 Q/O</td></tr>
-<tr><td>KDA</td><td>与 L 无关</td><td>约 8 MB 恒定</td><td>不存列表，改存固定大小的循环状态</td></tr>
-</table>
-<p>其中 MLA 的「存压缩形态、用时再展开」最值得单独看一眼——它不是减少头的个数，而是<b>换了存储的内容</b>：</p>
+<p>这张图从「第 5 个 token 的视角」看注意力到底发生了什么。假设生成已进行到第 5 个位置，序列里前 4 个 token 是它的历史。模型为当前 token 生成一个查询向量 q₅，然后拿这个查询去和每个历史 token 的「钥匙」k₁、k₂、k₃、k₄ 做点积——点积越大，说明当前 token 越「需要」这个历史 token 的信息。</p>
+<p>四个点积结果（q₅·k₁ 到 q₅·k₄）还不能直接用，需要除以 √d_h 做缩放，再统一送进 softmax 变成一组归一化的注意力权重 a₁、a₂、a₃、a₄。这组权重的含义很直白：当前 token 分配多少注意力给每个历史位置。</p>
+<p>至于第 5 个位置本身以及后面的「未来」token，在解码阶段是看不见的——因果掩码会在 softmax 之前把这些位置的分数直接置为 -∞，softmax 后权重自然变成 0，等价于完全不参与。这就是 causal mask 的作用：保证第 t 个 token 只能依据 1 至 t 的历史做决策，绝不偷看未来。</p>
+<p>最后的输出 o₅ 就是用注意力权重对历史「内容」v₁、v₂、v₃、v₄ 做加权求和，权重越大对应 v 的影响越强。整个流程一句话：<b>用 Q 去和 K 匹配得到权重，再用权重去加权汇总 V</b>。并行训练时每个位置同时做这件事，只是第 i 个位置只能看前 i 个；到了推理阶段，每个位置只剩「当前一个 q 查全部历史」——这正是 KV Cache 要服务的场景。</p>
+
+<h2 id="s3">3. 多头注意力：拆头不是循环 32 次</h2>
+<div class="card">
+<div class="mermaid">
+flowchart TB
+    QKV["Q, K, V<br/>[B, S, d_model]"] --> SPLIT["按头拆分<br/>[B, H, S, dh]"]
+
+    SPLIT --> H1["head₁: softmax(Q₁K₁ᵀ/√dh)V₁"]
+    SPLIT --> H2["head₂: ..."]
+    SPLIT --> H3["..."]
+    SPLIT --> HH["head_H: ..."]
+
+    H1 --> CAT["concat<br/>[B, S, d_model]"]
+    H2 --> CAT
+    H3 --> CAT
+    HH --> CAT
+
+    CAT --> WO["× Wo"]
+    WO --> Y["输出"]
+</div>
+<div class="figcap">图 3 · 多头结构：按头拆分成 [B,H,S,dh] 并行计算，concat 后过输出投影 Wo</div>
+</div>
+<p><b>读图 3</b>：代码里没有「对每个头循环」——view + transpose 一次把 [B,S,d_model] 重排成 [B,H,S,dh]，32 个头在同一组矩阵乘里并行；concat 是它的逆操作（transpose 回来再 view）。批、头、序列维在张量形状里都有名字，形状对不上时先读形状再读代码。</p>
+<pre>
+class MultiHeadAttention(nn.Module):
+    """对应图 3：显式展示按头拆分 / 并行 / 拼接。"""
+    def __init__(self, d_model: int, n_heads: int):
+        super().__init__()
+        self.h, self.dh = n_heads, d_model // n_heads
+        self.Wq = nn.Linear(d_model, d_model, bias=False)
+        self.Wk = nn.Linear(d_model, d_model, bias=False)
+        self.Wv = nn.Linear(d_model, d_model, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
+
+    def forward(self, x, causal=True):
+        B, S, _ = x.shape
+        q, k, v = self.Wq(x), self.Wk(x), self.Wv(x)   # [B,S,d_model]
+
+        # 按头拆分
+        def split(t):
+            return t.view(B, S, self.h, self.dh).transpose(1, 2)
+        q, k, v = split(q), split(k), split(v)         # [B,H,S,dh]
+
+        # 每个头并行计算（矩阵一次搞定，等价于 for 循环）
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.dh)  # [B,H,S,S]
+        if causal:
+            m = torch.triu(torch.ones(S, S, dtype=torch.bool, device=x.device), 1)
+            scores = scores.masked_fill(m, float("-inf"))
+        heads = F.softmax(scores, dim=-1) @ v          # [B,H,S,dh]
+
+        # concat 多头：转置回 [B,S,H,dh] 再 view
+        concat = heads.transpose(1, 2).contiguous().view(B, S, self.h * self.dh)
+        return self.Wo(concat)
+</pre>
+
+<h2 id="s4">4. 没有 KV Cache：每步都在重算</h2>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph Step4["生成 x₄ 时（无 Cache）"]
+        A1["重算 k₁,k₂,k₃,k₄"] --> A2["重算 v₁,v₂,v₃,v₄"]
+        A2 --> A3["q₄ 与全部 K 做注意力"]
+        A3 --> A4["输出 o₄"]
+    end
+
+    subgraph Step5["生成 x₅ 时（无 Cache）"]
+        B1["又重算 k₁..k₅"] --> B2["又重算 v₁..v₅"]
+        B2 --> B3["q₅ 与全部 K 做注意力"]
+        B3 --> B4["输出 o₅"]
+    end
+
+    Step4 -. "大量重复计算" .-> Step5
+</div>
+<div class="figcap">图 4 · 无缓存的生成：生成 x₄、x₅ 每一步都把全部历史重新过一遍 K/V 投影</div>
+</div>
+<p><b>读图 4</b>：浪费发生在 K/V 投影上——历史的钥匙和内容明明没变，每生成一个新 token 却要全部重算一遍（generate_naive 每步 forward 整段序列）。注意点积本身每步本来就要做（新的 q 要扫全部 k），缓存省的是「投影重算」这部分。repeat_kv_demo 把这个重复显式写了出来：</p>
+<pre>
+@torch.no_grad()
+def generate_naive(model, prompt_ids, max_new_tokens):
+    """
+    对应图 4：每生成一个 token，都把整段历史重新 forward 一遍。
+    """
+    ids = prompt_ids
+    for _ in range(max_new_tokens):
+        logits = model(ids)                # [B, S, vocab]
+        next_tok = logits[:, -1].argmax(-1, keepdim=True)  # 贪心
+        ids = torch.cat([ids, next_tok], dim=1)
+    return ids
+
+
+def repeat_kv_demo(x_full: torch.Tensor,
+                   Wk: nn.Linear, Wv: nn.Linear,
+                   steps: int = 3):
+    """
+    演示“重复计算 K/V”：每一步都算一遍 k = Wk(x)。
+    """
+    all_k = []
+    for t in range(1, steps + 1):
+        x_t = x_full[:, :t, :]        # 取前 t 个 token
+        k = Wk(x_t)                   # ← 重复计算历史 K
+        v = Wv(x_t)                   # ← 重复计算历史 V
+        all_k.append(k[:, -1, :])
+    return all_k
+</pre>
+
+<h2 id="s5">5. 有 KV Cache：Prefill 一次写满，Decode 每步追加</h2>
+<div class="card">
+<div class="mermaid">
+sequenceDiagram
+    autonumber
+    participant U as 输入/Prompt
+    participant M as 模型
+    participant C as KV Cache
+
+    rect rgb(235,245,255)
+    Note over U,C: 阶段一：Prefill（并行处理 prompt）
+    U->>M: x₁, x₂, x₃
+    M->>M: 一次算完 q₁..q₃, k₁..k₃, v₁..v₃
+    M->>C: 写入 K=[k₁,k₂,k₃]<br/>V=[v₁,v₂,v₃]
+    M-->>U: 输出 x₄ 的概率
+    end
+
+    rect rgb(240,255,240)
+    Note over U,C: 阶段二：Decode（逐 token 生成）
+    U->>M: 新 token x₄
+    M->>M: 只算 q₄, k₄, v₄
+    M->>C: 追加 k₄, v₄
+    C-->>M: 返回全部 K,V
+    M->>M: q₄ × K_cacheᵀ → softmax → × V_cache
+    M-->>U: 输出 x₅
+    end
+
+    rect rgb(255,250,235)
+    Note over U,C: 继续 Decode
+    U->>M: 新 token x₅
+    M->>M: 只算 q₅, k₅, v₅
+    M->>C: 追加 k₅, v₅
+    C-->>M: 返回全部 K,V
+    M-->>U: 输出 x₆
+    end
+</div>
+<div class="figcap">图 5 · Prefill 阶段一次并行算完 prompt 的 Q/K/V 并写入缓存；Decode 阶段每个新 token 只算自己的 q、k、v 并追加</div>
+</div>
+<p><b>读图 5</b>：缓存的写入分两段——prefill 把整段 prompt 一次算完写入（并行、吃算力），decode 每步只处理 1 个新 token、算它的 q/k/v 后把 k、v 追加进缓存（串行、吃访存）。代码里 prefill 与 decode 共用同一个 attention，差别只在输入长度 S：S 大于 1 时需要 causal mask，S=1 时天然无未来。下面三段是缓存容器、带缓存的注意力和生成主循环：</p>
+<pre>
+class KVCache:
+    """对应图 5：一个极简 KV Cache 容器，按层存 K/V。"""
+    def __init__(self):
+        self.k = None   # [B, H, t, dh]
+        self.v = None
+
+    def append(self, k_new: torch.Tensor, v_new: torch.Tensor):
+        # k_new/v_new: [B, H, 1, dh]
+        if self.k is None:
+            self.k, self.v = k_new, v_new
+        else:
+            self.k = torch.cat([self.k, k_new], dim=2)  # 沿序列维拼接
+            self.v = torch.cat([self.v, v_new], dim=2)
+
+    @property
+    def seq_len(self) -&gt; int:
+        return 0 if self.k is None else self.k.size(2)
+
+
+class CachedAttention(nn.Module):
+    """Prefill 和 Decode 共用同一个 attention，只是输入长度不同。"""
+    def __init__(self, d_model, n_heads):
+        super().__init__()
+        self.h, self.dh = n_heads, d_model // n_heads
+        self.Wq = nn.Linear(d_model, d_model, bias=False)
+        self.Wk = nn.Linear(d_model, d_model, bias=False)
+        self.Wv = nn.Linear(d_model, d_model, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
+        self.cache = KVCache()
+
+    def _split(self, t):
+        B, S, _ = t.shape
+        return t.view(B, S, self.h, self.dh).transpose(1, 2)  # [B,H,S,dh]
+
+    def forward(self, x, is_prefill: bool):
+        B, S, _ = x.shape
+        q = self._split(self.Wq(x))         # [B,H,S,dh]
+        k = self._split(self.Wk(x))
+        v = self._split(self.Wv(x))
+
+        # 把新 k/v 追加进 cache
+        self.cache.append(k, v)
+        K_all, V_all = self.cache.k, self.cache.v   # [B,H,total,dh]
+
+        scores = q @ K_all.transpose(-2, -1) / math.sqrt(self.dh)  # [B,H,S,total]
+
+        # Prefill 且 S&gt;1 才需要 causal mask；Decode 时 S=1 天然无未来
+        if is_prefill and S &gt; 1:
+            offset = K_all.size(2) - S  # cache 里已有的历史长度（本例 prefill 时为 0）
+            row = torch.arange(S, device=x.device)[:, None] + offset
+            col = torch.arange(K_all.size(2), device=x.device)[None, :]
+            mask = col &gt; row
+            scores = scores.masked_fill(mask, float("-inf"))
+
+        attn = F.softmax(scores, dim=-1)
+        out = attn @ V_all                                   # [B,H,S,dh]
+        out = out.transpose(1, 2).contiguous().view(B, S, -1)
+        return self.Wo(out)
+
+
+@torch.no_grad()
+def generate_with_cache(model, prompt_ids, max_new_tokens):
+    """第一次 Prefill，之后每步只喂 1 个 token。"""
+    logits = model(prompt_ids, is_prefill=True)
+    next_tok = logits[:, -1].argmax(-1, keepdim=True)
+
+    for _ in range(max_new_tokens - 1):
+        logits = model(next_tok, is_prefill=False)
+        next_tok = logits[:, -1].argmax(-1, keepdim=True)
+
+    return next_tok
+</pre>
+
+<h2 id="s6">6. Decode 单步的内部数据流</h2>
 <div class="card">
 <div class="mermaid">
 flowchart TD
-            X["输入 x"] --> Wkv["W_kv 压缩层<br>4096 → 512<br>一次投影同时压 K、V"]
-            Wkv --> CK["c_K：256 维<br>（K 的 latent）"]
-            Wkv --> CV["c_V：256 维<br>（V 的 latent）"]
-            CK --> Ca["缓存 c_K<br>L × 256"]
-            CV --> Cb["缓存 c_V<br>L × 256"]
-            Ca --> UpK["解压 W_k_up<br>256 → 32×128 展开成 K"]
-            Cb --> UpV["解压 W_v_up<br>256 → 32×128 展开成 V"]
-            UpK --> A["与 Q 计算注意力"]
-            UpV --> A
-            Note["对比 MHA：<br>MHA 缓存存 32×128 完整 K/V<br>MLA 只存压缩后的 256 维 latent"] -.-> Ca
+    XT["新 token x_t"] --> W["× Wq, Wk, Wv"]
+
+    W --> QT["q_t<br/>[B,H,1,dh]"]
+    W --> KT["k_t<br/>[B,H,1,dh]"]
+    W --> VT["v_t<br/>[B,H,1,dh]"]
+
+    KT --> APP["追加到缓存"]
+    VT --> APP
+
+    APP --> KC["K_cache<br/>[B,H,t,dh]"]
+    APP --> VC["V_cache<br/>[B,H,t,dh]"]
+
+    QT --> SC["Scores = q_t K_cacheᵀ / √dh<br/>[B,H,1,t]"]
+    KC --> SC
+
+    SC --> SM["softmax → [B,H,1,t]"]
+    SM --> O["× V_cache<br/>[B,H,1,dh]"]
+    VC --> O
+
+    O --> OUT["输出 o_t"]
 </div>
-<div class="figcap">图 8 · MLA 的缓存形态（复用自《多头注意力机制精读》图 MLA-2）：缓存里存 256 维 latent，而不是 32×128 的完整 K/V</div>
+<div class="figcap">图 6 · Decode 单步：新 token 的 k_t、v_t 追加进缓存，q_t 与全部历史 K 点积后加权全部历史 V</div>
 </div>
-<div class="kp w">
-<span class="kp-t">第五条省法：KV 量化（与前四条正交）</span>
-存储精度从 fp16 降到 fp8 或 int8，16KB 直接砍半到 8KB，任何架构都能叠加；代价是数值容差——精度敏感的场景要做逐位验证（站内《精度一致性类参数》篇展开的就是这类开关）。
+<p><b>读图 6</b>：一步的形状账——输入 [B,1,d_model]，投影拆头后 q/k/v 各 [B,H,1,dh]；缓存里的 K/V 是 [B,H,t,dh]；点积 scores 为 [B,H,1,t]，softmax 后乘 V_cache 得 [B,H,1,dh]。t 每步加 1，这就是「缓存随生成线性长高」的单步微观图。</p>
+<pre>
+@torch.no_grad()
+def decode_one_step(x_t: torch.Tensor,
+                    cache: KVCache,
+                    Wq: nn.Linear, Wk: nn.Linear,
+                    Wv: nn.Linear, Wo: nn.Linear,
+                    n_heads: int, dh: int):
+    """
+    对应图 6：Decode 单步。
+    x_t: [B, 1, d_model]
+    """
+    B = x_t.size(0)
+
+    def split(t):
+        return t.view(B, 1, n_heads, dh).transpose(1, 2)  # [B,H,1,dh]
+
+    # 只算当前 token 的 q/k/v
+    q_t = split(Wq(x_t))    # [B,H,1,dh]
+    k_t = split(Wk(x_t))
+    v_t = split(Wv(x_t))
+
+    # 追加进 cache：t 从 1 变长
+    cache.append(k_t, v_t)
+
+    # 用当前 q 去查全部历史 K
+    scores = q_t @ cache.k.transpose(-2, -1) / math.sqrt(dh)  # [B,H,1,t]
+    attn = F.softmax(scores, dim=-1)                          # [B,H,1,t]
+
+    # 加权求和全部 V
+    out = attn @ cache.v                                      # [B,H,1,dh]
+    out = out.transpose(1, 2).contiguous().view(B, 1, n_heads * dh)
+    return Wo(out)                                            # [B,1,d_model]
+</pre>
+
+<h2 id="s7">7. 缓存是逐层存在的</h2>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph L1["Transformer 第 1 层"]
+        K1["K cache<br/>[B,H,t,dh]"]
+        V1["V cache<br/>[B,H,t,dh]"]
+    end
+
+    subgraph L2["Transformer 第 2 层"]
+        K2["K cache<br/>[B,H,t,dh]"]
+        V2["V cache<br/>[B,H,t,dh]"]
+    end
+
+    subgraph L3["..."]
+        K3["..."]
+        V3["..."]
+    end
+
+    subgraph LN["Transformer 第 L 层"]
+        KL["K cache<br/>[B,H,t,dh]"]
+        VL["V cache<br/>[B,H,t,dh]"]
+    end
+</div>
+<div class="figcap">图 7 · 每一层 Transformer 各有自己的 K cache 与 V cache，形状同为 [B,H,t,dh]</div>
+</div>
+<p><b>读图 7</b>：KV Cache 不是一个大数组，而是每层各存各的——输入每穿过一个 Block，就把当前 token 在这一层的 k、v 追加进这一层自己的缓存；一个 32 层模型就是 32 对抽屉。CachedTransformer 把这个结构直接写成代码，inspect_cache_shapes 可以打印每层的实际形状。</p>
+<pre>
+class CachedTransformer(nn.Module):
+    """每层各有一份 KV Cache。"""
+    def __init__(self, n_layers, d_model, n_heads):
+        super().__init__()
+        self.layers = nn.ModuleList([
+            CachedAttention(d_model, n_heads) for _ in range(n_layers)
+        ])
+
+    def forward(self, x, is_prefill: bool):
+        for layer in self.layers:
+            x = layer(x, is_prefill=is_prefill)
+        return x
+
+    def reset_cache(self):
+        for layer in self.layers:
+            layer.cache.k = None
+            layer.cache.v = None
+
+
+def inspect_cache_shapes(model: CachedTransformer):
+    for i, layer in enumerate(model.layers):
+        k, v = layer.cache.k, layer.cache.v
+        if k is not None:
+            print(f"layer {i}: K={tuple(k.shape)}, V={tuple(v.shape)}")
+</pre>
+
+<h2 id="s8">8. Cache 随序列增长与显存账</h2>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    T1["t=1<br/>K=[k₁]<br/>V=[v₁]"]
+    T2["t=2<br/>K=[k₁,k₂]<br/>V=[v₁,v₂]"]
+    T3["t=3<br/>K=[k₁,k₂,k₃]<br/>V=[v₁,v₂,v₃]"]
+    T4["t=4<br/>追加 k₄,v₄"]
+    T5["...<br/>线性增长"]
+
+    T1 --> T2 --> T3 --> T4 --> T5
+</div>
+<div class="figcap">图 8 · 缓存随 token 数线性增长：每步追加一对 k、v，从不压缩也不淘汰</div>
+</div>
+<p><b>读图 8</b>：增长是严格的线性——没有压缩、没有淘汰，历史全部保留。显存公式：<b>2 × 层数 × batch × 序列长 × KV 头数 × 每头维数 × 每元素字节数</b>（乘 2 是 K、V 各一份）。按本篇基线（32 层、8 个 KV 头、每头 128、fp16 即 2 字节）代入：每 token 每层 4KB，全模型每 token 128KB。代码里的 kv_cache_memory_bytes(32, 1, 4096, 8, 128) 算出 0.50GB，即下表第二行：</p>
+<pre>
+def kv_cache_memory_bytes(n_layers, batch, seq_len,
+                          n_kv_heads, head_dim,
+                          dtype_bytes=2):
+    """
+    KV Cache 显存公式：
+      2 * L * B * S * H_kv * d_h * bytes
+    """
+    return 2 * n_layers * batch * seq_len * n_kv_heads * head_dim * dtype_bytes
+
+
+def demo_growth():
+    """演示 cache 每步线性增长的形状与显存。"""
+    cache = KVCache()
+    B, H, dh = 1, 8, 64
+    for step in range(1, 5):
+        k_new = torch.randn(B, H, 1, dh)
+        v_new = torch.randn(B, H, 1, dh)
+        cache.append(k_new, v_new)
+        print(f"step {step}: K={tuple(cache.k.shape)}, "
+              f"V={tuple(cache.v.shape)}, "
+              f"bytes={cache.k.numel() * cache.k.element_size() * 2}")
+
+
+if __name__ == "__main__":
+    print("KV Cache ≈ "
+          f"{kv_cache_memory_bytes(32, 1, 4096, 8, 128) / 1024**3:.2f} GB")
+    demo_growth()
+</pre>
+<table>
+<tr><th>序列长度</th><th>每 token 全模型</th><th>本基线总量（batch=1）</th><th>换 32 头 MHA</th></tr>
+<tr><td>1024</td><td>128 KB</td><td>128 MB</td><td>512 MB</td></tr>
+<tr><td>4096</td><td>128 KB</td><td>512 MB</td><td>2 GB</td></tr>
+<tr><td>32768</td><td>128 KB</td><td>4 GB</td><td>16 GB</td></tr>
+<tr><td>100000</td><td>128 KB</td><td>12.8 GB</td><td>51.2 GB</td></tr>
+</table>
+<p>末列是同样长度下不分组（32 个 KV 头）的对照——分组共享（本文基线的 8 个 KV 头）已经把显存压到四分之一；第 10 章把这条压缩路线补全。另一个直观换算：decode 每生成 1 个 token，缓存就多 128KB，一千步就是 128MB——省着用才放得下并发。</p>
+
+<h2 id="s9">9. 两条推理路径对照：平方重算 vs 线性追加</h2>
+<div class="card">
+<div class="mermaid">
+flowchart TB
+    START["开始生成<br/>Prompt = x₁..x_p"] --> FWD1["Step 1: forward(x₁..x_p, x_{p+1})<br/>计算全部 K/V"]
+    FWD1 --> GEN1["输出 x_{p+1}"]
+    GEN1 --> FWD2["Step 2: forward(x₁..x_{p+1}, x_{p+2})<br/>重新计算全部 K/V"]
+    FWD2 --> GEN2["输出 x_{p+2}"]
+    GEN2 --> FWD3["Step 3: forward(x₁..x_{p+2}, x_{p+3})<br/>再次重算全部 K/V"]
+    FWD3 --> GEN3["输出 x_{p+3}"]
+    GEN3 --> MORE["... 每步重复历史"]
+
+    style FWD1 fill:#ffe4e1
+    style FWD2 fill:#ffe4e1
+    style FWD3 fill:#ffe4e1
+</div>
+<div class="figcap">图 9 · 无缓存的推理路径：每一步 forward 的序列都比上一步长 1，历史 K/V 全部重算（红色标注）</div>
+</div>
+<pre>
+def no_cache_characteristics(prompt_len: int, gen_len: int):
+    """
+    图 9 的定量描述：
+      每步 forward 的 token 数 = prompt_len + step
+      总 token-forward 数 ≈ Σ (prompt_len + i)，i=1..gen_len
+    """
+    total = sum(prompt_len + i for i in range(1, gen_len + 1))
+    return {
+        "特点": ["每步全量重算 K/V", "计算量随步数平方增长", "显存占用恒定（只有激活）", "实现简单"],
+        "总 token-forward 数": total,
+        "适用场景": "训练 / 简单原型 / 短序列生成",
+    }
+
+
+def no_cache_peak_memory(prompt_len, gen_len, d_model, n_layers, bytes_per=2):
+    """
+    无 cache 时显存主要来自激活；峰值与最长一次 forward 长度近似成正比，
+    并不随生成长度累积（因为每步都释放）。
+    """
+    max_len = prompt_len + gen_len
+    # 粗略估计：每层激活 ≈ 数个 [B, S, d_model]
+    return max_len * d_model * n_layers * 4 * bytes_per
+</pre>
+<table>
+<tr><th>维度</th><th>无 KV Cache</th></tr>
+<tr><td>每步计算</td><td>重算全部历史 K/V</td></tr>
+<tr><td>计算量</td><td>随生成长度呈平方级增长</td></tr>
+<tr><td>显存</td><td>低（只保留激活，每步释放）</td></tr>
+<tr><td>实现</td><td>最简单，无需维护状态</td></tr>
+<tr><td>典型用途</td><td>训练、短序列、教学原型</td></tr>
+</table>
+<div class="card">
+<div class="mermaid">
+flowchart TB
+    PRE["Prefill：forward(x₁..x_p)<br/>一次算完 K/V 并写入 cache"] --> C0["Cache = K₁..p, V₁..p"]
+    C0 --> D1["Decode Step 1：只输入 x_{p+1}<br/>算 q,k,v → 追加 cache"]
+    D1 --> C1["Cache = K₁..p+1, V₁..p+1"]
+    C1 --> D2["Decode Step 2：只输入 x_{p+2}<br/>算 q,k,v → 追加 cache"]
+    D2 --> C2["Cache = K₁..p+2, V₁..p+2"]
+    C2 --> D3["Decode Step 3：只输入 x_{p+3}"]
+    D3 --> MORE["... 每步只算 1 个 token"]
+
+    style PRE fill:#e0f7e0
+    style D1 fill:#e0f7e0
+    style D2 fill:#e0f7e0
+    style D3 fill:#e0f7e0
+</div>
+<div class="figcap">图 10 · 有缓存的推理路径：Prefill 一次建缓存（绿色标注），之后每步只算 1 个新 token</div>
+</div>
+<pre>
+def with_cache_characteristics(prompt_len: int, gen_len: int):
+    """
+    图 10 的定量描述：
+      Prefill 一次算 prompt_len 个 token；
+      每个 Decode step 只算 1 个 token。
+      总 token-forward 数 = prompt_len + gen_len
+    """
+    total = prompt_len + gen_len
+    return {
+        "特点": ["Prefill 一次建 cache", "Decode 只算新 token", "计算量随生成长度线性增长",
+                 "显存随生成长度线性增长"],
+        "总 token-forward 数": total,
+        "适用场景": "自回归推理 / 长文本生成 / 生产部署",
+    }
+
+
+def cache_memory_at_step(prompt_len, gen_len, n_layers, n_kv_heads,
+                         head_dim, batch=1, dtype_bytes=2):
+    """
+    有 cache 时显存的“增长轨迹”：
+      step 0 = Prefill 后，长度 = prompt_len
+      step i = 长度 = prompt_len + i
+    """
+    trajectory = []
+    for i in range(gen_len + 1):
+        S = prompt_len + i
+        bytes_ = 2 * n_layers * batch * S * n_kv_heads * head_dim * dtype_bytes
+        trajectory.append((f"step {i}", S, bytes_ / 1024**2))
+    return trajectory
+
+
+if __name__ == "__main__":
+    print("=== 图 9 无 Cache ===")
+    print(no_cache_characteristics(128, 64))
+
+    print("\n=== 图 10 有 Cache ===")
+    print(with_cache_characteristics(128, 64))
+    for name, S, mb in cache_memory_at_step(128, 64, 32, 8, 128):
+        print(f"{name}: seq={S}, KV≈{mb:.1f} MB")
+</pre>
+<table>
+<tr><th>维度</th><th>有 KV Cache</th></tr>
+<tr><td>每步计算</td><td>只算新 token 的 q、k、v</td></tr>
+<tr><td>计算量</td><td>随生成长度线性增长</td></tr>
+<tr><td>显存</td><td>额外占用 KV Cache，随长度线性增长</td></tr>
+<tr><td>实现</td><td>需维护每层 cache 状态</td></tr>
+<tr><td>典型用途</td><td>推理部署、长文本生成、生产系统</td></tr>
+</table>
+<div class="kp t">
+<span class="kp-t">一个具体对照（prompt 128 + 生成 64）</span>
+无缓存：每步 forward 的 token 数为 129、130 至 192，合计 10,272 个 token-forward；有缓存：prefill 128 + decode 每步 1，合计 192 个。同样的输出，前向计算量差 53.5 倍——且生成越长差距越大（平方 vs 线性）。
 </div>
 
-<h2 id="s8">8. 与站内文章的关系</h2>
+<h2 id="s10">10. 优化路线与一页记忆卡</h2>
+<div class="card">
+<div class="mermaid">
+mindmap
+  root((QKV 与 KV Cache))
+    QKV
+      Q 查询
+      K 钥匙
+      V 内容
+      softmax·QKᵀ/√dh·V
+      causal mask 遮未来
+    KV Cache
+      只缓存历史 K,V
+      Q 不缓存
+      Prefill 建缓存
+      Decode 追加缓存
+      每层各一份
+      显存线性增长
+    推理路径
+      无 Cache：平方级重算
+      有 Cache：线性增长
+    优化
+      MQA
+      GQA
+      PagedAttention
+      量化 KV
+</div>
+<div class="figcap">图 11 · 一页记忆卡：QKV 怎么查、KV Cache 存什么、两条推理路径、四条优化分支</div>
+</div>
+<p><b>读图 11</b>：记忆卡的四根分支正好是本篇的四条线——QKV 的计算、缓存的存在形式、两条推理路径的代价、以及压缩缓存的优化。优化分支的共同思路：Q 头一个不少（32 个全保留），压的是 K/V 的份数或精度。同一每头 128 维口径下的量级对照：</p>
+<table>
+<tr><th>方案</th><th>KV 头数</th><th>每 token 每层</th><th>一句话</th></tr>
+<tr><td>MHA</td><td>32</td><td>16 KB</td><td>每头独立 K/V（基线的 4 倍）</td></tr>
+<tr><td>GQA · 本文基线</td><td>8</td><td>4 KB</td><td>32 个 Q 头分 8 组共享，repeat_interleave 对齐</td></tr>
+<tr><td>GQA · 4 组</td><td>4</td><td>2 KB</td><td>压得更狠，质量仍近 MHA</td></tr>
+<tr><td>MQA</td><td>1</td><td>0.5 KB</td><td>全部头共享一份（缩 32 倍，质量受损）</td></tr>
+<tr><td>MLA</td><td>latent</td><td>1 KB</td><td>不存 K/V 存 256 维压缩向量，用时解压（吸收进 Q/O）</td></tr>
+<tr><td>KV 量化</td><td>不变</td><td>再减半</td><td>fp16 降 fp8/int8，与前几条可叠加</td></tr>
+</table>
+<p>PagedAttention（块池）是另一维度的优化——不减每 token 体积，而是把缓存切块按需分配、物理散放、块表拼回，让预留显存可共享（站内《DeepSeek V4.1 全链路主时序》步骤 17 的块表就是它的工程现场）。GroupedQueryAttention 的完整源码：</p>
+<pre>
+class GroupedQueryAttention(nn.Module):
+    """
+    优化分支：Q 有 H 个头，K/V 只有 G 个头（G &lt; H），
+    多个 query 共享一个 KV 头，降低 KV Cache 显存。
+    """
+    def __init__(self, d_model, n_q_heads, n_kv_heads):
+        super().__init__()
+        assert n_q_heads % n_kv_heads == 0
+        self.hq, self.hkv = n_q_heads, n_kv_heads
+        self.dh = d_model // n_q_heads
+        self.group = n_q_heads // n_kv_heads
+
+        self.Wq = nn.Linear(d_model, self.hq * self.dh, bias=False)
+        self.Wk = nn.Linear(d_model, self.hkv * self.dh, bias=False)
+        self.Wv = nn.Linear(d_model, self.hkv * self.dh, bias=False)
+        self.Wo = nn.Linear(d_model, d_model, bias=False)
+
+    def forward(self, x, causal=True):
+        B, S, _ = x.shape
+        q = self.Wq(x).view(B, S, self.hq, self.dh).transpose(1, 2)   # [B,hq,S,dh]
+        k = self.Wk(x).view(B, S, self.hkv, self.dh).transpose(1, 2)  # [B,hkv,S,dh]
+        v = self.Wv(x).view(B, S, self.hkv, self.dh).transpose(1, 2)
+
+        # 把每个 KV 头复制 group 次，以对齐 Q 头
+        k = k.repeat_interleave(self.group, dim=1)   # [B,hq,S,dh]
+        v = v.repeat_interleave(self.group, dim=1)
+
+        scores = q @ k.transpose(-2, -1) / math.sqrt(self.dh)
+        if causal:
+            m = torch.triu(torch.ones(S, S, dtype=torch.bool, device=x.device), 1)
+            scores = scores.masked_fill(m, float("-inf"))
+        out = F.softmax(scores, dim=-1) @ v
+        out = out.transpose(1, 2).contiguous().view(B, S, -1)
+        return self.Wo(out)
+</pre>
+<div class="kp w">
+<span class="kp-t">核心一句话</span>
+QKV 是「怎么查」：Q 查 K，权重乘 V。KV Cache 是「别重复造」：历史 K/V 存起来，Decode 每步只算新 token 的 q、k、v。图 9 与图 10 分别刻画平方级重算与线性增长两条推理路径的代价差异。
+</div>
+
+<h2 id="s11">11. 与站内文章的关系</h2>
 <div class="kp">
 <ul>
-<li><b>《<a href="多头注意力_v0.2_精读版.html">多头注意力机制精读</a>》</b>：本篇图 1、4、7、8 的出处；MHA → MQA → GQA → MLA → KDA 五族的结构与数字在那里逐个展开；</li>
-<li><b>《<a href="DeepSeek V4.1 全链路主时序 · 56步四阶段.html">DeepSeek V4.1 全链路主时序</a>》</b>：真实推理引擎里的块池长什么样——步骤 14 前缀命中、步骤 17 allocate_slots 分配 KV 块写块表，就是本篇图 6 的工程现场；</li>
-<li><b>《<a href="昇腾算子地图 · 从一层前向到三层算子楼.html">昇腾算子地图</a>》</b>：缓存写入在 NPU 上的算子形态——投影+归一化+写 cache 的融合算子、按页表散写的写回算子，都住在三层算子楼里。</li>
+<li><b>《<a href="多头注意力_v0.2_精读版.html">多头注意力机制精读</a>》</b>：MHA → MQA → GQA → MLA → KDA 五族的结构与数字逐个展开，本篇第 10 章优化表的出处；</li>
+<li><b>《<a href="DeepSeek V4.1 全链路主时序 · 56步四阶段.html">DeepSeek V4.1 全链路主时序</a>》</b>：真实推理引擎里 prefill/decode 与块池的工程现场——步骤 14 前缀命中、步骤 17 allocate_slots 分配 KV 块写块表；</li>
+<li><b>《<a href="昇腾算子地图 · 从一层前向到三层算子楼.html">昇腾算子地图</a>》</b>：缓存写入在 NPU 上的算子形态——投影+归一化+写 cache 的融合算子、按页表散写的写回算子。</li>
 </ul>
 </div>
 
-<h2 id="s9">9. 术语速查</h2>
+<h2 id="s12">12. 术语速查</h2>
 <table>
 <tr><th>术语</th><th>本篇语境下的含义</th></tr>
-<tr><td>KV Cache</td><td>每层各存的两个历史张量 K [L,32,128] / V [L,32,128]，fp16 下每 token 每层 16KB</td></tr>
-<tr><td>prefill / decode</td><td>提示词阶段一次并行写满缓存 / 生成阶段每步串行追加 1 行（全模型 1MB）</td></tr>
-<tr><td>TTFT</td><td>首字延迟，由 prefill 段决定</td></tr>
-<tr><td>块池 / PagedAttention</td><td>缓存按固定块（本例 16 token / 16MB）切开管理：按需领用、物理散放、块表翻译</td></tr>
-<tr><td>块表</td><td>每序列一张 slot → 物理块号的映射表，把散放的块拼回逻辑连续序列</td></tr>
-<tr><td>前缀共享</td><td>相同前缀的请求在块表里指向同一物理块，多轮对话的系统提示只存一份</td></tr>
-<tr><td>MQA / GQA / MLA</td><td>共享 1 份 / 分组共享 4 份 / latent 压缩存储——每 token 每层 0.5KB / 2KB / 1KB</td></tr>
-<tr><td>KDA</td><td>Key-Dependent Attention：不存 KV 列表，改存固定大小循环状态（约 8MB 恒定）</td></tr>
-<tr><td>KV 量化</td><td>缓存精度 fp16 → fp8/int8，体积减半，与前四条路线可叠加</td></tr>
+<tr><td>Q / K / V</td><td>查询 / 钥匙 / 内容：X 分别乘 Wq、Wk、Wv 得到的三份投影，形状 [B,H,S,dh]</td></tr>
+<tr><td>causal mask</td><td>上三角置 -∞ 的掩码：第 t 个 token 只能看 1 至 t，softmax 后未来权重为 0</td></tr>
+<tr><td>Prefill / Decode</td><td>提示词阶段一次并行算完并写满缓存 / 生成阶段每步只算 1 个新 token 并追加</td></tr>
+<tr><td>KV Cache</td><td>每层各存的历史 K、V 张量 [B,H,t,dh]；Q 不缓存（用完即弃）</td></tr>
+<tr><td>显存公式</td><td>2 × 层数 × batch × 序列长 × KV 头数 × 每头维数 × 每元素字节数</td></tr>
+<tr><td>平方 vs 线性</td><td>无缓存每步重算全部历史（总前向量平方级）；有缓存每步 1 个 token（线性）</td></tr>
+<tr><td>MQA / GQA / MLA</td><td>共享 1 份 / 分组共享 / 存压缩向量——压的都是 KV 的份数或形态，Q 头不减</td></tr>
+<tr><td>PagedAttention</td><td>缓存切块（block）按需分配、物理散放、块表拼回，预留显存可共享</td></tr>
+<tr><td>KV 量化</td><td>缓存精度 fp16 → fp8/int8，体积减半，与结构类优化可叠加</td></tr>
 </table>
 
-<p class="dim" style="margin-top:36px">来源：数字基线（d_model=4096、32 头、每头 128、fp16、64 层）与图 1/4/7/8 沿用《多头注意力机制精读》；块池账、两阶段写入与重算账为本篇按同基线推得 · 块大小 16 token 为 vLLM 系引擎常用默认</p>
+<p class="dim" style="margin-top:36px">来源：11 图与 10 段代码收录于 2026-10-18 底稿（QKV 与 KV Cache 图解，全部可运行）；显存账按底稿基线（32 层、8 KV 头、每头 128、fp16）推得，MHA/MLA 对照口径取自《多头注意力机制精读》</p>
 </div>
 
 <div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
