@@ -189,75 +189,29 @@ flowchart TD
 <div class="card">
 <div class="mermaid">
 flowchart LR
-    classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
-    classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef src fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
-
-    ENC["编码器 · 层 1–20<br/>正常逐层前向"]:::src --> H20["H_20 · 编码器末层隐藏态<br/>解码段 层 21–40 全局 KV 的唯一来源"]:::src
-
-    H20 -->|"KV 投影 W₂₁"| FA
-    H20 -->|"KV 投影 W₂₅"| FB
-    H20 -->|"KV 投影 W₂₉"| FC
-    H20 -->|"KV 投影 W₃₃"| FD
-    H20 -->|"KV 投影 W₃₇"| FE
-
+    ENC["编码器 · 层 1–20"] --> H20["H_20 · 第 20 层隐藏特征"]
+    H20 -->|"KV 转换小模型"| FA
+    H20 -->|"KV 转换小模型"| FB
+    H20 -->|"KV 转换小模型"| FC
+    H20 -->|"KV 转换小模型"| FD
+    H20 -->|"KV 转换小模型"| FE
     subgraph GA["共享组 1 · 层 21–24"]
-        direction LR
-        FA["层 21 · Full<br/>投影 W₂₁(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RA["层 22 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RB["层 23 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RC["层 24 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FA -.->|共享| RA
-        FA -.->|共享| RB
-        FA -.->|共享| RC
+        FA["层 21 · 持有主 KV"] --- RA["层 22–24 · 直接复用"]
     end
-
     subgraph GB["共享组 2 · 层 25–28"]
-        direction LR
-        FB["层 25 · Full<br/>投影 W₂₅(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RD["层 26 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RE["层 27 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RF["层 28 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FB -.->|共享| RD
-        FB -.->|共享| RE
-        FB -.->|共享| RF
+        FB["层 25 · 持有主 KV"] --- RB["层 26–28 · 直接复用"]
     end
-
     subgraph GC["共享组 3 · 层 29–32"]
-        direction LR
-        FC["层 29 · Full<br/>投影 W₂₉(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RG["层 30 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RH["层 31 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RI["层 32 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FC -.->|共享| RG
-        FC -.->|共享| RH
-        FC -.->|共享| RI
+        FC["层 29 · 持有主 KV"] --- RC["层 30–32 · 直接复用"]
     end
-
     subgraph GD["共享组 4 · 层 33–36"]
-        direction LR
-        FD["层 33 · Full<br/>投影 W₃₃(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RJ["层 34 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RK["层 35 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RL["层 36 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FD -.->|共享| RJ
-        FD -.->|共享| RK
-        FD -.->|共享| RL
+        FD["层 33 · 持有主 KV"] --- RD["层 34–36 · 直接复用"]
     end
-
     subgraph GE["共享组 5 · 层 37–40"]
-        direction LR
-        FE["层 37 · Full<br/>投影 W₃₇(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RM["层 38 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RN["层 39 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RO["层 40 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FE -.->|共享| RM
-        FE -.->|共享| RN
-        FE -.->|共享| RO
+        FE["层 37 · 持有主 KV"] --- RE["层 38–40 · 直接复用"]
     end
 </div>
-<div class="figcap">图 3 · CSA2 机制（源自《Flash 推理加速解读》）：H_20 经各层投影生成层 21–40 的主 KV（5 组各一个 Full 层持有），组内 Reindex / Reuse 复用 KV 与 Top-K</div>
+<div class="figcap">图 3 · CSA2 机制（按《Flash 推理加速解读》重绘）：H_20 经 KV 转换小模型转出五组主 KV，每组一层持有、组内直接复用——Full / Reindex / Reuse 角色与 Top-K 细节见正文</div>
 </div>
 <p><b>量化效果四笔账</b>：</p>
 <table>
