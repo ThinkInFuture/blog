@@ -119,6 +119,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-10-19</span></div>
+<div class="cc-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</div>
+<div class="cc-desc">四步递进的推理配置与量化四笔账；MLA→V4.0→V4.1 演进台阶（70,272→3,514→890 B/token）与 HCA 相位根因；老师-学生训练结构图与 Qwen3.5-4B 复现实测——13 图 4 段代码，取自 Flash 解读与复现记录</div>
+<a class="cc-link" href="学习html/DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-10-18</span></div>
 <div class="cc-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</div>
 <div class="cc-desc">Q/K/V 怎么算、causal mask 挡什么、无缓存为什么平方级重算、Prefill 与 Decode 怎么写缓存、逐层缓存与显存公式、以及 GQA/MLA/量化怎么省——11 张图配 10 段可运行 PyTorch</div>
@@ -142,19 +148,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">一个 token 位移，召回从 50% 掉到 0：分块 KV 压缩的相位敏感性，以及 V4.1 用 CSA2 + SWA 的解法</div>
 <a class="cc-link" href="学习html/DeepSeek-V4.1固定窗口压缩的相位敏感性.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">复现实验</span><span class="cc-date">2026-09-27</span></div>
-<div class="cc-title">Kev 复现实验：全周期问题总账（含底座选型期补录）</div>
-<div class="cc-desc">从模型选型期到交付流程期 20 条问题全收录：对话版当 Base 重大更正、数据泄漏与评测口径教训、v3 重训进行中</div>
-<a class="cc-link" href="实验html/Kev复现全周期问题总账-20260927.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">43</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">44</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -162,14 +162,14 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">43 篇 · 8 个专题</div>
+<div class="sec-badge">44 篇 · 8 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">43</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">44</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
-<button class="chip" data-topic="accel">推理加速<span class="count">7</span></button>
+<button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
 <button class="chip" data-topic="vllm">vLLM 源码<span class="count">12</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
@@ -177,6 +177,8 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="accel" data-ts="20261019"><a href="学习html/DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html"><span class="li-date">2026-10-19</span><span class="li-main"><span class="li-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测<span class="li-tag">推理加速</span></span><span class="li-desc">V4.1-Flash 四步递进推理配置与量化四笔账（KV 容量 1/4、持久化 1/8、890 B/token、27.6MB↓75%）；MLA→V4.0 三段分段→V4.1 换路径的演进史与 HCA 废弃的相位根因（40pp→6pp）；老师-学生训练结构与 Qwen3.5-4B 复现（GSM8K -1pp、prefill 1.56x、持久 3.44x、k8v4 top-5 100%）——13 图 4 段代码</span></span></a></li>
+
 <li class="li" data-topic="theory" data-ts="20261018"><a href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html"><span class="li-date">2026-10-18</span><span class="li-main"><span class="li-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）<span class="li-tag">基础理论</span></span><span class="li-desc">从一行注意力的 PyTorch 源码走到推理缓存：causal mask 在挡什么、无缓存每步重算的平方代价、Prefill/Decode 两阶段与逐层缓存、显存公式 2·L·B·S·H_kv·dh·bytes 的具体账、两条推理路径对照与 MQA/GQA/MLA 优化——11 图配 10 段可运行代码</span></span></a></li>
 
 <li class="li" data-topic="vllm" data-ts="20261017"><a href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html"><span class="li-date">2026-10-17</span><span class="li-main"><span class="li-title">DeepSeek V4.1 全链路主时序：一条请求从压测端到首字返回的 57 步<span class="li-tag">vLLM 源码</span></span><span class="li-desc">启动加载、prefill、decode、后台横切四阶段 57 步一张时序走完，认模型入编为步骤 3——models/__init__ 24 条模型注册表，载入权重前就定下哪个模型用哪套实现</span></span></a></li>
