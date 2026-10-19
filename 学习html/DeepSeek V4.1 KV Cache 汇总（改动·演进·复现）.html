@@ -158,7 +158,7 @@ flowchart TD
 <li><b>① baseline</b>：每层自算自存，40 份 KV——固有瓶颈本体；</li>
 <li><b>② Prefill / Decode 分离</b>：Prefill 拿完整输入一次算完，产出两样——对输入的完整理解 H_20 与解码器要用的全局 KV（此阶段解码器 20 层完全不执行）；Decode 每步只处理单个新 token，解码器基于投影的全局 KV 做注意力逐步生成；</li>
 <li><b>③ CED</b>：Prefill 只跑编码器，解码器的 KV 缓存不再由自己计算，而是直接从编码器输出投影得到——<b>计算量减半</b>；</li>
-<li><b>④ CSA2</b>：解码段分共享组，每组一个 Full 层（主 KV + 索引器 K + Top-K）带若干 Reindex（复用 KV、重选 Top-K）与 Reuse（KV 与 Top-K 全复用）层——<b>存储量大幅下降</b>。</li>
+<li><b>④ CSA2</b>：解码段分共享组，每组一个 Full 层（主 KV + 索引器 K + Top-K）带若干 Reindex（复用 KV、重选 Top-K）与 Reuse（连 Top-K 也继承、只算稀疏注意力）层——<b>一套静态共享规则，不是模型</b>（config 逐层指定角色）；存储量大幅下降。</li>
 </ul>
 </div>
 <div class="card">
@@ -189,75 +189,29 @@ flowchart TD
 <div class="card">
 <div class="mermaid">
 flowchart LR
-    classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
-    classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef src fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
-
-    ENC["编码器 · 层 1–20<br/>正常逐层前向"]:::src --> H20["H_20 · 编码器末层隐藏态<br/>解码段 层 21–40 全局 KV 的唯一来源"]:::src
-
-    H20 -->|"KV 投影 W₂₁"| FA
-    H20 -->|"KV 投影 W₂₅"| FB
-    H20 -->|"KV 投影 W₂₉"| FC
-    H20 -->|"KV 投影 W₃₃"| FD
-    H20 -->|"KV 投影 W₃₇"| FE
-
+    ENC["编码器 · 层 1–20"] --> H20["H_20 · 第 20 层隐藏特征"]
+    H20 -->|"KV 转换小模型"| FA
+    H20 -->|"KV 转换小模型"| FB
+    H20 -->|"KV 转换小模型"| FC
+    H20 -->|"KV 转换小模型"| FD
+    H20 -->|"KV 转换小模型"| FE
     subgraph GA["共享组 1 · 层 21–24"]
-        direction LR
-        FA["层 21 · Full<br/>投影 W₂₁(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RA["层 22 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RB["层 23 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RC["层 24 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FA -.->|共享| RA
-        FA -.->|共享| RB
-        FA -.->|共享| RC
+        FA["层 21 · Full<br/>生成主 KV 与索引，自做 Top-K"] -->|"CSA2 共享规则"| RA["层 22–24 · Reindex / Reuse<br/>复用主 KV：Reindex 重选 Top-K，Reuse 连 Top-K 也继承"]
     end
-
     subgraph GB["共享组 2 · 层 25–28"]
-        direction LR
-        FB["层 25 · Full<br/>投影 W₂₅(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RD["层 26 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RE["层 27 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RF["层 28 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FB -.->|共享| RD
-        FB -.->|共享| RE
-        FB -.->|共享| RF
+        FB["层 25 · Full<br/>生成主 KV 与索引，自做 Top-K"] -->|"CSA2 共享规则"| RB["层 26–28 · Reindex / Reuse<br/>复用主 KV，规则同上"]
     end
-
     subgraph GC["共享组 3 · 层 29–32"]
-        direction LR
-        FC["层 29 · Full<br/>投影 W₂₉(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RG["层 30 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RH["层 31 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RI["层 32 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FC -.->|共享| RG
-        FC -.->|共享| RH
-        FC -.->|共享| RI
+        FC["层 29 · Full<br/>生成主 KV 与索引，自做 Top-K"] -->|"CSA2 共享规则"| RC["层 30–32 · Reindex / Reuse<br/>复用主 KV，规则同上"]
     end
-
     subgraph GD["共享组 4 · 层 33–36"]
-        direction LR
-        FD["层 33 · Full<br/>投影 W₃₃(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RJ["层 34 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RK["层 35 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RL["层 36 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FD -.->|共享| RJ
-        FD -.->|共享| RK
-        FD -.->|共享| RL
+        FD["层 33 · Full<br/>生成主 KV 与索引，自做 Top-K"] -->|"CSA2 共享规则"| RD["层 34–36 · Reindex / Reuse<br/>复用主 KV，规则同上"]
     end
-
     subgraph GE["共享组 5 · 层 37–40"]
-        direction LR
-        FE["层 37 · Full<br/>投影 W₃₇(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RM["层 38 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RN["层 39 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RO["层 40 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FE -.->|共享| RM
-        FE -.->|共享| RN
-        FE -.->|共享| RO
+        FE["层 37 · Full<br/>生成主 KV 与索引，自做 Top-K"] -->|"CSA2 共享规则"| RE["层 38–40 · Reindex / Reuse<br/>复用主 KV，规则同上"]
     end
 </div>
-<div class="figcap">图 3 · CSA2 机制（源自《Flash 推理加速解读》）：H_20 经各层投影生成层 21–40 的主 KV（5 组各一个 Full 层持有），组内 Reindex / Reuse 复用 KV 与 Top-K</div>
+<div class="figcap">图 3 · 两级设计：CED 的「KV 转换小模型」把 H_20 转成五组主 KV（这是模型权重）；CSA2 是一套静态共享规则——config 里逐层指定 Full / Reindex / Reuse 角色，不是模型。复现时因主干冻结、跨层 KV 余弦约 0，才用小适配器模型来实现这套规则（第 5 章展开）</div>
 </div>
 <p><b>量化效果四笔账</b>：</p>
 <table>
