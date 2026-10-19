@@ -191,10 +191,15 @@ flowchart TD
     classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
     classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
     classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
+    classDef src fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+
+    H20["H_20 · 编码器末层隐藏态<br/>全局 KV 的唯一来源"]:::src
+    H20 -->|"KV 投影 W₁"| FA
+    H20 -->|"KV 投影 W₅"| FB
 
     subgraph GA["共享组 A · 层 1–4"]
         direction LR
-        FA["层 1 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        FA["层 1 · Full<br/>投影 W₁(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
         RA["层 2 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
         RB["层 3 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
         RC["层 4 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
@@ -205,7 +210,7 @@ flowchart TD
 
     subgraph GB["共享组 B · 层 5–8"]
         direction LR
-        FB["层 5 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        FB["层 5 · Full<br/>投影 W₅(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
         RD["层 6 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
         RE["层 7 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
         RF["层 8 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
@@ -214,7 +219,7 @@ flowchart TD
         FB -.->|共享| RF
     end
 </div>
-<div class="figcap">图 3 · CSA2 机制（源自《Flash 推理加速解读》）：共享组内 Full / Reindex / Reuse 三种角色复用 KV 与 Top-K</div>
+<div class="figcap">图 3 · CSA2 机制（源自《Flash 推理加速解读》）：主 KV 由 H_20 经各层投影生成（Full 层持有），组内 Reindex / Reuse 复用 KV 与 Top-K</div>
 </div>
 <p><b>量化效果四笔账</b>：</p>
 <table>
