@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</title>
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --del:#c2410c;--code-bg:#f3f4f6;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --del:#f87171;--code-bg:#262a32;
+  }
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;line-height:1.75;font-size:15.5px}
+.wrap{max-width:960px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:27px;line-height:1.35;margin:0 0 6px}
+h2{font-size:21px;margin:52px 0 12px;padding-top:18px;border-top:1px solid var(--border)}
+h3{font-size:16.5px;margin:30px 0 8px;color:var(--brand-text)}
+h4{font-size:15px;margin:20px 0 6px;color:var(--accent-text)}
+p{margin:10px 0}
+b{color:var(--text)}
+.subtitle{color:var(--text-muted);font-size:14px;margin-bottom:20px}
+nav.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 28px;font-size:14px}
+nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc a{color:var(--brand-text);text-decoration:none}
+nav.toc a:hover{text-decoration:underline}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:12.8px}
+.cnum{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;color:var(--brand);font-weight:700}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.8px;line-height:1.6}
+pre .c{color:var(--text-muted)}
+pre .a{color:var(--ok);font-weight:700}
+pre .d{color:var(--del);text-decoration:line-through}
+.codetag{font-size:13px;font-weight:700;margin:14px 0 4px}
+.codetag.before{color:var(--del)}
+.codetag.after{color:var(--ok)}
+table{width:100%;border-collapse:collapse;margin:14px 0}
+th,td{border:1px solid var(--border);padding:8px 12px;text-align:left;font-size:13.5px;vertical-align:top}
+th{background:var(--surface-muted)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px 20px;margin:16px 0;overflow-x:auto}
+.card svg{display:block;margin:0 auto}
+.figcap{text-align:center;color:var(--text-muted);font-size:12.5px;margin-top:10px}
+.figgrid{display:grid;grid-template-columns:1fr;gap:20px}
+@media (min-width:1200px){.figgrid{grid-template-columns:1fr 1fr}.figgrid .card{overflow-x:auto}}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 10px 10px 0;padding:14px 18px;margin:16px 0}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp.g{border-color:var(--ok);background:var(--ok-bg)}
+.kp-t{font-weight:700;font-size:14px;display:block;margin-bottom:6px}
+.kp ul{margin:6px 0 2px;padding-left:20px}
+.kp li{margin:4px 0;font-size:14px}
+.tag{display:inline-block;border-radius:6px;padding:1px 9px;font-size:12.5px;font-weight:600;margin-right:6px}
+.tag.blue{background:var(--brand-bg);color:var(--brand-text)}
+.tag.teal{background:var(--accent-bg);color:var(--accent-text)}
+.tag.amber{background:var(--warn-bg);color:var(--warn)}
+.tag.green{background:var(--ok-bg);color:var(--ok)}
+.dim{color:var(--text-muted);font-size:13.5px}
+.quote{border-left:3px solid var(--border);padding:2px 14px;margin:12px 0;color:var(--text-muted);font-size:13.5px}
+svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif}
+.ts{fill:var(--text);font-size:12px}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.node{fill:var(--surface);stroke:var(--border);stroke-width:1.5;rx:8}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.wc{fill:var(--warn-bg);stroke:var(--warn);stroke-width:1.5;stroke-dasharray:5 4}
+.arr{stroke:var(--text-muted);stroke-width:1.5;fill:none}
+.flow{stroke:var(--brand);stroke-width:2;fill:none}
+.dash{stroke:var(--accent);stroke-width:1.8;fill:none;stroke-dasharray:5 4}
+.ghost{fill:var(--surface);stroke:var(--border);stroke-width:1.5;stroke-dasharray:5 4}
+.grpA{fill:var(--brand-bg);stroke:var(--brand);stroke-width:2}
+.grpB{fill:var(--warn-bg);stroke:var(--warn);stroke-width:2}
+.frame{fill:none;stroke:var(--border);stroke-width:1.5;stroke-dasharray:6 5}
+.gbadge{fill:var(--surface-muted);stroke:var(--border);stroke-width:1.5}
+.nb{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.cb{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.bdg{fill:var(--text);font-size:17px;font-weight:700}
+.garr{stroke:var(--border);stroke-width:1.5;stroke-dasharray:4 4;fill:none}
+</style>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+
+<div class="wrap">
+
+
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+
+<h1>DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</h1>
+<div class="subtitle">汇总篇：第 1 章取自《DeepSeek-V4.1-Flash推理加速解读》——V4.1-Flash 改了什么（四步递进的推理配置）与量化的效果账；第 2、3 章讲 KV Cache 从 MLA 基准到 V4.0 三段分段再到 V4.1 换路径的演进史与 HCA 废弃的相位根因；第 4、5 章是训练结构说明与 Qwen3.5-4B 复现实测。素材：Flash 解读、kv演进.md、复现实测.md、out/ 训练结构图 ×2、相位敏感性一篇</div>
+
+<nav class="toc">
+<b>目录</b>
+<a href="#s1">1 V4.1-Flash 改了什么：一句话与四笔账</a>
+<a href="#s2">2 KV Cache 演进：MLA → V4.0 三段分段 → V4.1 换路径</a>
+<a href="#s3">3 HCA 为什么退场：无重叠的相位代价</a>
+<a href="#s4">4 训练说明：老师-学生结构与三段关键代码</a>
+<a href="#s5">5 复现实测：设定、结果与边界</a>
+<a href="#s6">6 结论与素材索引</a>
+</nav>
+
+<h2 id="s1">1. V4.1-Flash 改了什么：四步递进与量化效果账</h2>
+<p><b>固有瓶颈</b>（该篇的出发点）：Transformer 每一层都独立保存专属 K、V——层数与序列长一起乘，上下文一长 KV Cache 先爆。V4.1-Flash 的解法不是继续把每一份压小，而是动「谁生成、谁持有」。</p>
+<p><b>架构总览</b>：40 层主干切成两段——前 20 层因果编码器 + 后 20 层解码器，每层内含 MoE 路由（Prefill 激活 8B/token）；两段之间靠 <b>KV 投影</b>衔接：解码器的全局 KV 不从自身生成，而由编码器最后一层隐藏态 H_20 投射得到。</p>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+    classDef proj fill:#fff,stroke:#d0d7de,color:#59636e,stroke-dasharray:4 3
+
+    IN["输入 tokens<br/>文本 + 图像"]:::io
+
+    subgraph ENC["因果编码器 · 20 层"]
+        direction TB
+        E1["层 1–20<br/>每层内含 MoE 路由<br/>Prefill 激活 8B/token"]:::enc
+    end
+
+    PROJ["KV 投影<br/>每层独立投射权重<br/>不涉及注意力 / MoE"]:::proj
+
+    subgraph DEC["解码器 · 20 层"]
+        direction TB
+        D1["层 21–40<br/>每层内含 MoE 路由<br/>Decode 激活 16B/token"]:::dec
+    end
+
+    OUT["输出 tokens"]:::io
+
+    IN --> ENC
+    ENC -->|"H_20 隐藏态"| PROJ
+    PROJ --> DEC
+    DEC --> OUT
+</div>
+<div class="figcap">图 1 · 模型架构（源自《Flash 推理加速解读》）：20 层编码器 + 20 层解码器，两段之间 KV 投影连接</div>
+</div>
+<p><b>四步递进的推理配置</b>（该篇的主线，也是「改了啥」的完整答案）：</p>
+<div class="kp">
+<ul>
+<li><b>① baseline</b>：每层自算自存，40 份 KV——固有瓶颈本体；</li>
+<li><b>② Prefill / Decode 分离</b>：Prefill 拿完整输入一次算完，产出两样——对输入的完整理解 H_20 与解码器要用的全局 KV（此阶段解码器 20 层完全不执行）；Decode 每步只处理单个新 token，解码器基于投影的全局 KV 做注意力逐步生成；</li>
+<li><b>③ CED</b>：Prefill 只跑编码器，解码器的 KV 缓存不再由自己计算，而是直接从编码器输出投影得到——<b>计算量减半</b>；</li>
+<li><b>④ CSA2</b>：解码段分共享组，每组一个 Full 层（主 KV + 索引器 K + Top-K）带若干 Reindex（复用 KV、重选 Top-K）与 Reuse（KV 与 Top-K 全复用）层——<b>存储量大幅下降</b>。</li>
+</ul>
+</div>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    classDef enc fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
+    classDef dec fill:#fbefff,stroke:#8250df,color:#8250df,stroke-width:1.5px
+    classDef bad fill:#ffebe9,stroke:#cf222e,color:#cf222e,stroke-width:1.5px
+    classDef good fill:#dafbe1,stroke:#1a7f37,color:#1a7f37,stroke-width:1.5px
+    classDef io fill:#f6f8fa,stroke:#8b949e,color:#1f2328,stroke-width:1.5px
+
+    subgraph OLD["无 CED · Prefill 跑满 40 层"]
+        direction LR
+        A1["输入<br/>30K tokens"]:::io --> B1["编码器<br/>20 层"]:::enc
+        B1 --> C1["解码器<br/>20 层<br/><i>自己算 KV</i>"]:::dec
+        C1 --> D1["Prefill 激活<br/><b>480,000 B</b>"]:::bad
+    end
+
+    subgraph NEW["有 CED · Prefill 只跑 20 层"]
+        direction LR
+        A2["输入<br/>30K tokens"]:::io --> B2["编码器<br/>20 层"]:::enc
+        B2 -->|"KV 投影"| C2["解码器<br/>20 层<br/><i>不重算 KV</i>"]:::dec
+        C2 --> D2["Prefill 激活<br/><b>240,000 B</b>"]:::good
+    end
+</div>
+<div class="figcap">图 2 · CED 机制（源自《Flash 推理加速解读》）：无 CED 时 Prefill 跑满 40 层；CED 只跑编码器，解码段 KV 由 H_20 投影，计算量减半</div>
+</div>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
+    classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
+    classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
+
+    subgraph GA["共享组 A · 层 1–4"]
+        direction LR
+        FA["层 1 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        RA["层 2 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        RB["层 3 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
+        RC["层 4 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        FA -.->|共享| RA
+        FA -.->|共享| RB
+        FA -.->|共享| RC
+    end
+
+    subgraph GB["共享组 B · 层 5–8"]
+        direction LR
+        FB["层 5 · Full<br/>主 KV + 索引器 K + Top-K"]:::full
+        RD["层 6 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        RE["层 7 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
+        RF["层 8 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
+        FB -.->|共享| RD
+        FB -.->|共享| RE
+        FB -.->|共享| RF
+    end
+</div>
+<div class="figcap">图 3 · CSA2 机制（源自《Flash 推理加速解读》）：共享组内 Full / Reindex / Reuse 三种角色复用 KV 与 Top-K</div>
+</div>
+<p><b>量化效果四笔账</b>：</p>
+<table>
+<tr><th>账目</th><th>数字</th><th>口径说明</th></tr>
+<tr><td>CSA2 收益</td><td><b>KV 存储容量压缩至基线 1/4</b></td><td>全注意力层共享同一份 KV + 小型转换模块跨层映射</td></tr>
+<tr><td>CED + CSA2 叠加</td><td><b>持久化 Prefix 缓存约 1/8</b></td><td>同一条请求的落盘口径</td></tr>
+<tr><td>全局 KV</td><td><b>890 B/token</b></td><td>2.5 条/token ×（288 B 主记录 + 68 B 索引）；V4.0 同口径约 3,514 B/token</td></tr>
+<tr><td>长上下文实例</td><td><b>31,000 token × 890 B = 27.6 MB，↓75%</b></td><td>该篇同源数字（持久化缓存/SSD 口径）</td></tr>
+</table>
+<p><b>FP4 的位置</b>：主 KV 从 FP8 下到 FP4（E2M1，每 16 通道一个 E4M3 scale，无 per-tensor scale）——这是在 CED 和 CSA2 已减过份数之后的动作，不是全局一刀切：<b>SWA KV 仍保留 FP8</b>。主记录 512 值 × FP4 = 256 B 加 32 B scale；索引 128 值 × FP4 = 64 B 加 4 B scale。省掉二级全局 scale 的数值前提：E2M1 只有 1 位尾数，实际 KV 最大幅度约 10，scale 上界约 2048，余量近两个数量级。</p>
+<pre>
+# FP4 E2M1 主 KV 量化，per-16-channel E4M3 scale
+def quantize_fp4_e2m1(x):                    # x: [..., 512]
+    x = x.view(..., 512 // 16, 16)           # 每 16 通道一组
+    scale = x.abs().amax(dim=-1) / 6.0       # 6 = E2M1 最大幅值
+    scale = scale.clamp(min_e4m3, max_e4m3)  # 无 per-tensor scale
+    q = (x / scale.unsqueeze(-1)).round()    # 4 bit 量化
+    return q, scale                           # 256 B + 32 B = 288 B
+</pre>
+
+<h2 id="s2">2. KV Cache 演进：MLA → V4.0 三段分段 → V4.1 换路径</h2>
+<p><b>台阶总览</b>：MLA 基准 70,272 B/token → V4.0 约 3,514 B/token → V4.1 约 890 B/token。三个阶段压的是不同的东西：<b>MLA 压每层存什么；V4.0 压序列维度（按时长分段）；V4.1 压份数（换生成路径 + 层间复用）</b>。</p>
+<p><b>基准 MLA</b>：特征维低秩——不为每个 head 存完整 K/V，存 512 维 latent 加 64 维 RoPE key，每 token 每层 576 标量；61 层线性累加到 70,272 B/token。层与层之间没有连线：各自生成、各自持有，<b>「每层各存一份」这个乘数没动</b>。</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph L1["层号（竖排）"]
+        direction TB
+        A1["Layer 1<br/>h_t → Q/K/V<br/>→ W_DKV 下投影"]
+        A2["Layer 2<br/>h_t → Q/K/V<br/>→ W_DKV 下投影"]
+        A3["Layer 3<br/>h_t → Q/K/V<br/>→ W_DKV 下投影"]
+        AD["..."]
+        A61["Layer 61<br/>h_t → Q/K/V<br/>→ W_DKV 下投影"]
+    end
+    A1 --> P1["latent 512 + RoPE 64<br/>= 576 标量 × 2 B<br/>= 1,152 B/token"]
+    A2 --> P2["1,152 B/token"]
+    A3 --> P3["1,152 B/token"]
+    AD --> PD["..."]
+    A61 --> P61["1,152 B/token"]
+    P1 --> SUM["全局 KV = 61 × 1,152 B<br/>= 70,272 B/token"]
+    P61 --> SUM
+</div>
+<div class="figcap">图 4 · MLA 基准：每层独立低秩，61 × 1,152 B = 70,272 B/token——压的是每层存什么，份数乘数未动</div>
+</div>
+<p><b>V4.0 的三段分段</b>：在特征维度之外沿序列维度加压，且按上下文长度分段：</p>
+<table>
+<tr><th>上下文区间</th><th>注意力类型</th><th>压缩比</th><th>重叠</th><th>角色</th></tr>
+<tr><td>0–4K</td><td>Full-Attn</td><td>不压缩</td><td>—</td><td>近处保留原始 KV，保证短距精度</td></tr>
+<tr><td>4K–100K</td><td>CSA</td><td>4:1</td><td>有，4 token</td><td>近中程稀疏检索，带 Indexer</td></tr>
+<tr><td>超过 100K</td><td>HCA</td><td>128:1</td><td>无</td><td>远程极粗压缩，省容量，无 Indexer</td></tr>
+</table>
+<p><b>CSA 段</b>：步长 4、窗口 8、重叠 4，块间保留一半重叠——这个重叠是它在边界处不崩的原因。21 层 CSA 主 KV 合计约 3,066 B/token，是 V4.0 全局 KV 的大头。</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph L2["CSA 层号（竖排）"]
+        direction TB
+        B2["Layer 2<br/>h_t → Q/K/V<br/>→ 4:1 压缩 + Indexer"]
+        B3["Layer 3<br/>h_t → Q/K/V<br/>→ 4:1 压缩 + Indexer"]
+        B4["Layer 4<br/>h_t → Q/K/V<br/>→ 4:1 压缩 + Indexer"]
+        BD1["..."]
+        B22["Layer 22<br/>h_t → Q/K/V<br/>→ 4:1 压缩 + Indexer"]
+    end
+    B2 --> C2["Q 查 Top-K 压缩块<br/>K/V 压成 4:1 entry<br/>步长 4，窗口 8，重叠 4<br/>146 B/token"]
+    B3 --> C3["146 B/token"]
+    B4 --> C4["146 B/token"]
+    BD1 --> CD1["..."]
+    B22 --> C22["146 B/token"]
+    C2 --> CHUNK["切块：token 0-7 窗口 8<br/>token 4-11 窗口 8，重叠 4<br/>token 8-15 窗口 8，重叠 4"]
+    C3 --> CHUNK
+    C4 --> CHUNK
+    CD1 --> CHUNK
+    C22 --> CHUNK
+    CHUNK --> SUM2["21 层 CSA<br/>21 × 146 ≈ 3,066 B/token"]
+</div>
+<div class="figcap">图 5 · V4.0 CSA：21 层 × 146 B ≈ 3,066 B/token，4:1 带重叠 + Indexer Top-K</div>
+</div>
+<p><b>HCA 段</b>：每 128 个 token 压成一条 entry，块间首尾相接、没有重叠；每层 query 直接看全部压缩块（无 Indexer）。20 层 HCA 合计仅约 91 B/token——省，但把风险集中在边界上（第 3 章展开）。</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph RAW["原始 token（最左列）"]
+        direction TB
+        R1["token 0–127"]
+        R2["token 128–255"]
+        R3["..."]
+        R4["token 3968–4095"]
+    end
+    R1 -->|"128:1"| K1["压缩块 A<br/>1 条 entry"]
+    R2 -->|"128:1"| K2["压缩块 B<br/>1 条 entry"]
+    R3 -->|"128:1"| KD["..."]
+    R4 -->|"128:1"| K4["压缩块 32<br/>1 条 entry"]
+
+    subgraph L3["HCA 层号（竖排）"]
+        direction TB
+        D23["Layer 23<br/>h_t → Q/K/V<br/>Q 看全部压缩块"]
+        D24["Layer 24<br/>h_t → Q/K/V<br/>Q 看全部压缩块"]
+        D25["Layer 25<br/>h_t → Q/K/V<br/>Q 看全部压缩块"]
+        DD2["..."]
+        D42["Layer 42<br/>h_t → Q/K/V<br/>Q 看全部压缩块"]
+    end
+    K1 --> D23
+    K2 --> D23
+    KD --> D23
+    K4 --> D23
+
+    D23 --> H23["无重叠，无 Indexer<br/>4.56 B/token/层"]
+    D24 --> H24["4.56 B/token/层"]
+    D25 --> H25["4.56 B/token/层"]
+    DD2 --> HD2["..."]
+    D42 --> H42["4.56 B/token/层"]
+
+    H23 --> BOUNDARY["边界问题<br/>query 在 127/128 边界<br/>证据被切到相邻块<br/>最坏检索 -40%"]
+    H24 --> BOUNDARY
+    H25 --> BOUNDARY
+    HD2 --> BOUNDARY
+    H42 --> BOUNDARY
+    BOUNDARY --> SUM3["20 层 HCA<br/>20 × 4.56 ≈ 91 B/token<br/>V4.0 总全局 ≈ 3,514 B/token"]
+</div>
+<div class="figcap">图 6 · V4.0 HCA：128:1 无重叠，20 × 4.56 ≈ 91 B/token；V4.0 全局合计约 3,514 B/token</div>
+</div>
+<p><b>V4.1 的两件事</b>：一是 <b>CED 拆分</b>——后 20 层的全局 KV 从 H_20 投影分发，不再逐层自产，全局 KV 生成维度上 40 层工作量接近减半；二是 <b>CSA2 层间复用</b>——Full 层完整生成主 KV 和 indexer K，Reindex 层共享主 KV 只重算 Top-K，Reuse 层连索引也复用，真正独立持有全局 KV 的只剩少数源层。压缩比从 4 降到 2（步长 2、窗口 4、重叠 2）。</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph LAYERS["层号（竖排）"]
+        direction TB
+        E1["Layer 1<br/>h_t → Q/K/V<br/>→ CSA2 2:1 编码"]
+        E2["Layer 2<br/>h_t → Q/K/V<br/>→ CSA2 2:1 编码"]
+        E3["Layer 3<br/>h_t → Q/K/V<br/>→ CSA2 2:1 编码"]
+        ED["..."]
+        E20["Layer 20<br/>h_t → Q/K/V<br/>→ CSA2 2:1 编码"]
+        D21["Layer 21<br/>从 H_20 投影得 KV<br/>→ CSA2 Full"]
+        D22["Layer 22<br/>从 H_20 投影得 KV<br/>→ CSA2 Reindex"]
+        D23["Layer 23<br/>从 H_20 投影得 KV<br/>→ CSA2 Reuse"]
+        DD["..."]
+        D40["Layer 40<br/>从 H_20 投影得 KV<br/>→ CSA2 Reuse"]
+    end
+
+    subgraph ENC["前 20 层：Causal Encoder"]
+        direction TB
+        EN1["逐层编码"] --> EN2["汇总全部上下文"]
+        EN2 --> H20["H_20<br/>Encoder 最终隐藏状态<br/>一份浓缩摘要"]
+    end
+    E1 --> EN1
+    E2 --> EN1
+    E3 --> EN1
+    ED --> EN1
+    E20 --> EN1
+
+    subgraph PROJ["投影分发（一次 matmul，无 attention）"]
+        direction TB
+        P["每层独立投影权重 W<br/>从 H_20 取出该层全局 KV"]
+    end
+    H20 --> P
+
+    subgraph DEC["后 20 层：Decoder（CSA2）"]
+        direction TB
+        DF["Full 层<br/>持有主 KV + indexer K"]
+        DR["Reindex 层<br/>共享主 KV，重算 Top-K"]
+        DU["Reuse 层<br/>直接复用，不新增"]
+    end
+    P --> DF
+    P --> DR
+    P --> DU
+    D21 -.-> DF
+    D22 -.-> DR
+    D23 -.-> DU
+    DD -.-> DU
+    D40 -.-> DU
+
+    DF --> SUM4["全局 KV = 890 B/token<br/>2.5 条/token × (288 + 68) B"]
+    DR --> SUM4
+    DU --> SUM4
+</div>
+<div class="figcap">图 7 · V4.1 CED + CSA2：H_20 投影分发（一次 matmul）+ Full/Reindex/Reuse 复用 → 全局 890 B/token</div>
+</div>
+
+<h2 id="s3">3. HCA 为什么退场：无重叠的相位代价</h2>
+<p><b>根因一条</b>：128:1 压缩且<b>块间无重叠</b>——query 落在 127/128 这类边界时，需要的证据被切到相邻块。字节 Seed 实测里，V4-Flash 在 128K 检索任务中最好与最差位置组的准确率差约 <b>40 个百分点</b>，波动周期与分块步长一致。站内《固定窗口压缩的相位敏感性》一篇专门展开了这个现象。</p>
+<div class="card">
+<div class="mermaid">
+flowchart LR
+    subgraph L5["Decoder 层号（竖排，原 HCA 位置）"]
+        direction TB
+        G23["Layer 23<br/>从 H_20 投影得 KV<br/>h_t → Q/K/V"]
+        G24["Layer 24<br/>从 H_20 投影得 KV<br/>h_t → Q/K/V"]
+        G25["Layer 25<br/>从 H_20 投影得 KV<br/>h_t → Q/K/V"]
+        GD2["..."]
+        G40["Layer 40<br/>从 H_20 投影得 KV<br/>h_t → Q/K/V"]
+    end
+    G23 --> COMPARE["同一段层，两代处理方式"]
+    G24 --> COMPARE
+    G25 --> COMPARE
+    GD2 --> COMPARE
+    G40 --> COMPARE
+    COMPARE --> OLD["V4.0 这段：HCA 128:1<br/>每层自己从 h_t 生成 KV<br/>无重叠，无 Indexer<br/>4.56 B/token/层<br/>边界最坏 -40%"]
+    COMPARE --> NEW["V4.1 这段：从 H_20 投影得 KV<br/>K/V → CSA2 2:1 带重叠<br/>带 Indexer，Q 查 Top-K<br/>100K 门限作废<br/>4K–1M 全 CSA2"]
+    OLD --> RESULT["最坏相位劣化<br/>40% → 约 6%<br/>没有清零"]
+    NEW --> RESULT
+</div>
+<div class="figcap">图 8 · 同一段层的两代处理：HCA 128:1 无重叠 → CSA2 2:1 带重叠带 Indexer，最坏相位劣化约 40% → 约 6%</div>
+</div>
+<p><b>三条边界要交代</b>：</p>
+<div class="kp">
+<ul>
+<li><b>相位问题没有消除</b>：CSA2 步长从 4 降到 2，最坏劣化从约 40 个百分点压到约 6%，周期性波动仍在，只是幅度可控；</li>
+<li><b>删 HCA ≠ 更省显存</b>：HCA 是无重叠极端压缩，取消后同等 1M 上下文的 KV 条目数比开 HCA 的 V4-Flash 更多，V4.1 靠 FP4 把整体显存压回来；</li>
+<li><b>V4-Pro 不受影响</b>：它仍是 CSA + HCA 混合架构，4K/100K 阈值继续生效——讲「V4.1 删了 HCA」要限定到 Flash 支线。</li>
+</ul>
+</div>
+
+<h2 id="s4">4. 训练说明：老师-学生结构与三段关键代码</h2>
+<p><b>训练结构（参考图）</b>：老师是 SWA（滑动窗口 128，冻结 ❄），学生在 SWA 之外多出一条<b>可学习的 KV 分支</b>（θ 标记为可训练参数）——HCA 版把历史压成 128:1 无重叠的压缩条目 + 滑窗原始 KV 做 Shared-KV MQA；CSA 版用 4:1 重叠压缩 + Lightning Indexer 打分选 Top-K，Indexer 因 Top-K 掩码不可导而加辅助损失 L_idx。</p>
+<div class="card">
+<svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
+<rect width="1300" height="1060" fill="#ffffff"></rect>
+<defs>
+      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path></marker>
+      <marker id="r2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path></marker>
+    </defs>
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path>
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path>
+<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 242 L 1000 257" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 647 349 L 647 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 762 349 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 647 358 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 680 358 L 680 371" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 800 349 L 800 481 L 780 481 L 780 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 795 413 L 896 413" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 795 530 L 910 530 L 910 448" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 329 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
+<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
+<path d="M 1040 380 L 1040 333" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
+<path d="M 900 432 L 800 432" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
+<path d="M 760 375 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
+<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
+<rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
+<rect x="27" y="107" width="520" height="680" rx="7" fill="rgb(250, 251, 252)"></rect>
+<rect data-tabr="0" x="31.0" y="77.0" width="245.2" height="21.0" rx="6" fill="rgb(154, 167, 180)"></rect>
+<text data-tabt="0" x="153.6" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">👨‍🏫 老师 · SWA（滑动窗口 · 冻结 ❄）</text>
+<rect x="201.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输入 H</text>
+<rect x="201.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">LayerNorm</text>
+<rect x="141.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="181.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">Q 投影</text>
+<rect x="241.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">K 投影</text>
+<rect x="341.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="381.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">V 投影</text>
+<rect x="191.0" y="351.0" width="180.0" height="54.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="374.6" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">滑窗 MQA</text>
+<text x="281.0" y="388.9" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">仅最近 128 token</text>
+<text x="281.0" y="388.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(74, 90, 104)">仅最近 128 token</text>
+<rect x="201.0" y="441.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="465.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">O 投影 ⊕ 残差</text>
+<rect x="201.0" y="516.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="540.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">FFN (SwiGLU)</text>
+<rect x="201.0" y="591.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="609.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">⊕ 残差</text>
+<rect x="201.0" y="651.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="671.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输出 H′</text>
+<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
+<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
+<rect data-tabr="1" x="571.0" y="77.0" width="318.3" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
+<text data-tabt="1" x="730.1" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ HCA（KV 学习分支为重点）</text>
+<rect x="921.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
+<rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
+<rect x="591.0" y="241.0" width="264.0" height="344.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="714.9" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（HCA · 可学习）</text>
+<rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
+<text x="648.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">Z = H·W^Z</text>
+<text x="648.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^Z·B</text>
+<rect x="711.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="763.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">KV 投影</text>
+<text x="763.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">C = H·W^KV</text>
+<text x="763.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^KV</text>
+<rect x="606.0" y="376.0" width="190.0" height="76.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="701.0" y="402.1" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">S = Softmax(Z_block + B)</text>
+<text x="701.0" y="417.6" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">C^Comp = Σ S_j ⊙ C_j</text>
+<text x="701.0" y="433.2" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">128:1 无重叠 · 仅本块</text>
+<rect x="606.0" y="496.0" width="190.0" height="54.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="701.0" y="518.9" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">最近滑窗原始 KV</text>
+<text x="701.0" y="534.4" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">（取最近窗口 · 经 W^KV）</text>
+<rect x="921.0" y="262.0" width="160.0" height="68.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="285.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">低秩 Q 投影 θ: W^DQ·W^UQ</text>
+<text x="1001.0" y="299.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">c^Q = h·W^DQ → q =</text>
+<text x="1001.0" y="314.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)"> c^Q·W^UQ</text>
+<rect x="901.0" y="381.0" width="200.0" height="64.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">Shared-KV MQA</text>
+<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">K = V = 压缩条目 ＋ 滑窗原始 KV</text>
+<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(11, 61, 26)">K = V = 压缩条目 ＋ 滑窗原始 KV</text>
+<rect x="921.0" y="496.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="512.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">O 投影 ⊕ 残差</text>
+<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_O</text>
+<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_O</text>
+<rect x="921.0" y="571.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="595.0" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">FFN (SwiGLU)</text>
+<rect x="921.0" y="646.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="664.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">⊕ 残差</text>
+<rect x="921.0" y="706.0" width="160.0" height="32.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="726.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">输出 H′</text>
+<rect x="501.0" y="821.0" width="300.0" height="52.0" rx="4" fill="rgb(253, 236, 237)" stroke="rgb(200, 36, 35)" stroke-width="3"></rect>
+<text x="651.0" y="841.9" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">Loss 计算</text>
+<text x="651.0" y="862.1" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">（LM 损失 ＋ 蒸馏对齐）</text>
+<rect x="803.0" y="397.0" width="92.3" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="849.1" y="409.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">压缩 KV（K=V）</text>
+<rect x="807.0" y="546.0" width="113.7" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="863.8" y="558.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">原始 KV（局部兜底）</text>
+<rect x="321.0" y="831.0" width="94.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="368.1" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">教师输出 · 软标签</text>
+<rect x="843.0" y="831.0" width="83.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="884.6" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">学生输出 · 预测</text>
+<rect x="801.0" y="767.0" width="117.5" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="859.8" y="779.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">梯度回传（仅学生 θ）</text>
+<rect x="1047.0" y="347.0" width="120.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="1107.0" y="359.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^DQ、W^UQ</text>
+<rect x="817.0" y="441.0" width="79.2" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="856.6" y="453.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^Z、B</text>
+<rect x="769.0" y="359.0" width="69.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="803.5" y="371.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^KV</text>
+<rect x="61.0" y="906.0" width="1182.0" height="104.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
+<line x1="79.0" y1="928.5" x2="127" y2="928.5" stroke="rgb(200, 36, 35)" stroke-width="3" stroke-dasharray="7 5"></line>
+<text x="288.5" y="934.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 17, 17)">红色虚线 ＝ 梯度回传（仅学生侧参数 θ 被更新）</text>
+<rect x="79.0" y="953.0" width="52.0" height="24.0" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="277.2" y="967.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(74, 90, 104)">灰色节点 ＝ 老师（SWA，❄ 冻结，无梯度）</text>
+<rect x="79.0" y="985.0" width="52.0" height="24.0" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="408.4" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（本图重点：公式与参数齐全；图 2 无 Indexer，全程可导）</text>
+</svg>
+<div class="figcap">图 9 · 训练结构·学生 SWA + HCA 分支：压缩权重 Z=H·W^Z 经 Softmax 聚合，128:1 无重叠 + 滑窗原始 KV，低秩 Q 投影</div>
+</div>
+<div class="card">
+<svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
+<rect width="1300" height="1060" fill="#ffffff"></rect>
+<defs>
+      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path></marker>
+      <marker id="r1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path></marker>
+    </defs>
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path>
+<path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path>
+<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 242 L 1000 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 647 349 L 647 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 762 349 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 647 368 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 680 368 L 680 391" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 700 475 L 700 516" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 690 578 L 690 606" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 795 430 L 896 430" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 795 549 L 860 549 L 860 398 L 896 398" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 305 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
+<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
+<path d="M 1040 380 L 1040 309" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
+<path d="M 940 444 L 940 460 L 800 460" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
+<path d="M 760 395 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
+<path d="M 712 610 L 712 582" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
+<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
+<rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
+<rect x="27" y="107" width="520" height="680" rx="7" fill="rgb(250, 251, 252)"></rect>
+<rect data-tabr="0" x="31.0" y="77.0" width="245.2" height="21.0" rx="6" fill="rgb(154, 167, 180)"></rect>
+<text data-tabt="0" x="153.6" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">👨‍🏫 老师 · SWA（滑动窗口 · 冻结 ❄）</text>
+<rect x="201.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输入 H</text>
+<rect x="201.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">LayerNorm</text>
+<rect x="141.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="181.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">Q 投影</text>
+<rect x="241.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">K 投影</text>
+<rect x="341.0" y="266.0" width="80.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="381.0" y="290.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">V 投影</text>
+<rect x="191.0" y="351.0" width="180.0" height="54.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="374.6" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">滑窗 MQA</text>
+<text x="281.0" y="388.9" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">仅最近 128 token</text>
+<text x="281.0" y="388.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(74, 90, 104)">仅最近 128 token</text>
+<rect x="201.0" y="441.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="465.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">O 投影 ⊕ 残差</text>
+<rect x="201.0" y="516.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="540.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">FFN (SwiGLU)</text>
+<rect x="201.0" y="591.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="609.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">⊕ 残差</text>
+<rect x="201.0" y="651.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="281.0" y="671.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输出 H′</text>
+<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
+<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
+<rect data-tabr="1" x="571.0" y="77.0" width="315.4" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
+<text data-tabt="1" x="728.7" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ CSA（KV 学习分支为重点）</text>
+<rect x="921.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
+<rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
+<rect x="591.0" y="241.0" width="264.0" height="444.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="713.6" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（CSA · 可学习）</text>
+<rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
+<text x="648.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">Z = H·W^Z</text>
+<text x="648.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^Z·B</text>
+<rect x="711.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="763.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">KV 投影</text>
+<text x="763.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">C = H·W^KV</text>
+<text x="763.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^KV</text>
+<rect x="606.0" y="396.0" width="190.0" height="80.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="701.0" y="424.1" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">S = Softmax(Z_block + B)</text>
+<text x="701.0" y="439.6" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">C^Comp = Σ S_j ⊙ C_j</text>
+<text x="701.0" y="455.2" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">4:1 重叠 · 当前块＋前一块</text>
+<rect x="606.0" y="521.0" width="190.0" height="58.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="701.0" y="546.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Lightning Indexer</text>
+<text x="701.0" y="560.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">打分选 Top-K · θ: W_idx</text>
+<text x="701.0" y="560.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">打分选 Top-K · θ: W_idx</text>
+<rect x="606.0" y="611.0" width="190.0" height="52.0" rx="4" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
+<text x="701.0" y="632.9" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">Indexer 辅助损失 L_idx</text>
+<text x="701.0" y="648.4" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">（Top-K 掩码不可导）</text>
+<rect x="921.0" y="266.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="282.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Q 投影</text>
+<text x="1001.0" y="296.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_Q</text>
+<text x="1001.0" y="296.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_Q</text>
+<rect x="901.0" y="381.0" width="200.0" height="64.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">稀疏 MQA</text>
+<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">仅 Top-K 块 · K = V = 压缩条目</text>
+<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(11, 61, 26)">仅 Top-K 块 · K = V = 压缩条目</text>
+<rect x="921.0" y="496.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="512.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">O 投影 ⊕ 残差</text>
+<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_O</text>
+<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_O</text>
+<rect x="921.0" y="571.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="595.0" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">FFN (SwiGLU)</text>
+<rect x="921.0" y="646.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="664.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">⊕ 残差</text>
+<rect x="921.0" y="706.0" width="160.0" height="32.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
+<text x="1001.0" y="726.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">输出 H′</text>
+<rect x="501.0" y="821.0" width="300.0" height="52.0" rx="4" fill="rgb(253, 236, 237)" stroke="rgb(200, 36, 35)" stroke-width="3"></rect>
+<text x="651.0" y="841.9" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">Loss 计算</text>
+<text x="651.0" y="862.1" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">（LM 损失 ＋ 蒸馏对齐）</text>
+<rect x="713.0" y="491.0" width="52.0" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="739.0" y="503.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">压缩条目</text>
+<rect x="621.0" y="587.0" width="52.0" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="647.0" y="599.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">索引分数</text>
+<rect x="801.0" y="414.0" width="92.3" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="847.1" y="426.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">压缩 KV（K=V）</text>
+<rect x="803.0" y="555.0" width="64.1" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="835.1" y="567.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">Top-K 掩码</text>
+<rect x="321.0" y="831.0" width="94.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="368.1" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">教师输出 · 软标签</text>
+<rect x="843.0" y="831.0" width="83.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="884.6" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">学生输出 · 预测</text>
+<rect x="801.0" y="767.0" width="117.5" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="859.8" y="779.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">梯度回传（仅学生 θ）</text>
+<rect x="1047.0" y="337.0" width="59.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="1076.5" y="349.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_Q</text>
+<rect x="817.0" y="469.0" width="79.2" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="856.6" y="481.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^Z、B</text>
+<rect x="771.0" y="379.0" width="69.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="805.5" y="391.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^KV</text>
+<rect x="719.0" y="589.0" width="67.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="752.5" y="601.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_idx</text>
+<rect x="61.0" y="906.0" width="1182.0" height="132.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
+<line x1="79.0" y1="928.5" x2="127" y2="928.5" stroke="rgb(200, 36, 35)" stroke-width="3" stroke-dasharray="7 5"></line>
+<rect x="141.0" y="915.0" width="2.0" height="2.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
+<text x="288.5" y="934.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 17, 17)">红色虚线 ＝ 梯度回传（仅学生侧参数 θ 被更新）</text>
+<rect x="79.0" y="953.0" width="52.0" height="24.0" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="277.2" y="967.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(74, 90, 104)">灰色节点 ＝ 老师（SWA，❄ 冻结，无梯度）</text>
+<rect x="79.0" y="985.0" width="52.0" height="24.0" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="318.5" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（本图重点：公式与参数齐全）</text>
+<rect x="79.0" y="1017.0" width="52.0" height="24.0" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
+<text x="338.0" y="1030.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 58, 0)">橙色节点 ＝ Indexer 辅助损失（Top-K 掩码不可导，仅图 1 有）</text>
+</svg>
+<div class="figcap">图 10 · 训练结构·学生 SWA + CSA 分支：4:1 重叠（当前块＋前一块）+ Lightning Indexer 选 Top-K + 辅助损失 L_idx</div>
+</div>
+<p><b>复现侧的三段核心代码</b>（完整版见复现实测.md）：CED 主投影器 Linear(2560, 2048) 约 5.24M 参数，输出前 1024 维作 K、后 1024 维作 V：</p>
+<pre>
+class CEDProjector(nn.Module):
+    """Linear(hidden -&gt; 2*KV_DIM)，输出前 1024 为 K、后 1024 为 V"""
+
+    def __init__(self, input_dim=config.PROJ_INPUT_DIM, output_dim=config.PROJ_OUTPUT_DIM):
+        super().__init__()
+        self.proj = nn.Linear(input_dim, output_dim, bias=True)
+
+    def forward(self, h16: torch.Tensor):
+        out = self.proj(h16)
+        return out[..., : out.shape[-1] // 2], out[..., out.shape[-1] // 2 :]
+</pre>
+<p><b>CSA2 适配器</b>：闭式解线性基座 + 残差修正。这里踩过一个坑——<b>ResidualMLP 若前后两层都零初始化，梯度恒为零，残差分支成死区</b>；改成只零初始化最后一层、前层随机初始化后，V 的 R² 从 0.57~0.69 提升到 0.67~0.83：</p>
+<pre>
+class ResidualMLPAdapter(nn.Module):
+    """闭式解线性基座 + 残差修正：y = base(x) + refine(x)。
+    refine 末层零初始化（起点等价闭式解）；前层保持默认随机初始化——
+    若两层全零，W1/W2 梯度恒为零，残差分支成死区（已踩坑，勿改回）。"""
+
+    def __init__(self, dim, hidden=None):
+        super().__init__()
+        hidden = hidden or dim * 2
+        self.base = nn.Linear(dim, dim)
+        self.refine = nn.Sequential(
+            nn.Linear(dim, hidden), nn.GELU(), nn.Linear(hidden, dim)
+        )
+        nn.init.zeros_(self.refine[2].weight)
+        nn.init.zeros_(self.refine[2].bias)
+
+    def forward(self, x):
+        return self.base(x) + self.refine(x)
+</pre>
+<p><b>岭回归闭式解初始化</b>：让适配器起点等价于「最优线性映射」，SGD 只补非线性残差：</p>
+<pre>
+@torch.no_grad()
+def init_from_closed_form(self, x_k, y_k, x_v, y_v, lam=1.0):
+    """闭式解（岭回归）初始化：x (N,dim) -&gt; y (N,dim)。
+    Linear：直接求解；ResidualMLP：初始化 base 分支（refine 保持零）。"""
+    for map_module, x, y in ((self.k_map, x_k, y_k), (self.v_map, x_v, y_v)):
+        target = map_module if isinstance(map_module, nn.Linear) else map_module.base
+        xa = torch.cat([x, torch.ones(x.shape[0], 1, device=x.device)], dim=1)
+        w = torch.linalg.solve(xa.T @ xa + lam * torch.eye(xa.shape[1], device=x.device), xa.T @ y)
+        target.weight.copy_(w[:-1].T)
+        target.bias.copy_(w[-1])
+</pre>
+
+<h2 id="s5">5. 复现实测：设定、结果与边界</h2>
+<p><b>设定</b>：Qwen3.5-4B 冻结主干，hook 一次 forward 捕获第 16 层隐藏态 H_16 与第 20/24/28/32 层的 k_proj/v_proj 输出（pre-norm、pre-RoPE 空间），1200 条样本落盘 12.2GB；CED 投影器 MSE 收敛 0.0658。与官方的关键差异：官方是<b>从头预训练时协同学习</b>投影器与适配器，复现是<b>在已收敛表示空间里做映射拟合</b>——验证的是机制可行性，不是原始训练配方。</p>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    A[输入 tokens] --> B["layers 0..15<br/>编码段"]
+    B --> C["H_16<br/>第16层隐藏态 (L, 2560)"]
+    C --> D["P(H_16)<br/>Linear 2560→2048"]
+    D --> E["K_20, V_20<br/>(L, 1024) × 2"]
+    C --> F["layers 16..31<br/>解码段"]
+    E --> F
+    F --> G[输出 logits]
+</div>
+<div class="figcap">图 11 · CED 在 32 层里的位置：第 16 层切分，H_16 经 Linear 2560→2048 投影出解码段全注意力层的 KV</div>
+</div>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    A["第20层<br/>Full 模式<br/>K_20, V_20"] --> B["K_20, V_20<br/>1 份存储"]
+    B --> C["第24层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> D["第28层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    B --> E["第32层适配器<br/>K: Linear<br/>V: ResidualMLP"]
+    C --> F["K_24, V_24"]
+    D --> G["K_28, V_28"]
+    E --> H["K_32, V_32"]
+</div>
+<div class="figcap">图 12 · CSA2 共享机制：只保留第 20 层 1 份 KV，第 24/28/32 层各挂小适配器做跨层映射（每层约 1M 参数）</div>
+</div>
+<div class="card">
+<div class="mermaid">
+flowchart TD
+    A["输入 tokens"] --> B["编码段 layers 0..15"]
+    B --> C["H_16"]
+    C --> D["CED 投影器 P<br/>Linear 2560→2048"]
+    D --> E["K_20, V_20<br/>全量 KV"]
+    E --> F["CSA2 适配器 × 3<br/>→ K_24/V_24, K_28/V_28, K_32/V_32"]
+    F --> G["TurboQuant k8v4<br/>K 8bit / V 4bit"]
+    G --> H["解码段 attention<br/>layers 16..31"]
+    H --> I["输出 logits"]
+</div>
+<div class="figcap">图 13 · 三者叠加的数据流：CED 投影 → CSA2 共享 → TurboQuant k8v4 量化 → 解码段 attention</div>
+</div>
+<p><b>四项主要结果</b>：</p>
+<table>
+<tr><th>指标</th><th>baseline</th><th>CED + CSA2 / 量化</th><th>判定</th></tr>
+<tr><td>GSM8K（100 题）</td><td>0.760</td><td><b>0.750（-1pp）</b></td><td>基本无损</td></tr>
+<tr><td>NIAH（50 条，8K 上下文）</td><td>0.940</td><td><b>0.920（-2pp）</b></td><td>基本无损</td></tr>
+<tr><td>Prefill 延迟 @2048 / 1024 / 512</td><td>589.9 ms</td><td><b>387.9 ms；1.56x / 1.27x / 1.18x</b></td><td>加速成立，随长度增长</td></tr>
+<tr><td>KV 解码段压缩（持久口径）</td><td>1x</td><td><b>3.44x（L 大时趋近 4x）</b></td><td>达标</td></tr>
+<tr><td>KV 全模型压缩（持久口径）</td><td>1x</td><td><b>1.60x（=理论 8/5）</b></td><td>达标</td></tr>
+<tr><td>k8v4 量化压缩比</td><td>1x</td><td><b>2.46x（理论 2.53x）</b></td><td>达标</td></tr>
+<tr><td>k8v4 top-5 重合 / top-1 一致</td><td>—</td><td><b>100% / 88.9%</b></td><td>轻微扰动</td></tr>
+</table>
+<div class="kp w">
+<span class="kp-t">两个必须说清的口径（易误读）</span>
+<b>持久 ≠ 驻留</b>：3.44x 是落盘/最小集合口径；运行时 reuse 层的物化视图仍占 HBM，驻留口径约 1.00x——当前实现是「落盘压缩 + 计算复用」，不是显存压缩，显存 4x 需要 attention 内惰性物化（后续工作）。<br/><b>mode_b 有适用边界</b>：解码段含 24 层 GatedDeltaNet（递归结构），从零状态起步无法携带历史——mode_b 适合 prefill 延迟优化与 next-token 评测，连续生成要走 mode_csa2_adapter；只旁路 4 个全注意力层时加速从 1.52x 回落 1.10x，这是架构约束不是实现 bug。
+</div>
+<p><b>可信度交叉验证</b>：手动逐层 decode 与官方 forward 的 max|Δlogit| = 0.0000、top-1 完全一致；固定位置 H_16 在总长 32~256 下 fp32 零差异（因果性严格）；分块 kernel 对末尾不完整 chunk 的 ~2^-5 量级差异与后缀内容无关，确认为非因果泄漏。<b>关键前提一条</b>：跨层 KV 不能直接复用——第 20 层与第 24/28/32 层 KV 余弦相似度约 0，必须经可训练适配器映射，映射后 R² 到 0.67~0.85。</p>
+
+<h2 id="s6">6. 结论与来源</h2>
+<p><b>结论三句</b>：演进主线索是「压每份 → 压序列 → 压份数」，V4.1 用 CED+CSA2 换掉逐层自产，用带重叠的 CSA2 接住 HCA 退场后的远程段，FP4 收位宽，全局 890 B/token、持久化 1/8；相位问题从 40pp 压到约 6pp 但未消除；复现侧在 4B 混合架构上验证机制成立——生成质量基本无损、prefill 加速与持久压缩达标、量化扰动轻微，规模与架构差异是结论的边界。</p>
+<p><b>来源与互链</b>：第 1 章与图 1–3 取自站内<b>《<a href="DeepSeek-V4.1-Flash推理加速解读.html">DeepSeek-V4.1-Flash 推理加速解读</a>》</b>（四步递进的推理配置与量化效果）；HCA 相位现象的专门展开见<b>《<a href="DeepSeek-V4.1固定窗口压缩的相位敏感性.html">DeepSeek-V4.1 固定窗口压缩的相位敏感性</a>》</b>；第 2、3 章基于 KV 演进底稿（图 4–8），第 4、5 章基于 CED+CSA2 复现实测记录（图 9–13 与四段代码）；训练结构参考图为老师-学生 SWA 结构两式（HCA / CSA）。</p>
+<p class="dim" style="margin-top:36px">汇总篇 · 2026-10-19 发布 · 第 1 章图 1–3 取自《Flash 推理加速解读》，相位现象详见《固定窗口压缩的相位敏感性》；数字与结论均取自所引素材</p>
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
