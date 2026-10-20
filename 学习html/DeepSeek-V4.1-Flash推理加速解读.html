@@ -629,28 +629,37 @@ flowchart TD
       <span class="mech-title">CSA2 做了什么？—— 让 KV 缓存不再每层都存一份</span>
     </div>
     <p class="mech-desc">
-      CSA2 把 40 层分成若干共享组，每组只有部分层存储完整的「主 KV + 索引器 K + Top-K 索引」，
-      其余层通过 Reindex（复用 KV、重选 Top-K）或 Reuse（KV 与 Top-K 全复用）来工作。
-      存储量因此大幅下降。
+      把 CED 和 CSA2 按<b>两个阶段</b>切开看：阶段一（CED）层 21–40 每层各有投影权重 W<sub>l</sub>，
+      都能从 H_20 生成自己的 K/V——这一步与 Q 无关；阶段二（CSA2）每层被静态指定
+      Full / Reindex / Reuse 之一，判定 KV 用谁的、Top-K 怎么挑，Q×V 注意力每层都照算。
+      省的是 KV 的生成与存储份数，不是注意力本身。
     </p>
 
     <div class="fig-label blue">图 6 · CSA2 机制</div>
     <div class="mermaid">
 flowchart LR
-    H20["H_20 · 编码器末层隐藏态<br/>（每层各有投影 W_l · 见图 5）"]
-    H20 -->|"层 21 用自己这份投影"| GA
-    H20 -.->|"其余层的投影不用<br/>（CSA2 静态指定，省生成与存储）"| GA
-    subgraph GA["CSA2 · 每层静态指定一种模式（示意 4 层，实际层 21–40）"]
-        direction TB
-        A21["层 21 · Full<br/>用自己的 KV · Q 碰 K 挑 Top-K"]
-        A22["层 22 · Reuse<br/>借最近 Full 的 KV · Top-K 直接抄"]
-        A25["层 25 · Reindex<br/>借 KV · Top-K 自己重挑"]
-        A40["层 40 · Reuse<br/>借 KV · Top-K 抄"]
-        A21 -.->|"借主 KV"| A22
-        A21 -.->|"借主 KV"| A25
-        A25 -.->|"借最近 Full"| A40
+    ENC["编码器 · 层 1–20"] --> H20["H_20 · 第 20 层隐藏特征"]
+    subgraph S1["阶段一 · CED 生成 KV（与 Q 无关）"]
+        H20 -->|"投影 W₂₁"| C21["层 21 生成自己的 K / V"]
+        H20 -->|"投影 W₂₂"| C22["层 22 生成自己的 K / V"]
+        H20 -->|"投影 W₂₅"| C25["层 25 生成自己的 K / V"]
+        H20 -->|"投影 W₄₀"| C40["层 40 生成自己的 K / V"]
+    end
+    subgraph S2["阶段二 · CSA2 逐层判定（索引在此挑）"]
+        C21 -->|"用自己这份"| A21["层 21 · Full<br/>Q 碰 K 挑 Top-K；Q×V 加权求和"]
+        C22 -.->|"自己这份不用，借层 21 的"| A22["层 22 · Reuse<br/>Top-K 直接抄；Q×V 照算"]
+        C25 -.->|"借最近 Full 层的"| A25["层 25 · Reindex<br/>Top-K 自己重挑；Q×V 照算"]
+        C40 -.->|"借最近的 Full"| A40["层 40 · Reuse<br/>Top-K 抄；Q×V 照算"]
     end
     </div>
+    <table class="pd-table">
+      <tr><th>模式</th><th>KV 怎么来（阶段一）</th><th>索引怎么来（阶段二）</th><th>注意力计算（每层都做）</th></tr>
+      <tr><td><b>Full</b></td><td>自己投影出来</td><td>自己拿 Q 碰 K，挑出 Top-K</td><td>按挑出的重点，Q 与对应 V 加权求和</td></tr>
+      <tr><td><b>Reindex</b></td><td>借前面 Full 层的</td><td>自己拿 Q 重新挑（换一套 Top-K）</td><td>按自己挑的名单，Q 与对应 V 加权求和</td></tr>
+      <tr><td><b>Reuse</b></td><td>借前面 Full 层的</td><td>直接抄前面的 Top-K</td><td>按抄来的名单，Q 与对应 V 加权求和</td></tr>
+    </table>
+    <p class="note"><strong>三种模式的分工</strong>：KV 来源 × 索引来源 × 注意力计算——Full 层是唯一完整持有者，Reindex 借 KV 换名单，Reuse 连名单也抄。
+    图 6 示意 4 层，实际层 21–40 每层都有投影、每层都被静态指定一种模式（config 典型排布：每 4 层一个 Full 或 Reindex 带三个 Reuse）。</p>
   </div>
 
   <!-- ================= 图 5：流程 1 ================= -->
