@@ -625,6 +625,7 @@ if __name__ == "__main__":
 <tr><td>32768</td><td>128 KB</td><td>4 GB</td><td>16 GB</td></tr>
 <tr><td>100000</td><td>128 KB</td><td>12.8 GB</td><td>51.2 GB</td></tr>
 </table>
+<div class="figcap">表 1 · KV Cache 显存账（基线 32 层 · 8 个 KV 头 · 每头 128 · fp16）</div>
 <p><b>与不分组对照</b>：末列是同样长度下 32 个 KV 头（MHA）的账——本文基线的 8 头分组已经把显存压到四分之一，第 10 章把这条压缩路线补全。</p>
 <p><b>换算到生成过程</b>：decode 每生成 1 个 token，缓存就多 128KB，一千步就是 128MB——同一张卡能并发几条请求，先数缓存。</p>
 
@@ -678,6 +679,7 @@ def no_cache_peak_memory(prompt_len, gen_len, d_model, n_layers, bytes_per=2):
 <tr><td>实现</td><td>最简单，无需维护状态</td></tr>
 <tr><td>典型用途</td><td>训练、短序列、教学原型</td></tr>
 </table>
+<div class="figcap">表 2 · 无 KV Cache 的特点小结</div>
 <div class="card">
 <div class="mermaid">
 flowchart TB
@@ -745,6 +747,7 @@ if __name__ == "__main__":
 <tr><td>实现</td><td>需维护每层 cache 状态</td></tr>
 <tr><td>典型用途</td><td>推理部署、长文本生成、生产系统</td></tr>
 </table>
+<div class="figcap">表 3 · 有 KV Cache 的特点小结</div>
 <div class="kp t">
 <span class="kp-t">一个具体对照（prompt 128 + 生成 64）</span>
 无缓存：每步 forward 的 token 数为 129、130 至 192，合计 10,272 个 token-forward；有缓存：prefill 128 + decode 每步 1，合计 192 个。同样的输出，前向计算量差 53.5 倍——且生成越长差距越大（平方 vs 线性）。
@@ -789,6 +792,7 @@ mindmap
 <tr><td>MLA</td><td>latent</td><td>1 KB</td><td>不存 K/V 存 256 维压缩向量，用时解压（吸收进 Q/O）</td></tr>
 <tr><td>KV 量化</td><td>不变</td><td>再减半</td><td>fp16 降 fp8/int8，与前几条可叠加</td></tr>
 </table>
+<div class="figcap">表 4 · 缓存压缩路线对照（同一每头 128 维口径）</div>
 <p>PagedAttention（块池）是另一维度的优化——不减每 token 体积，而是把缓存切块按需分配、物理散放、块表拼回，让预留显存可共享（站内《DeepSeek V4.1 全链路主时序》步骤 17 的块表就是它的工程现场）。GroupedQueryAttention 的完整源码：</p>
 <pre>
 class GroupedQueryAttention(nn.Module):
@@ -853,6 +857,7 @@ QKV 是「怎么查」：Q 查 K，权重乘 V。KV Cache 是「别重复造」�
 <tr><td>PagedAttention</td><td>缓存切块（block）按需分配、物理散放、块表拼回，预留显存可共享</td></tr>
 <tr><td>KV 量化</td><td>缓存精度 fp16 → fp8/int8，体积减半，与结构类优化可叠加</td></tr>
 </table>
+<div class="figcap">表 5 · 术语速查</div>
 
 <p class="dim" style="margin-top:36px">来源：11 图与 10 段代码收录于 2026-10-18 底稿（QKV 与 KV Cache 图解，全部可运行）；显存账按底稿基线（32 层、8 KV 头、每头 128、fp16）推得，MHA/MLA 对照口径取自《多头注意力机制精读》</p>
 </div>
