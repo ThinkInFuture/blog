@@ -167,6 +167,7 @@ flowchart TD
 <tr><td><b>Reindex</b></td><td>借前面 Full 层的</td><td>自己拿 Q 重新挑（换一套 Top-K）</td><td>按自己挑的名单，Q 与对应 V 加权求和</td></tr>
 <tr><td><b>Reuse</b></td><td>借前面 Full 层的</td><td>直接抄前面的 Top-K</td><td>按抄来的名单，Q 与对应 V 加权求和</td></tr>
 </table>
+<div class="figcap">表 1 · CSA2 三种模式的分工：KV 来源 × 索引来源 × 注意力计算</div>
 <div class="card">
 <div class="mermaid">
 flowchart TD
@@ -219,6 +220,7 @@ flowchart LR
 <tr><td>全局 KV</td><td><b>890 B/token</b></td><td>2.5 条/token ×（288 B 主记录 + 68 B 索引）；V4.0 同口径约 3,514 B/token</td></tr>
 <tr><td>长上下文实例</td><td><b>31,000 token × 890 B = 27.6 MB，↓75%</b></td><td>该篇同源数字（持久化缓存/SSD 口径）</td></tr>
 </table>
+<div class="figcap">表 2 · V4.1-Flash 量化效果四笔账</div>
 <p><b>FP4 的位置</b>：主 KV 从 FP8 下到 FP4（E2M1，每 16 通道一个 E4M3 scale，无 per-tensor scale）——这是在 CED 和 CSA2 已减过份数之后的动作，不是全局一刀切：<b>SWA KV 仍保留 FP8</b>。主记录 512 值 × FP4 = 256 B 加 32 B scale；索引 128 值 × FP4 = 64 B 加 4 B scale。省掉二级全局 scale 的数值前提：E2M1 只有 1 位尾数，实际 KV 最大幅度约 10，scale 上界约 2048，余量近两个数量级。</p>
 <pre>
 # FP4 E2M1 主 KV 量化，per-16-channel E4M3 scale
@@ -261,6 +263,7 @@ flowchart LR
 <tr><td>4K–100K</td><td>CSA</td><td>4:1</td><td>有，4 token</td><td>近中程稀疏检索，带 Indexer</td></tr>
 <tr><td>超过 100K</td><td>HCA</td><td>128:1</td><td>无</td><td>远程极粗压缩，省容量，无 Indexer</td></tr>
 </table>
+<div class="figcap">表 3 · V4.0 按上下文长度的三段分段</div>
 <p><b>CSA 段</b>：步长 4、窗口 8、重叠 4，块间保留一半重叠——这个重叠是它在边界处不崩的原因。21 层 CSA 主 KV 合计约 3,066 B/token，是 V4.0 全局 KV 的大头。</p>
 <div class="card">
 <div class="mermaid">
@@ -427,63 +430,60 @@ flowchart LR
 <div class="card">
 <svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
 <rect width="1300" height="1060" fill="#ffffff"></rect>
-<defs>
-      <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path></marker>
-      <marker id="r2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path></marker>
-    </defs>
-<path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path>
-<path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path>
-<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 242 L 1000 257" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 647 349 L 647 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 762 349 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 647 358 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 680 358 L 680 371" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 800 349 L 800 481 L 780 481 L 780 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 795 413 L 896 413" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 795 530 L 910 530 L 910 448" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 329 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a2)"></path>
-<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
-<path d="M 1040 380 L 1040 333" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
-<path d="M 900 432 L 800 432" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
-<path d="M 760 375 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r2)"></path>
-<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
-<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
 <rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
 <rect x="27" y="107" width="520" height="680" rx="7" fill="rgb(250, 251, 252)"></rect>
 <rect data-tabr="0" x="31.0" y="77.0" width="245.2" height="21.0" rx="6" fill="rgb(154, 167, 180)"></rect>
 <text data-tabt="0" x="153.6" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">👨‍🏫 老师 · SWA（滑动窗口 · 冻结 ❄）</text>
+<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
+<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
+<rect data-tabr="1" x="571.0" y="77.0" width="318.3" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
+<text data-tabt="1" x="730.1" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ HCA（KV 学习分支为重点）</text>
+<rect x="591.0" y="241.0" width="264.0" height="344.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,146.8 276.8,139.8 283.2,139.8" fill="#4b5563"></polygon>
+<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,146.8 996.8,139.8 1003.2,139.8" fill="#4b5563"></polygon>
+<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,201.8 276.8,194.8 283.2,194.8" fill="#4b5563"></polygon>
+<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="180.0,261.8 176.8,254.8 183.2,254.8" fill="#4b5563"></polygon>
+<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,261.8 276.8,254.8 283.2,254.8" fill="#4b5563"></polygon>
+<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="380.0,261.8 376.8,254.8 383.2,254.8" fill="#4b5563"></polygon>
+<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,346.8 276.8,339.8 283.2,339.8" fill="#4b5563"></polygon>
+<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,436.8 276.8,429.8 283.2,429.8" fill="#4b5563"></polygon>
+<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,511.8 276.8,504.8 283.2,504.8" fill="#4b5563"></polygon>
+<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,586.8 276.8,579.8 283.2,579.8" fill="#4b5563"></polygon>
+<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,646.8 276.8,639.8 283.2,639.8" fill="#4b5563"></polygon>
+<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,201.8 996.8,194.8 1003.2,194.8" fill="#4b5563"></polygon>
+<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="620.0,281.8 616.8,274.8 623.2,274.8" fill="#4b5563"></polygon>
+<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="790.0,281.8 786.8,274.8 793.2,274.8" fill="#4b5563"></polygon>
+<path d="M 1000 242 L 1000 257" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,257.8 996.8,250.8 1003.2,250.8" fill="#4b5563"></polygon>
+<path d="M 647 349 L 647 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 762 349 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 647 358 L 762 358" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 680 358 L 680 371" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="680.0,371.8 676.8,364.8 683.2,364.8" fill="#4b5563"></polygon>
+<path d="M 800 349 L 800 481 L 780 481 L 780 491" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="780.0,491.8 776.8,484.8 783.2,484.8" fill="#4b5563"></polygon>
+<path d="M 795 413 L 896 413" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,413.0 889.8,416.2 889.8,409.8" fill="#4b5563"></polygon>
+<path d="M 795 530 L 910 530 L 910 448" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="910.0,447.2 913.2,454.2 906.8,454.2" fill="#4b5563"></polygon>
+<path d="M 1000 329 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,376.8 996.8,369.8 1003.2,369.8" fill="#4b5563"></polygon>
+<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,491.8 996.8,484.8 1003.2,484.8" fill="#4b5563"></polygon>
+<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,566.8 996.8,559.8 1003.2,559.8" fill="#4b5563"></polygon>
+<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,641.8 996.8,634.8 1003.2,634.8" fill="#4b5563"></polygon>
+<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,701.8 996.8,694.8 1003.2,694.8" fill="#4b5563"></polygon>
+<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="496.8,846.0 489.8,849.2 489.8,842.8" fill="#4b5563"></polygon>
+<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="803.2,846.0 810.2,842.8 810.2,849.2" fill="#4b5563"></polygon>
+<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1000.0,741.2 1003.2,748.2 996.8,748.2" fill="#c82423"></polygon>
+<path d="M 1040 380 L 1040 333" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1040.0,332.2 1043.2,339.2 1036.8,339.2" fill="#c82423"></polygon>
+<path d="M 900 432 L 800 432" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="799.2,432.0 806.2,428.8 806.2,435.2" fill="#c82423"></polygon>
+<path d="M 760 375 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="760.0,352.2 763.2,359.2 756.8,359.2" fill="#c82423"></polygon>
+<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
 <rect x="201.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输入 H</text>
 <rect x="201.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
@@ -497,7 +497,6 @@ flowchart LR
 <rect x="191.0" y="351.0" width="180.0" height="54.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="374.6" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">滑窗 MQA</text>
 <text x="281.0" y="388.9" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">仅最近 128 token</text>
-<text x="281.0" y="388.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(74, 90, 104)">仅最近 128 token</text>
 <rect x="201.0" y="441.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="465.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">O 投影 ⊕ 残差</text>
 <rect x="201.0" y="516.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
@@ -506,15 +505,10 @@ flowchart LR
 <text x="281.0" y="609.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">⊕ 残差</text>
 <rect x="201.0" y="651.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="671.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输出 H′</text>
-<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
-<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
-<rect data-tabr="1" x="571.0" y="77.0" width="318.3" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
-<text data-tabt="1" x="730.1" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ HCA（KV 学习分支为重点）</text>
 <rect x="921.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
 <text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
 <rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
-<rect x="591.0" y="241.0" width="264.0" height="344.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="714.9" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（HCA · 可学习）</text>
 <rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
@@ -538,11 +532,9 @@ flowchart LR
 <rect x="901.0" y="381.0" width="200.0" height="64.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">Shared-KV MQA</text>
 <text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">K = V = 压缩条目 ＋ 滑窗原始 KV</text>
-<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(11, 61, 26)">K = V = 压缩条目 ＋ 滑窗原始 KV</text>
 <rect x="921.0" y="496.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="512.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">O 投影 ⊕ 残差</text>
 <text x="1001.0" y="526.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_O</text>
-<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_O</text>
 <rect x="921.0" y="571.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="595.0" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">FFN (SwiGLU)</text>
 <rect x="921.0" y="646.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
@@ -581,65 +573,62 @@ flowchart LR
 <div class="card">
 <svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
 <rect width="1300" height="1060" fill="#ffffff"></rect>
-<defs>
-      <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path></marker>
-      <marker id="r1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
-        <path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path></marker>
-    </defs>
-<path d="M 0 0 L 10 5 L 0 10 z" fill="#4b5563"></path>
-<path d="M 0 0 L 10 5 L 0 10 z" fill="#c82423"></path>
-<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 242 L 1000 261" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 647 349 L 647 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 762 349 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 647 368 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 680 368 L 680 391" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 700 475 L 700 516" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 690 578 L 690 606" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 795 430 L 896 430" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 795 549 L 860 549 L 860 398 L 896 398" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 305 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2" marker-end="url(#a1)"></path>
-<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
-<path d="M 1040 380 L 1040 309" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
-<path d="M 940 444 L 940 460 L 800 460" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
-<path d="M 760 395 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
-<path d="M 712 610 L 712 582" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5" marker-end="url(#r1)"></path>
-<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
-<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
 <rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
 <rect x="27" y="107" width="520" height="680" rx="7" fill="rgb(250, 251, 252)"></rect>
 <rect data-tabr="0" x="31.0" y="77.0" width="245.2" height="21.0" rx="6" fill="rgb(154, 167, 180)"></rect>
 <text data-tabt="0" x="153.6" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">👨‍🏫 老师 · SWA（滑动窗口 · 冻结 ❄）</text>
+<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
+<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
+<rect data-tabr="1" x="571.0" y="77.0" width="315.4" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
+<text data-tabt="1" x="728.7" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ CSA（KV 学习分支为重点）</text>
+<rect x="591.0" y="241.0" width="264.0" height="444.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,146.8 276.8,139.8 283.2,139.8" fill="#4b5563"></polygon>
+<path d="M 1000 70 L 1000 146" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,146.8 996.8,139.8 1003.2,139.8" fill="#4b5563"></polygon>
+<path d="M 280 182 L 280 201" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,201.8 276.8,194.8 283.2,194.8" fill="#4b5563"></polygon>
+<path d="M 280 233 L 280 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 380 250" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 250 L 180 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="180.0,261.8 176.8,254.8 183.2,254.8" fill="#4b5563"></polygon>
+<path d="M 280 250 L 280 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,261.8 276.8,254.8 283.2,254.8" fill="#4b5563"></polygon>
+<path d="M 380 250 L 380 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="380.0,261.8 376.8,254.8 383.2,254.8" fill="#4b5563"></polygon>
+<path d="M 180 305 L 180 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 305 L 280 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 380 305 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 180 322 L 380 322" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 280 322 L 280 346" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,346.8 276.8,339.8 283.2,339.8" fill="#4b5563"></polygon>
+<path d="M 280 404 L 280 436" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,436.8 276.8,429.8 283.2,429.8" fill="#4b5563"></polygon>
+<path d="M 280 480 L 280 511" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,511.8 276.8,504.8 283.2,504.8" fill="#4b5563"></polygon>
+<path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,586.8 276.8,579.8 283.2,579.8" fill="#4b5563"></polygon>
+<path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,646.8 276.8,639.8 283.2,639.8" fill="#4b5563"></polygon>
+<path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,201.8 996.8,194.8 1003.2,194.8" fill="#4b5563"></polygon>
+<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="620.0,281.8 616.8,274.8 623.2,274.8" fill="#4b5563"></polygon>
+<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="790.0,281.8 786.8,274.8 793.2,274.8" fill="#4b5563"></polygon>
+<path d="M 1000 242 L 1000 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,261.8 996.8,254.8 1003.2,254.8" fill="#4b5563"></polygon>
+<path d="M 647 349 L 647 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 762 349 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 647 368 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
+<path d="M 680 368 L 680 391" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="680.0,391.8 676.8,384.8 683.2,384.8" fill="#4b5563"></polygon>
+<path d="M 700 475 L 700 516" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="700.0,516.8 696.8,509.8 703.2,509.8" fill="#4b5563"></polygon>
+<path d="M 690 578 L 690 606" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="690.0,606.8 686.8,599.8 693.2,599.8" fill="#4b5563"></polygon>
+<path d="M 795 430 L 896 430" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,430.0 889.8,433.2 889.8,426.8" fill="#4b5563"></polygon>
+<path d="M 795 549 L 860 549 L 860 398 L 896 398" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,398.0 889.8,401.2 889.8,394.8" fill="#4b5563"></polygon>
+<path d="M 1000 305 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,376.8 996.8,369.8 1003.2,369.8" fill="#4b5563"></polygon>
+<path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,491.8 996.8,484.8 1003.2,484.8" fill="#4b5563"></polygon>
+<path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,566.8 996.8,559.8 1003.2,559.8" fill="#4b5563"></polygon>
+<path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,641.8 996.8,634.8 1003.2,634.8" fill="#4b5563"></polygon>
+<path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,701.8 996.8,694.8 1003.2,694.8" fill="#4b5563"></polygon>
+<path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="496.8,846.0 489.8,849.2 489.8,842.8" fill="#4b5563"></polygon>
+<path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="803.2,846.0 810.2,842.8 810.2,849.2" fill="#4b5563"></polygon>
+<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1000.0,741.2 1003.2,748.2 996.8,748.2" fill="#c82423"></polygon>
+<path d="M 1040 380 L 1040 309" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1040.0,308.2 1043.2,315.2 1036.8,315.2" fill="#c82423"></polygon>
+<path d="M 940 444 L 940 460 L 800 460" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="799.2,460.0 806.2,456.8 806.2,463.2" fill="#c82423"></polygon>
+<path d="M 760 395 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="760.0,352.2 763.2,359.2 756.8,359.2" fill="#c82423"></polygon>
+<path d="M 712 610 L 712 582" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="712.0,581.2 715.2,588.2 708.8,588.2" fill="#c82423"></polygon>
+<rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
 <rect x="201.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输入 H</text>
 <rect x="201.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
@@ -653,7 +642,6 @@ flowchart LR
 <rect x="191.0" y="351.0" width="180.0" height="54.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="374.6" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">滑窗 MQA</text>
 <text x="281.0" y="388.9" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">仅最近 128 token</text>
-<text x="281.0" y="388.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(74, 90, 104)">仅最近 128 token</text>
 <rect x="201.0" y="441.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="465.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">O 投影 ⊕ 残差</text>
 <rect x="201.0" y="516.0" width="160.0" height="40.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
@@ -662,15 +650,10 @@ flowchart LR
 <text x="281.0" y="609.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">⊕ 残差</text>
 <rect x="201.0" y="651.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="671.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输出 H′</text>
-<rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
-<rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
-<rect data-tabr="1" x="571.0" y="77.0" width="315.4" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
-<text data-tabt="1" x="728.7" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ CSA（KV 学习分支为重点）</text>
 <rect x="921.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
 <text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
 <rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
-<rect x="591.0" y="241.0" width="264.0" height="444.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="713.6" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（CSA · 可学习）</text>
 <rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
@@ -687,22 +670,18 @@ flowchart LR
 <rect x="606.0" y="521.0" width="190.0" height="58.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="701.0" y="546.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Lightning Indexer</text>
 <text x="701.0" y="560.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">打分选 Top-K · θ: W_idx</text>
-<text x="701.0" y="560.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">打分选 Top-K · θ: W_idx</text>
 <rect x="606.0" y="611.0" width="190.0" height="52.0" rx="4" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
 <text x="701.0" y="632.9" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">Indexer 辅助损失 L_idx</text>
 <text x="701.0" y="648.4" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">（Top-K 掩码不可导）</text>
 <rect x="921.0" y="266.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="282.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Q 投影</text>
 <text x="1001.0" y="296.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_Q</text>
-<text x="1001.0" y="296.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_Q</text>
 <rect x="901.0" y="381.0" width="200.0" height="64.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">稀疏 MQA</text>
 <text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">仅 Top-K 块 · K = V = 压缩条目</text>
-<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(11, 61, 26)">仅 Top-K 块 · K = V = 压缩条目</text>
 <rect x="921.0" y="496.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="512.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">O 投影 ⊕ 残差</text>
 <text x="1001.0" y="526.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_O</text>
-<text x="1001.0" y="526.9" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(92, 58, 0)">θ: W_O</text>
 <rect x="921.0" y="571.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="595.0" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">FFN (SwiGLU)</text>
 <rect x="921.0" y="646.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
@@ -847,6 +826,7 @@ flowchart TD
 <tr><td>k8v4 量化压缩比</td><td>1x</td><td><b>2.46x（理论 2.53x）</b></td><td>达标</td></tr>
 <tr><td>k8v4 top-5 重合 / top-1 一致</td><td>—</td><td><b>100% / 88.9%</b></td><td>轻微扰动</td></tr>
 </table>
+<div class="figcap">表 4 · 复现四项主要结果（Qwen3.5-4B）</div>
 <div class="kp w">
 <span class="kp-t">两个必须说清的口径（易误读）</span>
 <b>持久 ≠ 驻留</b>：3.44x 是落盘/最小集合口径；运行时 reuse 层的物化视图仍占 HBM，驻留口径约 1.00x——当前实现是「落盘压缩 + 计算复用」，不是显存压缩，显存 4x 需要 attention 内惰性物化（后续工作）。<br/><b>mode_b 有适用边界</b>：解码段含 24 层 GatedDeltaNet（递归结构），从零状态起步无法携带历史——mode_b 适合 prefill 延迟优化与 next-token 评测，连续生成要走 mode_csa2_adapter；只旁路 4 个全注意力层时加速从 1.52x 回落 1.10x，这是架构约束不是实现 bug。
@@ -867,6 +847,7 @@ flowchart TD
 <tr><td>稀疏注意力与 KV 量化</td><td>缓存精度派生 + 量化/非量化两套算子选路</td><td>dsa_attn_kv_plan.py:22 / 147 / 176</td></tr>
 <tr><td>MoE 融合与配套</td><td>mc2 一体大算子开关、MTP / VL / SP 配套</td><td>moe_comm_method.py:270、mtp.py:62、dsa_cp.py:1942</td></tr>
 </table>
+<div class="figcap">表 5 · V4 特性到 vllm-ascend 适配点对照</div>
 <p><b>① 模型接入与 SWA 滑窗：注册、滑窗缓存、后端选路三件事一次落位。</b>models/__init__.py:32 把 DeepseekV4ForCausalLM 注册到 AscendDeepseekV4ForCausalLM（model.py:1038，支持 PP / LoRA / Eagle3）；滑窗缓存 AscendDeepseekV4SWACache（model.py:110）继承上游 VllmDeepseekV4SWACache，窗口宽取 config.sliding_window（model.py:490）；SWA 层经 get_attn_backend 把注意力后端切到 AscendDSASWABackend（类定义 dsa_v1.py:296）：</p>
 <pre>
 def get_attn_backend(self):
