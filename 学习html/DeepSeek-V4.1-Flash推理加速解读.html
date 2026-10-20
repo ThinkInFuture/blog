@@ -637,72 +637,18 @@ flowchart TD
     <div class="fig-label blue">图 6 · CSA2 机制</div>
     <div class="mermaid">
 flowchart LR
-    classDef full fill:#0969da,stroke:#0969da,color:#ffffff,stroke-width:1.5px
-    classDef reindex fill:#54aeff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef reuse fill:#cae8ff,stroke:#0969da,color:#1f2328,stroke-width:1.2px
-    classDef src fill:#ddf4ff,stroke:#0969da,color:#0969da,stroke-width:1.5px
-
-    ENC["编码器 · 层 1–20<br/>正常逐层前向"]:::src --> H20["H_20 · 编码器末层隐藏态<br/>解码段 层 21–40 全局 KV 的唯一来源"]:::src
-
-    H20 -->|"KV 投影 W₂₁"| FA
-    H20 -->|"KV 投影 W₂₅"| FB
-    H20 -->|"KV 投影 W₂₉"| FC
-    H20 -->|"KV 投影 W₃₃"| FD
-    H20 -->|"KV 投影 W₃₇"| FE
-
-    subgraph GA["共享组 1 · 层 21–24"]
-        direction LR
-        FA["层 21 · Full<br/>投影 W₂₁(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RA["层 22 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RB["层 23 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RC["层 24 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FA -.->|共享| RA
-        FA -.->|共享| RB
-        FA -.->|共享| RC
-    end
-
-    subgraph GB["共享组 2 · 层 25–28"]
-        direction LR
-        FB["层 25 · Full<br/>投影 W₂₅(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RD["层 26 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RE["层 27 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RF["层 28 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FB -.->|共享| RD
-        FB -.->|共享| RE
-        FB -.->|共享| RF
-    end
-
-    subgraph GC["共享组 3 · 层 29–32"]
-        direction LR
-        FC["层 29 · Full<br/>投影 W₂₉(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RG["层 30 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RH["层 31 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RI["层 32 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FC -.->|共享| RG
-        FC -.->|共享| RH
-        FC -.->|共享| RI
-    end
-
-    subgraph GD["共享组 4 · 层 33–36"]
-        direction LR
-        FD["层 33 · Full<br/>投影 W₃₃(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RJ["层 34 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RK["层 35 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RL["层 36 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FD -.->|共享| RJ
-        FD -.->|共享| RK
-        FD -.->|共享| RL
-    end
-
-    subgraph GE["共享组 5 · 层 37–40"]
-        direction LR
-        FE["层 37 · Full<br/>投影 W₃₇(H_20) 持有<br/>主 KV + 索引器 K + Top-K"]:::full
-        RM["层 38 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        RN["层 39 · Reindex<br/>复用 KV，重选 Top-K"]:::reindex
-        RO["层 40 · Reuse<br/>KV 与 Top-K 全复用"]:::reuse
-        FE -.->|共享| RM
-        FE -.->|共享| RN
-        FE -.->|共享| RO
+    H20["H_20 · 编码器末层隐藏态<br/>（每层各有投影 W_l · 见图 5）"]
+    H20 -->|"层 21 用自己这份投影"| GA
+    H20 -.->|"其余层的投影不用<br/>（CSA2 静态指定，省生成与存储）"| GA
+    subgraph GA["CSA2 · 每层静态指定一种模式（示意 4 层，实际层 21–40）"]
+        direction TB
+        A21["层 21 · Full<br/>用自己的 KV · Q 碰 K 挑 Top-K"]
+        A22["层 22 · Reuse<br/>借最近 Full 的 KV · Top-K 直接抄"]
+        A25["层 25 · Reindex<br/>借 KV · Top-K 自己重挑"]
+        A40["层 40 · Reuse<br/>借 KV · Top-K 抄"]
+        A21 -.->|"借主 KV"| A22
+        A21 -.->|"借主 KV"| A25
+        A25 -.->|"借最近 Full"| A40
     end
     </div>
   </div>
