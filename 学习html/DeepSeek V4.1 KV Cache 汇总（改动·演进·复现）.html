@@ -103,6 +103,18 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 
 
 <script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+.fsbtn{position:absolute;top:10px;right:10px;z-index:5;padding:6px 14px;border-radius:8px;background:#fff;border:1px solid #d5dbe5;box-shadow:0 2px 8px rgba(15,23,42,.08);font-size:13px;color:#374151;cursor:pointer;font-family:inherit}
+.fsbtn:hover{border-color:#3b82f6;color:#3b82f6}
+.fsmask{display:none;position:fixed;inset:0;z-index:10002;background:#f8fafc;flex-direction:column}
+.fsmask.open{display:flex}
+.fsbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;flex-shrink:0}
+.fsx{padding:5px 14px;border-radius:8px;border:1px solid #d5dbe5;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:inherit}
+.fsx:hover{border-color:#3b82f6;color:#3b82f6}
+.fsbody{flex:1;overflow:auto;padding:12px}
+.fsbody svg{display:block;max-width:100%;height:auto}
+@media print{.fsbtn,.fsmask{display:none!important}}
+</style>
 
 <h1>DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</h1>
 <div class="subtitle">汇总篇：第 1 章取自《DeepSeek-V4.1-Flash推理加速解读》——V4.1-Flash 改了什么（四步递进的推理配置）与量化的效果账；第 2、3 章讲 KV Cache 从 MLA 基准到 V4.0 三段分段再到 V4.1 换路径的演进史与 HCA 废弃的相位根因；第 4、5 章是训练结构说明与 Qwen3.5-4B 复现实测。素材：Flash 解读、kv演进.md、复现实测.md、out/ 训练结构图 ×2、相位敏感性一篇</div>
@@ -429,6 +441,8 @@ flowchart LR
 <h2 id="s4">4. 训练说明：老师-学生结构与三段关键代码</h2>
 <p><b>训练结构（参考图）</b>：老师是 SWA（滑动窗口 128，冻结 ❄），学生在 SWA 之外多出一条<b>可学习的 KV 分支</b>（θ 标记为可训练参数）——HCA 版把历史压成 128:1 无重叠的压缩条目 + 滑窗原始 KV 做 Shared-KV MQA；CSA 版用 4:1 重叠压缩 + Lightning Indexer 打分选 Top-K，Indexer 因 Top-K 掩码不可导而加辅助损失 L_idx。</p>
 <div class="card">
+<div style="position:relative" id="fsW0">
+<button class="fsbtn" data-fs="fsW0" data-title="图9 · 训练结构（学生 SWA + HCA 分支）" type="button">⛶ 全屏查看</button>
 <svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
 <rect width="1300" height="1060" fill="#ffffff"></rect>
 <rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
@@ -569,9 +583,12 @@ flowchart LR
 <rect x="79.0" y="985.0" width="52.0" height="24.0" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="408.4" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（本图重点：公式与参数齐全；图 2 无 Indexer，全程可导）</text>
 </svg>
+</div>
 <div class="figcap">图 9 · 训练结构·学生 SWA + HCA 分支：压缩权重 Z=H·W^Z 经 Softmax 聚合，128:1 无重叠 + 滑窗原始 KV，低秩 Q 投影</div>
 </div>
 <div class="card">
+<div style="position:relative" id="fsW1">
+<button class="fsbtn" data-fs="fsW1" data-title="图10 · 训练结构（学生 SWA + CSA 分支）" type="button">⛶ 全屏查看</button>
 <svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
 <rect width="1300" height="1060" fill="#ffffff"></rect>
 <rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
@@ -725,6 +742,7 @@ flowchart LR
 <rect x="79.0" y="1017.0" width="52.0" height="24.0" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
 <text x="338.0" y="1030.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 58, 0)">橙色节点 ＝ Indexer 辅助损失（Top-K 掩码不可导，仅图 1 有）</text>
 </svg>
+</div>
 <div class="figcap">图 10 · 训练结构·学生 SWA + CSA 分支：4:1 重叠（当前块＋前一块）+ Lightning Indexer 选 Top-K + 辅助损失 L_idx</div>
 </div>
 <p><b>复现侧的三段核心代码</b>（完整版见复现实测.md）：CED 主投影器 Linear(2560, 2048) 约 5.24M 参数，输出前 1024 维作 K、后 1024 维作 V：</p>
@@ -897,6 +915,31 @@ else:
     )
 </pre>
 <p>这些适配点上的算子各自住在编排层 / 自研层 / CANN 层的哪一格、trace 里叫什么名字，见站内《<a href="昇腾算子地图 · 从一层前向到三层算子楼.html">昇腾算子地图</a>》；一条请求把这些适配点串起来的完整时序，见《<a href="DeepSeek V4.1 全链路主时序 · 56步四阶段.html">DeepSeek V4.1 全链路主时序</a>》。</p>
+
+<div class="fsmask" id="fsMask">
+<div class="fsbar"><span id="fsTitle">全屏查看</span><button class="fsx" id="fsX" type="button">✕ 退出</button></div>
+<div class="fsbody" id="fsBody"></div>
+</div>
+<script>
+(function(){
+var mask=document.getElementById('fsMask'),body=document.getElementById('fsBody'),x=document.getElementById('fsX'),title=document.getElementById('fsTitle');
+var home=null;
+function open(btn){
+  var w=document.getElementById(btn.getAttribute('data-fs'));
+  var svg=w.querySelector('svg'); home=w;
+  title.textContent=btn.getAttribute('data-title')||'全屏查看';
+  body.appendChild(svg); mask.classList.add('open'); document.body.style.overflow='hidden'; body.scrollTop=0;
+}
+function close(){
+  if(!home) return;
+  var svg=body.querySelector('svg'); home.appendChild(svg);
+  mask.classList.remove('open'); document.body.style.overflow=''; home=null;
+}
+document.querySelectorAll('.fsbtn').forEach(function(b){b.addEventListener('click',function(){open(b);});});
+x.addEventListener('click',close);
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
+</script>
 
 <p class="dim" style="margin-top:36px">汇总篇 · 2026-10-19 发布 · 第 1 章图 1–3 取自《Flash 推理加速解读》，相位现象详见《固定窗口压缩的相位敏感性》；数字与结论均取自所引素材</p>
 </div>
