@@ -439,7 +439,7 @@ flowchart LR
 </div>
 
 <h2 id="s4">4. 训练说明：老师-学生结构与三段关键代码</h2>
-<p><b>训练结构（参考图）</b>：老师是 SWA（滑动窗口 128，冻结 ❄），学生在 SWA 之外多出一条<b>可学习的 KV 分支</b>（θ 标记为可训练参数）——HCA 版把历史压成 128:1 无重叠的压缩条目 + 滑窗原始 KV 做 Shared-KV MQA；CSA 版用 4:1 重叠压缩 + Lightning Indexer 打分选 Top-K，Indexer 因 Top-K 掩码不可导而加辅助损失 L_idx。</p>
+<p><b>训练结构（参考图）</b>：老师是 SWA（滑动窗口 128，冻结 ❄），学生在 SWA 之外多出一条<b>可学习的 KV 分支</b>（θ 标记为可训练参数）。两张图的差别全部在黄色 KV 学习分支里：<b>图 9 学压缩</b>——原料是本层 H（经 LN，与 Q 同源），把 128 块压成 1 条压缩条目，加滑窗原始 KV 做 Shared-KV MQA；<b>图 10 学提取</b>——原料换成 H_mid（编码段末层摘要，全段一份、20 层共用），每层一个独立投影矩阵 W_l^KV 直接提成本层 K/V，不压长度、无 Indexer、全程可导。</p>
 <div class="card">
 <div style="position:relative" id="fsW0">
 <button class="fsbtn" data-fs="fsW0" data-title="图9 · 训练结构（学生 SWA + HCA 分支）" type="button">⛶ 全屏查看</button>
@@ -524,7 +524,9 @@ flowchart LR
 <text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
 <rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
-<text x="714.9" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（HCA · 可学习）</text>
+<text x="729.1" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（HCA · 学压缩：128 块压 1 条）</text>
+<rect x="599.0" y="223.0" width="183.3" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="690.6" y="235.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">原料＝本层 H（经 LN · 与 Q 同源）</text>
 <rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
 <text x="648.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">Z = H·W^Z</text>
@@ -584,11 +586,11 @@ flowchart LR
 <text x="408.4" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（本图重点：公式与参数齐全；图 2 无 Indexer，全程可导）</text>
 </svg>
 </div>
-<div class="figcap">图 9 · 训练结构·学生 SWA + HCA 分支：压缩权重 Z=H·W^Z 经 Softmax 聚合，128:1 无重叠 + 滑窗原始 KV，低秩 Q 投影</div>
+<div class="figcap">图 9 · 训练结构·学生 SWA + HCA 分支：KV 学习分支＝学压缩（原料本层 H，128 块压 1 条），Softmax 加权聚合 + 滑窗原始 KV + 低秩 Q 投影</div>
 </div>
 <div class="card">
 <div style="position:relative" id="fsW1">
-<button class="fsbtn" data-fs="fsW1" data-title="图10 · 训练结构（学生 SWA + CSA 分支）" type="button">⛶ 全屏查看</button>
+<button class="fsbtn" data-fs="fsW1" data-title="图10 · 训练结构（学生 SWA + CED 分支·学提取）" type="button">⛶ 全屏查看</button>
 <svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1300 1060" width="1300" height="1060" font-family="SF Pro Display, PingFang SC, Microsoft YaHei, sans-serif">
 <rect width="1300" height="1060" fill="#ffffff"></rect>
 <rect x="21.0" y="101.0" width="532.0" height="692.0" rx="10" fill="rgb(154, 167, 180)"></rect>
@@ -597,9 +599,9 @@ flowchart LR
 <text data-tabt="0" x="153.6" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">👨‍🏫 老师 · SWA（滑动窗口 · 冻结 ❄）</text>
 <rect x="561.0" y="101.0" width="732.0" height="692.0" rx="10" fill="rgb(52, 91, 153)"></rect>
 <rect x="567" y="107" width="720" height="680" rx="7" fill="rgb(255, 255, 255)"></rect>
-<rect data-tabr="1" x="571.0" y="77.0" width="315.4" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
-<text data-tabt="1" x="728.7" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ CSA（KV 学习分支为重点）</text>
-<rect x="591.0" y="241.0" width="264.0" height="444.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<rect data-tabr="1" x="571.0" y="77.0" width="315.6" height="21.0" rx="6" fill="rgb(52, 91, 153)"></rect>
+<text data-tabt="1" x="728.8" y="91.9" text-anchor="middle" font-size="13" font-weight="bold" fill="rgb(255, 255, 255)">🧑‍🎓 学生 · SWA ＋ CED（KV 学习分支为重点）</text>
+<rect x="591.0" y="241.0" width="264.0" height="314.0" rx="8" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <path d="M 650 45 L 650 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
 <path d="M 280 70 L 1000 70" fill="none" stroke="#4b5563" stroke-width="2"></path>
 <path d="M 280 70 L 280 146" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,146.8 276.8,139.8 283.2,139.8" fill="#4b5563"></polygon>
@@ -620,33 +622,21 @@ flowchart LR
 <path d="M 280 555 L 280 586" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,586.8 276.8,579.8 283.2,579.8" fill="#4b5563"></polygon>
 <path d="M 280 618 L 280 646" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="280.0,646.8 276.8,639.8 283.2,639.8" fill="#4b5563"></polygon>
 <path d="M 1000 182 L 1000 201" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,201.8 996.8,194.8 1003.2,194.8" fill="#4b5563"></polygon>
-<path d="M 1000 233 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 1000 242" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 620 242 L 620 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="620.0,281.8 616.8,274.8 623.2,274.8" fill="#4b5563"></polygon>
-<path d="M 790 242 L 790 281" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="790.0,281.8 786.8,274.8 793.2,274.8" fill="#4b5563"></polygon>
-<path d="M 1000 242 L 1000 261" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,261.8 996.8,254.8 1003.2,254.8" fill="#4b5563"></polygon>
-<path d="M 647 349 L 647 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 762 349 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 647 368 L 762 368" fill="none" stroke="#4b5563" stroke-width="2"></path>
-<path d="M 680 368 L 680 391" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="680.0,391.8 676.8,384.8 683.2,384.8" fill="#4b5563"></polygon>
-<path d="M 700 475 L 700 516" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="700.0,516.8 696.8,509.8 703.2,509.8" fill="#4b5563"></polygon>
-<path d="M 690 578 L 690 606" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="690.0,606.8 686.8,599.8 693.2,599.8" fill="#4b5563"></polygon>
-<path d="M 795 430 L 896 430" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,430.0 889.8,433.2 889.8,426.8" fill="#4b5563"></polygon>
-<path d="M 795 549 L 860 549 L 860 398 L 896 398" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,398.0 889.8,401.2 889.8,394.8" fill="#4b5563"></polygon>
-<path d="M 1000 305 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,376.8 996.8,369.8 1003.2,369.8" fill="#4b5563"></polygon>
+<path d="M 1000 233 L 1000 257" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,257.8 996.8,250.8 1003.2,250.8" fill="#4b5563"></polygon>
+<path d="M 700 190 L 700 290" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="700.0,290.8 696.8,283.8 703.2,283.8" fill="#4b5563"></polygon>
+<path d="M 795 324 L 850 324 L 850 400 L 896 400" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="896.8,400.0 889.8,403.2 889.8,396.8" fill="#4b5563"></polygon>
+<path d="M 1000 329 L 1000 376" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,376.8 996.8,369.8 1003.2,369.8" fill="#4b5563"></polygon>
 <path d="M 1000 444 L 1000 491" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,491.8 996.8,484.8 1003.2,484.8" fill="#4b5563"></polygon>
 <path d="M 1000 535 L 1000 566" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,566.8 996.8,559.8 1003.2,559.8" fill="#4b5563"></polygon>
 <path d="M 1000 610 L 1000 641" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,641.8 996.8,634.8 1003.2,634.8" fill="#4b5563"></polygon>
 <path d="M 1000 673 L 1000 701" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="1000.0,701.8 996.8,694.8 1003.2,694.8" fill="#4b5563"></polygon>
 <path d="M 280 682 L 280 846 L 496 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="496.8,846.0 489.8,849.2 489.8,842.8" fill="#4b5563"></polygon>
 <path d="M 1000 737 L 1000 846 L 804 846" fill="none" stroke="#4b5563" stroke-width="2"></path><polygon points="803.2,846.0 810.2,842.8 810.2,849.2" fill="#4b5563"></polygon>
-<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1000.0,741.2 1003.2,748.2 996.8,748.2" fill="#c82423"></polygon>
-<path d="M 1040 380 L 1040 309" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1040.0,308.2 1043.2,315.2 1036.8,315.2" fill="#c82423"></polygon>
-<path d="M 940 444 L 940 460 L 800 460" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="799.2,460.0 806.2,456.8 806.2,463.2" fill="#c82423"></polygon>
-<path d="M 760 395 L 760 353" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="760.0,352.2 763.2,359.2 756.8,359.2" fill="#c82423"></polygon>
-<path d="M 712 610 L 712 582" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="712.0,581.2 715.2,588.2 708.8,588.2" fill="#c82423"></polygon>
+<path d="M 740 820 L 740 782 L 1000 782 L 1000 742" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1000.0,741.2 1003.2,748.2 996.8,748.2" fill="#4b5563"></polygon>
+<path d="M 1040 380 L 1040 333" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="1040.0,332.2 1043.2,339.2 1036.8,339.2" fill="#4b5563"></polygon>
+<path d="M 896 430 L 700 430 L 700 358" fill="none" stroke="#c82423" stroke-width="2" stroke-dasharray="7 5"></path><polygon points="700.0,357.2 703.2,364.2 696.8,364.2" fill="#4b5563"></polygon>
 <rect x="576.0" y="11.0" width="150.0" height="35.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
-<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H</text>
+<text x="651.0" y="32.5" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 Hidden States H_l</text>
 <rect x="201.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输入 H</text>
 <rect x="201.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
@@ -669,34 +659,29 @@ flowchart LR
 <rect x="201.0" y="651.0" width="160.0" height="32.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
 <text x="281.0" y="671.0" text-anchor="middle" font-size="12" fill="rgb(74, 90, 104)">输出 H′</text>
 <rect x="921.0" y="151.0" width="160.0" height="32.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
-<text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H</text>
+<text x="1001.0" y="171.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">输入 H_l（本层）</text>
 <rect x="921.0" y="206.0" width="160.0" height="28.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
 <text x="1001.0" y="224.0" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">LayerNorm</text>
-<text x="713.6" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（CSA · 可学习）</text>
-<rect x="596.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
-<text x="648.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">压缩权重</text>
-<text x="648.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">Z = H·W^Z</text>
-<text x="648.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^Z·B</text>
-<rect x="711.0" y="286.0" width="105.0" height="64.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
-<text x="763.5" y="306.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">KV 投影</text>
-<text x="763.5" y="320.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">C = H·W^KV</text>
-<text x="763.5" y="335.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W^KV</text>
-<rect x="606.0" y="396.0" width="190.0" height="80.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
-<text x="701.0" y="424.1" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">S = Softmax(Z_block + B)</text>
-<text x="701.0" y="439.6" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">C^Comp = Σ S_j ⊙ C_j</text>
-<text x="701.0" y="455.2" text-anchor="middle" font-size="11.5" fill="rgb(11, 61, 26)">4:1 重叠 · 当前块＋前一块</text>
-<rect x="606.0" y="521.0" width="190.0" height="58.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
-<text x="701.0" y="546.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Lightning Indexer</text>
-<text x="701.0" y="560.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">打分选 Top-K · θ: W_idx</text>
-<rect x="606.0" y="611.0" width="190.0" height="52.0" rx="4" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
-<text x="701.0" y="632.9" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">Indexer 辅助损失 L_idx</text>
-<text x="701.0" y="648.4" text-anchor="middle" font-size="11.5" fill="rgb(107, 58, 0)">（Top-K 掩码不可导）</text>
-<rect x="921.0" y="266.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
-<text x="1001.0" y="282.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">Q 投影</text>
-<text x="1001.0" y="296.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_Q</text>
+<rect x="596.0" y="151.0" width="240.0" height="40.0" rx="4" fill="rgb(232, 244, 252)" stroke="rgb(2, 108, 160)" stroke-width="2"></rect>
+<text x="716.0" y="175.0" text-anchor="middle" font-size="12" fill="rgb(10, 61, 92)">H_mid · 编码段末层（全段一份）</text>
+<text x="738.8" y="261.1" text-anchor="middle" font-size="12" font-weight="bold" fill="rgb(133, 77, 14)">KV 学习分支（CED · 学提取：H_mid → 本层 KV）</text>
+<rect x="713.0" y="225.0" width="202.3" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="814.1" y="237.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">原料＝H_mid（第 20 层摘要 · 非本层）</text>
+<rect x="597.0" y="365.0" width="145.6" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="669.8" y="377.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">提取：1 份摘要 → 本层 K/V</text>
+<rect x="606.0" y="291.0" width="190.0" height="68.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="701.0" y="313.0" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">每层 KV 投影</text>
+<text x="701.0" y="327.8" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">K_l = V_l = H_mid · W_l^KV</text>
+<text x="701.0" y="342.7" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_l^KV（逐层独立）</text>
+<rect x="606.0" y="471.0" width="190.0" height="54.0" rx="4" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
+<text x="701.0" y="493.4" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">对照：SWA 滑窗 KV 例外</text>
+<text x="701.0" y="508.2" text-anchor="middle" font-size="11" fill="rgb(74, 90, 104)">仍逐层从本层隐藏态算</text>
+<rect x="921.0" y="262.0" width="160.0" height="68.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
+<text x="1001.0" y="291.4" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">Q 投影 θ: W_Q</text>
+<text x="1001.0" y="306.2" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">q_l = H_l · W_Q（本层原料）</text>
 <rect x="901.0" y="381.0" width="200.0" height="64.0" rx="4" fill="rgb(237, 247, 238)" stroke="rgb(35, 133, 57)" stroke-width="2"></rect>
-<text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">稀疏 MQA</text>
-<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">仅 Top-K 块 · K = V = 压缩条目</text>
+<text x="1001.0" y="409.6" text-anchor="middle" font-size="12" fill="rgb(11, 61, 26)">CED Attention</text>
+<text x="1001.0" y="423.9" text-anchor="middle" font-size="11" fill="rgb(11, 61, 26)">本层 Q × 投影 K/V（原料＝H_mid）</text>
 <rect x="921.0" y="496.0" width="160.0" height="40.0" rx="4" fill="rgb(255, 248, 220)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
 <text x="1001.0" y="512.6" text-anchor="middle" font-size="12" fill="rgb(92, 58, 0)">O 投影 ⊕ 残差</text>
 <text x="1001.0" y="526.9" text-anchor="middle" font-size="11" fill="rgb(92, 58, 0)">θ: W_O</text>
@@ -709,42 +694,40 @@ flowchart LR
 <rect x="501.0" y="821.0" width="300.0" height="52.0" rx="4" fill="rgb(253, 236, 237)" stroke="rgb(200, 36, 35)" stroke-width="3"></rect>
 <text x="651.0" y="841.9" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">Loss 计算</text>
 <text x="651.0" y="862.1" text-anchor="middle" font-size="15" font-weight="bold" fill="rgb(107, 17, 17)">（LM 损失 ＋ 蒸馏对齐）</text>
-<rect x="713.0" y="491.0" width="52.0" height="17.0" rx="3" fill="#f2f2f2"></rect>
-<text x="739.0" y="503.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">压缩条目</text>
-<rect x="621.0" y="587.0" width="52.0" height="17.0" rx="3" fill="#f2f2f2"></rect>
-<text x="647.0" y="599.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">索引分数</text>
-<rect x="801.0" y="414.0" width="92.3" height="17.0" rx="3" fill="#f2f2f2"></rect>
-<text x="847.1" y="426.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">压缩 KV（K=V）</text>
-<rect x="803.0" y="555.0" width="64.1" height="17.0" rx="3" fill="#f2f2f2"></rect>
-<text x="835.1" y="567.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">Top-K 掩码</text>
+<rect x="807.0" y="309.0" width="97.0" height="17.0" rx="3" fill="#f2f2f2"></rect>
+<text x="855.5" y="321.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">投影 K/V（K=V）</text>
 <rect x="321.0" y="831.0" width="94.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
 <text x="368.1" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">教师输出 · 软标签</text>
 <rect x="843.0" y="831.0" width="83.2" height="17.0" rx="3" fill="#f2f2f2"></rect>
 <text x="884.6" y="843.2" text-anchor="middle" font-size="11" fill="rgb(51, 51, 51)">学生输出 · 预测</text>
 <rect x="801.0" y="767.0" width="117.5" height="17.0" rx="3" fill="#fdececee"></rect>
 <text x="859.8" y="779.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">梯度回传（仅学生 θ）</text>
-<rect x="1047.0" y="337.0" width="59.0" height="17.0" rx="3" fill="#fdececee"></rect>
-<text x="1076.5" y="349.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_Q</text>
-<rect x="817.0" y="469.0" width="79.2" height="17.0" rx="3" fill="#fdececee"></rect>
-<text x="856.6" y="481.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^Z、B</text>
-<rect x="771.0" y="379.0" width="69.0" height="17.0" rx="3" fill="#fdececee"></rect>
-<text x="805.5" y="391.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W^KV</text>
-<rect x="719.0" y="589.0" width="67.0" height="17.0" rx="3" fill="#fdececee"></rect>
-<text x="752.5" y="601.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_idx</text>
-<rect x="61.0" y="906.0" width="1182.0" height="132.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
+<rect x="1047.0" y="347.0" width="59.0" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="1076.5" y="359.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_Q</text>
+<rect x="717.0" y="407.0" width="77.2" height="17.0" rx="3" fill="#fdececee"></rect>
+<text x="755.6" y="419.2" text-anchor="middle" font-size="11" font-weight="bold" fill="rgb(200, 36, 35)">更新 W_l^KV</text>
+<rect x="61.0" y="906.0" width="1182.0" height="104.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
 <line x1="79.0" y1="928.5" x2="127" y2="928.5" stroke="rgb(200, 36, 35)" stroke-width="3" stroke-dasharray="7 5"></line>
-<rect x="141.0" y="915.0" width="2.0" height="2.0" rx="8" fill="rgb(244, 248, 251)" stroke="rgb(201, 214, 224)"></rect>
 <text x="288.5" y="934.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 17, 17)">红色虚线 ＝ 梯度回传（仅学生侧参数 θ 被更新）</text>
 <rect x="79.0" y="953.0" width="52.0" height="24.0" fill="rgb(238, 241, 244)" stroke="rgb(125, 139, 153)" stroke-width="2"></rect>
-<text x="277.2" y="967.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(74, 90, 104)">灰色节点 ＝ 老师（SWA，❄ 冻结，无梯度）</text>
+<text x="312.9" y="967.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(74, 90, 104)">灰色节点 ＝ 老师（SWA，❄ 冻结，无梯度）＋ 对照说明</text>
 <rect x="79.0" y="985.0" width="52.0" height="24.0" fill="rgb(255, 251, 235)" stroke="rgb(212, 136, 6)" stroke-width="2" stroke-dasharray="7 5"></rect>
-<text x="318.5" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（本图重点：公式与参数齐全）</text>
-<rect x="79.0" y="1017.0" width="52.0" height="24.0" fill="rgb(253, 243, 231)" stroke="rgb(200, 122, 35)" stroke-width="2"></rect>
-<text x="338.0" y="1030.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(107, 58, 0)">橙色节点 ＝ Indexer 辅助损失（Top-K 掩码不可导，仅图 1 有）</text>
+<text x="407.5" y="998.6" text-anchor="middle" font-size="13.5" font-weight="bold" fill="rgb(92, 58, 0)">黄色虚线框 ＝ KV 学习分支（CED：换 KV 的原料，不压长度 · 无 Indexer，全程可导）</text>
 </svg>
 </div>
-<div class="figcap">图 10 · 训练结构·学生 SWA + CSA 分支：4:1 重叠（当前块＋前一块）+ Lightning Indexer 选 Top-K + 辅助损失 L_idx</div>
+<div class="figcap">图 10 · 训练结构·学生 SWA + CED 分支：KV 学习分支＝学提取（原料 H_mid 全段一份·红框），每层独立投影 W_l^KV 提成本层 K/V；SWA 滑窗 KV 例外仍逐层自算</div>
 </div>
+<p><b>加深差异的读法</b>：两张图的老师列与 Loss 完全相同，差别只有三处——<b>分支框标题</b>（学压缩 / 学提取）、<b>入口原料</b>（本层 H / H_mid 一份）、<b>梯度红线落点</b>（三条更新三组 θ / 两条更新两组 θ）。展开成表：</p>
+<table>
+<tr><th>维度</th><th>图9 · HCA（学压缩）</th><th>图10 · CED（学提取）</th></tr>
+<tr><td>KV 原料</td><td>本层 H（经 LN，与 Q 同源）</td><td>H_mid（第 20 层摘要，全段一份、20 层共用）</td></tr>
+<tr><td>学习对象</td><td>压缩权重：128 块压 1 条（W^Z·B 加权聚合）</td><td>提取投影：H_mid → 本层 K/V（W_l^KV）</td></tr>
+<tr><td>可学 θ</td><td>三组：W^KV、W^Z·B、W^DQ·W^UQ</td><td>两类：W_l^KV（×20）与 W_Q</td></tr>
+<tr><td>梯度</td><td>全程可导（无 Indexer）；红线三条</td><td>线性投影梯度最干净、无辅助损失；红线两条</td></tr>
+<tr><td>训练救不回的</td><td>128:1 块边界硬切分——相位 40pp 残留</td><td>无离散决策；H_mid 表示压力大（原版联合训练磨合，复现需适配器）</td></tr>
+<tr><td>一句话</td><td><b>怎么把历史压小</b></td><td><b>怎么从一份摘要提取各层 KV</b></td></tr>
+</table>
+<div class="figcap">表 4 · HCA 与 CED 的训练差异对照（配图 9 / 图 10 读）</div>
 <p><b>复现侧的三段核心代码</b>（完整版见复现实测.md）：CED 主投影器 Linear(2560, 2048) 约 5.24M 参数，输出前 1024 维作 K、后 1024 维作 V：</p>
 <pre>
 class CEDProjector(nn.Module):
@@ -846,7 +829,7 @@ flowchart TD
 <tr><td>k8v4 量化压缩比</td><td>1x</td><td><b>2.46x（理论 2.53x）</b></td><td>达标</td></tr>
 <tr><td>k8v4 top-5 重合 / top-1 一致</td><td>—</td><td><b>100% / 88.9%</b></td><td>轻微扰动</td></tr>
 </table>
-<div class="figcap">表 4 · 复现四项主要结果（Qwen3.5-4B）</div>
+<div class="figcap">表 5 · 复现四项主要结果（Qwen3.5-4B）</div>
 <div class="kp w">
 <span class="kp-t">两个必须说清的口径（易误读）</span>
 <b>持久 ≠ 驻留</b>：3.44x 是落盘/最小集合口径；运行时 reuse 层的物化视图仍占 HBM，驻留口径约 1.00x——当前实现是「落盘压缩 + 计算复用」，不是显存压缩，显存 4x 需要 attention 内惰性物化（后续工作）。<br/><b>mode_b 有适用边界</b>：解码段含 24 层 GatedDeltaNet（递归结构），从零状态起步无法携带历史——mode_b 适合 prefill 延迟优化与 next-token 评测，连续生成要走 mode_csa2_adapter；只旁路 4 个全注意力层时加速从 1.52x 回落 1.10x，这是架构约束不是实现 bug。
@@ -867,7 +850,7 @@ flowchart TD
 <tr><td>稀疏注意力与 KV 量化</td><td>缓存精度派生 + 量化/非量化两套算子选路</td><td>dsa_attn_kv_plan.py:22 / 147 / 176</td></tr>
 <tr><td>MoE 融合与配套</td><td>mc2 一体大算子开关、MTP / VL / SP 配套</td><td>moe_comm_method.py:270、mtp.py:62、dsa_cp.py:1942</td></tr>
 </table>
-<div class="figcap">表 5 · V4 特性到 vllm-ascend 适配点对照</div>
+<div class="figcap">表 6 · V4 特性到 vllm-ascend 适配点对照</div>
 <p><b>① 模型接入与 SWA 滑窗：注册、滑窗缓存、后端选路三件事一次落位。</b>models/__init__.py:32 把 DeepseekV4ForCausalLM 注册到 AscendDeepseekV4ForCausalLM（model.py:1038，支持 PP / LoRA / Eagle3）；滑窗缓存 AscendDeepseekV4SWACache（model.py:110）继承上游 VllmDeepseekV4SWACache，窗口宽取 config.sliding_window（model.py:490）；SWA 层经 get_attn_backend 把注意力后端切到 AscendDSASWABackend（类定义 dsa_v1.py:296）：</p>
 <pre>
 def get_attn_backend(self):
@@ -884,7 +867,7 @@ def get_dsv4_compress_ratio(config: Any, layer_idx: int) -> int:
         return 0
     return compress_ratios[layer_idx]
 </pre>
-<p><b>③ Lightning Indexer 的昇腾化：一个 _C_ascend 算子加一条双流调度。</b>打分选块由 AscendIndexerOps（indexer.py:170）封装，落在 npu_quant_lightning_indexer_v2（:219）；调度上把主 matmul[C] 与辅助 kv_quant[V] + scatter_k_cache[AIV] 放到 aux_stream 并行（:522-528，npu_stream_switch 切流、事件同步）——第 5 章复现里带辅助损失 L_idx 的那个索引器，生产端就是这个形态：</p>
+<p><b>③ Lightning Indexer 的昇腾化：一个 _C_ascend 算子加一条双流调度。</b>打分选块由 AscendIndexerOps（indexer.py:170）封装，落在 npu_quant_lightning_indexer_v2（:219）；调度上把主 matmul[C] 与辅助 kv_quant[V] + scatter_k_cache[AIV] 放到 aux_stream 并行（:522-528，npu_stream_switch 切流、事件同步）——复现记录里的 Lightning Indexer，在生产端的形态：</p>
 <pre>
 # ===== Part1: matmul[C] ∥ kv_quant[V] + scatter_k_cache[AIV] =====
 e_kv_ready = main_stream.record_event()
