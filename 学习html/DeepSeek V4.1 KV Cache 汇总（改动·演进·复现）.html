@@ -158,16 +158,9 @@ flowchart TD
 <li><b>① baseline</b>：每层自算自存，40 份 KV——固有瓶颈本体；</li>
 <li><b>② Prefill / Decode 分离</b>：Prefill 拿完整输入一次算完，产出两样——对输入的完整理解 H_20 与解码器要用的全局 KV（此阶段解码器 20 层完全不执行）；Decode 每步只处理单个新 token，解码器基于投影的全局 KV 做注意力逐步生成；</li>
 <li><b>③ CED</b>：Prefill 只跑编码器，解码段 KV 不再由本层隐藏态计算，而是从 H_20 投影得到——<b>层 21–40 每层各有自己的投影权重</b>（SWA 滑窗 KV 是例外，仍逐层自算）——<b>计算量减半</b>；</li>
-<li><b>④ CSA2</b>：解码段每层被静态指定 Full / Reindex / Reuse 之一，管的就两件事——<b>KV 用自己投影的还是借最近 Full 层的</b>、<b>Top-K 索引自己挑还是抄前面的</b>；Q 是每层自己的，Q×V 注意力每层都照算。config 的典型排布是每 4 层一个 Full 或 Reindex 带三个 Reuse——省的是 KV 生成与索引挑选，不是注意力本身：</li>
+<li><b>④ CSA2</b>：解码段每层被静态指定 Full / Reindex / Reuse 之一，管的就两件事——<b>KV 用自己投影的还是借最近 Full 层的</b>、<b>Top-K 索引自己挑还是抄前面的</b>；Q 是每层自己的，Q×V 注意力每层都照算。config 的典型排布是每 4 层一个 Full 或 Reindex 带三个 Reuse——省的是 KV 生成与索引挑选，不是注意力本身（三种模式的分工见表 1）。</li>
 </ul>
 </div>
-<table>
-<tr><th>模式</th><th>KV 怎么来（阶段一）</th><th>索引怎么来（阶段二）</th><th>注意力计算（每层都做）</th></tr>
-<tr><td><b>Full</b></td><td>自己投影出来</td><td>自己拿 Q 碰 K，挑出 Top-K</td><td>按挑出的重点，Q 与对应 V 加权求和</td></tr>
-<tr><td><b>Reindex</b></td><td>借前面 Full 层的</td><td>自己拿 Q 重新挑（换一套 Top-K）</td><td>按自己挑的名单，Q 与对应 V 加权求和</td></tr>
-<tr><td><b>Reuse</b></td><td>借前面 Full 层的</td><td>直接抄前面的 Top-K</td><td>按抄来的名单，Q 与对应 V 加权求和</td></tr>
-</table>
-<div class="figcap">表 1 · CSA2 三种模式的分工：KV 来源 × 索引来源 × 注意力计算</div>
 <div class="card">
 <div class="mermaid">
 flowchart TD
@@ -212,6 +205,14 @@ flowchart LR
 </div>
 <div class="figcap">图 3 · 两阶段切开（示意 4 层，实际层 21–40 每层都有投影）：阶段一 CED——每层各有投影权重，都能从 H_20 生成自己的 KV；阶段二 CSA2——逐层静态指定模式，判定 KV 用谁的、Top-K 怎么挑（索引是注意力阶段的第一步），Q×V 每层都算</div>
 </div>
+<table>
+<tr><th>模式</th><th>KV 怎么来（阶段一）</th><th>索引怎么来（阶段二）</th><th>注意力计算（每层都做）</th></tr>
+<tr><td><b>Full</b></td><td>自己投影出来</td><td>自己拿 Q 碰 K，挑出 Top-K</td><td>按挑出的重点，Q 与对应 V 加权求和</td></tr>
+<tr><td><b>Reindex</b></td><td>借前面 Full 层的</td><td>自己拿 Q 重新挑（换一套 Top-K）</td><td>按自己挑的名单，Q 与对应 V 加权求和</td></tr>
+<tr><td><b>Reuse</b></td><td>借前面 Full 层的</td><td>直接抄前面的 Top-K</td><td>按抄来的名单，Q 与对应 V 加权求和</td></tr>
+</table>
+<div class="figcap">表 1 · CSA2 三种模式的分工：KV 来源 × 索引来源 × 注意力计算</div>
+
 <p><b>量化效果四笔账</b>：</p>
 <table>
 <tr><th>账目</th><th>数字</th><th>口径说明</th></tr>
