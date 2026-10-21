@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DeepInfer 源码导航：DeepSeek 开源推理框架的全景地图</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; white-space:nowrap; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; text-align:center; }
+.mermaid svg { margin:0 auto; }
+.arch { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:16px; margin:12px 0; }
+.arch-title { text-align:center; font-weight:bold; font-size:1.02rem; margin-bottom:12px; }
+.arch-row { display:flex; gap:14px; align-items:stretch; }
+.arch-block { border-radius:10px; padding:12px; flex:1; }
+.arch-block.model { background:#f5f7ff; border:1.5px solid #5b6ee1; flex:.82; }
+.arch-block.frame { background:#fffdf3; border:1.5px solid #9a6700; flex:1.18; }
+.arch-head { border-radius:8px; padding:7px 10px; margin-bottom:10px; font-size:.92rem; }
+.model .arch-head { background:#eef3ff; color:#3a4aa8; }
+.frame .arch-head { background:#fff4d5; color:#7a5800; }
+.arch-head span { display:block; font-size:.78rem; color:var(--muted); margin-top:2px; font-weight:normal; }
+.arch-grid5 { display:flex; flex-direction:column; gap:8px; }
+.cell { background:#fff; border:1px solid #d0d7de; border-radius:7px; padding:6px 8px; font-size:.86rem; font-weight:600; text-align:center; }
+.model .cell { border-color:#91a7ee; }
+.frame .cell { border-color:#d8c289; }
+.cell .csub { display:block; font-weight:normal; font-size:.7rem; color:var(--muted); margin-top:3px; line-height:1.45; }
+.arch-stages { display:flex; gap:8px; }
+.stage { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.stage-name { text-align:center; font-size:.8rem; font-weight:bold; color:#7a5800; background:#fff4d5; border-radius:6px; padding:3px 4px; }
+.stage-cells { display:flex; flex-direction:column; gap:6px; flex:1; }
+.arch-l2 { margin-top:12px; background:#f6f8fa; border:1px dashed #9ea7b3; border-radius:8px; padding:8px 12px; font-size:.82rem; color:#4b5563; }
+.l2tag { font-weight:bold; color:#3a4aa8; margin-right:8px; }
+.steps { margin:8px 0 4px; padding-left:22px; }
+.steps li { margin:3px 0; font-size:.92rem; }
+.flow2 { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:18px 20px; margin:12px 0; }
+.flow2-title { text-align:center; font-weight:bold; margin-bottom:18px; font-size:1rem; }
+.flow2-grid { display:grid; grid-template-columns:5fr 64px 6fr; row-gap:30px; align-items:center; }
+.fnode { position:relative; background:#f7f8fa; border:1.5px solid #aab3bf; border-radius:12px; padding:10px 14px; text-align:center; font-weight:bold; font-size:.95rem; }
+.fnode.adapt { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnode .fsub, .fnote .fsub { font-weight:normal; font-size:.8rem; color:var(--muted); margin-top:3px; line-height:1.5; }
+.fnode:not(.last)::after { content:''; position:absolute; left:50%; bottom:-24px; transform:translateX(-50%); width:2px; height:16px; background:#3b82f6; }
+.fnode:not(.last)::before { content:''; position:absolute; left:50%; bottom:-25px; transform:translateX(-50%); border:5px solid transparent; border-top:7px solid #3b82f6; }
+.fmid { position:relative; height:100%; display:flex; align-items:center; justify-content:center; }
+.fmid::before { content:''; position:absolute; left:-2px; right:-2px; top:50%; border-top:2px dashed #14b8a6; }
+.fnum { position:relative; z-index:1; width:30px; height:30px; border-radius:50%; border:2.5px solid #3b82f6; background:#fff; color:#1d4ed8; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+.fnote { border-radius:12px; padding:10px 14px; font-weight:bold; text-align:center; font-size:.9rem; line-height:1.5; }
+.fnote.glm { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnote.cap { background:#fff8e1; border:1.5px dashed #d97706; color:#7a5800; }
+.fnote.start { background:#f7f8fa; border:1.5px solid #aab3bf; color:#4b5563; }
+code { font-family:Consolas,monospace; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 9px; font-size:.84rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+td.l0 { font-weight:bold; color:#0969da; white-space:nowrap; }
+td.l1 { font-weight:600; color:#3a4aa8; }
+td.ok { color:#1a7f37; }
+.warn { color:#cf222e; font-weight:bold; }
+.note { background:#f0f4ff; border-left:4px solid #667eea; padding:12px 16px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+.linklist li { margin:5px 0; }
+.linklist a { color:var(--accent); }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style><style>
+.figcap{font-size:12.5px;color:#6b7280;text-align:center;margin:6px 0 14px}
+.dim{color:#9aa3ad;font-size:13px}
+</style>
+<body>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+<div class="topnav">
+    <span class="brand">DeepInfer · 源码导航</span>
+    <a href="#s1">①是什么</a>
+    <a href="#s2">②目录全景</a>
+    <a href="#s3">③vLLM 血缘</a>
+    <a href="#s4">④特性开关全集</a>
+    <a href="#s5">⑤双平台</a>
+    <a href="../index.html">← 返回首页</a>
+</div>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:0 0 6px">&larr; 返回首页</a>
+<h1>DeepInfer 源码导航：DeepSeek 开源推理框架的全景地图</h1>
+<p class="subtitle">
+<span class="badge b-blue">deepseek-ai/DeepInfer @ 774ce24</span>
+<span class="badge b-green">218 个 py · 46,353 行实测清点</span>
+2026-10-21 发布 · 源码基线：本地克隆逐文件核对</p><div class="card"><p><strong>怎么读</strong>：DeepSeek 把支撑其大规模生产服务的推理框架 DeepInfer 开源了（Apache-2.0）。本篇是源码级导航——目录全景、与 vLLM 的结构对照、全部配置开关、双硬件平台路径，全部条目来自本地克隆的逐文件清点，后续篇章再按特性逐个深入。</p></div>
+
+<h2 id="s1">1. 是什么：生产规模的开源快照</h2>
+<div class="card">
+<p><strong>定位</strong>：DeepInfer 是支撑 DeepSeek-V4.1-Flash 大规模线上服务的推理引擎开源版，README 原话——"the high-performance inference framework that powers DeepSeek's large-scale production services"。官方 Q&amp;A 给出的生产规模：单集群每天服务 <strong>155 万亿 token</strong>，整体营收 38 美元/GPU·小时（谷时电价口径）。</p>
+<p><strong>血缘</strong>：README 致谢段写明"originally built primarily on vLLM"，另受 SGLang 与 TensorRT-LLM 启发——结构与 vLLM 相似，但为 V4.1-Flash 的 CED/YOCO 架构与大规模部署做了深度定制（后续章节逐一对照）。</p>
+<p><strong>开源边界</strong>：本次开源的是引擎本体（离线推理可用）；KV cache 存储系统与跨副本负载均衡因耦合内部基础设施未含，设计细节在官方 Zhihu 长文与仓库 doc/inference_deployment_qa.md（312 行 Q&amp;A）里展开。伴生开源 deepseek-recipe（Rust 实现的 API 协议↔token 编解码组件）。</p>
+<table>
+<tr><th>项</th><th>值（实测）</th></tr>
+<tr><td>仓库</td><td>github.com/deepseek-ai/DeepInfer · Apache-2.0 · 开源首日 12.4k stars</td></tr>
+<tr><td>主包规模</td><td>deepinfer/ 218 个 py · 46,353 行；csrc/ 15 个 C++/CUDA 文件；deep_cluster/ 8 py</td></tr>
+<tr><td>支持模型</td><td>DeepSeek-V4.1-Flash（默认 checkpoint：DeepSeek-V4.1-Flash-1017）</td></tr>
+<tr><td>硬件</td><td>NVIDIA SM100 GPU（CUDA 13）/ 华为昇腾 950 NPU（CANN 9.2）</td></tr>
+<tr><td>构建</td><td>Python 3.12 + GCC≥13；build.sh，DEEPINFER_ACCELERATOR=nvidia|ascend 切换</td></tr>
+</table>
+<div class="figcap">表 1 · DeepInfer 开源快照基本面（本地仓库与 README 实测）</div>
+</div>
+
+<h2 id="s2">2. 目录全景：一张地图</h2>
+<div class="card">
+<p><strong>顶层七目录</strong>：deepinfer/ 是引擎主包，deep_cluster/ 是集群拓扑感知，csrc/ 是 C++/CUDA 扩展（含昇腾的 asc_utils.cpp），vendor/ 空壳（kernel 库走外部依赖），eval/ 与 examples/ 是评测与示例（12 py · 3,018 行，含 offline_inference.py 与结构化输出示例），doc/ 只有一份 312 行部署 Q&amp;A。</p>
+<div class="mermaid">
+flowchart TD
+    R["DeepInfer 仓库"] --> P["deepinfer/ 218 py · 46,353 行"]
+    R --> C["csrc/ 15 个 C++/CUDA<br/>pybind / engine / asc_utils.cpp"]
+    R --> DC["deep_cluster/ 8 py<br/>hardware + topology"]
+    R --> EX["examples/ eval/ doc/"]
+    P --> E["engine/ llm_engine + arg_utils + stats_logger"]
+    P --> W["worker/ model_runner + cache_engine<br/>cuda_graph_runner + dflash_cuda_graph_runner"]
+    P --> ME["model_executor/ eplb + input_metadata<br/>layers + models + parallel_utils"]
+    P --> N["npu_ops/ 昇腾算子补丁"]
+    P --> SO["structure_output/ 结构化输出四件"]
+    P --> VE["ve/ 视觉编码器（多模态）"]
+    P --> ENV["environ.py 全部环境变量"]
+</div>
+<div class="figcap">图 1 · 目录全景：主包七个子系统的分工（行数为逐文件清点）</div>
+</div>
+
+<h2 id="s3">3. vLLM 血缘：结构对照</h2>
+<div class="card">
+<p><strong>相同骨架</strong>：engine / worker / model_executor / entrypoints / distributed 的五层骨架与 vLLM 一一对应，类名也大量沿用（LLMEngine、Worker、ModelRunner）。<strong>新增的五个目录</strong>是 DeepSeek 定制的重心：</p>
+<table>
+<tr><th>目录</th><th>vLLM 对应</th><th>DeepInfer 定制</th></tr>
+<tr><td>model_executor/input_metadata/</td><td>vllm/v1/metadata</td><td>yoco.py（SWA 截断）、prepare_tensor_input_zos.py（零开销调度）</td></tr>
+<tr><td>model_executor/models/v4_modules/</td><td>vllm/models/deepseek_v2 等</td><td>V4.1-Flash 专用模块（attn / mlp，CED/YOCO 在此落地）</td></tr>
+<tr><td>npu_ops/</td><td>无（vllm-ascend 是外挂插件）</td><td>昇腾算子直接进主包：deep_select topk / vit_attn</td></tr>
+<tr><td>structure_output/</td><td>vllm/v1/structured_output</td><td>compiler + mask + matcher + so_matcher_builder 四件</td></tr>
+<tr><td>ve/</td><td>vllm/multimodal</td><td>视觉编码器独立成包（E/P/D 分离里的 E）</td></tr>
+</table>
+<div class="figcap">表 2 · 与 vLLM 的结构对照：五层骨架相同，五个目录是定制重心</div>
+<p><strong>规模对比</strong>：vLLM 主包数百万行级，DeepInfer 主包 4.6 万行——这是一台为 V4.1-Flash 单车型调校的引擎，不是通用框架；换车型的成本被换来了单模型深度优化的自由（v4_modules 里可以直写 CED 的投影分发与 SWA 的 ring buffer 语义）。</p>
+</div>
+
+<h2 id="s4">4. 特性开关全集：environ.py 221 行</h2>
+<div class="card">
+<p><strong>一文件看全特性</strong>：deepinfer/environ.py（221 行）集中定义全部 DEEPINFER_* 环境变量，每个带默认值与中文 docstring——这份文件就是框架特性的权威清单，按用途分组：</p>
+<table>
+<tr><th>分组</th><th>代表开关（实测）</th><th>含义</th></tr>
+<tr><td>EPLB</td><td>DEEPINFER_OVERRIDE_NUM_EXTRA_EXPERTS / EXPERT_COUNT_WINDOW_SIZE=100 / EXPERT_REARRANGEMENT_STEP_INTERVAL / MOE_LB_STAT_INTERVAL=128</td><td>冗余专家数、统计窗口、重排间隔、均衡度统计</td></tr>
+<tr><td>投机解码</td><td>DEEPINFER_USE_NEXTN_DECODE=5 / ENABLE_MTP_VARLEN / MAX_BACKTRACKING_TOKENS / DFLASH_CONFIDENCE_HEAD_TEMPERATURE</td><td>draft 长度、变长验证、回退上限、置信头温度</td></tr>
+<tr><td>YoCo 截断</td><td>DEEPINFER_YOCO_PREFILL_TRUNCATION_MODE=off|mask|compact / YOCO_PREFILL_KEEP_TOKENS</td><td>SWA bounded replay 的模式与保留长度</td></tr>
+<tr><td>调度</td><td>DEEPINFER_PREFILL_ATTEMPT_INTERVAL=70 / PREFILL_ANY_ATTEMPT_INTERVAL=100 / ZERO_OVERHEAD_SCHEDULING</td><td>集体 prefill 间隔（ALL/ANY 两档）与零开销调度</td></tr>
+<tr><td>图捕获</td><td>DEEPINFER_ENFORCE_EAGER / CUDAGRAPH_BATCH_SIZE_INTERVAL=8 / DFLASH_ENFORCE_EAGER</td><td>CUDA graph 开关与批粒度</td></tr>
+<tr><td>结构化输出</td><td>DEEPINFER_XGRAMMAR_TIMEOUT=20 / XGRAMMAR_CACHE_LIMIT_BYTES=10GiB / SO_BUILDER_CPUS=4</td><td>xgrammar 编译超时/缓存/编译并发</td></tr>
+<tr><td>状态槽</td><td>DEEPINFER_NUM_STATE_SLOTS_RATIO=1.2 / PREFILL_STORE_EXTRA_STATE / PREFILL_STORE_EXTRA_SIZE=128</td><td>SWA state 槽位配比与超额存储</td></tr>
+<tr><td>批不变</td><td>DEEPINFER_BATCH_INVARIANT（NVIDIA only）</td><td>批不变推理与确定性采样的总开关</td></tr>
+</table>
+<div class="figcap">表 3 · environ.py 环境变量分组速查（默认值与两档调度语义均取自 docstring 原文）</div>
+</div>
+
+<h2 id="s5">5. 双平台：昇腾是一等公民</h2>
+<div class="card">
+<p><strong>主包内建昇腾路径</strong>：与 vllm-ascend 的外挂插件模式不同，DeepInfer 把昇腾支持直接放进主包——requirements-ascend.txt 独立依赖清单、csrc/asc_utils.cpp 昇腾工具链、npu_ops/ 三个文件做算子替换：</p>
+<div class="mermaid">
+flowchart LR
+    A["npu_ops/__init__.py<br/>patch_imports"] -->|"topk"| B["deep_select.interface<br/>昇腾 topk kernel"]
+    A -->|"_flash_attn_fwd"| C["flash_attn.cute 接口<br/>vit_attn 昇腾版"]
+    B --> D["采样侧 topk 未就绪<br/>回退 torch.topk"]
+    E["DEEPINFER_ACCELERATOR=ascend"] --> F["ENGRAM_FORCE_GPU_STORAGE 自动开启<br/>CANN 9.2 构建"]
+</div>
+<div class="figcap">图 2 · 昇腾路径：patch_imports 把两个热算子换成 NPU 实现，采样 topk 暂回退 torch（deep_select.py 内注释 TODO(NPU)）</div>
+<p><strong>平台分派的代价与收益</strong>：批不变推理与确定性采样当前标注 NVIDIA only（environ.py 注释）；收益是同一套 engine / worker / model_executor 代码在两个平台跑同一个模型，官方 Q&amp;A 明确"支持多厂商加速器"是推理系统三大设计目标之首。</p>
+<p><strong>站内衔接</strong>：特性逐个展开见《DeepInfer 特性地图》，SWA bounded replay 的深挖见《DeepInfer SWA Bounded Replay 深挖》；V4.1-Flash 的模型机制（CED/CSA2/SWA）见站内《DeepSeek V4.1 的 KV Cache 汇总》。</p>
+</div>
+
+<p class="dim" style="margin-top:36px">DeepInfer 源码导航 · 2026-10-21 发布 · 事实来源：本地克隆 deepseek-ai/DeepInfer @ 774ce24 逐文件清点 + README + doc/inference_deployment_qa.md</p>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+
+</body>
+</html>
