@@ -118,12 +118,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow prev" onclick="moveCarousel(-1)">&lsaquo;</button>
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-20</span></div>
-<div class="cc-title">fla 库与 vllm-ascend：KDA 算子的源码血缘与三层分布</div>
-<div class="cc-desc">flash-linear-attention 不是 vllm-ascend 的 pip 依赖而是源码血缘：fla 源头 → vllm vendored → vllm-ascend 拷贝定制；import/版权头/requirements 三证据，两套命名对照，Chunk-KDA 六步 kernel 全定位</div>
-<a class="cc-link" href="学习html/fla库与vllm-ascend：KDA算子的源码血缘与三层分布.html">阅读 &rarr;</a>
-</div>
+
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-10-19</span></div>
 <div class="cc-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</div>
@@ -148,13 +143,19 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">机内 8 卡灵衢 UB 背板 Full-Mesh；RoCE / FM16 灵衢直连 / UBoE 三种机间拓扑——是不是超节点，一条命令判定</div>
 <a class="cc-link" href="学习html/昇腾A5组网形态详解-Atlas650E三种拓扑.html">阅读 &rarr;</a>
 </div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-17</span></div>
+<div class="cc-title">DeepSeek V4.1 全链路主时序：56 步四阶段</div>
+<div class="cc-desc">一条请求从 HTTP 进到 token 出的 56 步全程时序——HTTP 服务、入队、调度、前向采样、出队四阶段，步步行号可查，vLLM 血缘与昇腾落点对照</div>
+<a class="cc-link" href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html">阅读 &rarr;</a>
+</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">48</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">47</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -162,15 +163,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">48 篇 · 9 个专题</div>
+<div class="sec-badge">47 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">48</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">47</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">13</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">12</span></button>
 <button class="chip" data-topic="dsinfer">DeepSeek 推理<span class="count">3</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
@@ -182,7 +183,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <li class="li" data-topic="dsinfer" data-ts="20261021"><a href="学习html/DeepInfer 特性地图 · 六大特性与源码对照.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">DeepInfer 特性地图：六大特性 × 源码位置 × 生产数字<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">E/P/D 分离+Wide-EP（decode EP64-128）+EPLB 生产参数（moe_lb 1.045-1.090）；DSpark 置信度变长验证（少验 30% draft、吞吐 +4-7% 全表）；异步调度时间线与 zos；批不变+确定性采样；结构化输出编译解耦——每条特性落到源码文件与环境变量</span></span></a></li>
 <li class="li" data-topic="dsinfer" data-ts="20261021"><a href="学习html/DeepInfer 源码导航 · DeepSeek开源推理框架全景.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">DeepInfer 源码导航：DeepSeek 开源推理框架的全景地图<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">DeepSeek 生产推理框架开源版的全景地图：规模总账（270 py/55,199 行/218 类 ast 全量提取）、目录分布、与 vLLM 的结构血缘对照（五层骨架+五个定制重心）、environ 开关全集、昇腾 patch_imports 路径；源码已随站镜像可经查看器逐文件打开——生产规模 155 万亿 token/天、SM100+昇腾 950 双平台</span></span></a></li>
 
-<li class="li" data-topic="vllm" data-ts="20261020"><a href="学习html/fla库与vllm-ascend：KDA算子的源码血缘与三层分布.html"><span class="li-date">2026-10-20</span><span class="li-main"><span class="li-title">fla 库与 vllm-ascend：KDA 算子的源码血缘与三层分布<span class="li-tag">vLLM 源码</span></span><span class="li-desc">不是 pip 依赖而是源码血缘——fla 库（MIT）→ vllm vendored 1702 行 → vllm-ascend 拷贝定制六文件+AscendC 绑定，外加 fla 官方 triton_ascend 平行分支；三证据实测（import/版权头/requirements）；同一算子两套命名对照与 Chunk-KDA 六步 kernel 定位</span></span></a></li>
+
 
 <li class="li" data-topic="accel" data-ts="20261019"><a href="学习html/DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html"><span class="li-date">2026-10-19</span><span class="li-main"><span class="li-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测<span class="li-tag">推理加速</span></span><span class="li-desc">V4.1-Flash 四步递进推理配置与量化四笔账（KV 容量 1/4、持久化 1/8、890 B/token、27.6MB↓75%）；MLA→V4.0 三段分段→V4.1 换路径的演进史与 HCA 废弃的相位根因（40pp→6pp）；老师-学生训练结构与 Qwen3.5-4B 复现（GSM8K -1pp、prefill 1.56x、持久 3.44x、k8v4 top-5 100%）——13 图 4 段代码</span></span></a></li>
 
