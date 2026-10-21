@@ -1,0 +1,1 @@
+window.__SRC_SET("deepinfer/npu_ops/__init__.py","from deepinfer.npu_ops.patch_imports import patch_imports\n\npatch_imports(\n    {\n        \"deepinfer.npu_ops.deep_select\": {\n            \"deep_select.interface\": \"topk\",\n        },\n        \"deepinfer.npu_ops.vit_attn\": {\n            \"flash_attn.cute.interface\": \"_flash_attn_fwd\",\n        },\n    }\n)\n");
