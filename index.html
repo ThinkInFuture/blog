@@ -119,24 +119,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">DeepSeek 推理</span><span class="cc-date">2026-10-21</span></div>
-<div class="cc-title">DeepInfer SWA Bounded Replay 深挖：YOCO 截断的两模式与命中账本</div>
-<div class="cc-desc">最懂 V4.1 架构的特性：CED 下块 KV 免算、SWA KV 只重算最近 128 token（精确重建需 2560 token×20 层），prefill</div>
-<a class="cc-link" href="学习html/DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">DeepSeek 推理</span><span class="cc-date">2026-10-21</span></div>
-<div class="cc-title">DeepInfer 特性地图：六大特性 × 源码位置 × 生产数字</div>
-<div class="cc-desc">E/P/D 分离+Wide-EP（decode EP64-128）+EPLB 生产参数（moe_lb 1.045-1.090）；DSpark 置信度变长验证（少</div>
-<a class="cc-link" href="学习html/DeepInfer 特性地图 · 六大特性与源码对照.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">DeepSeek 推理</span><span class="cc-date">2026-10-21</span></div>
-<div class="cc-title">DeepInfer 源码导航：DeepSeek 开源推理框架的全景地图</div>
-<div class="cc-desc">DeepInfer 开源首日快照：生产规模 155 万亿 token/天、基于 vLLM 构建；主包 218 py 46,353 行逐文件清点，目录全景图与 v</div>
-<a class="cc-link" href="学习html/DeepInfer 源码导航 · DeepSeek开源推理框架全景.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-20</span></div>
 <div class="cc-title">fla 库与 vllm-ascend：KDA 算子的源码血缘与三层分布</div>
 <div class="cc-desc">flash-linear-attention 不是 vllm-ascend 的 pip 依赖而是源码血缘：fla 源头 → vllm vendored → vllm-ascend 拷贝定制；import/版权头/requirements 三证据，两套命名对照，Chunk-KDA 六步 kernel 全定位</div>
@@ -147,6 +129,24 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</div>
 <div class="cc-desc">四步递进的推理配置与量化四笔账；MLA→V4.0→V4.1 演进台阶（70,272→3,514→890 B/token）与 HCA 相位根因；老师-学生训练结构图与 Qwen3.5-4B 复现实测——13 图 4 段代码，取自 Flash 解读与复现记录</div>
 <a class="cc-link" href="学习html/DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-10-18</span></div>
+<div class="cc-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</div>
+<div class="cc-desc">Q/K/V 怎么算、causal mask 挡什么、无缓存为什么平方级重算、Prefill 与 Decode 怎么写缓存、逐层缓存与显存公式、以及 GQA/MLA/量化怎么省——11 张图配 10 段可运行 PyTorch</div>
+<a class="cc-link" href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">算子与编程</span><span class="cc-date">2026-10-16</span></div>
+<div class="cc-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开</div>
+<div class="cc-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——三层全景逐层展开族谱，拿真实 profiling 数据认亲</div>
+<a class="cc-link" href="学习html/昇腾算子地图 · 从一层前向到三层算子楼.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">硬件架构</span><span class="cc-date">2026-10-15</span></div>
+<div class="cc-title">昇腾 A5 组网形态详解：Atlas 650E 的三种拓扑对比</div>
+<div class="cc-desc">机内 8 卡灵衢 UB 背板 Full-Mesh；RoCE / FM16 灵衢直连 / UBoE 三种机间拓扑——是不是超节点，一条命令判定</div>
+<a class="cc-link" href="学习html/昇腾A5组网形态详解-Atlas650E三种拓扑.html">阅读 &rarr;</a>
 </div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
