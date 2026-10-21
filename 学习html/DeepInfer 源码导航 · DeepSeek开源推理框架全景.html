@@ -134,7 +134,7 @@ footer a { color:var(--accent); }
 <span class="badge b-green">270 py · 55,199 行 · 218 类 · 951 顶层函数 · ast 全量提取</span>
 2026-10-21 发布 · 对标 code-docs 全景深度</p>
 
-<div class="card"><p><strong>怎么读</strong>：本篇是 DeepInfer（DeepSeek 开源的生产推理框架，支撑 V4.1-Flash）的全景源码导航——全部 270 个 Python 文件逐文件给出路径、行数、职责（模块 docstring），顶层类与函数逐个列出（行数 + 一句话说明），另有 33 个 C++/CUDA 文件清单。所有条目由 ast 从源码程序化提取，非手抄。本篇给三样东西：框架是什么、代码分布总账、与 vLLM 的血缘及配置开关——单屏可读。</p></div>
+<div class="card"><p><strong>怎么读</strong>：本篇是 DeepInfer（DeepSeek 开源的生产推理框架，支撑 V4.1-Flash）的全景源码导航——全部 270 个 Python 文件逐文件给出路径、行数、职责（模块 docstring），顶层类与函数逐个列出（行数 + 一句话说明），另有 33 个 C++/CUDA 文件清单。所有条目由 ast 从源码程序化提取，非手抄。七步走：是什么、总账、上下游关系、请求处理十步、核心模块九宫格（每卡可直达源码）、开关全集、双平台；完整文档站（架构总览 / 核心模块逐文件 / 全景源码 270 卡 / 参数说明 55 变量）见 <a href="../code-docs/deepinfer/index.html">DeepInfer 文档站</a>。</p></div>
 
 <h2 id="s1">1. 是什么：生产规模的开源快照</h2>
 <div class="card">
