@@ -368,7 +368,55 @@ flowchart TD
         <h3>3.2 下游：DeepInfer（重写/新增）</h3>
         <p>engine/ 主循环重排（异步调度 + ALL/ANY 集体 prefill）、worker/ cache_engine 全重写（StateBlock + SWA state）、v4_modules 26 文件（CED 与 YOCO 落地）、tilelang_ops 算子库（CUDA 25 + AscendC 33）、npu_ops / ve / structure_output 三个定制新目录。</p>
         <h3>3.3 依赖关系</h3>
-        <p>vllm-ascend 靠 Platform 接口外挂进 vLLM；DeepInfer 把 vLLM 的代码长进了自己身体里——主包 4.6 万行，fork 后删掉通用框架的多车型包袱，换来在 v4_modules 里直写 CED 投影分发与 SWA ring buffer 语义的自由。</p>
+        <p>DeepInfer 不依赖任何 vLLM 包（fork 源码进主包），运行时依赖以下库（版本取自仓库四份 requirements，2026-10-21 @ 774ce24）：</p>
+        <p style="font-size:13px;color:#6b7280">依赖文件分层：<code>requirements.txt</code>（通用运行时）← <code>requirements-dev.txt</code>（开发，-r 引通用）← <code>requirements-nvidia.txt</code> / <code>requirements-ascend.txt</code>（平台二选一，-r 引开发）。</p>
+        <div class="dep-grid">
+            <div class="dep-item"><h4>深度学习框架（平台二选一）</h4><ul>
+                <li>torch==2.13.0+cu132（NVIDIA）</li>
+                <li>torch==2.13.0+cpu（配昇腾）</li>
+                <li>torch-npu==2.13.0rc1（昇腾）</li>
+            </ul></div>
+            <div class="dep-item"><h4>算子与编译</h4><ul>
+                <li>tilelang==0.1.15</li>
+                <li>tile-kernels==2.1.0</li>
+                <li>flash-attn-4==4.0.0b34（NVIDIA）</li>
+                <li>ninja==1.13.0</li>
+                <li>pybind11==3.0.1</li>
+            </ul></div>
+            <div class="dep-item"><h4>模型相关</h4><ul>
+                <li>transformers==4.50.0</li>
+                <li>tokenizers==0.21.4</li>
+                <li>huggingface_hub==0.36.2</li>
+                <li>safetensors==0.8.0</li>
+                <li>xgrammar==0.2.2（结构化输出）</li>
+            </ul></div>
+            <div class="dep-item"><h4>科学计算</h4><ul>
+                <li>numpy==2.3.5</li>
+                <li>scipy==1.17.0</li>
+                <li>sympy==1.14.0</li>
+                <li>einops==0.8.2</li>
+                <li>pillow==11.3.0（视觉）</li>
+            </ul></div>
+            <div class="dep-item"><h4>进程与通信</h4><ul>
+                <li>posix_ipc==1.3.2（共享内存）</li>
+                <li>pyzmq==27.1.0</li>
+                <li>psutil==7.2.2</li>
+                <li>orjson==3.11.7</li>
+            </ul></div>
+            <div class="dep-item"><h4>开发与 Profiling（dev）</h4><ul>
+                <li>pytest==8.4.2 / ruff==0.15.0</li>
+                <li>fastapi==0.128.0 / uvicorn==0.40.0</li>
+                <li>matplotlib==3.11.2</li>
+                <li>tree-sitter==0.26.0</li>
+            </ul></div>
+        </div>
+        <div class="note">
+            <h4>如何理解上下游关系</h4>
+            <p>1. <strong>vLLM</strong> 是"蓝本源头"：五层骨架与类名体系继承自一年多前的 vLLM 早期版本，不随上游 vLLM 升级</p>
+            <p>2. <strong>DeepInfer</strong> 是"整车"而非"适配器"：fork 源码长进主包（4.6 万行），为 V4.1-Flash 深度定制——与 vllm-ascend 外挂插件路线完全不同</p>
+            <p>3. 用户只需 <strong>安装一个 deepinfer 包</strong>：pip 装平台 requirements 即可离线推理，不需要另装 vLLM</p>
+            <p>4. 想逐文件深入？<a href="panorama.html" style="color:#667eea;font-weight:bold">进入全景源码导航</a>，每张文件卡可直达源码镜像</p>
+        </div>
         <div class="mermaid-box"><div class="chart-content"><pre class="mermaid">
 flowchart TD
     V["vLLM 上游 · 继承复用"]:::up --> V1["LLMEngine 类体系<br/>EngineArgs 装配"]
