@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DeepInfer 特性地图：六大特性 × 源码位置 × 生产数字</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; white-space:nowrap; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; text-align:center; }
+.mermaid svg { margin:0 auto; }
+.arch { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:16px; margin:12px 0; }
+.arch-title { text-align:center; font-weight:bold; font-size:1.02rem; margin-bottom:12px; }
+.arch-row { display:flex; gap:14px; align-items:stretch; }
+.arch-block { border-radius:10px; padding:12px; flex:1; }
+.arch-block.model { background:#f5f7ff; border:1.5px solid #5b6ee1; flex:.82; }
+.arch-block.frame { background:#fffdf3; border:1.5px solid #9a6700; flex:1.18; }
+.arch-head { border-radius:8px; padding:7px 10px; margin-bottom:10px; font-size:.92rem; }
+.model .arch-head { background:#eef3ff; color:#3a4aa8; }
+.frame .arch-head { background:#fff4d5; color:#7a5800; }
+.arch-head span { display:block; font-size:.78rem; color:var(--muted); margin-top:2px; font-weight:normal; }
+.arch-grid5 { display:flex; flex-direction:column; gap:8px; }
+.cell { background:#fff; border:1px solid #d0d7de; border-radius:7px; padding:6px 8px; font-size:.86rem; font-weight:600; text-align:center; }
+.model .cell { border-color:#91a7ee; }
+.frame .cell { border-color:#d8c289; }
+.cell .csub { display:block; font-weight:normal; font-size:.7rem; color:var(--muted); margin-top:3px; line-height:1.45; }
+.arch-stages { display:flex; gap:8px; }
+.stage { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.stage-name { text-align:center; font-size:.8rem; font-weight:bold; color:#7a5800; background:#fff4d5; border-radius:6px; padding:3px 4px; }
+.stage-cells { display:flex; flex-direction:column; gap:6px; flex:1; }
+.arch-l2 { margin-top:12px; background:#f6f8fa; border:1px dashed #9ea7b3; border-radius:8px; padding:8px 12px; font-size:.82rem; color:#4b5563; }
+.l2tag { font-weight:bold; color:#3a4aa8; margin-right:8px; }
+.steps { margin:8px 0 4px; padding-left:22px; }
+.steps li { margin:3px 0; font-size:.92rem; }
+.flow2 { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:18px 20px; margin:12px 0; }
+.flow2-title { text-align:center; font-weight:bold; margin-bottom:18px; font-size:1rem; }
+.flow2-grid { display:grid; grid-template-columns:5fr 64px 6fr; row-gap:30px; align-items:center; }
+.fnode { position:relative; background:#f7f8fa; border:1.5px solid #aab3bf; border-radius:12px; padding:10px 14px; text-align:center; font-weight:bold; font-size:.95rem; }
+.fnode.adapt { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnode .fsub, .fnote .fsub { font-weight:normal; font-size:.8rem; color:var(--muted); margin-top:3px; line-height:1.5; }
+.fnode:not(.last)::after { content:''; position:absolute; left:50%; bottom:-24px; transform:translateX(-50%); width:2px; height:16px; background:#3b82f6; }
+.fnode:not(.last)::before { content:''; position:absolute; left:50%; bottom:-25px; transform:translateX(-50%); border:5px solid transparent; border-top:7px solid #3b82f6; }
+.fmid { position:relative; height:100%; display:flex; align-items:center; justify-content:center; }
+.fmid::before { content:''; position:absolute; left:-2px; right:-2px; top:50%; border-top:2px dashed #14b8a6; }
+.fnum { position:relative; z-index:1; width:30px; height:30px; border-radius:50%; border:2.5px solid #3b82f6; background:#fff; color:#1d4ed8; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+.fnote { border-radius:12px; padding:10px 14px; font-weight:bold; text-align:center; font-size:.9rem; line-height:1.5; }
+.fnote.glm { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnote.cap { background:#fff8e1; border:1.5px dashed #d97706; color:#7a5800; }
+.fnote.start { background:#f7f8fa; border:1.5px solid #aab3bf; color:#4b5563; }
+code { font-family:Consolas,monospace; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 9px; font-size:.84rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+td.l0 { font-weight:bold; color:#0969da; white-space:nowrap; }
+td.l1 { font-weight:600; color:#3a4aa8; }
+td.ok { color:#1a7f37; }
+.warn { color:#cf222e; font-weight:bold; }
+.note { background:#f0f4ff; border-left:4px solid #667eea; padding:12px 16px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+.linklist li { margin:5px 0; }
+.linklist a { color:var(--accent); }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style><style>
+.figcap{font-size:12.5px;color:#6b7280;text-align:center;margin:6px 0 14px}
+.dim{color:#9aa3ad;font-size:13px}
+</style>
+<body>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+<div class="topnav">
+    <span class="brand">DeepInfer · 特性地图</span>
+    <a href="#s1">①部署形态</a>
+    <a href="#s2">②并行与EPLB</a>
+    <a href="#s3">③DSpark</a>
+    <a href="#s4">④异步调度</a>
+    <a href="#s5">⑤批不变与SO</a>
+    <a href="#s6">⑥总表</a>
+    <a href="../index.html">← 返回首页</a>
+</div>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:0 0 6px">&larr; 返回首页</a>
+<h1>DeepInfer 特性地图：六大特性 × 源码位置 × 生产数字</h1>
+<p class="subtitle">
+<span class="badge b-blue">deepseek-ai/DeepInfer @ 774ce24</span>
+<span class="badge b-green">官方 Q&amp;A 生产数字全收录</span>
+2026-10-21 发布 · 每条特性都落到源码文件与环境变量</p><div class="card"><p><strong>怎么读</strong>：README 列了六组特性，本篇把每一组落到三样东西上——它解决什么问题、在哪个源码文件、开哪个环境变量；生产数字（吞吐收益、均衡度、TTL）全部取自官方部署 Q&amp;A。SWA bounded replay 单独成篇深挖，本篇只给位置。</p></div>
+
+<h2 id="s1">1. 部署形态：E/P/D 分离 + Wide-EP</h2>
+<div class="card">
+<p><strong>系统形态</strong>：官方架构是 Vision Encoder / Prefill / Decode 三段分离加专用存储节点——VE 单卡部署（推荐便宜卡），prefill 用普通 8 卡机，decode 用 64–128 卡超节点；TP 与 CP 暂不使用。最小高效部署单元 = 64 卡 prefill + 64 卡 decode（P:D 实际约 1:1）。</p>
+<div class="mermaid">
+flowchart TD
+    API["Entrypoint<br/>（kvcache-store CHECK 角色·哈希链前缀匹配）"] --> VE["VE 实例<br/>单卡·视觉编码"]
+    API --> P["Prefill 集群<br/>普通 8 卡机 · EP2-8/DP2-8"]
+    API --> D["Decode 集群<br/>64-128 卡超节点 · EP64-128 = Wide-EP"]
+    P -->|"块 KV + SWA state 落盘"| S["3FS 存储集群<br/>约 100 PiB SSD · TTL 3-7 天"]
+    S -->|"命中回填·GDR swap-in"| D
+    LB["四个负载均衡器<br/>Prefill/Decode/VE/专家并行"] -.-> P
+    LB -.-> D
+</div>
+<div class="figcap">图 1 · E/P/D 分离架构：块 KV 走 3FS 专用集群，SWA state 留本机内存（官方 Q&amp;A 架构文字版）</div>
+<p><strong>Wide-EP 的账</strong>：decode 侧 EP 拉到 64–128，把 MoE 每步的访存量摊薄到超节点互联上，官方结论"大幅降低 decode 每步 MoE 部分的显存流量，配合 EPLB 有效抬升 TPS"；代价是大 EP 一个通信域内单卡故障即整实例不可用，容错靠重启时按健康 GPU 重定 EP 大小。</p>
+</div>
+
+<h2 id="s2">2. 并行与 EPLB：数字齐全的均衡术</h2>
+<div class="card">
+<p><strong>EPLB 机制</strong>：每 GPU 在本职专家外多持几个冗余专家（热门专家副本）；按最近 N 步负载统计，每 M 步重排专家归属，权重经 NVLink symm_mem 在组内搬移。源码落在 model_executor/eplb/ 与 environ.py 的 EPLB 组开关。</p>
+<table>
+<tr><th>参数</th><th>Prefill</th><th>Decode</th></tr>
+<tr><td>冗余专家数 / GPU</td><td>4 起步（总数取整到 ep_size 倍数）</td><td>1 起步（EP64 下含共享专家外每卡 7 个）</td></tr>
+<tr><td>统计窗口 / 重排间隔</td><td>100 步 / 1,000 步</td><td>1,000 步 / 10,000 步</td></tr>
+<tr><td>实测 moe_lb（最慢/均值）</td><td>1.074（EP4DP4）/ 1.045（EP2DP2）</td><td>1.090</td></tr>
+</table>
+<div class="figcap">表 1 · EPLB 生产参数与实测均衡度（官方 Q&amp;A 原数字）</div>
+<p><strong>两级调度器</strong>：Prefill LB 按总上下文四桶（&lt;16K / 16–64K / 64–256K / ≥256K）动态调配引擎数，引擎按剩余算力配额拉活、无前缀亲和；单卡内 chunk 大小不是定值——由二次成本模型 cost(q, c)（q=本步 token 数，c=已算前缀长）反解出预算内最大 q，再经 DP 组 all-reduce MIN 收齐。Decode LB 双维平衡（请求数定批大小、KV 总长定注意力成本），短请求送低并发高 KV 卡。VE LB 机器粒度随机 + 卡上最少 patch 数。总效果≈理想离线均衡的 80%。</p>
+</div>
+
+<h2 id="s3">3. DSpark：置信度调度的变长验证</h2>
+<div class="card">
+<p><strong>问题</strong>：固定长度验证（每步验 5 个 draft token）把验证算力浪费在接受率低的 token 上。<strong>做法</strong>：Confidence Head 预测每个 draft token 的接受概率，调度时只把验证算力分给边际收益最高的前缀子集——生产配置 draft 模型一次出 5 个 token，按预测接受率排序后选使有效吞吐最大的前缀验证。</p>
+<div class="mermaid">
+flowchart LR
+    D["draft 模型出 5 token"] --> CH["Confidence Head<br/>逐 token 接受率"]
+    CH --> TK["TileLang kernel（GPU 侧）<br/>累乘 → 全局排序 top-k → 融合 remap scatter"]
+    TK -->|"pinned buffer 写回"| SC["CPU 调度<br/>只定总预算"]
+    SC --> V["变长验证<br/>验 3.2-4.4 个 / 步"]
+</div>
+<div class="figcap">图 2 · DSpark 变长验证链路：confidence 在异步调度下来不及回 CPU，每请求长度由 GPU 上的 TileLang kernel 算好写回 pinned buffer</div>
+<table>
+<tr><th>并发（seqs/rank）</th><th>固定 5 验证长度</th><th>动态验证长度</th><th>接受长度 固/动</th><th>吞吐增益</th></tr>
+<tr><td>32</td><td>5</td><td>3.65</td><td>3.25 / 3.17</td><td>+1.6%</td></tr>
+<tr><td>60（生产点）</td><td>5</td><td>3.58</td><td>3.30 / 3.21</td><td>+5.4%</td></tr>
+<tr><td>96</td><td>5</td><td>3.24</td><td>3.30 / 3.15</td><td>+11.0%</td></tr>
+</table>
+<div class="figcap">表 2 · 变长验证收益（EP64/DP64 基准，官方 Q&amp;A 原表节选）：每步少验约 30% draft token，接受长度几乎不掉</div>
+<p><strong>源码落点</strong>：model_executor/layers/mtp_info_pool.py（MTP 提案的 GPU 稳定存储，(max_num_seqs+1)×nextn 行、slot 0 留 padding、confidence 缓冲）；tilelang_ops/store_mtp_info.py、dflash.py；开关 DEEPINFER_ENABLE_MTP_VARLEN=1，draft 长度 DEEPINFER_USE_NEXTN_DECODE=5，置信头温度 DFLASH_CONFIDENCE_HEAD_TEMPERATURE。</p>
+</div>
+
+<h2 id="s4">4. 异步调度：零开销批调度器</h2>
+<div class="card">
+<p><strong>被优化的问题</strong>：decode 第 N 步原本串行跑 schedule(N) → forward(N) → sample(N) → post-process(N)，其中 post-process 前必须做一次 CPU-GPU 同步等采样结果，GPU 在 post-process(N) 与 schedule(N+1) 期间空转。<strong>做法</strong>（沿 SGLang / NanoFlow 思路）：GPU 跑 forward(N)→sample(N) 的同时，CPU 并行跑 schedule(N+1) → launch_forward(N+1) → post-process(N−1) → launch_sample(N+1)，全程无空转。默认开启，DEEPINFER_ZERO_OVERHEAD_SCHEDULING 可关；environ.py 里 ALL/ANY 两档集体 prefill 间隔（70/100 步）就是为这套异步节奏配的。源码入口 engine/llm_engine.py 与 input_metadata/prepare_tensor_input_zos.py（zos=zero-overhead scheduling）。</p>
+</div>
+
+<h2 id="s5">5. 批不变推理与结构化输出</h2>
+<div class="card">
+<p><strong>批不变推理</strong>：同一请求在不同批组合下输出完全一致——DEEPINFER_BATCH_INVARIANT=1 开启（当前 NVIDIA only）；叠加关掉 MTP 变长并在 SamplingParams 传固定 seq_seed，得到确定性采样（同输入同参数必同输出）。源码贯穿 attention_backend.py、tilelang_ops/random_sampling.py、parallel_utils/userbuffer.py、worker/runtime_config.py。</p>
+<p><strong>结构化输出</strong>：约束生成符合 regex / JSON schema / EBNF。做法是编译与推理解耦——SO 编译异步跑在专用机器上（structure_output/compiler.py 编译成文法自动机），请求进引擎前取编译结果；decode 每步推进自动机、算出合法 token 集、生成 mask 施加到采样（mask.py / matcher.py / so_matcher_builder.py）。用法：SamplingParams 传 so_args={"schema_type": ..., "schema": ...}，示例 examples/_structured_output.py；缓存与超时由 XGRAMMAR 组环境变量控制（默认缓存 10 GiB、超时 20 秒）。</p>
+</div>
+
+<h2 id="s6">6. 总表：特性 × 开关 × 源码</h2>
+<div class="card">
+<table>
+<tr><th>特性</th><th>开关</th><th>源码主阵地</th><th>生产数字</th></tr>
+<tr><td>Wide-EP + EPLB</td><td>EPLB 组环境变量</td><td>model_executor/eplb/</td><td>decode EP64-128；moe_lb 1.045–1.090</td></tr>
+<tr><td>DSpark 变长验证</td><td>ENABLE_MTP_VARLEN / USE_NEXTN_DECODE</td><td>layers/mtp_info_pool.py + tilelang_ops/dflash.py</td><td>少验 30%，吞吐 +4–7%（96 并发 +11%）</td></tr>
+<tr><td>SWA bounded replay</td><td>YOCO_PREFILL_TRUNCATION_MODE / KEEP_TOKENS</td><td>input_metadata/yoco.py + models/v4_modules/</td><td>decoder prefill 计算近乎减半（详见深挖篇）</td></tr>
+<tr><td>异步调度</td><td>默认开启 / ZERO_OVERHEAD_SCHEDULING</td><td>engine/llm_engine.py + prepare_tensor_input_zos.py</td><td>GPU 全程无空转</td></tr>
+<tr><td>批不变 + 确定性采样</td><td>BATCH_INVARIANT + seq_seed</td><td>attention_backend / random_sampling / userbuffer</td><td>NVIDIA only</td></tr>
+<tr><td>结构化输出</td><td>so_args（SamplingParams）</td><td>structure_output/ 四文件</td><td>SO 编译缓存 10 GiB 默认</td></tr>
+</table>
+<div class="figcap">表 3 · 六大特性总表：开关、源码、数字三列对齐（数字均取自官方 Q&amp;A）</div>
+<p><strong>低精度三处</strong>（Q&amp;A 口径）：主 KV 用 per-16 e4m3（类 NVFP4 但无全局 scale）；indexer KV 与 MoE 路由专家权重均 per-32 ue8m0 MXFP4。kernel 层：Mega MoE 是 scale-up 域内通用解；FlashMLA 开源版缺一处手调 SASS，解码 kernel 慢 5%–10%，端到端差距最多 5%。</p>
+</div>
+
+<p class="dim" style="margin-top:36px">DeepInfer 特性地图 · 2026-10-21 发布 · 事实来源：README 特性清单 + doc/inference_deployment_qa.md 生产数字 + 源码文件定位（deepseek-ai/DeepInfer @ 774ce24）</p>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+
+</body>
+</html>
