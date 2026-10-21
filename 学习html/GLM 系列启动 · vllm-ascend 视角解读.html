@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GLM 系列启动 · vllm-ascend 视角解读</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root{
+  --bg:#ffffff;--surface:#f7f8fa;--surface-muted:#eef1f5;--border:#dde1e7;
+  --text:#1a1f27;--text-muted:#6b7280;
+  --brand:#2563eb;--brand-bg:#eff6ff;--brand-text:#1d4ed8;
+  --accent:#0d9488;--accent-bg:#f0fdfa;--accent-text:#0f766e;
+  --warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;
+  --bad:#c0392b;--bad-bg:#fdf0ef;
+  --code-bg:#f3f4f6;--add-bg:#e8f5ec;--del-bg:#fdeceb;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#16181d;--surface:#1d2026;--surface-muted:#262a32;--border:#343a45;
+    --text:#e5e7eb;--text-muted:#9ca3af;
+    --brand:#60a5fa;--brand-bg:#1e2a44;--brand-text:#93c5fd;
+    --accent:#2dd4bf;--accent-bg:#12312e;--accent-text:#5eead4;
+    --warn:#fbbf24;--warn-bg:#332a14;
+    --ok:#4ade80;--ok-bg:#14301e;
+    --bad:#e07060;--bad-bg:#3a1d18;
+    --code-bg:#262a32;--add-bg:#16301f;--del-bg:#3a1d18;
+  }
+}
+
+*{box-sizing:border-box}
+
+html{scroll-behavior:smooth}
+
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:-apple-system,"Segoe UI","PingFang SC","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  font-size:15.5px;
+  line-height:1.9;
+  -webkit-font-smoothing:antialiased;
+}
+
+.wrap{max-width:860px;margin:0 auto;padding:48px 28px 96px}
+
+/* ---------- 标题体系 ---------- */
+h1{
+  font-size:27px;
+  line-height:1.4;
+  letter-spacing:-.2px;
+  margin:0 0 10px;
+  font-weight:800;
+}
+h2{
+  font-size:20px;
+  line-height:1.5;
+  margin:64px 0 16px;
+  padding-top:26px;
+  border-top:1px solid var(--border);
+  font-weight:800;
+  letter-spacing:-.2px;
+}
+h3{
+  font-size:16px;
+  line-height:1.6;
+  margin:32px 0 10px;
+  color:var(--brand-text);
+  font-weight:700;
+}
+h3::before{
+  content:"";
+  display:inline-block;
+  width:4px;height:15px;
+  background:var(--brand);
+  border-radius:2px;
+  margin-right:9px;
+  vertical-align:-2px;
+}
+p{margin:14px 0}
+p + p{margin-top:12px}
+b{color:var(--text);font-weight:700}
+
+.subtitle{
+  color:var(--text-muted);
+  font-size:13.5px;
+  line-height:1.75;
+  margin-bottom:28px;
+  padding-bottom:24px;
+  border-bottom:1px solid var(--border);
+}
+
+/* ---------- 行内代码 / 代码块 ---------- */
+code{
+  background:var(--code-bg);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:1.5px 6px;
+  font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  font-size:.86em;
+  white-space:nowrap;
+  word-break:break-word;
+}
+pre{
+  background:var(--code-bg);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:16px 18px;
+  overflow-x:auto;
+  font-family:ui-monospace,"SFMono-Regular",Consolas,"Liberation Mono",monospace;
+  font-size:12.6px;
+  line-height:1.75;
+  margin:16px 0;
+  tab-size:4;
+}
+pre code{
+  background:none;border:none;padding:0;
+  white-space:pre;font-size:inherit;
+}
+.add{background:var(--add-bg);display:block}
+.del{background:var(--del-bg);display:block;text-decoration:line-through;opacity:.75}
+.tagline{
+  display:block;
+  font-size:11.5px;
+  color:var(--text-muted);
+  padding-bottom:9px;
+  margin-bottom:11px;
+  border-bottom:1px dashed var(--border);
+  font-family:ui-monospace,"SFMono-Regular",Consolas,monospace;
+  white-space:normal;
+}
+
+/* ---------- 表格 ---------- */
+.table-wrap{
+  overflow-x:auto;
+  margin:18px 0;
+  border:1px solid var(--border);
+  border-radius:12px;
+}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13.4px;
+  line-height:1.7;
+}
+th,td{
+  padding:11px 14px;
+  text-align:left;
+  vertical-align:top;
+  border-bottom:1px solid var(--border);
+}
+th{
+  background:var(--surface-muted);
+  font-weight:700;
+  white-space:nowrap;
+  border-bottom:1px solid var(--border);
+}
+tbody tr:nth-child(even){background:var(--surface)}
+tbody tr:last-child td{border-bottom:none}
+
+/* ---------- 卡片 ---------- */
+.card{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px 20px 16px;
+  margin:20px 0;
+  overflow-x:auto;
+}
+.card svg{
+  display:block;
+  margin:0 auto;
+  width:100%;
+  height:auto;
+  min-width:580px;
+}
+.figcap{
+  text-align:center;
+  color:var(--text-muted);
+  font-size:12.5px;
+  line-height:1.7;
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px dashed var(--border);
+}
+
+/* ---------- 重点块 ---------- */
+.kp{
+  border-left:4px solid var(--brand);
+  background:var(--brand-bg);
+  border-radius:0 12px 12px 0;
+  padding:15px 20px;
+  margin:20px 0;
+}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:var(--warn);background:var(--warn-bg)}
+.kp-t{
+  font-weight:700;
+  font-size:14px;
+  display:block;
+  margin-bottom:8px;
+}
+.kp p{margin:8px 0;font-size:14px}
+.kp ul,.kp ol{margin:8px 0 4px;padding-left:22px}
+.kp li{margin:6px 0;font-size:14px}
+
+.plain{
+  border-left:4px solid var(--accent);
+  background:var(--accent-bg);
+  border-radius:0 12px 12px 0;
+  padding:16px 20px;
+  margin:16px 0;
+  font-size:14.5px;
+}
+.plain b:first-child{
+  display:block;
+  margin-bottom:6px;
+  color:var(--accent-text);
+}
+
+/* ---------- 30 秒版本 ---------- */
+.tldr{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:20px 24px 18px;
+  margin:24px 0 8px;
+}
+.tldr-title{
+  display:inline-block;
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.12em;
+  color:var(--brand-text);
+  background:var(--brand-bg);
+  border:1px solid var(--brand);
+  border-radius:999px;
+  padding:3px 12px;
+  margin-bottom:14px;
+}
+.tldr ol{
+  margin:0;
+  padding-left:24px;
+  counter-reset:none;
+}
+.tldr li{
+  margin:10px 0;
+  font-size:14.3px;
+  line-height:1.85;
+  padding-left:2px;
+}
+.tldr li::marker{color:var(--brand);font-weight:700}
+
+/* ---------- 目录 ---------- */
+.toc{
+  background:var(--surface);
+  border:1px solid var(--border);
+  border-radius:14px;
+  padding:18px 24px 20px;
+  margin:28px 0 8px;
+}
+.toc-title{
+  font-size:12px;
+  font-weight:800;
+  letter-spacing:.12em;
+  color:var(--text-muted);
+  margin-bottom:12px;
+}
+.toc ol{
+  margin:0;
+  padding-left:22px;
+  columns:2;
+  column-gap:36px;
+}
+.toc li{
+  margin:7px 0;
+  font-size:13.8px;
+  break-inside:avoid;
+}
+.toc a{
+  color:var(--brand-text);
+  text-decoration:none;
+  border-bottom:1px solid transparent;
+  transition:border-color .15s;
+}
+.toc a:hover{border-bottom-color:var(--brand-text)}
+
+/* ---------- 普通列表 ---------- */
+ul,ol{padding-left:24px}
+li{margin:8px 0}
+
+.dim{color:var(--text-muted);font-size:13.2px;line-height:1.8}
+.note{
+  color:var(--text-muted);
+  font-size:12.8px;
+  line-height:1.85;
+  border-top:1px dashed var(--border);
+  padding-top:16px;
+  margin-top:48px;
+}
+
+/* ---------- SVG 文本 ---------- */
+svg text{
+  font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+}
+.tb{fill:var(--text);font-size:12.5px;font-weight:700}
+.th{fill:var(--text);font-size:13px;font-weight:700}
+.tm{fill:var(--text-muted);font-size:11.5px}
+.bc{fill:var(--brand-bg);stroke:var(--brand);stroke-width:1.5}
+.ac{fill:var(--accent-bg);stroke:var(--accent);stroke-width:1.5}
+.rc{fill:var(--bad-bg);stroke:var(--bad);stroke-width:1.5}
+.oc{fill:var(--ok-bg);stroke:var(--ok);stroke-width:1.5}
+.flow{stroke:var(--brand);stroke-width:2;fill:none;stroke-linecap:round}
+
+/* ---------- 响应式 ---------- */
+@media (max-width:720px){
+  body{font-size:15px}
+  .wrap{padding:32px 18px 72px}
+  h1{font-size:22px}
+  h2{font-size:18px;margin-top:52px}
+  .toc ol{columns:1}
+  .tldr{padding:16px 18px}
+}
+</style>
+</head>
+<body>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:10px 24px 0">&larr; 返回首页</a>
+<div class="wrap">
+
+<!-- ============ 页头 ============ -->
+<h1>GLM 系列启动 · vllm-ascend 视角解读</h1>
+
+<div class="subtitle">
+  GLM-5.2 / GLM-5.3 / GLM-5.3-Flash 各走什么代码路径？为什么 <code>vllm_ascend\models</code> 里"找不到 glm"？<br>
+  源码取自 vllm-project 主线（2026-10-20）＋ 组内真实启动脚本 · 2026-10-20
+</div>
+
+<!-- ============ 30 秒版本 ============ -->
+<div class="tldr">
+  <div class="tldr-title">30 秒版本</div>
+  <ol>
+    <li>vLLM 世界分两层：<b>vllm 核心管"模型实现"，vllm-ascend 是平台插件管"昇腾侧的一切"</b>。</li>
+    <li>启动时 vllm 读权重的 <code>config.json</code> 里的 <code>architectures</code>（模型身份证）去注册表查类；<b>NPU 上 vllm-ascend 会先用 <code>register_model()</code> 把少数"需要昇腾特化"的架构覆盖注册</b>，查表结果就落到插件自己的实现上。</li>
+    <li><b>GLM-5.2 / 5.3 走 <code>GlmMoeDsaForCausalLM</code></b>（实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁）；<b>GLM-5.3-Flash 走 <code>Glm5NextForCausalLM</code></b>——核心只有 nvidia / amd 两家内核，<b>昇腾版整套在 <code>vllm_ascend/models/glm5next/</code></b>（KDA 层就调上次精度问题的 <code>chunk_kda_fwd</code>）。</li>
+    <li>所以"没有 glm"是个误会：<b>目录里有 <code>glm5next/</code> 和 <code>glm5_dspark.py</code></b>——大多数 GLM 不进来，是因为它们<b>不需要</b>进来，不是没适配。</li>
+  </ol>
+</div>
+
+<!-- ============ 目录 ============ -->
+<nav class="toc">
+  <div class="toc-title">目录</div>
+  <ol>
+    <li><a href="#ch1">先分清两层仓库：谁管模型，谁管芯片</a></li>
+    <li><a href="#ch2">启动时发生了什么：从 vllm serve 到模型类</a></li>
+    <li><a href="#ch3">三个模型各走哪条分支</a></li>
+    <li><a href="#ch4">为什么 vllm_ascend\models 里"没有 glm"</a></li>
+    <li><a href="#ch5">自己动手查：三条命令</a></li>
+  </ol>
+</nav>
+
+<!-- ================= 第 1 章 ================= -->
+<h2 id="ch1">第 1 章 · 先分清两层仓库：谁管模型，谁管芯片</h2>
+
+<p>装好 vllm-ascend 后，环境里其实有<b>三个角色</b>。</p>
+
+<ul>
+  <li><b>vllm 核心</b>（pip 包 <code>vllm</code>）管所有模型的通用实现——<code>vllm/model_executor/models/</code> 下一个模型一个文件（<code>glm4.py</code>、<code>deepseek_v2.py</code>……），以及一张"身份证 → 实现类"的<b>注册表</b>。</li>
+  <li><b>vllm-ascend</b> 不抄一遍所有模型，它只做芯片侧的事：注意力后端、通信、量化、自定义算子，<b>外加少数非改不可的模型</b>。</li>
+  <li><b>torch_npu + CANN</b> 在最底下，把 PyTorch 算子落到昇腾芯片上执行。</li>
+</ul>
+
+<div class="card">
+<svg viewBox="0 0 840 250" role="img" aria-label="两层仓库分工">
+<defs><marker id="m1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="20" y="18" width="800" height="62" rx="8"/>
+<text class="th" x="36" y="40">vLLM 核心（pip install vllm）· 模型实现 + 注册表</text>
+<text class="tm" x="36" y="60">vllm/model_executor/models/：glm4.py、glm4_moe.py、deepseek_v2.py、glm5next/（common + nvidia + amd）…</text>
+<text class="tm" x="36" y="74">几乎所有 GLM 的模型代码都在这一层</text>
+<path class="flow" d="M420 80 V98" marker-end="url(#m1)"/>
+<rect class="ac" x="20" y="102" width="800" height="62" rx="8"/>
+<text class="th" x="36" y="124">vllm-ascend · 平台插件（只管昇腾侧）</text>
+<text class="tm" x="36" y="144">platform.py 硬件钩子 · attention/ NPU 注意力后端 · ops/ 融合算子 · models/ 少数需要 NPU 特化的模型（覆盖注册）</text>
+<text class="tm" x="36" y="158">启动时执行 register_model()，把 NPU 版实现盖到注册表上</text>
+<path class="flow" d="M420 164 V182" marker-end="url(#m1)"/>
+<rect class="oc" x="20" y="186" width="800" height="44" rx="8"/>
+<text class="th" x="36" y="212">torch_npu + CANN · 算子真正落芯片（含 chunk_kda_fwd、DispatchFFNCombine 等自定义算子）</text>
+<text class="tm" x="20" y="246">GLM 的模型代码 95% 在最上层通用实现里；只有"非改不可"的才进中层——这是理解全部问题的钥匙。</text>
+</svg>
+<div class="figcap">图 1 · 三层分工：模型代码默认放核心，插件只补芯片侧的缺口</div>
+</div>
+
+<div class="kp">
+  <span class="kp-t">一句话记住分工</span>
+  模型实现是"菜谱"（跟芯片无关），vllm-ascend 是"灶台适配器"（把同样的菜谱在昇腾灶台上做出同样味道）。<b>菜谱不进灶台仓库</b>——除非这道菜必须为昇腾灶台改刀工。
+</div>
+
+<!-- ================= 第 2 章 ================= -->
+<h2 id="ch2">第 2 章 · 启动时发生了什么：从 vllm serve 到模型类</h2>
+
+<h3>2.1 六步启动链</h3>
+
+<p>拿组内真实的 P 实例启动参数说事（实测在跑 <b>GLM-5.3-W4A4C8-MXFP4</b>，TP=8 ＋ PD 分离 ＋ MTP 投机解码）。从敲下命令到模型开算，走这六步：</p>
+
+<div class="card">
+<svg viewBox="0 0 840 224" role="img" aria-label="启动六步">
+<defs><marker id="m2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="20" y="16" width="250" height="60" rx="8"/>
+<text class="tb" x="145" y="38" text-anchor="middle">① vllm serve 权重目录</text>
+<text class="tm" x="145" y="56" text-anchor="middle">GLM-5.3-W4A4C8-MXFP4 权重目录</text>
+<rect class="bc" x="296" y="16" width="250" height="60" rx="8"/>
+<text class="tb" x="421" y="38" text-anchor="middle">② 读 config.json</text>
+<text class="tm" x="421" y="56" text-anchor="middle">architectures: ["GlmMoeDsaForCausalLM"]</text>
+<rect class="bc" x="572" y="16" width="248" height="60" rx="8"/>
+<text class="tb" x="696" y="38" text-anchor="middle">③ 发现平台插件</text>
+<text class="tm" x="696" y="56" text-anchor="middle">entry point → NPUPlatform</text>
+<path class="flow" d="M270 46 H296" marker-end="url(#m2)"/>
+<path class="flow" d="M546 46 H572" marker-end="url(#m2)"/>
+<path class="flow" d="M696 76 V96 H146 V112" marker-end="url(#m2)"/>
+<rect class="ac" x="20" y="112" width="250" height="60" rx="8"/>
+<text class="tb" x="145" y="134" text-anchor="middle">④ 插件覆盖注册</text>
+<text class="tm" x="145" y="152" text-anchor="middle">vllm_ascend/models/__init__.py</text>
+<text class="tm" x="145" y="166" text-anchor="middle">register_model()</text>
+<rect class="ac" x="296" y="112" width="250" height="60" rx="8"/>
+<text class="tb" x="421" y="134" text-anchor="middle">⑤ 注册表查表</text>
+<text class="tm" x="421" y="152" text-anchor="middle">架构名 → 模型类路径</text>
+<text class="tm" x="421" y="166" text-anchor="middle">若被 ④ 覆盖 → 拿到 NPU 版</text>
+<rect class="ac" x="572" y="112" width="248" height="60" rx="8"/>
+<text class="tb" x="696" y="134" text-anchor="middle">⑥ import 类 → 加载权重</text>
+<text class="tm" x="696" y="152" text-anchor="middle">进入 forward，开始推理</text>
+<path class="flow" d="M270 142 H296" marker-end="url(#m2)"/>
+<path class="flow" d="M546 142 H572" marker-end="url(#m2)"/>
+<text class="tm" x="20" y="202">后续每次 forward，模型里的注意力层还会经 platform 钩子选 NPU 后端（DSA / GDN / MC2…）——</text>
+<text class="tm" x="20" y="218">但"用哪个模型类"在 ⑤ 就一锤定音了。<tspan font-weight="700" fill="var(--text)">②决定"报名字"，④决定"名字背后是谁"。</tspan></text>
+</svg>
+<div class="figcap">图 2 · 启动六步：config.json 报架构名 → 插件抢先覆盖注册 → 注册表给出最终实现类</div>
+</div>
+
+<h3>2.2 关键代码一：核心注册表里的 GLM 条目</h3>
+
+<pre><code><span class="tagline">vllm/model_executor/models/registry.py（vLLM 核心 · 2026-10-20 主线）</span>
+"Glm4ForCausalLM":        ("glm4",                     "Glm4ForCausalLM"),        <b># GLM-4 稠密/MoE 前代</b>
+"Glm4MoeForCausalLM":     ("glm4_moe",                 "Glm4MoeForCausalLM"),
+"Glm4MoeLiteForCausalLM": ("glm4_moe_lite",            "Glm4MoeLiteForCausalLM"),
+"GlmMoeDsaForCausalLM":   ("vllm.models.deepseek_v32", "GlmMoeDsaForCausalLM"),   <b># GLM-5.2 / 5.3：长在 DeepSeek 家族代码里</b>
+"Glm5NextForCausalLM":    ("vllm.models.glm5next",     "Glm5NextForCausalLM"),    <b># GLM-5.3-Flash：按厂商分目录的新式模型</b></code></pre>
+
+<p>两个值得注意的点：</p>
+
+<ul>
+  <li><b>GlmMoeDsa 的实现直接复用 DeepSeek 代码</b>——GLM 5 系的 MoE + MLA + DSA 结构和 DeepSeek V3 系同源，注册表入口指到 <code>vllm.models.deepseek_v32</code>；</li>
+  <li><b>Glm5Next 用了"按厂商分目录"的新模式</b>——核心里它长这样：</li>
+</ul>
+
+<pre><code><span class="tagline">vllm/models/glm5next/__init__.py（核心侧只有通用代码 + 两家友商内核）</span>
+from vllm.platforms import current_platform
+if current_platform.is_xpu():
+    raise NotImplementedError(<b>"GLM-5.3-Flash does not currently support XPU."</b>)
+from .common.model import Glm5NextForCausalLM, Glm5NextForConditionalGeneration
+from .common.mtp import Glm5NextMTP
+<span class="tagline">目录结构：vllm/models/glm5next/{common/, nvidia/, amd/, sparse_indexer.py}——没有昇腾的份</span></code></pre>
+
+<h3>2.3 关键代码二：插件侧的覆盖注册</h3>
+
+<p>vllm-ascend 安装时以 entry point 形式把 <code>NPUPlatform</code> 注册给 vllm；启动时平台插件会执行下面这段，<b>同名架构后注册者生效</b>（源码注释原话："overwrites the upstream architecture mapping"）：</p>
+
+<pre><code><span class="tagline">vllm_ascend/models/__init__.py（NPU 平台启动时执行 · 摘录 GLM 相关条目）</span>
+ModelRegistry.register_model(<b>"GlmMoeDsaForCausalLM"</b>,
+    "vllm_ascend.models.deepseek_mtp:AscendGlmMoeDsaForCausalLM")        <b># 覆盖核心实现</b>
+ModelRegistry.register_model(<b>"Glm5NextForCausalLM"</b>,
+    "vllm_ascend.models.glm5next.model:Glm5NextForCausalLM")             <b># 昇腾版整套实现</b>
+ModelRegistry.register_model("Glm5NextForConditionalGeneration",
+    "vllm_ascend.models.glm5next.model:Glm5NextForConditionalGeneration")
+ModelRegistry.register_model("Glm5NextMTPModel",
+    "vllm_ascend.models.glm5next.mtp:Glm5NextMTP")
+ModelRegistry.register_model(<b>"Glm5DSparkForCausalLM"</b>,
+    "vllm_ascend.models.glm5_dspark:Glm5DSparkForCausalLM")              <b># GLM5 投机解码草稿模型</b></code></pre>
+
+<div class="kp t">
+  <span class="kp-t">这就是"启动分支"的全部含义</span>
+  同一个架构名，在 GPU 上解析到核心实现，在 NPU 上解析到插件的 Ascend 版——<b>分支不是 if-else 写在模型里，而是"注册表覆盖"发生在启动期</b>。模型代码自己完全感知不到跑在哪种芯片上。
+</div>
+
+<!-- ================= 第 3 章 ================= -->
+<h2 id="ch3">第 3 章 · 三个模型各走哪条分支</h2>
+
+<h3>3.1 GLM-5.2 / GLM-5.3：GlmMoeDsa 一族——核心实现 ＋ NPU 小补丁</h3>
+
+<p>两代检查点组内部署形态：</p>
+
+<ul>
+  <li><b>5.2</b> = <code>GLM-5.2-W8A8C8-mxfp8</code>（4 节点 32 卡 PD 分离）</li>
+  <li><b>5.3</b> = <code>GLM-5.3-W4A4C8-MXFP4</code>（单机 8 卡，就是 A5 上那套）</li>
+</ul>
+
+<p>它们是 <b>MoE + MLA + DSA（稀疏注意力）同族</b>，共享注册名 <code>GlmMoeDsaForCausalLM</code>，NPU 上被覆盖为 <code>AscendGlmMoeDsaForCausalLM</code>——打开一看，<b>它几乎什么都没改</b>：</p>
+
+<pre><code><span class="tagline">vllm_ascend/models/deepseek_mtp.py（NPU 覆盖类 · 完整摘录主体）</span>
+class AscendGlmMoeDsaForCausalLM(GlmMoeDsaForCausalLM):     <b># 直接继承核心实现</b>
+    def load_weights(self, weights):
+        mapper = WeightsMapper(orig_to_new_prefix={"rot.": None})  <b># 只处理 rot 前缀的权重映射</b>
+        return AutoWeightsLoader(self).load_weights(weights, mapper=mapper)</code></pre>
+
+<p>运行期的昇腾特色都在<b>层和后端</b>里，不在模型文件里：<code>--quantization ascend</code>（W4A4C8 / MXFP4 量化走 NPU 方案）、<code>additional_config</code> 里 <code>enable_dsa_cp: true</code>（DSA 的 CP 并行，就是之前 PR 18671 解读的那套）、MoE 通信走 MC2 融合算子。投机解码的 MTP 提议者也是 NPU 子类 <code>AscendDeepSeekMTP</code>，源码注释顺手给出了家族证据：</p>
+
+<pre><code><span class="tagline">vllm_ascend/models/deepseek_mtp.py（注释原文）</span>
+# <b>GLM-5.3 and friends</b> ship no MTP head, leaving shared_head.head at
+# its allocation-time contents. Record that so the proposer <b>shares the target head</b>.
+<span class="tagline">→ GLM-5.3 这一代检查点不带 MTP 头，提议者直接借用主模型的 lm_head</span></code></pre>
+
+<p class="dim">5.2 与 5.3 共用同一架构名的依据：核心注册表里 5.x 的 MoE + DSA 只有这一个注册名；上面这条 "and friends" 注释；组内 5.2 / 5.3 部署走同一套 DSA / MTP / MC2 套件。严格确认以权重目录 <code>config.json</code> 的 <code>architectures</code> 字段为准（查法见第 5 章）。</p>
+
+<h3>3.2 GLM-5.3-Flash：Glm5Next——核心没有昇腾份，整套实现搬进插件</h3>
+
+<p>Flash 是另一条路：<b>混合架构（一部分层 KDA 线性注意力 ＋ 一部分层全注意力）＋ 多模态 ＋ MTP</b>。vLLM 核心为它设计了"按厂商分目录"的模式（common 通用骨架 ＋ nvidia / amd 各一份内核），<b>昇腾的对应物没有进核心，而是整套放在插件里</b>——<code>vllm_ascend/models/glm5next/</code>，一共 11 个文件：</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>文件</th><th>干什么</th><th>昇腾特色</th></tr>
+</thead>
+<tbody>
+<tr><td><code>model.py</code>（44KB）</td><td>模型主体（Glm5NextForCausalLM）</td><td>被 register_model 覆盖注册的入口</td></tr>
+<tr><td><code>kda.py</code>（24KB）</td><td><b>KDA 线性注意力层</b>（继承 vLLM 的 GDN 基类）</td><td><b>调 <code>ops/kda.py</code> 的 <code>chunk_kda</code>——就是上次精度问题的 <code>chunk_kda_fwd</code> CANN 算子</b>；因果卷积走 AscendC <code>causal_conv1d</code></td></tr>
+<tr><td><code>attention.py</code>（13KB）</td><td>全注意力层</td><td>NPU 稀疏注意力（DSA）路径</td></tr>
+<tr><td><code>sparse_attn_indexer_kpool.py</code></td><td>DSA 稀疏索引器</td><td>对照核心里 618 字节的接口 stub——核心只定义契约，各家给实现</td></tr>
+<tr><td><code>kv_cache.py</code> / <code>cache_config.py</code> / <code>cache_views.py</code></td><td>KDA 状态 ＋ KV cache 管理</td><td>KDA 的"笔记本"也要进 vLLM 的显存管理体系</td></tr>
+<tr><td><code>mtp.py</code> / <code>multimodal.py</code> / <code>processor.py</code></td><td>MTP 层 / 多模态 / 预处理</td><td>MTP 受 KDA 约束（见下方代码）</td></tr>
+<tr><td><code>ops/</code>（causal_conv1d、kda）</td><td>昇腾算子入口</td><td>Python 壳 → CANN 自定义算子</td></tr>
+</tbody>
+</table>
+</div>
+
+<p>看 <code>kda.py</code> 开头几行，文件名和约束写得明明白白：</p>
+
+<pre><code><span class="tagline">vllm_ascend/models/glm5next/kda.py（docstring 原文）</span>
+"""<b>GLM-5.3-Flash KDA layer</b> with separate convolutions and a bounded safe gate."""
+class Glm5NextLinearAttention(GatedDeltaNetAttention):   <b># 继承 vLLM 的 GDN 基类</b>
+    ...
+    from vllm_ascend.models.glm5next.ops.kda import KDA_MAX_RECURRENT_TOKENS, <b>chunk_kda</b>, recurrent_kda
+<span class="tagline">硬约束（NPU 实现的边界，配错直接启动失败，这是好事）</span>
+    if config.linear_head_dim != 128 or dtype != torch.bfloat16:
+        raise ValueError("GLM AscendC KDA requires BF16 activations and head_dim=128.")
+    if num_spec + 1 > KDA_MAX_RECURRENT_TOKENS:
+        raise ValueError("GLM AscendC KDA supports at most seven speculative tokens.")
+<span class="tagline">还有一条细节注释：GLM-5.3-Flash 用有界 sigmoid 门控，不是默认的无界 softplus</span></code></pre>
+
+<h3>3.3 三条路放在一起看</h3>
+
+<div class="card">
+<svg viewBox="0 0 840 316" role="img" aria-label="三条启动分支">
+<defs><marker id="m3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<text class="th" x="20" y="22">路 A · GLM-5.2 / GLM-5.3（MoE + MLA + DSA）—— 核心实现，小补丁</text>
+<rect class="bc" x="20" y="32" width="188" height="66" rx="8"/>
+<text class="tm" x="114" y="52" text-anchor="middle">config.json</text>
+<text class="tb" x="114" y="70" text-anchor="middle">GlmMoeDsaForCausalLM</text>
+<text class="tm" x="114" y="86" text-anchor="middle">W8A8C8 / W4A4C8 检查点</text>
+<rect class="bc" x="232" y="32" width="188" height="66" rx="8"/>
+<text class="tb" x="326" y="52" text-anchor="middle">核心实现</text>
+<text class="tm" x="326" y="70" text-anchor="middle">vllm.models.deepseek_v32</text>
+<text class="tm" x="326" y="86" text-anchor="middle">本体在 deepseek_v2.py</text>
+<rect class="bc" x="444" y="32" width="188" height="66" rx="8"/>
+<text class="tb" x="538" y="52" text-anchor="middle">NPU 覆盖：小补丁</text>
+<text class="tm" x="538" y="70" text-anchor="middle">AscendGlmMoeDsa…</text>
+<text class="tm" x="538" y="86" text-anchor="middle">只改权重映射/EPLB 细节</text>
+<rect class="oc" x="656" y="32" width="164" height="66" rx="8"/>
+<text class="tb" x="738" y="52" text-anchor="middle">运行期</text>
+<text class="tm" x="738" y="70" text-anchor="middle">DSA-CP · MC2 融合</text>
+<text class="tm" x="738" y="86" text-anchor="middle">MTP=AscendDeepSeekMTP</text>
+<path class="flow" d="M208 65 H232" marker-end="url(#m3)"/>
+<path class="flow" d="M420 65 H444" marker-end="url(#m3)"/>
+<path class="flow" d="M632 65 H656" marker-end="url(#m3)"/>
+<text class="th" x="20" y="132">路 B · GLM-5.3-Flash（混合 KDA + 全注意力）—— 核心没昇腾份，整套进插件</text>
+<rect class="ac" x="20" y="142" width="188" height="66" rx="8"/>
+<text class="tm" x="114" y="162" text-anchor="middle">config.json</text>
+<text class="tb" x="114" y="180" text-anchor="middle">Glm5NextForCausalLM</text>
+<text class="tm" x="114" y="196" text-anchor="middle">多模态 + MTP</text>
+<rect class="ac" x="232" y="142" width="188" height="66" rx="8"/>
+<text class="tb" x="326" y="162" text-anchor="middle">核心只有三家</text>
+<text class="tm" x="326" y="180" text-anchor="middle">common + nvidia + amd</text>
+<text class="tm" x="326" y="196" text-anchor="middle">没有昇腾目录</text>
+<rect class="ac" x="444" y="142" width="188" height="66" rx="8"/>
+<text class="tb" x="538" y="162" text-anchor="middle">NPU 覆盖：整套</text>
+<text class="tm" x="538" y="180" text-anchor="middle">vllm_ascend/models/</text>
+<text class="tm" x="538" y="196" text-anchor="middle">glm5next/（11 个文件）</text>
+<rect class="rc" x="656" y="142" width="164" height="66" rx="8"/>
+<text class="tb" x="738" y="162" text-anchor="middle">KDA 层</text>
+<text class="tm" x="738" y="180" text-anchor="middle">chunk_kda（AscendC）</text>
+<text class="tm" x="738" y="196" text-anchor="middle">= chunk_kda_fwd 那个算子</text>
+<path class="flow" d="M208 175 H232" marker-end="url(#m3)"/>
+<path class="flow" d="M420 175 H444" marker-end="url(#m3)"/>
+<path class="flow" d="M632 175 H656" marker-end="url(#m3)"/>
+<text class="th" x="20" y="242">支线 · GLM5 的 DSpark 草稿模型（投机解码）</text>
+<rect class="oc" x="20" y="252" width="800" height="48" rx="8"/>
+<text class="tm" x="36" y="272">Glm5DSparkForCausalLM：DSpark 生成头（Markov/Confidence）+ GLM 的 MLA 骨干适配——源码原话</text>
+<text class="tm" x="36" y="290">"GLM MLA backbone adapter for the upstream DSpark generation contracts"，同样只存在于 vllm_ascend/models/glm5_dspark.py。</text>
+</svg>
+<div class="figcap">图 3 · 三条分支：A 路核心实现兜底只打补丁；B 路核心缺昇腾份所以整套进插件；DSpark 是投机解码支线</div>
+</div>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th></th><th>GLM-5.2</th><th>GLM-5.3</th><th>GLM-5.3-Flash</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><b>架构名（config.json）</b></td>
+  <td colspan="2">GlmMoeDsaForCausalLM（同族同注册名，超参 / 量化不同）</td>
+  <td>Glm5NextForCausalLM</td>
+</tr>
+<tr>
+  <td><b>NPU 上最终类</b></td>
+  <td colspan="2">AscendGlmMoeDsaForCausalLM（核心子类，≈不改）</td>
+  <td>vllm_ascend glm5next 整套实现</td>
+</tr>
+<tr>
+  <td><b>注意力</b></td>
+  <td colspan="2">MLA + DSA（稀疏），enable_dsa_cp 并行</td>
+  <td>部分层 KDA 线性注意力 + 部分层全注意力</td>
+</tr>
+<tr>
+  <td><b>关键昇腾算子</b></td>
+  <td colspan="2">MC2（DispatchFFNCombine 等）、DSA 后端</td>
+  <td><b>chunk_kda_fwd</b>、causal_conv1d、DSA 索引器 kpool 版</td>
+</tr>
+<tr>
+  <td><b>组内部署形态</b></td>
+  <td>W8A8C8 · 4 节点 32 卡 PD</td>
+  <td>W4A4C8-MXFP4 · 单机 8 卡 + MTP</td>
+  <td>精度测试（DeepSWE / TerminalBench）</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<!-- ================= 第 4 章 ================= -->
+<h2 id="ch4">第 4 章 · 回答标题问题：为什么 vllm_ascend\models 里"没有 glm"</h2>
+
+<h3>4.1 先纠偏：其实有，只是不叫通常以为的那个名字</h3>
+
+<p>主线（2026-10-20）的 <code>vllm_ascend/models/</code> 完整清单里有 <b><code>glm5next/</code>（11 个文件）和 <code>glm5_dspark.py</code></b>——GLM-5.3-Flash 的整套昇腾实现就在里面。</p>
+
+<p>本地那份 <code>vllm-ascend-main</code> 代码如果翻不到，两种可能：</p>
+
+<ul>
+  <li><b>下载得早</b>（glm5next 是后来才合入的）；</li>
+  <li>或者<b>按 <code>glm4.py</code> / <code>glm.py</code> 这种"单文件名"习惯去找，漏了目录名</b>。</li>
+</ul>
+
+<p>验证方法：<code>git log --oneline -- vllm_ascend/models/glm5next</code>。全目录实拍：</p>
+
+<div class="table-wrap">
+<table>
+<thead>
+<tr><th>类型</th><th>条目</th></tr>
+</thead>
+<tbody>
+<tr>
+  <td><b>目录（6 个）</b></td>
+  <td><b>glm5next/</b>、deepseek_v4/、deepseek_v41/、minimax_m3/、common/、layer/</td>
+</tr>
+<tr>
+  <td><b>文件（12 个）</b></td>
+  <td><b>glm5_dspark.py</b>、deepseek_mtp.py、kimi_k3.py、kimi_k3_dspark.py、kimi_k3_mtp.py、llama_eagle3.py、llama_eagle3_vwn.py、gemma4_mm.py、qwen3_5_vl.py、qwen3_dspark.py、qwen3_dflash2.py、__init__.py（注册入口）</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<h3>4.2 更重要的答案：什么模型才"有资格"进这个目录</h3>
+
+<p>这个目录的准入标准不是"是不是名模型"，而是<b>"核心通用实现是不是搞不定"</b>。三种情况：</p>
+
+<ol>
+  <li><b>① NPU 需要一整套自己的内核</b>——GLM-5.3-Flash 的 KDA 层在 GPU 上靠 Triton / FLA 内核，昇腾上必须换 AscendC 算子（chunk_kda），连同因果卷积、DSA 索引器、cache 管理全得换 → <b>整套实现进插件</b>（glm5next、deepseek_v4、kimi_k3 都属此类）；</li>
+  <li><b>② NPU 有专属预处理</b>——qwen3_5_vl 的图像 resize / patchify 在 NPU 侧做融合 → 只把预处理部分搬进来；</li>
+  <li><b>③ 核心能跑但要小补丁</b>——权重映射差异、个别算子行为差异 → 注册一个轻量子类覆盖，避免反向给核心提补丁的等待期（GlmMoeDsa 的 rot 前缀、MTP 的 head 处理）。</li>
+</ol>
+
+<div class="card">
+<svg viewBox="0 0 840 236" role="img" aria-label="准入决策树">
+<defs><marker id="m4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker></defs>
+<rect class="bc" x="250" y="14" width="340" height="40" rx="8"/>
+<text class="tb" x="420" y="39" text-anchor="middle">一个新模型要上昇腾</text>
+<path class="flow" d="M420 54 V72"/>
+<rect class="ac" x="20" y="72" width="300" height="44" rx="8"/>
+<text class="tb" x="170" y="90" text-anchor="middle">Q1 · 通用实现在 NPU 上跑不了/跑不快？</text>
+<text class="tm" x="380" y="99">是 → 整套实现进 vllm_ascend/models</text>
+<text class="tm" x="380" y="113">（glm5next · deepseek_v4 · kimi_k3）</text>
+<path class="flow" d="M320 94 H374" marker-end="url(#m4)"/>
+<path class="flow" d="M170 116 V134"/>
+<text class="tm" x="180" y="129">否 ↓</text>
+<rect class="ac" x="20" y="134" width="300" height="44" rx="8"/>
+<text class="tb" x="170" y="152" text-anchor="middle">Q2 · 有 NPU 专属预处理吗？</text>
+<text class="tm" x="380" y="153">是 → 只搬预处理部分（qwen3_5_vl 图像融合）</text>
+<text class="tm" x="180" y="191">否 ↓</text>
+<path class="flow" d="M170 178 V196"/>
+<rect class="ac" x="20" y="196" width="300" height="40" rx="8"/>
+<text class="tb" x="170" y="213" text-anchor="middle">Q3 · 需要小补丁吗（权重映射等）？</text>
+<text class="tm" x="380" y="207">是 → 轻量子类覆盖注册（GlmMoeDsa、MTP）</text>
+<text class="tm" x="380" y="221">否 → <tspan fill="var(--ok)" font-weight="700">什么都不用做</tspan>：glm4 / glm4_moe 系列零改动</text>
+<path class="flow" d="M320 154 H374" marker-end="url(#m4)"/>
+<path class="flow" d="M320 216 H374" marker-end="url(#m4)"/>
+</svg>
+<div class="figcap">图 4 · 准入决策树：三道门，全过不了才"什么都不用做"——glm4 系列就停在最后一格</div>
+</div>
+
+<h3>4.3 反过来：glm4 / glm4_moe 为什么不用进</h3>
+
+<p>GLM-4 系是<b>标准结构</b>（GQA 注意力 ＋ 标准 MoE ＋ RMSNorm / RoPE）。核心实现里这些全是 vLLM 的通用层——通用层在 NPU 上由 torch_npu 自动把算子派发到昇腾，注意力再由 vllm-ascend 的 NPU 后端接管，<b>模型文件一行都不用抄</b>。</p>
+
+<p>这就是"菜谱不进灶台仓库"：适配的成本花在通用层一次性做掉，所有标准模型白拿收益。而 5.3-Flash 的 KDA 是新刀工，通用层里根本没有对应物，只能整套自己来。</p>
+
+<!-- ================= 第 5 章 ================= -->
+<h2 id="ch5">第 5 章 · 自己动手查：三条命令</h2>
+
+<pre><code><span class="tagline">1) 看权重自报的架构名（启动分支的源头）</span>
+python -c "import json; print(json.load(open('/path/to/model/config.json'))['architectures'])"
+
+<span class="tagline">2) 让注册表回答"这个架构在当前环境解析到哪个类"（含插件覆盖后的最终结果）</span>
+python -c "from vllm.model_executor.models.registry import ModelRegistry as R; \
+print(R.resolve_model(['Glm5NextForCausalLM']))"
+
+<span class="tagline">3) 看插件覆盖了哪些架构（GLM 相关的直接 grep）</span>
+grep -n "Glm" vllm_ascend/models/__init__.py</code></pre>
+
+<p class="dim">第 2 条命令在 NPU 环境和 x86 环境各跑一次，输出不同——这就是"启动分支"最直接的亲眼验证。启动日志里 platform 初始化段也会打出所选平台与注意力后端。</p>
+
+<!-- ================= 总结 ================= -->
+<div class="kp t">
+  <span class="kp-t">全文压缩成四句</span>
+  <ol>
+    <li>vllm 核心管模型实现与注册表，vllm-ascend 是平台插件管昇腾侧，两层靠"注册表覆盖"接线；</li>
+    <li>启动分支 = config.json 的 architectures 报名 → 插件 register_model() 覆盖注册 → 注册表给出最终实现类；</li>
+    <li>GLM-5.2 / 5.3 走 <code>GlmMoeDsaForCausalLM</code>（核心 DeepSeek 家族实现 ＋ NPU 小补丁，DSA-CP / MC2 / MTP 都在层和后端），GLM-5.3-Flash 走 <code>Glm5NextForCausalLM</code>（核心只有 common / nvidia / amd，昇腾整套在 <code>vllm_ascend/models/glm5next/</code>，KDA 调 <code>chunk_kda_fwd</code>）；</li>
+    <li>"models 里没有 glm"是误会——有 <code>glm5next/</code> 和 <code>glm5_dspark.py</code>，其他 GLM 不进来是因为标准实现够用，不是没适配。</li>
+  </ol>
+</div>
+
+<p class="note">
+源码来源：vllm-project/vllm 与 vllm-project/vllm-ascend 主线（registry.py、vllm_ascend/models/__init__.py、glm5next/kda.py、deepseek_mtp.py、glm5_dspark.py，2026-10-20 拉取）；部署事实来自组内脚本实读。GLM-5.2/5.3 共用注册名为多证据推断，最终以权重 config.json 为准。
+</p>
+
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
