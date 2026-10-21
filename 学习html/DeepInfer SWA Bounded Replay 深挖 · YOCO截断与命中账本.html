@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>DeepInfer SWA Bounded Replay 深挖：YOCO 截断的两模式与命中账本</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root { --accent:#5b6ee1; --text:#24292f; --muted:#656d76; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior:smooth; scroll-padding-top:70px; }
+body { font-family:Arial,'Microsoft YaHei',sans-serif; background:#f7f8fa; color:var(--text); line-height:1.85; padding:20px; }
+body>* { max-width:1200px !important; margin-left:auto !important; margin-right:auto !important; }
+.topnav { position:sticky; top:0; z-index:50; background:rgba(255,255,255,.97); border:1px solid #d0d7de; border-radius:12px; padding:10px 18px; margin-bottom:18px; display:flex; align-items:center; gap:4px; flex-wrap:wrap; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+.topnav a { color:var(--muted); text-decoration:none; padding:4px 11px; border-radius:8px; font-size:.9rem; white-space:nowrap; }
+.topnav a:hover { background:var(--accent); color:#fff; }
+.topnav .brand { color:var(--accent); font-weight:bold; margin-right:8px; }
+h1 { font-size:1.5rem; margin:8px 0 4px; }
+h2 { font-size:1.22rem; margin:26px 0 10px; padding-bottom:6px; border-bottom:2px solid var(--accent); }
+h3 { font-size:1.02rem; margin:16px 0 8px; color:#3a4aa8; }
+.subtitle { color:var(--muted); margin-bottom:14px; font-size:.93rem; }
+.badge { display:inline-block; border-radius:6px; padding:2px 10px; font-size:.78rem; font-weight:bold; margin-right:6px; }
+.b-blue { background:#ddf4ff; color:#0969da; }
+.b-green { background:#dafbe1; color:#1a7f37; }
+.card { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:15px 20px; margin:12px 0; }
+.guide { background:#f6f8fa; border-left:4px solid var(--accent); padding:8px 14px; border-radius:8px; margin:8px 0; font-size:.9rem; color:#3a4aa8; }
+.fig-caption { font-weight:bold; color:var(--accent); margin:14px 0 4px; }
+.qa { color:#9a6700; font-weight:bold; }
+.mermaid { overflow-x:auto; padding:8px; background:#fff; border-radius:8px; text-align:center; }
+.mermaid svg { margin:0 auto; }
+.arch { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:16px; margin:12px 0; }
+.arch-title { text-align:center; font-weight:bold; font-size:1.02rem; margin-bottom:12px; }
+.arch-row { display:flex; gap:14px; align-items:stretch; }
+.arch-block { border-radius:10px; padding:12px; flex:1; }
+.arch-block.model { background:#f5f7ff; border:1.5px solid #5b6ee1; flex:.82; }
+.arch-block.frame { background:#fffdf3; border:1.5px solid #9a6700; flex:1.18; }
+.arch-head { border-radius:8px; padding:7px 10px; margin-bottom:10px; font-size:.92rem; }
+.model .arch-head { background:#eef3ff; color:#3a4aa8; }
+.frame .arch-head { background:#fff4d5; color:#7a5800; }
+.arch-head span { display:block; font-size:.78rem; color:var(--muted); margin-top:2px; font-weight:normal; }
+.arch-grid5 { display:flex; flex-direction:column; gap:8px; }
+.cell { background:#fff; border:1px solid #d0d7de; border-radius:7px; padding:6px 8px; font-size:.86rem; font-weight:600; text-align:center; }
+.model .cell { border-color:#91a7ee; }
+.frame .cell { border-color:#d8c289; }
+.cell .csub { display:block; font-weight:normal; font-size:.7rem; color:var(--muted); margin-top:3px; line-height:1.45; }
+.arch-stages { display:flex; gap:8px; }
+.stage { flex:1; display:flex; flex-direction:column; gap:6px; min-width:0; }
+.stage-name { text-align:center; font-size:.8rem; font-weight:bold; color:#7a5800; background:#fff4d5; border-radius:6px; padding:3px 4px; }
+.stage-cells { display:flex; flex-direction:column; gap:6px; flex:1; }
+.arch-l2 { margin-top:12px; background:#f6f8fa; border:1px dashed #9ea7b3; border-radius:8px; padding:8px 12px; font-size:.82rem; color:#4b5563; }
+.l2tag { font-weight:bold; color:#3a4aa8; margin-right:8px; }
+.steps { margin:8px 0 4px; padding-left:22px; }
+.steps li { margin:3px 0; font-size:.92rem; }
+.flow2 { background:#fff; border:1px solid #d0d7de; border-radius:12px; padding:18px 20px; margin:12px 0; }
+.flow2-title { text-align:center; font-weight:bold; margin-bottom:18px; font-size:1rem; }
+.flow2-grid { display:grid; grid-template-columns:5fr 64px 6fr; row-gap:30px; align-items:center; }
+.fnode { position:relative; background:#f7f8fa; border:1.5px solid #aab3bf; border-radius:12px; padding:10px 14px; text-align:center; font-weight:bold; font-size:.95rem; }
+.fnode.adapt { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnode .fsub, .fnote .fsub { font-weight:normal; font-size:.8rem; color:var(--muted); margin-top:3px; line-height:1.5; }
+.fnode:not(.last)::after { content:''; position:absolute; left:50%; bottom:-24px; transform:translateX(-50%); width:2px; height:16px; background:#3b82f6; }
+.fnode:not(.last)::before { content:''; position:absolute; left:50%; bottom:-25px; transform:translateX(-50%); border:5px solid transparent; border-top:7px solid #3b82f6; }
+.fmid { position:relative; height:100%; display:flex; align-items:center; justify-content:center; }
+.fmid::before { content:''; position:absolute; left:-2px; right:-2px; top:50%; border-top:2px dashed #14b8a6; }
+.fnum { position:relative; z-index:1; width:30px; height:30px; border-radius:50%; border:2.5px solid #3b82f6; background:#fff; color:#1d4ed8; font-weight:bold; display:flex; align-items:center; justify-content:center; font-size:.9rem; }
+.fnote { border-radius:12px; padding:10px 14px; font-weight:bold; text-align:center; font-size:.9rem; line-height:1.5; }
+.fnote.glm { background:#eef5ff; border:1.5px solid #3b82f6; color:#1d4ed8; }
+.fnote.cap { background:#fff8e1; border:1.5px dashed #d97706; color:#7a5800; }
+.fnote.start { background:#f7f8fa; border:1.5px solid #aab3bf; color:#4b5563; }
+code { font-family:Consolas,monospace; }
+p code, li code, td code { background:#eef1f5; color:#953800; padding:1px 5px; border-radius:4px; font-size:.85em; }
+table { width:100%; border-collapse:collapse; margin:10px 0; background:#fff; }
+th, td { border:1px solid #d0d7de; padding:6px 9px; font-size:.84rem; text-align:left; vertical-align:top; }
+th { background:#eef1f6; }
+td.l0 { font-weight:bold; color:#0969da; white-space:nowrap; }
+td.l1 { font-weight:600; color:#3a4aa8; }
+td.ok { color:#1a7f37; }
+.warn { color:#cf222e; font-weight:bold; }
+.note { background:#f0f4ff; border-left:4px solid #667eea; padding:12px 16px; border-radius:8px; margin:12px 0; font-size:.9rem; }
+.linklist li { margin:5px 0; }
+.linklist a { color:var(--accent); }
+footer { text-align:center; color:var(--muted); padding:24px; font-size:.82rem; }
+footer a { color:var(--accent); }
+</style><style>
+.figcap{font-size:12.5px;color:#6b7280;text-align:center;margin:6px 0 14px}
+.dim{color:#9aa3ad;font-size:13px}
+</style>
+<body>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
+<div class="topnav">
+    <span class="brand">DeepInfer · Bounded Replay 深挖</span>
+    <a href="#s1">①为什么需要</a>
+    <a href="#s2">②两模式</a>
+    <a href="#s3">③命中账本</a>
+    <a href="#s4">④state 存储</a>
+    <a href="#s5">⑤代码落点</a>
+    <a href="../index.html">← 返回首页</a>
+</div>
+<a href="../index.html" style="display:inline-block;font-size:13px;color:#6b7280;text-decoration:none;margin:0 0 6px">&larr; 返回首页</a>
+<h1>DeepInfer SWA Bounded Replay 深挖：YOCO 截断的两模式与命中账本</h1>
+<p class="subtitle">
+<span class="badge b-blue">deepseek-ai/DeepInfer @ 774ce24</span>
+<span class="badge b-green">yoco.py 逐字段精读 + Q&amp;A 账本核对</span>
+2026-10-21 发布 · 前置阅读：站内 V4.1-Flash 架构文章</p><div class="card"><p><strong>怎么读</strong>：SWA bounded replay 是 DeepInfer 里最"懂 V4.1-Flash 架构"的一个特性——它利用 CED/YOCO 的结构，把 decoder 侧 prefill 计算近乎砍半。本篇从架构账本讲到源码字段：为什么可行、mask/compact 两种模式差在哪、命中规则怎么算、SWA state 存了什么。</p></div>
+
+<h2 id="s1">1. 为什么需要：CED 架构下 decoder prefill 的账</h2>
+<div class="card">
+<p><strong>前置架构</strong>（站内 V4.1 系列已展开）：V4.1-Flash 把 40 层拆成 20 层编码器 + 20 层解码器；CED 让解码器的<b>块 KV</b>（全局稀疏 KV）直接从编码器末层隐藏态投影得到——prefill 阶段解码器的块 KV 不用算。<strong>剩下的成本</strong>：每个解码器层的 <b>SWA KV</b>（滑窗注意力缓存）仍需逐层计算，而 YOCO 语义下解码器层消费 KV 时不重算。</p>
+<p><strong>精确重建的价</strong>（官方 Q&amp;A 原数字）：要精确重建解码器 SWA KV，得把<strong>最后 2,560 个 token 跑完 20 个解码器层</strong>；bounded replay 的选择是——每个 prefill 只在解码器层重算<strong>最近 128 个 token</strong>，注意力窗口截断到重算段内（位置 i 的 query 只看 max(s, i−127) 到 i），得到一份<strong>近似 SWA KV</strong>。结果只供本次 decode 用、<strong>不进前缀缓存</strong>。这笔账的效果：<strong>总 prefill 计算量近乎减半</strong>，重算成本与上下文长度、层数都无关（常数）。</p>
+<div class="mermaid">
+flowchart TD
+    IN["prefill 输入<br/>命中 block KV 前缀"] --> ENC["编码器 20 层<br/>只算未命中后缀"]
+    ENC -->|"CED 投影（免算）"| BLK["解码器块 KV<br/>直接复用·不重算不覆写"]
+    ENC --> DEC["解码器 20 层 SWA KV<br/>只重算最近 128 token"]
+    DEC -->|"近似窗口<br/>i 只看 max(s, i-127)..i"| OUT["供本次 decode 使用<br/>不进前缀缓存"]
+</div>
+<div class="figcap">图 1 · bounded replay 的位置：块 KV 走 CED 投影复用，SWA KV 只重算最近 128 token（官方 Q&amp;A 机制文字版）</div>
+</div>
+
+<h2 id="s2">2. 两模式：mask 与 compact</h2>
+<div class="card">
+<p><strong>源码主战场</strong>：deepinfer/model_executor/input_metadata/yoco.py（182 行，YocoMetadataMixin）。文件头 docstring 写明：字段由 C++ prepare_prompt_v4 按截断模式二选一产出，两模式的 SWA 可见域同式（C++ 共用 yoco_swa_visibility），因此<strong>attention 数值在保留区间内一致</strong>——两模式是性能取舍不是精度取舍：</p>
+<table>
+<tr><th>维度</th><th>mask 模式</th><th>compact 模式</th></tr>
+<tr><td>query 处理</td><td>保留全部 query，仅收窄 SWA 可见域</td><td>真正移除截断区 query</td></tr>
+<tr><td>省的是什么</td><td>省 KV 访存，不省计算</td><td>consumer 层计算直接删掉（README 默认推荐）</td></tr>
+<tr><td>产出字段</td><td>yoco_mask_swa_index_pivots（full 布局）</td><td>yoco_consumer_* 全家（compact 布局，get_consumer_view 消费）</td></tr>
+<tr><td>开关</td><td colspan="2">DEEPINFER_YOCO_PREFILL_TRUNCATION_MODE=off|mask|compact（默认 off）；KEEP_TOKENS 默认 0，启用必须显式设</td></tr>
+</table>
+<div class="figcap">表 1 · mask 与 compact 两模式对照（yoco.py docstring 原文口径）</div>
+<p><strong>V4.1 默认参数</strong>（README）：mode=compact、KEEP_TOKENS=140。约束式：KEEP_TOKENS ≥ window_size(128) + MAX_BACKTRACKING_TOKENS——保留的末尾必须罩住 SWA 窗口加投机解码的最大回退长度；MAX_BACKTRACKING_TOKENS 的默认下限正是 USE_NEXTN_DECODE+1（draft 5 → 至少 6），与 DSpark 特性咬合。</p>
+<p><strong>compact 布局的字段全家</strong>（yoco.py 逐字段）：query_indices（full→compact 的 gather 正映射）、cu_seqlens_q（cumsum(keep_len) 边界）、positions、swa_index_pivots（[total_q_c, 4] int32 可见域）、ks/ke（按稀疏层压缩比分键的 compact 版）、kv_ca_index_offset_len（按稠密压缩比分键）、slot_mapping_store_swa（占位 token 显式 −1 不写 ring）、cp_mirror_len 与 cp_contrib_pad_len（CP 边界重分布，CP==1 时为 None）。</p>
+</div>
+
+<h2 id="s3">3. 命中账本：两段缓存怎么配合</h2>
+<div class="card">
+<p><strong>总原则</strong>（官方 Q&amp;A）：命中长度由<b>块 KV 缓存</b>决定；最后一个块要不要重算由 <b>SWA KV 缓存</b>决定——SWA 缺失就退一块重算。具体三步：上限先卡死——长为 L 的输入，YOCO 截断要求下最大命中 ≤ L−134（128 窗 + 6 回退）；查块 KV 得 L1（128 的整数倍）；再看 L1−128 到 L1 区间内有没有 SWA KV，有则命中 L1，没有则 L1−128（128 是重算窗口）。</p>
+<div class="mermaid">
+flowchart LR
+    L["输入长 L<br/>命中上限 L-134"] --> B["查块 KV 缓存<br/>得 L1（128 整倍）"]
+    B --> S{"L1-128..L1 内<br/>有 SWA KV？"}
+    S -->|有| H1["命中 L1"]
+    S -->|没有| H2["命中 L1-128<br/>退一块重算"]
+</div>
+<div class="figcap">图 2 · 命中三步：块 KV 定长、SWA KV 定最后一块去留（官方 Q&amp;A 规则）</div>
+<p><strong>编码器侧也有 replay</strong>：前缀缓存命中后，编码器只重算命中前缀的最近 128 token 并与未命中后缀一起前向——重算段只重建 SWA KV，块 KV 原样复用、既不重算也不覆写。编码器侧 SWA KV 缺失时同样退一块。</p>
+</div>
+
+<h2 id="s4">4. SWA state 存储：算清一笔账</h2>
+<div class="card">
+<p><strong>StateBlock 两区</strong>：每序列占一个定长槽，按"是否需要持久"分两区——[stored 区：SWA] 与 [dropped 区：YOCO consumer SWA + 压缩边界累加器 ca_state/ica_state]。V4.1 只持久化<b>前 20 层</b>（编码器层）；消费层（解码器）的 SWA 靠 prefill 重算恢复，不存。压缩窗口边界天然对齐 128 token 存储粒度，无跨界依赖。</p>
+<table>
+<tr><th>账目</th><th>数字</th><th>口径</th></tr>
+<tr><td>单序列落盘量</td><td>20 层 × 134 token × 528 B = <b>1,415,040 B</b></td><td>state_size_to_disk；528 B/token 是 MXFP8 SWA KV 格式</td></tr>
+<tr><td>存储位置</td><td>本机内存，单副本</td><td>不进 3FS 持久缓存；内存目录逻辑统一、按 key 物理分区</td></tr>
+<tr><td>跨机命中</td><td>Entrypoint 目录 + 400G VLAN 拉回</td><td>无本地副本时从持有机器远程取</td></tr>
+<tr><td>存储粒度</td><td>128 token 倍数位置</td><td>prefill 末 token 预留后向下取整；chunked prefill 只在最后一块存</td></tr>
+<tr><td>decode 期副本</td><td>device 内 replica 区，越界最多 5 token</td><td>由槽位 ring buffer 比 window 多 6 位吸收</td></tr>
+</table>
+<div class="figcap">表 2 · SWA state 存储账（全部为官方 Q&amp;A 原数字；20 层即 V4.1 的编码器层数）</div>
+</div>
+
+<h2 id="s5">5. 代码落点速查</h2>
+<div class="card">
+<table>
+<tr><th>文件</th><th>职责</th></tr>
+<tr><td>model_executor/input_metadata/yoco.py</td><td>两模式的 metadata 字段与 consumer/mask 视图（182 行）</td></tr>
+<tr><td>model_executor/models/deepseek.py 与 v4_modules/</td><td>V4.1 模型实现，消费截断视图跑前向</td></tr>
+<tr><td>layers/tilelang_ops/gather.py / prepare_cp_mirror.py</td><td>compact 布局的 gather 与 CP 边界镜像（yoco.py 直接 import）</td></tr>
+<tr><td>worker/cache_engine.py</td><td>state 槽位与 ring buffer 管理（978 行）</td></tr>
+<tr><td>environ.py（YoCo 组）</td><td>TRUNCATION_MODE 三态 + KEEP_TOKENS 约束式</td></tr>
+</table>
+<div class="figcap">表 3 · bounded replay 相关源码地图（行数为实测）</div>
+<p><strong>站内衔接</strong>：V4.1-Flash 的 CED/CSA2/SWA 机制与量化口径见《DeepSeek V4.1 的 KV Cache 汇总》；框架全貌见《DeepInfer 源码导航》《DeepInfer 特性地图》。SWA state 的 528 B/token 与汇总篇的 890 B/token 全局账同源不同口径——前者只算滑窗层落盘，后者是全局 KV 每 token 合计。</p>
+</div>
+
+<p class="dim" style="margin-top:36px">DeepInfer SWA Bounded Replay 深挖 · 2026-10-21 发布 · 事实来源：yoco.py 逐字段精读 + environ.py docstring + doc/inference_deployment_qa.md 账本（deepseek-ai/DeepInfer @ 774ce24）</p>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+
+</body>
+</html>
