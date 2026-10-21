@@ -324,6 +324,8 @@ h2{scroll-margin-top:70px}
             <li><a href="core.html">核心模块</a></li>
             <li><a href="panorama.html">全景源码</a></li>
             <li><a href="parameters.html">参数说明</a></li>
+            <li><a href="usage.html">使用说明</a></li>
+            <li><a href="source-guide.html">源码讲解</a></li>
             <li class="sep" title="关联资源"></li>
             <li><a href="../src-viewer.html">源码查看器</a></li>
             <li><a href="../index.html">vLLM-Ascend 文档</a></li>
@@ -341,6 +343,7 @@ h2{scroll-margin-top:70px}
         <p>DeepInfer 是 DeepSeek 生产推理引擎的开源版，支撑 DeepSeek-V4.1-Flash 大规模线上服务。官方 Q&amp;A 给出的生产规模：单集群每天服务 <strong>155 万亿 token</strong>，整体营收 38 美元/GPU·小时（谷时电价口径）。</p>
         <p>README 致谢段写明 "originally built primarily on vLLM"，另受 SGLang 与 TensorRT-LLM 启发——五层骨架与 vLLM 相同，但为 V4.1-Flash 的 CED/YOCO 架构与大规模部署深度定制。六大特性：Wide-EP（decode EP64-128）+ EPLB 专家均衡、DSpark 置信度变长验证、SWA bounded replay、异步调度、批不变与确定性采样、结构化输出（xgrammar）。</p>
         <p>开源边界：引擎本体（离线推理可用）；KV cache 存储系统与跨副本负载均衡未含（耦合内部基础设施），设计在 doc/inference_deployment_qa.md（312 行）展开；伴生开源 deepseek-recipe（Rust 编解码组件）。</p>
+        <p><strong>延伸阅读（博客专区）</strong>：<a href="../../学习html/DeepInfer 特性地图 · 六大特性与源码对照.html">DeepInfer 特性地图：六大特性与源码对照</a> · <a href="../../学习html/DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html">SWA Bounded Replay 深挖：YOCO 截断与命中账本</a> · <a href="../../学习html/DeepInfer 源码导航 · DeepSeek开源推理框架全景.html">DeepInfer 源码导航（七章导读）</a></p>
     </div>
 
     <div class="section">
@@ -445,8 +448,13 @@ flowchart TD
     </div>
 
     <div class="section">
-        <h2>四、整体架构与请求处理流程</h2>
-        <h3>4.1 请求处理十步（离线推理路径）</h3>
+        <h2>四、整体架构</h2>
+        <p>理解 DeepInfer 的架构，先分清<strong>两个层面</strong>：<strong>上游继承层</strong>（来自 vLLM 的通用骨架，DeepInfer 未改或小改）与<strong>本项目重写层</strong>（为 V4.1-Flash 深度定制的执行主干）。与 vllm-ascend 的插件式分层不同，DeepInfer 两层代码都长在同一个包里。</p>
+        <h3>4.1 上游继承层（来自 vLLM，通用骨架）</h3>
+        <p><strong>LLMEngine 类体系</strong>：整个推理系统的入口，接收请求、管理会话、协调组件——只管上层逻辑，不关心底层是 GPU 还是 NPU。<strong>Worker/ModelRunner 骨架</strong>：每张卡一个 Worker 执行实际推理，调用注意力后端与算子完成计算。<strong>Scheduler 调度思想</strong>：连续批处理、请求优先级、资源分配的通用方法论。<strong>EngineArgs 装配</strong>：启动参数到引擎配置的转换约定。</p>
+        <h3>4.2 本项目重写层（DeepInfer 执行主干）</h3>
+        <p><strong>engine/ 主循环重排</strong>：ALL/ANY 两档集体 prefill + 异步调度（zos），为大规模吞吐重新设计调度节奏。<strong>worker/cache_engine</strong>：StateBlock 槽位 + SWA state 管理，KV 生命周期围绕 V4.1 的块 KV 重写。<strong>v4_modules</strong>：26 文件全重写，CED 投影分发与 YOCO 截断的模型本体。<strong>tilelang_ops</strong>：三层自研算子库（接口+参考+测试），attention/candidate_blocks 等按平台分发。<strong>platform.py</strong>：GPU/NPU 双平台入口。DeepInfer 无"插件注册层"——fork 源码直接进主包，这是它与 vllm-ascend 路线的根本区别。</p>
+        <h3>4.3 请求处理完整流程（离线推理路径十步）</h3>
         <ol style="line-height:1.9">
         <li><strong>LLM 入口</strong>：entrypoints/llm.py 的 LLM.generate 接收 prompt 与 SamplingParams（seq_seed / so_args 在此进引擎）；</li>
         <li><strong>引擎会话</strong>：engine/llm_engine.py（1,030 行）创建会话、装配 EngineArgs，多模态请求先走 ve/ 视觉编码；</li>
@@ -485,16 +493,82 @@ flowchart TD
     </div>
 
     <div class="section">
-        <h2>五、核心模块详解</h2>
+        <h2>五、核心模块详解（入口）</h2>
         <p>九大功能模块协同实现 V4.1-Flash 的高性能推理；每张卡给职责与代表文件，<strong>查看详情</strong>进 core.html 对应节，<strong>看源码</strong>直达源码镜像。</p>
         <div class="modgrid"><div class="modcard" id="g1"><p style="margin:0 0 4px"><strong style="font-size:15px">🚀 engine/</strong><br/><span style="color:#2563eb;font-size:13px">引擎主循环</span></p><p style="margin:6px 0;font-size:13px;color:#374151">llm_engine.py 1,030 行：会话装配与主循环重排</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">ALL/ANY 两档集体 prefill</li><li style="margin:2px 0">异步调度 zos（CPU 与 GPU 重叠）</li><li style="margin:2px 0">MTP 变长验证编排</li></ul><a class="btn" href="core.html#m1">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/engine/llm_engine.py" target="_blank">看源码 · llm_engine.py</a></div><div class="modcard" id="g2"><p style="margin:0 0 4px"><strong style="font-size:15px">👷 worker/</strong><br/><span style="color:#2563eb;font-size:13px">执行与缓存</span></p><p style="margin:6px 0;font-size:13px;color:#374151">批执行与 KV state 管理，全重写</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">StateBlock 槽位管理</li><li style="margin:2px 0">SWA state 存取</li><li style="margin:2px 0">dflash 专用图捕获</li><li style="margin:2px 0">decode 性能缓存</li></ul><a class="btn" href="core.html#m2">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/worker/cache_engine.py" target="_blank">看源码 · cache_engine.py</a></div><div class="modcard" id="g3"><p style="margin:0 0 4px"><strong style="font-size:15px">🧠 model_executor/models/v4_modules/</strong><br/><span style="color:#2563eb;font-size:13px">V4.1-Flash 模型主体</span></p><p style="margin:6px 0;font-size:13px;color:#374151">26 文件全重写：CED 与 YOCO 在此落地</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">MLA 运行时 attn.py 1,009 行</li><li style="margin:2px 0">跨层 KV 共享 cross_layer</li><li style="margin:2px 0">engram 记忆块</li><li style="margin:2px 0">多头一致性 hc/mHC</li></ul><a class="btn" href="core.html#m3">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/model_executor/models/v4_modules/attn.py" target="_blank">看源码 · attn.py</a></div><div class="modcard" id="g4"><p style="margin:0 0 4px"><strong style="font-size:15px">⚡ model_executor/layers/</strong><br/><span style="color:#2563eb;font-size:13px">层与算子编排</span></p><p style="margin:6px 0;font-size:13px;color:#374151">把 TileLang 算子接进模型层</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">attention 后端分发</li><li style="margin:2px 0">index_attn 稀疏索引</li><li style="margin:2px 0">sampler 采样层</li><li style="margin:2px 0">RoPE 与 layernorm</li></ul><a class="btn" href="core.html#m4">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/model_executor/layers/attention_backend.py" target="_blank">看源码 · attention_backend.py</a></div><div class="modcard" id="g5"><p style="margin:0 0 4px"><strong style="font-size:15px">🔧 model_executor/layers/tilelang_ops/</strong><br/><span style="color:#2563eb;font-size:13px">TileLang 算子库</span></p><p style="margin:6px 0;font-size:13px;color:#374151">三层自研：接口 + 参考 + 测试</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">attention 与 candidate_blocks</li><li style="margin:2px 0">load_paged_kv_cache</li><li style="margin:2px 0">fused_sample 融合采样</li><li style="margin:2px 0">CUDA 25 / AscendC 33 文件</li></ul><a class="btn" href="core.html#m5">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/model_executor/layers/tilelang_ops/candidate_blocks.py" target="_blank">看源码 · candidate_blocks.py</a></div><div class="modcard" id="g6"><p style="margin:0 0 4px"><strong style="font-size:15px">🌐 model_executor/eplb/ + distributed/</strong><br/><span style="color:#2563eb;font-size:13px">分布式与均衡</span></p><p style="margin:6px 0;font-size:13px;color:#374151">专家负载均衡与跨机通信</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">EPLB 按统计窗重排专家</li><li style="margin:2px 0">moe_lb 1.045–1.090</li><li style="margin:2px 0">shm_broadcast 共享内存广播</li></ul><a class="btn" href="core.html#m6">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/model_executor/eplb/policy.py" target="_blank">看源码 · policy.py</a></div><div class="modcard" id="g7"><p style="margin:0 0 4px"><strong style="font-size:15px">🖊 structure_output/</strong><br/><span style="color:#2563eb;font-size:13px">结构化输出</span></p><p style="margin:6px 0;font-size:13px;color:#374151">文法约束三件套 + xgrammar 对接</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">compiler 编译文法</li><li style="margin:2px 0">mask 生成 token 掩码</li><li style="margin:2px 0">matcher 推进自动机</li><li style="margin:2px 0">so_matcher_builder</li></ul><a class="btn" href="core.html#m7">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/structure_output/matcher.py" target="_blank">看源码 · matcher.py</a></div><div class="modcard" id="g8"><p style="margin:0 0 4px"><strong style="font-size:15px">🎨 ve/</strong><br/><span style="color:#2563eb;font-size:13px">视觉编码器</span></p><p style="margin:6px 0;font-size:13px;color:#374151">多模态处理独立成包</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">multimodal_processor</li><li style="margin:2px 0">vl 输入张量准备</li><li style="margin:2px 0">schema 校验</li></ul><a class="btn" href="core.html#m8">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/ve/prepare_tensor_input_vl.py" target="_blank">看源码 · prepare_tensor_input_vl.py</a></div><div class="modcard" id="g9"><p style="margin:0 0 4px"><strong style="font-size:15px">⚙ platform.py + npu_ops/</strong><br/><span style="color:#2563eb;font-size:13px">双平台与昇腾补丁</span></p><p style="margin:6px 0;font-size:13px;color:#374151">GPU/NPU 一个入口分发</p><ul style="margin:4px 0 8px;padding-left:18px;font-size:12.5px;color:#4b5563"><li style="margin:2px 0">平台探测与分发</li><li style="margin:2px 0">npu_ops/deep_select topk</li><li style="margin:2px 0">npu_ops/vit_attn 视觉注意力</li><li style="margin:2px 0">patch_imports 算子补丁</li></ul><a class="btn" href="core.html#m9">查看详情</a> <a class="srclnk" href="../src-viewer.html?file=deepinfer/platform.py" target="_blank">看源码 · platform.py</a></div></div>
     </div>
 
     <div class="section">
-        <h2>六、技术栈与硬件</h2>
-        <p>Python 3.10+ / C++（pybind11）/ TileLang（算子 DSL）/ CUDA（SM100）/ CANN 9.2（昇腾）。硬件双平台：NVIDIA SM100 系与华为昇腾 950；deep_cluster/ 探测集群拓扑。</p>
+        <h2>七、注意力后端</h2>
+        <p>注意力是 V4.1-Flash 性能的主战场：编码器 20 层全注意力算出 KV，CED 投影分发给解码器；解码侧走稀疏索引只算 topk 块；SWA 层用 bounded replay 只重算 128 token。DeepInfer 的注意力栈按"分发入口 → 模型运行时 → 稀疏索引 → 算子落地"四层组织。</p>
+        <p><strong>分发入口（layers/attention_backend.py）</strong>：按平台与模型形态选择执行路径。<strong>模型运行时（v4_modules/attn.py，1,009 行）</strong>：MLA 运行时——管理 CED 投影分发、SWA ring buffer、块 KV 读写。<strong>稀疏索引（v4_modules/index_attn）</strong>：indexer 为每个 query 选 topk 候选块，跳过无关 KV。<strong>算子落地（tilelang_ops）</strong>：attention / candidate_blocks / load_paged_kv_cache 完成 FP4 主 KV（ue8m0 scale）的实际计算；昇腾侧另有 npu_ops/vit_attn 视觉注意力。</p>
+        <div class="mermaid-box"><div class="chart-content"><pre class="mermaid">
+flowchart TD
+    A["模型前向请求注意力"]:::up --> B["attention_backend.py 分发入口<br/>按平台与模型形态选路径"]:::own
+    B --> C["v4_modules/attn.py MLA 运行时 1,009 行<br/>CED 投影分发 + SWA ring buffer"]:::own
+    C --> D1["编码器路径<br/>20 层全注意力算 KV"]:::own
+    C --> D2["解码器路径 index_attn<br/>稀疏索引选 topk 候选块"]:::own
+    D2 --> E["tilelang_ops 算子<br/>attention / candidate_blocks<br/>load_paged_kv_cache"]:::own
+    E --> F1["cuda 25 文件<br/>GPU 平台"]:::feat
+    E --> F2["asc 33 文件<br/>AscendC 平台"]:::feat
+    B -.-> G["npu_ops/vit_attn<br/>视觉注意力（昇腾）"]:::feat
+    classDef up fill:#fef3c7,stroke:#d97706,color:#1f2937;
+    classDef own fill:#dcfce7,stroke:#16a34a,color:#1f2937;
+    classDef feat fill:#dbeafe,stroke:#2563eb,color:#1f2937;
+</pre></div></div>
+        <div class="chart-label">图 4：注意力栈四层——黄框为继承抽象，绿框为 DeepInfer 重写，蓝框为平台算子</div>
+    </div>
+
+    <div class="section">
+        <h2>八、技术栈</h2>
+        <p>Python 3.12+（pyproject 要求）/ C++（pybind11 绑定）/ TileLang 0.1.15（算子 DSL，cuda 25 文件 + asc 33 文件）/ CUDA 13.2 / CANN 9.2（昇腾）。构建面刻意最小：setup.py 92 行 + build.sh。</p>
         <table class="param-t"><tr><th>csrc/ C++/CUDA 文件</th><th>行数</th></tr><tr><td>csrc/asc_utils.cpp</td><td>116</td></tr><tr><td>csrc/cuda_utils.cpp</td><td>110</td></tr><tr><td>csrc/cuda_utils.hpp</td><td>50</td></tr><tr><td>csrc/engine/block_manager.hpp</td><td>243</td></tr><tr><td>csrc/engine/flops_estimator.hpp</td><td>331</td></tr><tr><td>csrc/engine/input_metadata/block_load_plan.cpp</td><td>61</td></tr><tr><td>csrc/engine/input_metadata/block_load_plan.hpp</td><td>35</td></tr><tr><td>csrc/engine/input_metadata/prepare_tensor_input.hpp</td><td>74</td></tr><tr><td>csrc/engine/input_metadata/prepare_tensor_input_base.cpp</td><td>252</td></tr><tr><td>csrc/engine/input_metadata/prepare_tensor_input_v4.cpp</td><td>656</td></tr><tr><td>csrc/engine/mtp_varlen.hpp</td><td>276</td></tr><tr><td>csrc/engine/outputs.hpp</td><td>309</td></tr><tr><td>csrc/engine/prepare_sample.cpp</td><td>285</td></tr><tr><td>csrc/engine/prepare_sample.hpp</td><td>67</td></tr><tr><td>csrc/engine/process_output.hpp</td><td>40</td></tr><tr><td>csrc/engine/pybind.cpp</td><td>12</td></tr><tr><td>csrc/engine/pybind.hpp</td><td>15</td></tr><tr><td>csrc/engine/pybind_output.cpp</td><td>139</td></tr><tr><td>csrc/engine/pybind_scheduler.cpp</td><td>139</td></tr><tr><td>csrc/engine/pybind_sequence.cpp</td><td>174</td></tr><tr><td>csrc/engine/scheduler.hpp</td><td>1330</td></tr><tr><td>csrc/engine/sequence.hpp</td><td>420</td></tr><tr><td>csrc/engine/utils.hpp</td><td>41</td></tr><tr><td>csrc/engine/zos.cpp</td><td>308</td></tr><tr><td>csrc/engine/zos.hpp</td><td>31</td></tr><tr><td>csrc/graph_timer/graph_timer.hpp</td><td>88</td></tr><tr><td>csrc/graph_timer/graph_timer_asc.cpp</td><td>46</td></tr><tr><td>csrc/graph_timer/graph_timer_cuda.cpp</td><td>92</td></tr><tr><td>csrc/graph_timer/pybind.cpp</td><td>32</td></tr><tr><td>csrc/pybind.cpp</td><td>18</td></tr><tr><td>csrc/utils/lockable.hpp</td><td>39</td></tr><tr><td>csrc/utils/log.hpp</td><td>63</td></tr><tr><td>csrc/utils/object_pool.hpp</td><td>49</td></tr></table>
-        <div class="chart-label">表 3：csrc/ 清单——zos 与 prepare_tensor_input_v4 正是零开销调度与 yoco 截断的 C++ 侧；graph_timer 分 CUDA 与昇腾两版</div>
+        <div class="chart-label">表 3：csrc/ 清单——zos 与 prepare_tensor_input_v4 正是零开销调度与 yoco 截断的 C++ 侧</div>
+    </div>
+
+    <div class="section">
+        <h2>九、硬件支持</h2>
+        <p><strong>NVIDIA SM100 系</strong>（requirements-nvidia：torch 2.13.0+cu132，flash-attn-4）：批不变与确定性采样特性仅此平台。<strong>华为昇腾 950</strong>（requirements-ascend：torch 2.13.0+cpu + torch-npu 2.13.0rc1，CANN 9.2）：AscendC 算子经 tilelang_ops/asc。<strong>deep_cluster/</strong> 部署前探测集群拓扑（几机几卡、互联形态），喂给调度做并行度决策。</p>
+    </div>
+
+    <div class="section">
+        <h2>十、模块协作关系（核心：用户是怎么用的）</h2>
+        <h3>10.1 用户视角：从安装到出 token 的完整流程</h3>
+        <ol style="line-height:1.9">
+        <li><strong>装一个包</strong>：按平台选 requirements-nvidia 或 requirements-ascend，pip 安装（依赖自动带上，不需要装 vLLM）；</li>
+        <li><strong>指定模型</strong>：模型权重取自 HuggingFace（transformers 生态），DeepInfer 无模型注册表——直接为 V4.1-Flash 服务，配置在 config.py 四大配置中心；</li>
+        <li><strong>发起推理</strong>：examples/offline_inference.py 里 LLM(model=...).generate(prompts, SamplingParams)，结果同步返回。</li>
+        </ol>
+        <h3>10.2 每个模块到底做了什么</h3>
+        <p>engine 装配会话并驱动主循环；worker 在每张卡上装批执行；v4_modules 是模型本体（CED/SWA/MoE）；layers 把算子接进模型；tilelang_ops 提供跨平台算子；eplb+distributed 管多机均衡；structure_output 约束输出格式；ve 处理视觉输入；platform 屏蔽 GPU/NPU 差异。</p>
+        <h3>10.3 为什么需要这些模块</h3>
+        <p>通用框架（vLLM 上游）给不了三样东西：直写 CED 投影分发的自由（v4_modules）、围绕块 KV+SWA state 的缓存生命周期（cache_engine）、为 V4.1 调校的集体 prefill 节奏（engine 主循环）——这就是 fork 而非插件的原因；而算子层做成 TileLang 三层结构，是为同一份接口在 CUDA 与 AscendC 双平台落地。</p>
+        <h3>10.4 一个具体例子：跑 V4.1-Flash</h3>
+        <ol style="line-height:1.9">
+        <li>用户在 offline_inference.py 指定 model 路径与 SamplingParams（seq_seed 可开确定性采样）；</li>
+        <li>llm_engine 装配 EngineArgs，读 config.py 生成模型/缓存/并行/调度四份配置；</li>
+        <li>platform.py 检测 DEEPINFER_ACCELERATOR（nvidia/ascend），选定算子后端；</li>
+        <li>worker 创建 ModelRunner 与 cache_engine，分配 SWA state 槽位与块 KV 池；</li>
+        <li>v4_modules 按配置图搭起模型：20 层编码器 + CED 投影 + 解码器块 KV + SWA 层 + MoE（EPLB 若开）；</li>
+        <li>distributed 建立多卡通信（Wide-EP 时 decode EP64-128）；</li>
+        <li>generate 进来后走十步流程（见 4.3）；tilelang_ops 在所选平台上执行稀疏注意力；</li>
+        <li>fused_sample 采样（DSpark 开启时置信度截取验证前缀），结果回 LLM 返回。</li>
+        </ol>
+        <div class="mermaid-box"><div class="chart-content"><pre class="mermaid">
+flowchart TD
+    U["用户 offline_inference.py"]:::up --> L["LLM 装配<br/>model + SamplingParams"]:::up
+    L --> E1["llm_engine 装配会话<br/>config.py 四大配置中心"]:::own
+    E1 --> P["platform.py 探测平台<br/>DEEPINFER_ACCELERATOR"]:::own
+    P --> W["worker + cache_engine<br/>SWA state 槽位 + 块 KV 池"]:::own
+    W --> V["v4_modules 搭模型<br/>20 层编码器 + CED + MoE"]:::own
+    V --> DS["distributed 建通信<br/>Wide-EP decode EP64-128"]:::own
+    DS --> R["generate 十步流程<br/>tilelang_ops 稀疏注意力"]:::own
+    R --> O["fused_sample 采样<br/>DSpark 置信度验证"]:::own
+    O --> U2["结果回 LLM 返回"]:::up
+    classDef up fill:#fef3c7,stroke:#d97706,color:#1f2937;
+    classDef own fill:#dcfce7,stroke:#16a34a,color:#1f2937;
+</pre></div></div>
+        <div class="chart-label">图 5：跑 V4.1-Flash 的模块协作——从装包到出 token，绿框为 DeepInfer 重写环节</div>
     </div>
 
 </div>
