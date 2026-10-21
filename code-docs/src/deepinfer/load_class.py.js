@@ -1,0 +1,1 @@
+window.__SRC_SET("deepinfer/load_class.py","import importlib.util\n\n\ndef load_class_from_file(file_path: str, class_name: str) -> type:\n    spec = importlib.util.spec_from_file_location(\"module\", file_path)\n    module = importlib.util.module_from_spec(spec)\n    spec.loader.exec_module(module)\n    return getattr(module, class_name)\n");
