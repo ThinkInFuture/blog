@@ -81,7 +81,8 @@ footer{text-align:center;color:#999;padding:24px;font-size:0.82rem;}
     if (!/^[A-Za-z0-9_\-\.\/]+$/.test(file) || file.indexOf('..') !== -1) {
         fail('非法的文件参数：' + file); return;
     }
-    if (file.slice(-3) !== '.py') { fail('仅支持 .py 文件：' + file); return; }
+    var _okExt = ['.py', '.cpp', '.hpp', '.cu', '.cc', '.h'];
+    if (!_okExt.some(function (e) { return file.slice(-e.length) === e; })) { fail('仅支持源码文件（.py/.cpp/.hpp/.cu/.cc/.h）：' + file); return; }
 
     document.title = file.split('/').pop() + ' - vLLM Ascend 源码';
 
