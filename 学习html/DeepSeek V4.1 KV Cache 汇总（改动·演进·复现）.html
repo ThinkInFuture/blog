@@ -103,6 +103,9 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 
 <script src="https://cdn.jsdmirror.com/npm/mermaid@10/dist/mermaid.min.js"></script>
 <style>
+.mmsafe{padding-top:48px}
+.mmsafe svg{overflow:visible}
+.mmsafe .cluster-label foreignObject{overflow:visible;white-space:nowrap}
 .fsbtn{position:absolute;top:10px;right:10px;z-index:5;padding:6px 14px;border-radius:8px;background:#fff;border:1px solid #d5dbe5;box-shadow:0 2px 8px rgba(15,23,42,.08);font-size:13px;color:#374151;cursor:pointer;font-family:inherit}
 .fsbtn:hover{border-color:#3b82f6;color:#3b82f6}
 .fsmask{display:none;position:fixed;inset:0;z-index:10002;background:#f8fafc;flex-direction:column}
@@ -124,9 +127,10 @@ svg text{font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sa
 <a href="#s2">2 KV Cache 演进：MLA → V4.0 三段分段 → V4.1 换路径</a>
 <a href="#s3">3 HCA 为什么退场：无重叠的相位代价</a>
 <a href="#s4">4 训练说明：老师-学生结构与四段关键代码</a>
-<a href="#s5">5 复现实测：设定、结果与边界</a>
-<a href="#s6">6 结论与素材索引</a>
-<a href="#s7">7 vllm-ascend 对 V4 特性的适配（源码实测）</a>
+<a href="#s45">5 CSA 与 CSA2：从单层压缩到跨层复用</a>
+<a href="#s5">6 复现实测：设定、结果与边界</a>
+<a href="#s6">7 结论与素材索引</a>
+<a href="#s7">8 vllm-ascend 对 V4 特性的适配（源码实测）</a>
 </nav>
 
 <h2 id="s1">1. V4.1-Flash 改了什么：四步递进与量化效果账</h2>
@@ -926,7 +930,7 @@ def init_from_closed_form(self, x_k, y_k, x_v, y_v, lam=1.0):
 </div>
 <div class="figcap">图 11 · 训练结构·学生 SWA + KV QAT 分支：KV 学习分支＝学量化（FakeQuant 插在 KV 写入缓存处），前向模拟 k8v4 round-trip · 反向 STE 直通 · s_K/s_V 与 W_l^KV 一起训练</div>
 </div>
-<p><b>加深差异的读法</b>：与图 10 对照只有两处新东西——黄框里多出两个 FakeQuant 节点（K/V 各一），梯度红线多一条落到 s_K、s_V。<b>QAT 的要义</b>：训练时就让模型「看见」量化误差，让 W_l^KV 主动学会消化它，而不是部署后才被动挨打（PTQ）。协议与第 5 章图 14 的 TurboQuant k8v4 一致——<b>训练怎么模拟，部署就怎么存</b>；对照灰盒提醒：SWA 滑窗 KV 不量化，只有投影出的 KV 走 QAT。</p>
+<p><b>加深差异的读法</b>：与图 10 对照只有两处新东西——黄框里多出两个 FakeQuant 节点（K/V 各一），梯度红线多一条落到 s_K、s_V。<b>QAT 的要义</b>：训练时就让模型「看见」量化误差，让 W_l^KV 主动学会消化它，而不是部署后才被动挨打（PTQ）。协议与第 6 章图 16 的 TurboQuant k8v4 一致——<b>训练怎么模拟，部署就怎么存</b>；对照灰盒提醒：SWA 滑窗 KV 不量化，只有投影出的 KV 走 QAT。</p>
 <p><b>第四段关键代码——KV 伪量化（STE 直通）</b>：</p>
 <pre>
 class KVFakeQuant(torch.autograd.Function):
@@ -956,7 +960,99 @@ def qat_kv(k, v, s_k, s_v):
 
 
 
-<h2 id="s5">5. 复现实测：设定、结果与边界</h2>
+<h2 id="s45">5. CSA 与 CSA2：从单层压缩到跨层复用</h2>
+<p><b>两者的关系不是简单的升级</b>，而是解决同一个「存不下、算得慢」问题的两种递进思路：CSA 在<b>单层内部</b>做「物理压缩 + 稀疏选择」，CSA2 则在 CSA 的基础上，把省下来的成果在<b>层与层之间</b>做「共享复用」，把重复建设彻底砍掉。</p>
+
+<h3>5.1 CSA：单层内部的「压缩 + 稀疏」两道漏斗</h3>
+<p>CSA 的核心是在<b>每一层内部</b>，用两道工序把海量 KV 削减到极小规模：</p>
+<ul>
+<li><b>第一道 · KV 压缩（物理缩减）</b>：把相邻的 <b>4 个 token</b> 的 KV 压缩成 <b>1 个</b>「压缩 KV 条目」，上下文长度瞬间变成原来的 <b>1/4</b>。</li>
+<li><b>第二道 · 稀疏索引（逻辑筛选）</b>：<b>Lightning Indexer</b> 给所有「压缩 KV」打分，只保留得分最高的 <b>Top-K</b>（Flash 模型 k=512，Pro 模型 k=1024）参与真正的注意力计算，剩下的直接丢弃。</li>
+<li><b>补偿机制</b>：压缩会损失局部细节，因此额外维护一个 <b>128 token 的滑动窗口</b>，保留最近未压缩的原始 KV 作为兜底。</li>
+</ul>
+<div class="card mmsafe">
+<div class="mermaid">
+flowchart TD
+    subgraph Input["输入 Token 序列"]
+        direction LR
+        T1["Token 1"] ~~~ T2["Token 2"] ~~~ T3["Token 3"] ~~~ T4["Token 4"] ~~~ Tn["... Token N"]
+    end
+    Input --> Compressor
+    subgraph Compressor["① KV Compressor（压缩比 N=4）"]
+        C1["压缩 KV 条目 1"]
+        C2["压缩 KV 条目 2"]
+        Cdots["..."]
+    end
+    Compressor --> Indexer
+    subgraph Indexer["② Lightning Indexer（Top-K 稀疏选择）"]
+        direction TB
+        Score["给所有压缩 KV 打分"]
+        TopK["只保留 Top-K<br>（Flash: k=512）"]
+        Discard["其余压缩 KV 直接丢弃"]
+    end
+    Indexer --> Attention
+    subgraph Attention["③ 真正的 Attention 计算"]
+        A1["Q 只和 Top-K 个压缩 KV 做注意力"]
+    end
+    subgraph SWA["补偿通道（始终保留）"]
+        S1["最近 128 个 token 的原始 KV<br>（不压缩，直接参与）"]
+    end
+    SWA --> Attention
+    style Compressor fill:#e8f0fe,stroke:#4a90d9
+    style Indexer fill:#fff3e0,stroke:#f57c00
+    style Discard fill:#ffebee,stroke:#d32f2f,stroke-dasharray: 5 5
+    style SWA fill:#f3e5f5,stroke:#8e24aa
+</div>
+<div class="figcap">图 12 · CSA 单层内的两道漏斗：4:1 压缩 → Lightning Indexer Top-K 稀疏选择；128 滑窗原始 KV 始终兜底</div>
+</div>
+
+<h3>5.2 CSA2：在 CSA 之上，把「重复建设」也砍掉</h3>
+<p>CSA 虽然把单层的 KV 量压下来了，但<b>后 20 层每一层都要各自跑一遍压缩和索引</b>，产生了大量重复的存储与计算。CSA2 的解法是：<b>不再让每一层都从零开始，而是让层与层之间「共享成果」</b>——把解码器层分配为三种<b>静态模式</b>，通过跨层复用主 KV 和索引器 K 来消灭重复：</p>
+<table>
+<tr><th>模式</th><th>KV 来源</th><th>索引（Top-K）来源</th><th>本质</th></tr>
+<tr><td><b>Full</b></td><td><b>自己生成</b>（完整跑完 CSA 流程）</td><td><b>自己重新打分挑选</b></td><td>生产者，唯一真正干重活的层</td></tr>
+<tr><td><b>Reindex</b></td><td><b>复用</b>前面 Full 层的 KV</td><td><b>用自己的 Q 重新打分</b>，挑一套新索引</td><td>半自主，换视角但不重复建库</td></tr>
+<tr><td><b>Reuse</b></td><td><b>复用</b>前面 Full 层的 KV</td><td><b>直接抄</b>前面层的 Top-K 名单</td><td>纯消费者，零重复计算</td></tr>
+</table>
+<div class="figcap">表 5 · CSA2 三种静态模式：谁生产、谁换视角、谁纯复用</div>
+<div class="card mmsafe">
+<div class="mermaid">
+flowchart TD
+    subgraph Decoder["Decoder 后 20 层（5 组轮转）"]
+        direction TB
+        subgraph G1["第 1 组"]
+            L1["Layer 21 (Full)<br>① 自己生成 KV<br>② 自己挑 Top-K"]
+            L2["Layer 22 (Reuse)<br>① 抄 KV<br>② 抄 Top-K"]
+            L3["Layer 23 (Reuse)<br>① 抄 KV<br>② 抄 Top-K"]
+            L4["Layer 24 (Reuse)<br>① 抄 KV<br>② 抄 Top-K"]
+        end
+        subgraph G2["第 2 组"]
+            L5["Layer 25 (Reindex)<br>① 抄 KV<br>② 自己重新挑 Top-K"]
+            L6["Layer 26 (Reuse)<br>① 抄 KV<br>② 抄 Top-K"]
+            Ldots["... 后续组结构相同"]
+        end
+        L1 ==>|"主 KV 共享"| L2 & L3 & L4 & L5
+        L5 ==>|"Top-K 名单下发"| L6
+    end
+    subgraph Post["存储与压缩"]
+        P1["FP4 量化<br>主 KV 以 4 位精度存储"]
+        P2["最终 KV 缓存<br>≈ 890 字节 / token"]
+    end
+    Decoder --> Post
+    style L1 fill:#e8f0fe,stroke:#4a90d9,stroke-width:2px
+    style L5 fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style L2 fill:#e8f5e9,stroke:#388e3c
+    style L3 fill:#e8f5e9,stroke:#388e3c
+    style L4 fill:#e8f5e9,stroke:#388e3c
+    style L6 fill:#e8f5e9,stroke:#388e3c
+</div>
+<div class="figcap">图 13 · CSA2 跨层共享：Full 层产 KV、Reindex 换视角挑索引、Reuse 纯复用——FP4 存储最终压到约 890 字节/token</div>
+</div>
+
+<h3>5.3 两者的继承关系</h3>
+<p><b>CSA 解决的是「单层内部怎么把 KV 变少」</b>：通过压缩（4→1）和稀疏选择（只留 Top-K），把每一层要处理的 KV 规模压到极致。<b>CSA2 解决的是「层与层之间怎么不再重复变少」</b>：既然 CSA 已经把单层的成果做出来了，后面几十层就直接复用这份成果，不再各自从头跑一遍压缩和索引。CSA2 还进一步把共享的主 KV 用 <b>FP4 量化</b>存储，最终把全局 KV 缓存压到了约 <b>890 字节/token</b>。</p>
+
+<h2 id="s5">6. 复现实测：设定、结果与边界</h2>
 <p><b>为什么选第 20/24/28/32 层</b>：Qwen3.5-4B 是混合架构，32 层里只有这四层是<b>标准的全注意力层</b>（间隔 4 层均匀分布）；其余层是 GatedDeltaNet 递归层——靠固定大小的状态传递历史、不保存逐层 KV 列表，天然没有「KV Cache」这个作用对象。CED / CSA2 管的正是全注意力层的 KV，复现的舞台因此就落在这四层上（四层共享一份，也正好对上官方设计的规模）。</p>
 <p><b>设定</b>：Qwen3.5-4B 冻结主干，hook 一次 forward 捕获第 16 层隐藏态 H_16 与第 20/24/28/32 层的 k_proj/v_proj 输出（pre-norm、pre-RoPE 空间），1200 条样本落盘 12.2GB；CED 投影器 MSE 收敛 0.0658。与官方的关键差异：官方是<b>从头预训练时协同学习</b>投影器与适配器，复现是<b>在已收敛表示空间里做映射拟合</b>——验证的是机制可行性，不是原始训练配方。</p>
 <div class="card">
@@ -970,7 +1066,7 @@ flowchart TD
     E --> F
     F --> G[输出 logits]
 </div>
-<div class="figcap">图 12 · CED 在 32 层里的位置：第 16 层切分，H_16 经 Linear 2560→2048 投影出解码段全注意力层的 KV</div>
+<div class="figcap">图 14 · CED 在 32 层里的位置：第 16 层切分，H_16 经 Linear 2560→2048 投影出解码段全注意力层的 KV</div>
 </div>
 <div class="card">
 <div class="mermaid">
@@ -983,7 +1079,7 @@ flowchart TD
     D --> G["K_28, V_28"]
     E --> H["K_32, V_32"]
 </div>
-<div class="figcap">图 13 · CSA2 共享机制：只保留第 20 层 1 份 KV，第 24/28/32 层各挂小适配器做跨层映射（每层约 1M 参数）</div>
+<div class="figcap">图 15 · CSA2 共享机制：只保留第 20 层 1 份 KV，第 24/28/32 层各挂小适配器做跨层映射（每层约 1M 参数）</div>
 </div>
 <div class="card">
 <div class="mermaid">
@@ -997,7 +1093,7 @@ flowchart TD
     G --> H["解码段 attention<br/>layers 16..31"]
     H --> I["输出 logits"]
 </div>
-<div class="figcap">图 14 · 三者叠加的数据流：CED 投影 → CSA2 共享 → TurboQuant k8v4 量化 → 解码段 attention</div>
+<div class="figcap">图 16 · 三者叠加的数据流：CED 投影 → CSA2 共享 → TurboQuant k8v4 量化 → 解码段 attention</div>
 </div>
 <p><b>四项主要结果</b>：</p>
 <table>
@@ -1010,17 +1106,17 @@ flowchart TD
 <tr><td>k8v4 量化压缩比</td><td>1x</td><td><b>2.46x（理论 2.53x）</b></td><td>达标</td></tr>
 <tr><td>k8v4 top-5 重合 / top-1 一致</td><td>—</td><td><b>100% / 88.9%</b></td><td>轻微扰动</td></tr>
 </table>
-<div class="figcap">表 5 · 复现四项主要结果（Qwen3.5-4B）</div>
+<div class="figcap">表 6 · 复现四项主要结果（Qwen3.5-4B）</div>
 <div class="kp w">
 <span class="kp-t">两个必须说清的口径（易误读）</span>
 <b>持久 ≠ 驻留</b>：3.44x 是落盘/最小集合口径；运行时 reuse 层的物化视图仍占 HBM，驻留口径约 1.00x——当前实现是「落盘压缩 + 计算复用」，不是显存压缩，显存 4x 需要 attention 内惰性物化（后续工作）。<br/><b>mode_b 有适用边界</b>：解码段含 24 层 GatedDeltaNet（递归结构），从零状态起步无法携带历史——mode_b 适合 prefill 延迟优化与 next-token 评测，连续生成要走 mode_csa2_adapter；只旁路 4 个全注意力层时加速从 1.52x 回落 1.10x，这是架构约束不是实现 bug。
 </div>
 <p><b>可信度交叉验证</b>：手动逐层 decode 与官方 forward 的 max|Δlogit| = 0.0000、top-1 完全一致；固定位置 H_16 在总长 32~256 下 fp32 零差异（因果性严格）；分块 kernel 对末尾不完整 chunk 的 ~2^-5 量级差异与后缀内容无关，确认为非因果泄漏。<b>关键前提一条</b>：跨层 KV 不能直接复用——第 20 层与第 24/28/32 层 KV 余弦相似度约 0，必须经可训练适配器映射，映射后 R² 到 0.67~0.85。</p>
 
-<h2 id="s6">6. 结论与来源</h2>
+<h2 id="s6">7. 结论与来源</h2>
 <p><b>结论三句</b>：演进主线索是「压每份 → 压序列 → 压份数」，V4.1 用 CED+CSA2 换掉逐层自产，用带重叠的 CSA2 接住 HCA 退场后的远程段，FP4 收位宽，全局 890 B/token、持久化 1/8；相位问题从 40pp 压到约 6pp 但未消除；复现侧在 4B 混合架构上验证机制成立——生成质量基本无损、prefill 加速与持久压缩达标、量化扰动轻微，规模与架构差异是结论的边界。</p>
 <p><b>来源与互链</b>：第 1 章与图 1–3 取自站内<b>《<a href="DeepSeek-V4.1-Flash推理加速解读.html">DeepSeek-V4.1-Flash 推理加速解读</a>》</b>（四步递进的推理配置与量化效果）；HCA 相位现象的专门展开见<b>《<a href="DeepSeek-V4.1固定窗口压缩的相位敏感性.html">DeepSeek-V4.1 固定窗口压缩的相位敏感性</a>》</b>；第 2、3 章基于 KV 演进底稿（图 4–8），第 4、5 章基于 CED+CSA2 复现实测记录（图 9–13 与四段代码）；训练结构参考图为老师-学生 SWA 结构两式（HCA / CSA）。</p>
-<h2 id="s7">7. vllm-ascend 对 V4 特性的适配（当期源码实测）</h2>
+<h2 id="s7">8. vllm-ascend 对 V4 特性的适配（当期源码实测）</h2>
 <p>视角切换：前六章讲 DeepSeek V4 自己的设计，这一章讲 <b>vllm-ascend 插件把这些特性落到昇腾 NPU 上的适配点</b>——每条都带文件与行号（本地当期源码实测；算子本体住哪层见站内《昇腾算子地图》）：</p>
 <p><b>先一张表对齐五个特性的落点，细节展开在下面六条与源码片段里。</b></p>
 <table>
@@ -1031,7 +1127,7 @@ flowchart TD
 <tr><td>稀疏注意力与 KV 量化</td><td>缓存精度派生 + 量化/非量化两套算子选路</td><td>dsa_attn_kv_plan.py:22 / 147 / 176</td></tr>
 <tr><td>MoE 融合与配套</td><td>mc2 一体大算子开关、MTP / VL / SP 配套</td><td>moe_comm_method.py:270、mtp.py:62、dsa_cp.py:1942</td></tr>
 </table>
-<div class="figcap">表 6 · V4 特性到 vllm-ascend 适配点对照</div>
+<div class="figcap">表 7 · V4 特性到 vllm-ascend 适配点对照</div>
 <p><b>① 模型接入与 SWA 滑窗：注册、滑窗缓存、后端选路三件事一次落位。</b>models/__init__.py:32 把 DeepseekV4ForCausalLM 注册到 AscendDeepseekV4ForCausalLM（model.py:1038，支持 PP / LoRA / Eagle3）；滑窗缓存 AscendDeepseekV4SWACache（model.py:110）继承上游 VllmDeepseekV4SWACache，窗口宽取 config.sliding_window（model.py:490）；SWA 层经 get_attn_backend 把注意力后端切到 AscendDSASWABackend（类定义 dsa_v1.py:296）：</p>
 <pre>
 def get_attn_backend(self):
@@ -1125,6 +1221,17 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 <button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
 </div>
 <script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+<script>
+(function(){
+  function lift(){
+    document.querySelectorAll('.mmsafe .cluster-label').forEach(function(el){
+      el.setAttribute('transform','translate(0,-30)');
+    });
+  }
+  setTimeout(lift, 600); setTimeout(lift, 1500);
+})();
+</script>
 
 </body>
 </html>
