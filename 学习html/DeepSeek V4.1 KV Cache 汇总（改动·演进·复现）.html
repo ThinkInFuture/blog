@@ -1226,10 +1226,18 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
 (function(){
   function lift(){
     document.querySelectorAll('.mmsafe .cluster-label').forEach(function(el){
-      el.setAttribute('transform','translate(0,-30)');
+      if (el.dataset.lifted) return;
+      var m = /translate\(\s*([-\d.]+)[ ,]+([-\d.]+)\s*\)/.exec(el.getAttribute('transform') || '');
+      if (!m) return;
+      el.dataset.lifted = '1';
+      el.setAttribute('transform', 'translate(' + m[1] + ',' + (parseFloat(m[2]) - 30) + ')');
     });
   }
-  setTimeout(lift, 600); setTimeout(lift, 1500);
+  var n = 0;
+  var timer = setInterval(function(){
+    lift();
+    if (document.querySelectorAll('.mmsafe .cluster-label[data-lifted]').length >= 9 || ++n > 40) clearInterval(timer);
+  }, 250);
 })();
 </script>
 
