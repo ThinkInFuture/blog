@@ -196,13 +196,13 @@ def forward(self, hidden_states, input_ids=None, hidden_states_fp32=None):   # L
 <div class="src-intro"><b>文件</b> · dsa_cp.py：DSA-CP 的核心实现（文件头注释自称 "Legacy DSA-CP implementation (TP/SP group)"）——稀疏注意力的完整 forward 链：QKV 投影 → 写 KV → indexer topk → 稀疏注意力 → o_proj，一整条链路都在这个文件里。<br><b>方法</b> · _forward 入口段：进门先决定 hidden_states 用哪个版本——need_gather_q_kv 为真就 all-gather 拼回全量（修复前冗余❶的出处）；随后 Q 投影（wq_a 降维 → q_norm → wq_b 升维）直接用本卡行。</div>
 <pre class="code">hidden_states = hidden_states_local
 if need_gather_q_kv:
-    hidden_states = tensor_model_parallel_all_gather(hidden_states_local, dim=0)  # ← 图 5 冗余❶ 的源头
+    hidden_states = tensor_model_parallel_all_gather(hidden_states_local, dim=0)  # ← 图 6 上栏❶ 冗余的源头
 ...
 qr_local = self.q_norm(self.wq_a(hidden_states_local))   # ① Q 投影：直接用本卡行
 q = self.wq_b(qr_local)
 q = q.unflatten(-1, (self.num_heads, self.head_dim))
 q = DeviceOperator.apply_dsa_q_rms(q, self.eps, self.q_norm_without_weight)       # + RoPE</pre>
-<div class="src-note"><b>说明</b>：图 2 第①步的实锤——Q 投影吃的是 hidden_states_local（本卡行）；但入口 L1823 的 need_gather_q_kv 分支会把分片 all-gather 回全量，这正是修复前（图 5）每层门口第一笔冗余的出处。</div>
+<div class="src-note"><b>说明</b>：图 2 第①步的实锤——Q 投影吃的是 hidden_states_local（本卡行）；但入口 L1823 的 need_gather_q_kv 分支会把分片 all-gather 回全量，这正是修复前（图 6 上栏❶）每层门口第一笔冗余的出处。</div>
 </div>
 <div class="src-item">
 <div class="src-path">vllm_ascend/attention/context_parallel/dsa_cp.py · L1869-1882（② 写 KV：压散进本卡 swa_kv_cache）</div>
@@ -449,7 +449,94 @@ torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
 </div>
 </div>
 
-<h2>图 5 · 两者同开：层边界的冲突与修复（PR #18671）</h2>
+<h2>图 5 · 修复前的真实形态：图 4 的骨架 ＋ 门口/出口两笔全量搬运</h2>
+<svg class="static" viewBox="0 0 720 716" role="img" aria-label="修复前形态：图4骨架叠加门口AG与出口RS冗余">
+<defs>
+<marker id="m5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+<marker id="m5b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
+<marker id="m5g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
+</defs>
+<text class="hdr" x="36" y="24">修复前的真实形态 —— 骨架同图 4，门口与出口各多一笔全量搬运（橙色 ❌）</text>
+
+<text class="lbl" x="36" y="64">上一层 MoE · 220 行（分片）</text>
+<path class="ln" d="M 192 58 H 208" marker-end="url(#m5)"/>
+<rect class="cap cap-acc" x="212" y="40" width="150" height="42" rx="8"/>
+<text class="cap-t t-acc" x="287" y="60" font-size="12">❌❶ all-gather</text>
+<text class="cap-s t-mut" x="287" y="76" font-size="11">220 → 3520 拼全量</text>
+<path class="ln" d="M 362 58 H 380" marker-end="url(#m5)"/>
+<text class="lbl" x="384" y="62">3520 行全量进入每张卡</text>
+<path class="ln" d="M 287 82 V 96" fill="none"/>
+<path class="ln" d="M 159 96 H 590" fill="none"/>
+<path class="ln" d="M 159 96 V 112" marker-end="url(#m5)"/>
+<path class="ln" d="M 389 96 V 112" marker-end="url(#m5)"/>
+<path class="ln" d="M 590 96 V 112" marker-end="url(#m5)"/>
+
+<rect x="64" y="116" width="190" height="464" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
+<rect x="294" y="116" width="190" height="464" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
+<rect x="524" y="116" width="132" height="464" rx="10" fill="var(--surface-muted)" opacity="0.3"/>
+<text class="bx-t" x="159" y="140" font-size="13">NPU 卡 0 · 被迫算全量</text>
+<text class="bx-t" x="389" y="140" font-size="13">NPU 卡 1 · 被迫算全量</text>
+<text class="bx-s" x="590" y="140" font-size="11">卡 2 … 卡 15</text>
+<text class="bx-s" x="590" y="156" font-size="10.5">（同样算全量）</text>
+
+<rect class="bx" x="79" y="168" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="190" font-size="12.5">① QKV 投影（重复）</text>
+<text class="bx-s" x="159" y="210" font-size="11">3520 行全量 × 本卡 4 头</text>
+<rect class="bx" x="309" y="168" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="190" font-size="12.5">① QKV 投影（重复）</text>
+<text class="bx-s" x="389" y="210" font-size="11">3520 行全量 × 本卡 4 头</text>
+<rect x="539" y="168" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M 159 222 V 238" marker-end="url(#m5)"/><path class="ln" d="M 389 222 V 238" marker-end="url(#m5)"/>
+
+<rect class="bx" x="79" y="242" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="264" font-size="12.5">② 写 KV + 稀疏注意力</text>
+<text class="bx-s" x="159" y="284" font-size="11">KV 写本卡段 · topk 选块</text>
+<rect class="bx" x="309" y="242" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="264" font-size="12.5">② 写 KV + 稀疏注意力</text>
+<text class="bx-s" x="389" y="284" font-size="11">KV 写本卡段 · topk 选块</text>
+<rect x="539" y="242" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M 159 296 V 314" marker-end="url(#m5)"/><path class="ln" d="M 389 296 V 314" marker-end="url(#m5)"/>
+
+<rect class="cap" x="99" y="318" width="120" height="34" rx="8" style="stroke:var(--border-strong);fill:var(--surface);"/>
+<text class="cap-s" x="159" y="340" font-size="11.5">每卡产出：3520 行 × 4 头</text>
+<rect class="cap" x="329" y="318" width="120" height="34" rx="8" style="stroke:var(--border-strong);fill:var(--surface);"/>
+<text class="cap-s" x="389" y="340" font-size="11.5">每卡产出：3520 行 × 4 头</text>
+<path class="ln" d="M 159 352 V 366" marker-end="url(#m5b)"/><path class="ln" d="M 389 352 V 366" marker-end="url(#m5b)"/>
+
+<rect class="cap cap-brd" x="150" y="370" width="250" height="34" rx="8"/>
+<text class="cap-t t-brd" x="275" y="392" font-size="12.5">协同❷ A2A：head 归属互换（必要）</text>
+<path class="ln-b" d="M 254 408 C 264 420, 284 420, 294 408" marker-end="url(#m5b)"/>
+<path class="ln-b" d="M 294 432 C 284 420, 264 420, 254 432" marker-end="url(#m5b)"/>
+<path class="ln-b" d="M 484 387 H 520" marker-end="url(#m5b)"/>
+<text class="mat-k" x="275" y="454" font-size="10.5">各卡的 220 行×4 头 ⇄ 互换 …… 每卡攒齐全 3520 行</text>
+
+<rect class="cap" x="99" y="466" width="120" height="34" rx="8" style="stroke:var(--blue);fill:var(--blue-soft);"/>
+<text class="cap-s t-mut" x="159" y="488" font-size="11.5">③ 3520 行 × 本卡 head</text>
+<rect class="cap" x="329" y="466" width="120" height="34" rx="8" style="stroke:var(--blue);fill:var(--blue-soft);"/>
+<text class="cap-s t-mut" x="389" y="488" font-size="11.5">③ 3520 行 × 本卡 head</text>
+<path class="ln" d="M 159 500 V 516" marker-end="url(#m5)"/><path class="ln" d="M 389 500 V 516" marker-end="url(#m5)"/>
+
+<rect class="bx" x="79" y="520" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="542" font-size="12.5">④ o_proj 行并行</text>
+<text class="bx-s" x="159" y="562" font-size="11">部分和 [3520×8192] 全量未归约</text>
+<rect class="bx" x="309" y="520" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="542" font-size="12.5">④ o_proj 行并行</text>
+<text class="bx-s" x="389" y="562" font-size="11">部分和 [3520×8192] 全量未归约</text>
+<rect x="539" y="520" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M 159 574 V 592" marker-end="url(#m5)"/><path class="ln" d="M 389 574 V 592" marker-end="url(#m5)"/><path class="ln" d="M 590 574 V 592" marker-end="url(#m5)"/>
+
+<rect class="cap cap-acc" x="64" y="596" width="592" height="40" rx="8"/>
+<text class="cap-t t-acc" x="360" y="613" font-size="12">❌❸ 垫零 + reduce-scatter：16 份全量部分和求和 · 3520 → 220 切回本卡段</text>
+<text class="cap-s t-mut" x="360" y="629" font-size="11">（全量行数不整除卡数时还要先垫零再切）</text>
+<path class="ln-brd" d="M 360 636 V 650" marker-end="url(#m5g)"/>
+
+<rect class="bar" x="64" y="654" width="592" height="32" rx="8"/>
+<text class="bar-ts" x="360" y="675">下一层 MoE · 220 行 —— 门口 AG ＋ 出口 RS，每层两笔全量通信 × 78 层</text>
+<text class="note-acc" x="36" y="704">橙色 ❌ = 冗余搬运（对照图 4 的全绿形态：分片直通时这两笔不存在）；绿色协同 = 必要通信，修复前后都在</text>
+</svg>
+<p class="desc"><b>对照图 4 读</b>：中间的计算骨架一步不少——①QKV、②写 KV＋稀疏注意力、协同 A2A、④o_proj 全都还在；差别只在<b>门口</b>和<b>出口</b>：SP 递来的 220 行分片先被 <b>❌❶ all-gather 拼回 3520 行全量</b>（此后每卡都在全量上重复计算），出门时全量输出再被 <b>❌❸ 垫零 + reduce-scatter 切回 220 行</b>。两笔橙色搬运每层都来一次（×78 层），就是长文 prefill TTFT 劣化的主因②；修复后（图 6 下栏）分片原样直通，只剩必要的 A2A 与单次 RS。两笔冗余的源码证据见图 6 的源码框。</p>
+
+<h2>图 6 · 两者同开：层边界的冲突与修复（PR #18671）</h2>
 <svg class="static" viewBox="0 0 720 472" role="img" aria-label="SP 与 DSA-CP 衔接布局转换修复前后对比">
 <defs>
 <marker id="md" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
@@ -499,19 +586,19 @@ torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
 </svg>
 <p class="desc"><b>冲突</b>：图 1 的 MoE 递出 220 行分片，图 2/3 的 attention 只收 3520 行全量——模型层只能每层"AG 拼全量 → 算 → RS 切回"（上栏）。<b>修复</b>：<code>#18671</code> 新增 <code>supports_sequence_parallel_input</code> / <code>forward_sequence_parallel</code> / <code>already_sequence_parallel</code> 协商接口，让 220 行分片原样穿过 attention（下栏）——也就是回到图 4 的正常形态；必要的 A2A 与单次 RS 收编进后端；仅 V1 + PP=1 + SP MoE + DSA-CP 全满足时启用，其余自动回退老路径。</p>
 <div class="srcbox">
-<div class="src-h">源码证据 · 图 5</div>
+<div class="src-h">源码证据 · 图 6</div>
 <div class="src-item">
 <div class="src-path">修复前 · vllm_ascend/attention/context_parallel/dsa_cp.py · L1822-1824（冗余❶：门口 all-gather）</div>
-<div class="src-intro"><b>文件</b> · dsa_cp.py：同图 2——DSA-CP 老实现，这三行是修复前每层门口第一笔冗余的出处。<br><b>方法</b> · _forward 的 need_gather_q_kv 分支：SP 分片进门先 all-gather 拼回 3520 行全量——因为老实现只认"全量进"的口径（图 5 上栏❶）。</div>
+<div class="src-intro"><b>文件</b> · dsa_cp.py：同图 2——DSA-CP 老实现，这三行是修复前每层门口第一笔冗余的出处。<br><b>方法</b> · _forward 的 need_gather_q_kv 分支：SP 分片进门先 all-gather 拼回 3520 行全量——因为老实现只认"全量进"的口径（图 6 上栏❶）。</div>
 <pre class="code">hidden_states = hidden_states_local
 if need_gather_q_kv:
     hidden_states = tensor_model_parallel_all_gather(hidden_states_local, dim=0)
     # ↑ 220 行 → 3520 行：把 SP 分片拼回全量才能进 attention（每层都来一次）</pre>
-<div class="src-note"><b>说明</b>：图 5 上栏❶的出处——SP 分片进来，attention 入口先 all-gather 拼全量。</div>
+<div class="src-note"><b>说明</b>：图 6 上栏❶的出处——SP 分片进来，attention 入口先 all-gather 拼全量。</div>
 </div>
 <div class="src-item">
 <div class="src-path">修复前 · vllm_ascend/models/common/ops/sequence_parallel.py · L67-78（冗余❸：垫零 + reduce-scatter）</div>
-<div class="src-intro"><b>文件</b> · sequence_parallel.py：同图 1 的 SP 工具箱——这里是"归约切回"那把刀。<br><b>方法</b> · _ascend_sp_reduce_scatter_impl：行数不整除卡数时先垫零，再 reduce-scatter——16 卡各持有全量输出的一段部分和，求和后各取回自己的 220 行（图 5 上栏❸）。</div>
+<div class="src-intro"><b>文件</b> · sequence_parallel.py：同图 1 的 SP 工具箱——这里是"归约切回"那把刀。<br><b>方法</b> · _ascend_sp_reduce_scatter_impl：行数不整除卡数时先垫零，再 reduce-scatter——16 卡各持有全量输出的一段部分和，求和后各取回自己的 220 行（图 6 上栏❸）。</div>
 <pre class="code">def _ascend_sp_reduce_scatter_impl(x: torch.Tensor) -&gt; torch.Tensor:
     """Pad rows to the TP multiple, then reduce-scatter across TP ranks."""
     tp_size = get_tensor_model_parallel_world_size()
@@ -523,7 +610,7 @@ if need_gather_q_kv:
     if output is not None:
         return output
     return tensor_model_parallel_reduce_scatter(x, 0)   # 全量 → 本卡 220 行</pre>
-<div class="src-note"><b>说明</b>：图 5 上栏❸的出处——attention 出来是全量 3520 行，模型层垫零凑整后 reduce-scatter 切回 220 行给下一层 MoE。❶+❸ 每层两次全量搬运，就是主因②。</div>
+<div class="src-note"><b>说明</b>：图 6 上栏❸的出处——attention 出来是全量 3520 行，模型层垫零凑整后 reduce-scatter 切回 220 行给下一层 MoE。❶+❸ 每层两次全量搬运，就是主因②。</div>
 </div>
 <div class="src-item">
 <div class="src-path">修复后 · PR #18671 · vllm_ascend/models/deepseek_mtp.py · L1096-1105（路由条件）与 L1001-1025（判定与直通）</div>
@@ -544,7 +631,7 @@ input_is_sequence_parallel = (        # L1001 形状判定：hidden 行数 != po
 ...
 hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)  # L1025
 # ↑ 告诉 MoE："进来的已是分片，出去的也保持分片"</pre>
-<div class="src-note"><b>说明</b>：图 5 下栏的实锤——四条件路由决定是否启用新 decoder；形状判定识别"输入已是分片"（第一层 residual 为 None、embedding 后仍是全量，自动走老路径）；<code>already_sequence_parallel=True</code> 就是 MoE 与 attention 的"分片口径"握手。</div>
+<div class="src-note"><b>说明</b>：图 6 下栏的实锤——四条件路由决定是否启用新 decoder；形状判定识别"输入已是分片"（第一层 residual 为 None、embedding 后仍是全量，自动走老路径）；<code>already_sequence_parallel=True</code> 就是 MoE 与 attention 的"分片口径"握手。</div>
 </div>
 </div>
 </div>
