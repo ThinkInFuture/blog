@@ -19,6 +19,7 @@ body{margin:0;background:var(--surface-muted);font-family:-apple-system,"Segoe U
 .card{max-width:880px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px 28px;}
 h1{font-size:20px;margin:0 0 4px;}
 h2{font-size:16px;margin:26px 0 10px;padding-top:14px;border-top:1px dashed var(--border);}
+h3{font-size:14px;margin:16px 0 6px;}
 .sub{font-size:13px;color:var(--text-muted);margin:0 0 8px;}
 p.desc{font-size:13.5px;line-height:1.75;margin:10px 0 0;}
 p.desc b{color:var(--text);}
@@ -65,6 +66,15 @@ pre.code{margin:0 0 6px;background:#f6f8fa;border:1px solid var(--border);border
 .src-note b{color:var(--text);}
 .src-intro{font-size:12px;line-height:1.7;margin:0 0 8px;padding:6px 9px;background:#fbfcfd;border-left:3px solid var(--border);border-radius:0 4px 4px 0;color:var(--text);}
 .src-intro b{color:var(--blue);}
+table.tbl{width:100%;border-collapse:collapse;font-size:12.5px;line-height:1.6;margin:10px 0 2px;}
+table.tbl th,table.tbl td{border:1px solid var(--border);padding:6px 9px;text-align:left;vertical-align:top;}
+table.tbl th{background:var(--surface-muted);font-weight:600;color:var(--text);}
+table.tbl td:nth-child(2){text-align:center;white-space:nowrap;}
+.qa{background:#fbfcfd;border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-top:14px;}
+.qa p{font-size:13px;line-height:1.75;margin:8px 0 0;}
+.qa p:first-child{margin-top:0;}
+.qa b{color:var(--text);}
+.qa .q-t{font-size:13.5px;font-weight:700;color:var(--blue);margin:0 0 6px;}
 </style>
 </head>
 <body>
@@ -135,6 +145,27 @@ def forward(self, hidden_states, input_ids=None, hidden_states_fp32=None):   # L
         router_logits=router_logits, input_ids=input_ids)</pre>
 <div class="src-note"><b>说明</b>：MoE 的 forward 天然只消费"本卡 token 视角"——路由和专家计算都以 hidden_states 的行数为单位，SP 分片喂进来不需要任何拼全量。</div>
 </div>
+</div>
+
+<h2>补 · token 依赖与切分边界：SP 为什么能切、attention 为什么不能裸切</h2>
+<div class="qa">
+<p class="q-t">先答两句：SP 切行不是为了算 KV；token 间依赖只在 attention。</p>
+<p><b>1. SP 切的是 MoE/FFN 这类“逐 token 前馈层”，不是为了算 KV。</b>这类层的关键性质是：<b>每个 token 的计算只依赖它自己那一行</b>——token A 选什么专家、过什么 FFN，和 token B 毫无关系（就是一堆行独立的矩阵乘 + 门控）。所以按行切完全安全：切完各卡算各的，拼回来结果分毫不差。切行的目的是<b>省 activation 通信与显存</b>（每卡激活从 3520 行变 220 行，MoE 层间传递量降到 1/16），跟 KV 没关系。<b>KV 的计算和写入发生在 attention 里</b>（<code>wkv</code> 投影 + 写 KV cache，图 2 第②步），不在 MoE。</p>
+<p><b>2. token 之间的依赖只存在于 attention 的交互步。</b>真正的 token 间依赖是“每个 query 要看<b>全序列</b>的 K/V 算加权和”——这就是为什么 attention 不能像 MoE 那样简单按行切开各算各的，也解释了图 2 为什么约定“全量进、全量出”。</p>
+<p><b>3. attention 内部要拆开看：哪步独立、哪步有依赖。</b></p>
+<table class="tbl">
+<thead>
+<tr><th>attention 内部步骤</th><th>token 依赖？</th><th>能否直接吃 220 行分片</th></tr>
+</thead>
+<tbody>
+<tr><td>Q/K/V 投影（wq_a / wq_b / wkv）</td><td>无——纯逐行线性变换</td><td>能（这正是 #18671 分片直通的依据）</td></tr>
+<tr><td>写 KV cache</td><td>无——每个 token 写自己的 KV</td><td>能（每卡写自己 token 段，图 4 第②步）</td></tr>
+<tr><td>注意力交互（Q·K 加权和）</td><td><b>有</b>——每个 query 要读全序列 KV</td><td>不能裸切，需要专门机制</td></tr>
+<tr><td>o_proj</td><td>无——逐行</td><td>能</td></tr>
+</tbody>
+</table>
+<p><b>4. 真正的交互步，DSA-CP 怎么化解。</b>解法是：<b>KV 分段存储 + 全局编址跨段读</b>——每卡存自己 token 段的 KV（省显存），indexer 选中的块通过全局 block table 跨段访问（token 依赖在这里被满足）；算完再用 A2A + RS 归位（图 4 协同❶❷）。另外注意 softmax 是<b>按 head 独立</b>的（不同 head 互不相关），所以 head 维切（TP）也是安全的。</p>
+<p><b>一句话</b>：能按行切的地方（MoE/FFN/投影/写 KV——逐 token 独立）就切，省通信；不能切的地方（注意力交互——全序列依赖）用“KV 分段存 + 全局读 + 算完归位”来化解。SP 管“独立的部分”，DSA-CP 管“有依赖的部分”——两个特性各管一段，这才是它们能同开、也才会同开时打架的根本原因。</p>
 </div>
 
 <h2>图 2 · DSA-CP attention：按 head 切，token 维必须全量</h2>
@@ -527,6 +558,12 @@ hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)  # L1025
 .hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
 .hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
 @media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media(max-width:720px){
+ li,p,h1,h2,h3{overflow-wrap:anywhere}
+ pre.code{white-space:pre-wrap;word-break:break-word}
+ table.tbl{display:block;table-layout:fixed;width:100%;max-width:100%;min-width:0}
+ table.tbl th,table.tbl td{white-space:normal;word-break:break-word}
+}
 @media print{.hs-fnav{display:none}}
 </style>
 <div class="hs-fnav" id="hs-fnav">
