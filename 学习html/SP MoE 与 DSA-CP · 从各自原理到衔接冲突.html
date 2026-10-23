@@ -342,22 +342,33 @@ self.down_proj = RowParallelLinear(                 # L244 横条：行切
 </div>
 
 <h2>图 4 · 两者同开，怎么协同：16 卡并行走完一层（分片直通的正常形态）</h2>
-<svg class="static" viewBox="0 0 720 670" role="img" aria-label="SP 分片直通下 16 卡协同">
+<svg class="static" viewBox="0 0 720 684" role="img" aria-label="SP 分片直通下 16 卡协同">
 <defs>
 <marker id="m4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
 <marker id="m4b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
 <marker id="m4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
 </defs>
 <text class="hdr" x="36" y="24">每卡拿图 3 切好的权重（4 头 + FFN 1/16 ≈ 67M），各管各的 220 行，只在两个点跨卡协同</text>
-<rect class="bx" x="64" y="36" width="592" height="40" rx="8"/>
-<text class="bx-t" x="360" y="61" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自：路由 → 专家 FFN → 取回（同图 1）</text>
-<path class="ln" d="M 159 76 V 96" marker-end="url(#m4)"/>
-<path class="ln" d="M 389 76 V 96" marker-end="url(#m4)"/>
-<path class="ln" d="M 590 76 V 96" marker-end="url(#m4)"/>
-<text class="lbl" x="170" y="92">220 行</text>
-<text class="lbl" x="400" y="92">220 行</text>
-<text class="lbl" x="598" y="92">220 行</text>
-<g transform="translate(0,58)">
+<rect class="bx" x="64" y="36" width="592" height="64" rx="10"/>
+<text class="bx-t" x="360" y="54" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自走完全程（同图 1）</text>
+<rect x="84" y="64" width="110" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="139" y="83" font-size="11">输入 · 220 行</text>
+<path class="ln" d="M 194 79 H 210" marker-end="url(#m4)"/>
+<rect x="214" y="64" width="110" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="269" y="83" font-size="11">路由打分（gate）</text>
+<path class="ln" d="M 324 79 H 340" marker-end="url(#m4)"/>
+<rect x="344" y="64" width="150" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="419" y="83" font-size="11">专家 FFN（E0/E1/E2/…）</text>
+<path class="ln" d="M 494 79 H 510" marker-end="url(#m4)"/>
+<rect x="514" y="64" width="120" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="574" y="83" font-size="11">取回合并 · 220 行</text>
+<path class="ln" d="M 159 100 V 114" marker-end="url(#m4)"/>
+<path class="ln" d="M 389 100 V 114" marker-end="url(#m4)"/>
+<path class="ln" d="M 590 100 V 114" marker-end="url(#m4)"/>
+<text class="lbl" x="170" y="110">220 行</text>
+<text class="lbl" x="400" y="110">220 行</text>
+<text class="lbl" x="598" y="110">220 行</text>
+<g transform="translate(0,72)">
 
 <rect x="64" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
 <rect x="294" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
@@ -460,28 +471,39 @@ torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
 </div>
 
 <h2>图 5 · 修复前的真实形态：图 4 的骨架 ＋ 门口/出口两笔全量搬运</h2>
-<svg class="static" viewBox="0 0 720 760" role="img" aria-label="修复前形态：图4骨架叠加门口AG与出口RS冗余">
+<svg class="static" viewBox="0 0 720 774" role="img" aria-label="修复前形态：图4骨架叠加门口AG与出口RS冗余">
 <defs>
 <marker id="m5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
 <marker id="m5b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
 <marker id="m5g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
 </defs>
 <text class="hdr" x="36" y="24">修复前的真实形态 —— 骨架同图 4，门口与出口各多一笔全量搬运（橙色 ❌）</text>
-<rect class="bx" x="64" y="36" width="592" height="40" rx="8"/>
-<text class="bx-t" x="360" y="61" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自：路由 → 专家 FFN → 取回（同图 1）</text>
-<path class="ln" d="M 159 76 V 92" marker-end="url(#m5)"/>
-<path class="ln" d="M 389 76 V 92" marker-end="url(#m5)"/>
-<path class="ln" d="M 590 76 V 92" marker-end="url(#m5)"/>
-<rect class="cap cap-acc" x="64" y="96" width="592" height="40" rx="8"/>
-<text class="cap-t t-acc" x="360" y="113" font-size="12">❌❶ all-gather：220 行分片 → 拼回 3520 行全量（每层门口都来一次）</text>
-<text class="cap-s t-mut" x="360" y="129" font-size="11">此后每张卡都在 3520 行全量上重复计算</text>
-<path class="ln" d="M 159 136 V 152" marker-end="url(#m5)"/>
-<path class="ln" d="M 389 136 V 152" marker-end="url(#m5)"/>
-<path class="ln" d="M 590 136 V 152" marker-end="url(#m5)"/>
-<text class="lbl" x="170" y="148">全量</text>
-<text class="lbl" x="400" y="148">全量</text>
-<text class="lbl" x="590" y="148" text-anchor="middle">全量</text>
-<g transform="translate(0,44)">
+<rect class="bx" x="64" y="36" width="592" height="64" rx="10"/>
+<text class="bx-t" x="360" y="54" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自走完全程（同图 1）</text>
+<rect x="84" y="64" width="110" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="139" y="83" font-size="11">输入 · 220 行</text>
+<path class="ln" d="M 194 79 H 210" marker-end="url(#m5)"/>
+<rect x="214" y="64" width="110" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="269" y="83" font-size="11">路由打分（gate）</text>
+<path class="ln" d="M 324 79 H 340" marker-end="url(#m5)"/>
+<rect x="344" y="64" width="150" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="419" y="83" font-size="11">专家 FFN（E0/E1/E2/…）</text>
+<path class="ln" d="M 494 79 H 510" marker-end="url(#m5)"/>
+<rect x="514" y="64" width="120" height="30" rx="6" style="fill:var(--surface);stroke:var(--border-strong);stroke-width:1.2"/>
+<text class="bx-s" x="574" y="83" font-size="11">取回合并 · 220 行</text>
+<path class="ln" d="M 159 100 V 114" marker-end="url(#m5)"/>
+<path class="ln" d="M 389 100 V 114" marker-end="url(#m5)"/>
+<path class="ln" d="M 590 100 V 114" marker-end="url(#m5)"/>
+<rect class="cap cap-acc" x="64" y="118" width="592" height="40" rx="8"/>
+<text class="cap-t t-acc" x="360" y="135" font-size="12">❌❶ all-gather：220 行分片 → 拼回 3520 行全量（每层门口都来一次）</text>
+<text class="cap-s t-mut" x="360" y="151" font-size="11">此后每张卡都在 3520 行全量上重复计算</text>
+<path class="ln" d="M 159 158 V 172" marker-end="url(#m5)"/>
+<path class="ln" d="M 389 158 V 172" marker-end="url(#m5)"/>
+<path class="ln" d="M 590 158 V 172" marker-end="url(#m5)"/>
+<text class="lbl" x="170" y="168">全量</text>
+<text class="lbl" x="400" y="168">全量</text>
+<text class="lbl" x="590" y="168" text-anchor="middle">全量</text>
+<g transform="translate(0,58)">
 
 
 
