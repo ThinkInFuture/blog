@@ -120,6 +120,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="carousel-track" id="carouselTrack">
 
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
+<div class="cc-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突</div>
+<div class="cc-desc">SP MoE 按 token 行切、DSA-CP 按 head 切——同开时每层门口 AG 拼全量再 RS 切回；PR #18671 让 220 行分片直通 attention，TTFT −9~11%、吞吐 +10~12%。TP 权重切割、16 卡协同、冲突修复，5 图配 5 组源码证据</div>
+<a class="cc-link" href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-21</span></div>
 <div class="cc-title">GLM 系列启动 · vllm-ascend 视角解读</div>
 <div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
@@ -143,19 +149,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">一条请求从 HTTP 进到 token 出的 56 步全程时序——HTTP 服务、入队、调度、前向采样、出队四阶段，步步行号可查，vLLM 血缘与昇腾落点对照</div>
 <a class="cc-link" href="学习html/DeepSeek V4.1 全链路主时序 · 56步四阶段.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">算子与编程</span><span class="cc-date">2026-10-16</span></div>
-<div class="cc-title">昇腾算子地图：编排层、自研算子、CANN 三层逐层展开</div>
-<div class="cc-desc">编排层不出算子、自研层藏着 DSA 特化、CANN 层两户人家——三层全景逐层展开族谱，拿真实 profiling 数据认亲</div>
-<a class="cc-link" href="学习html/昇腾算子地图 · 从一层前向到三层算子楼.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">48</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">49</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -163,15 +163,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">48 篇 · 9 个专题</div>
+<div class="sec-badge">49 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">48</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">49</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">13</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">14</span></button>
 <button class="chip" data-topic="dsinfer">DeepSeek 推理<span class="count">3</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
@@ -179,6 +179,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突<span class="li-tag">vLLM 源码</span></span><span class="li-desc">SP MoE 按 token 行切（每卡 220 行直通下一层），DSA-CP 按 head 切（token 维必须全量）——两者同开时层边界冲突：每层 AG 拼全量再 RS 切回；PR #18671 分片直通修复，TTFT −9~11%、吞吐 +10~12%。5 图 + 5 组源码证据</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261021"><a href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">GLM 系列启动 · vllm-ascend 视角解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</span></span></a></li>
 <li class="li" data-topic="dsinfer" data-ts="20261021"><a href="学习html/DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">DeepInfer SWA Bounded Replay 深挖：YOCO 截断的两模式与命中账本<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">最懂 V4.1 架构的特性：CED 下块 KV 免算、SWA KV 只重算最近 128 token（精确重建需 2560 token×20 层），prefill 计算近乎减半；yoco.py 逐字段精读 mask/compact 两模式；命中三步（L-134 上限/块 KV 定长/SWA 退一块）；SWA state 账（20 层×134×528B=1.4MB/序列）</span></span></a></li>
 <li class="li" data-topic="dsinfer" data-ts="20261021"><a href="学习html/DeepInfer 特性地图 · 六大特性与源码对照.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">DeepInfer 特性地图：六大特性 × 源码位置 × 生产数字<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">E/P/D 分离+Wide-EP（decode EP64-128）+EPLB 生产参数（moe_lb 1.045-1.090）；DSpark 置信度变长验证（少验 30% draft、吞吐 +4-7% 全表）；异步调度时间线与 zos；批不变+确定性采样；结构化输出编译解耦——每条特性落到源码文件与环境变量</span></span></a></li>
