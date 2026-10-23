@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SP MoE 与 DSA-CP：从各自原理到衔接冲突</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root{
+  --surface:#ffffff; --surface-muted:#f5f6f7; --text:#1f2328; --text-muted:#57606a;
+  --border:#d8dee4; --border-strong:#9aa4ae;
+  --brand:#1a7f37; --brand-text:#116329; --brand-soft:#e6f2ea;
+  --accent:#9a6700; --accent-soft:#fdf3d7;
+  --blue:#0969da; --blue-soft:#ddf4ff;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--surface-muted);font-family:-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;color:var(--text);padding:24px;}
+.card{max-width:880px;margin:0 auto;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:24px 28px 28px;}
+h1{font-size:20px;margin:0 0 4px;}
+h2{font-size:16px;margin:26px 0 10px;padding-top:14px;border-top:1px dashed var(--border);}
+.sub{font-size:13px;color:var(--text-muted);margin:0 0 8px;}
+p.desc{font-size:13.5px;line-height:1.75;margin:10px 0 0;}
+p.desc b{color:var(--text);}
+code{background:var(--surface-muted);border:1px solid var(--border);border-radius:4px;padding:1px 5px;font-size:12.5px;}
+svg.static{width:100%;height:auto;display:block;}
+.bar{fill:var(--surface-muted);stroke:var(--border-strong);stroke-width:1.5;}
+.bar-t{font:600 13px sans-serif;fill:var(--text);text-anchor:middle;}
+.bar-ts{font:600 12.5px sans-serif;fill:var(--text);text-anchor:middle;}
+.bx{fill:var(--surface-muted);stroke:var(--border-strong);stroke-width:1.5;}
+.bx-t{font:600 13.5px sans-serif;fill:var(--text);text-anchor:middle;}
+.bx-s{font:400 12px sans-serif;fill:var(--text-muted);text-anchor:middle;}
+.grp{fill:none;stroke:var(--border-strong);stroke-width:1.5;stroke-dasharray:6,4;}
+.grp-t{font:600 12.5px sans-serif;fill:var(--text-muted);}
+.mat-lbl{font:600 12px sans-serif;fill:var(--text);text-anchor:middle;}
+.mat-s{font:400 11px sans-serif;fill:var(--text-muted);text-anchor:middle;}
+.mat-k{font:600 11px sans-serif;fill:var(--blue);text-anchor:middle;}
+.step{font:400 12.5px sans-serif;fill:var(--text);}
+.step-n{font:600 12.5px sans-serif;fill:var(--blue);}
+.cap{stroke-width:2;fill:var(--surface);}
+.cap-acc{stroke:var(--accent);fill:var(--accent-soft);}
+.cap-brd{stroke:var(--brand);fill:var(--brand-soft);}
+.cap-t{font:600 13px sans-serif;text-anchor:middle;}
+.cap-s{font:400 12px sans-serif;text-anchor:middle;}
+.t-acc{fill:var(--accent);} .t-brd{fill:var(--brand-text);} .t-mut{fill:var(--text-muted);}
+.lbl{font:400 12px sans-serif;fill:var(--text-muted);}
+.hdr{font:600 14px sans-serif;fill:var(--text);}
+.note-acc{font:400 13px sans-serif;fill:var(--accent);}
+.note-brd{font:400 13px sans-serif;fill:var(--brand-text);}
+.note-b{font:400 13px sans-serif;fill:var(--blue);}
+.key{font:400 12.5px sans-serif;fill:var(--text-muted);}
+.ln{stroke:var(--border-strong);stroke-width:1.6;fill:none;}
+.ln-brd{stroke:var(--brand);stroke-width:2;fill:none;}
+.ln-b{stroke:var(--blue);stroke-width:1.6;fill:none;}
+.leg-t{font:400 12px sans-serif;fill:var(--text-muted);}
+.leg-sw{stroke-width:2;fill:none;}
+.sum{font:400 12.5px sans-serif;fill:var(--text);}
+.srcbox{margin-top:14px;border:1px solid var(--border);border-radius:10px;overflow:hidden;}
+.src-h{background:var(--surface-muted);font-size:12.5px;font-weight:700;padding:6px 12px;color:var(--text-muted);}
+.src-item{padding:10px 12px;border-top:1px solid var(--border);}
+.srcbox .src-item:first-of-type{border-top:none;}
+.src-path{font:600 11.5px Consolas,monospace;color:var(--blue);margin-bottom:6px;word-break:break-all;}
+pre.code{margin:0 0 6px;background:#f6f8fa;border:1px solid var(--border);border-radius:6px;padding:8px 10px;font:11.5px/1.55 Consolas,"Courier New",monospace;overflow-x:auto;white-space:pre;}
+.src-note{font-size:12px;color:var(--text-muted);line-height:1.65;}
+.src-note b{color:var(--text);}
+.src-intro{font-size:12px;line-height:1.7;margin:0 0 8px;padding:6px 9px;background:#fbfcfd;border-left:3px solid var(--border);border-radius:0 4px 4px 0;color:var(--text);}
+.src-intro b{color:var(--blue);}
+</style>
+</head>
+<body>
+<div class="card">
+<h1>SP MoE 与 DSA-CP：从各自原理到衔接冲突</h1>
+<p class="sub">口径：GLM V1 · TP16 · prefill 一个 batch 3520 token · 每卡 SP 分片 220 行</p>
+
+<h2>图 1 · SP MoE：按 token 行切，切的是"序列维"</h2>
+<svg class="static" viewBox="0 0 720 300" role="img" aria-label="SP MoE 序列并行示意">
+<defs>
+<marker id="m1" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+</defs>
+<rect class="bar" x="36" y="20" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="41">hidden_states · 3520 行（token 维全量，一层的输入）</text>
+<path class="ln-b" d="M136 52 V76" marker-end="url(#m1)"/>
+<path class="ln-b" d="M360 52 V76" marker-end="url(#m1)"/>
+<path class="ln-b" d="M584 52 V76" marker-end="url(#m1)"/>
+<rect class="bx" x="36" y="80" width="200" height="84" rx="10"/>
+<text class="bx-t" x="136" y="104">NPU 卡 0 · 220 行</text>
+<text class="bx-s" x="136" y="127">MoE：路由 → 专家 FFN → 取回</text>
+<text class="bx-s" x="136" y="148">通信只搬 220 行 token</text>
+<rect class="bx" x="260" y="80" width="200" height="84" rx="10"/>
+<text class="bx-t" x="360" y="104">NPU 卡 1 · 220 行</text>
+<text class="bx-s" x="360" y="127">MoE：路由 → 专家 FFN → 取回</text>
+<text class="bx-s" x="360" y="148">通信只搬 220 行 token</text>
+<rect class="bx" x="484" y="80" width="200" height="84" rx="10"/>
+<text class="bx-t" x="584" y="104">NPU 卡 15 · 220 行</text>
+<text class="bx-s" x="584" y="127">MoE：路由 → 专家 FFN → 取回</text>
+<text class="bx-s" x="584" y="148">通信只搬 220 行 token</text>
+<rect class="bar" x="36" y="188" width="648" height="32" rx="8"/>
+<text class="bar-ts" x="360" y="209">层间流转：每卡 220 行直达下一层 MoE —— activation 全程不拼全量（图中省略其余 13 卡）</text>
+<text class="key" x="36" y="252">· 切的是 token 行：每卡只处理 1/16 的 token，MoE 的 activation 通信量随之降到 1/16</text>
+<text class="key" x="36" y="274">· 开关：--sequence-parallel-moe（上游 vLLM 特性）· 省的是 MoE 层间通信 · 输入输出天然是"本地分片"</text>
+</svg>
+<p class="desc"><b>一句话</b>：SP MoE 让每张卡只当 1/16 的"token 包工头"——只管好自己那 220 行，算完直接交给下一层，全程谁都不需要看到全量。<b>权重不切</b>（每卡全量权重）。</p>
+<div class="srcbox">
+<div class="src-h">源码证据 · 图 1</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/models/common/ops/sequence_parallel.py · L62-64 与 L32-43（vllm-ascend 源码）</div>
+<div class="src-intro"><b>文件</b> · sequence_parallel.py：vllm-ascend 的序列并行（SP）工具箱——token 轴怎么"切下去"（shard）、"拼回来"（all-gather）、"归约切回"（reduce-scatter），三种集合操作都封装在这个文件里（对齐上游 vLLM 同名模块，并适配了昇腾的自定义通信）。<br><b>方法</b> · sp_shard / _ascend_sp_shard_impl：拿到全量 hidden_states 后，先把 token 轴垫零到卡数（16）的整数倍，再按本 rank 切出自己那一段——图 1"3520 行 → 每卡 220 行"的那把切刀。</div>
+<pre class="code">def sp_shard(x: torch.Tensor) -&gt; torch.Tensor:
+    """Shard the token axis across TP ranks for sequence parallelism."""
+    return torch.ops.vllm.ascend_sp_shard_impl(x)
+
+def _ascend_sp_shard_impl(x: torch.Tensor) -&gt; torch.Tensor:
+    """Pad the token axis (dim 0) to the TP multiple, then take this rank's chunk."""
+    tp_size = get_tensor_model_parallel_world_size()
+    tp_rank = get_tensor_model_parallel_rank()
+    sp_pad = (-x.shape[0]) % tp_size          # 垫零到 16 的倍数
+    if sp_pad &gt; 0:
+        x = F.pad(x, (0, 0) * (x.ndim - 1) + (0, sp_pad))
+    chunk = x.shape[0] // tp_size
+    out = x[tp_rank * chunk : (tp_rank + 1) * chunk]   # ← 取本卡那段：220 行
+    return out.clone() if sp_pad == 0 else out</pre>
+<div class="src-note"><b>说明</b>：图 1 顶部那条"3520 行"被切成每卡"220 行"，正是它的手笔——token 轴（dim 0）按 TP rank 切片，行数不整除时先垫零。</div>
+</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/models/deepseek_v4/model.py · L378 与 L383-413（DeepseekV4MoE）</div>
+<div class="src-intro"><b>文件</b> · model.py（deepseek_v4 目录）：GLM-5.x / DeepSeek V4 系列模型的实现文件——每层 Block 的权重定义（选哪个 Linear 类 = 选哪种切法）和 forward 计算都在这里。<br><b>方法</b> · DeepseekV4MoE.forward：MoE 层的入口——先路由打分（gate），把 token 送进 FusedMoE 算专家 FFN，最后合并共享专家输出。它天然只按"本卡看到的行数"工作，因此 SP 分片直接喂进来即可，无需拼全量。</div>
+<pre class="code">is_sequence_parallel=self.is_sequence_parallel,          # L378 组装 FusedMoE 时声明 SP 模式
+...
+def forward(self, hidden_states, input_ids=None, hidden_states_fp32=None):   # L383
+    num_tokens, hidden_dim = hidden_states.shape   # 本卡只看到自己那份 token
+    ...
+    router_logits = F.linear(router_input, self.gate.weight)      # 路由：220 行各自选专家
+    fused_moe_out = self.experts(
+        hidden_states=hidden_states,            # 分片直接进专家（dispatch 内部按 EP A2A）
+        router_logits=router_logits, input_ids=input_ids)</pre>
+<div class="src-note"><b>说明</b>：MoE 的 forward 天然只消费"本卡 token 视角"——路由和专家计算都以 hidden_states 的行数为单位，SP 分片喂进来不需要任何拼全量。</div>
+</div>
+</div>
+
+<h2>图 2 · DSA-CP attention：按 head 切，token 维必须全量</h2>
+<svg class="static" viewBox="0 0 720 330" role="img" aria-label="DSA-CP attention 原理示意">
+<defs>
+<marker id="m2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+</defs>
+<rect class="bar" x="36" y="20" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="41">hidden_states · 3520 行 全量进入（token 维不切）</text>
+<path class="ln-b" d="M360 52 V76" marker-end="url(#m2)"/>
+<rect class="bx" x="36" y="80" width="648" height="140" rx="12"/>
+<text class="bx-t" x="360" y="104">Attention · DSA-CP（以下为每张卡视角：16 份 head 中的 1 份）</text>
+<text x="64" y="130"><tspan class="step-n">① QKV 投影 · 按 head 切</tspan><tspan class="step" dx="8">每卡只算自己那份 head 的 Q / K / V</tspan></text>
+<text x="64" y="154"><tspan class="step-n">② 写 KV cache（全序列）</tspan><tspan class="step" dx="8">indexer 按 topk 选出相关的 KV 块</tspan></text>
+<text x="64" y="178"><tspan class="step-n">③ 稀疏注意力</tspan><tspan class="step" dx="8">只算选中的块 → 得到本卡 head 的部分结果</tspan></text>
+<text x="64" y="202"><tspan class="step-n">④ o_proj · 行并行</tspan><tspan class="step" dx="8">各卡各有一份"部分和"，需跨卡归约（A2A / RS）</tspan></text>
+<path class="ln-b" d="M360 220 V244" marker-end="url(#m2)"/>
+<rect class="bar" x="36" y="248" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="269">hidden_states · 3520 行 全量输出（部分和已归约）</text>
+<text class="key" x="36" y="306">· 切的是 head 维（TP 的责任）：token 维必须全量 —— 写 KV、算注意力都要看到整个序列</text>
+<text class="key" x="36" y="326">· 开关：additional_config enable_dsa_cp · 门口的 A2A / RS 是 head 归并与投影归约，属必要通信</text>
+</svg>
+<p class="desc"><b>一句话</b>：DSA-CP 让每张卡当 1/16 的"head 包工头"——但 head 的计算必须对着全部 token 做，所以它的门禁是"<b>全量进、全量出</b>"。</p>
+<div class="srcbox">
+<div class="src-h">源码证据 · 图 2</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/attention/context_parallel/dsa_cp.py · L1822-1856（_forward 入口：① QKV 投影）</div>
+<div class="src-intro"><b>文件</b> · dsa_cp.py：DSA-CP 的核心实现（文件头注释自称 "Legacy DSA-CP implementation (TP/SP group)"）——稀疏注意力的完整 forward 链：QKV 投影 → 写 KV → indexer topk → 稀疏注意力 → o_proj，一整条链路都在这个文件里。<br><b>方法</b> · _forward 入口段：进门先决定 hidden_states 用哪个版本——need_gather_q_kv 为真就 all-gather 拼回全量（修复前冗余❶的出处）；随后 Q 投影（wq_a 降维 → q_norm → wq_b 升维）直接用本卡行。</div>
+<pre class="code">hidden_states = hidden_states_local
+if need_gather_q_kv:
+    hidden_states = tensor_model_parallel_all_gather(hidden_states_local, dim=0)  # ← 图 5 冗余❶ 的源头
+...
+qr_local = self.q_norm(self.wq_a(hidden_states_local))   # ① Q 投影：直接用本卡行
+q = self.wq_b(qr_local)
+q = q.unflatten(-1, (self.num_heads, self.head_dim))
+q = DeviceOperator.apply_dsa_q_rms(q, self.eps, self.q_norm_without_weight)       # + RoPE</pre>
+<div class="src-note"><b>说明</b>：图 2 第①步的实锤——Q 投影吃的是 hidden_states_local（本卡行）；但入口 L1823 的 need_gather_q_kv 分支会把分片 all-gather 回全量，这正是修复前（图 5）每层门口第一笔冗余的出处。</div>
+</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/attention/context_parallel/dsa_cp.py · L1869-1882（② 写 KV：压散进本卡 swa_kv_cache）</div>
+<div class="src-intro"><b>方法</b> · wkv 投影 + dsa_kv_compress_scatter：把本卡 token 的 KV 算出来（wkv 单份 latent，无 head 维），再按 slot_mapping"压散"写进本卡负责的 swa_kv_cache 段——CP 分工的落点：每卡只写自己的 token 段，写完之后全局才凑齐。</div>
+<pre class="code">kv = self.wkv(hidden_states_cache)
+kv = self.kv_norm(kv)
+kv = kv.view(-1, 1, self.nope_head_dim + self.rope_head_dim)
+torch.ops._C_ascend.inplace_partial_rotary_mul(kv.unsqueeze(1), cos, sin, ...)
+get_dsa_attn_kv_plan(self.vllm_config).dsa_kv_compress_scatter(
+    swa_kv_cache, kv, swa_metadata.req_metadata.slot_mapping)   # ← KV 写进本卡负责的段</pre>
+<div class="src-note"><b>说明</b>：图 2 第②步——KV 投影后经 dsa_kv_compress_scatter 按 slot_mapping 写入本卡的 swa_kv_cache（CP 分工：每卡各写自己 token 段的 KV）。</div>
+</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/attention/context_parallel/dsa_cp.py · L1907-1915（② 后半：indexer topk 选块）</div>
+<div class="src-intro"><b>方法</b> · _indexer_select_topk：稀疏注意力的"选块器"——indexer 给全序列的 KV 块逐块打分，topk 挑出与本卡 query 最相关的少数块，后续注意力只算这些块（这正是 DSA 中"Sparse"的含义）。</div>
+<pre class="code">compress_topk_idxs = self._indexer_select_topk(
+    x=hidden_states_local, qr=qr_local,
+    kv_cache=kv_cache, metadata=layer_metadata,
+    cos=local_cos, sin=local_sin, ...)</pre>
+<div class="src-note"><b>说明</b>：图 2 的"topk 选块"——indexer 从全序列 KV 里选出与本卡 query 相关的块，注意力只算这些块（稀疏）。</div>
+</div>
+</div>
+
+<h2>图 3 · TP 权重切割：模型权重被切到 16 张卡（对应图 2 的"按 head 切"）</h2>
+<svg class="static" viewBox="0 0 720 640" role="img" aria-label="TP 张量并行权重切割示意">
+<defs>
+<marker id="m3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+</defs>
+<rect class="bar" x="44" y="18" width="528" height="30" rx="8"/>
+<text class="bar-t" x="308" y="38">输入 3520 行 × 8192 列 · 全量进入每张卡（token 不切）</text>
+<path class="ln" d="M308 48 V72" marker-end="url(#m3)"/>
+
+<rect class="grp" x="44" y="76" width="528" height="150" rx="10"/>
+<text class="grp-t" x="60" y="96">多头注意力（64 头 × 128 维）268M → 每卡 4 头 ≈ 17M</text>
+<rect x="80" y="108" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="80" y="108" width="19" height="72" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="99" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="118" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="137" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="200" y="108" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="200" y="108" width="19" height="72" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="219" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="238" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="257" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="320" y="108" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="320" y="108" width="19" height="72" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="339" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="358" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="377" y="108" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="440" y="108" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="440" y="108" width="76" height="18" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="440" y="126" width="76" height="18" fill="var(--surface-muted)"/>
+<rect x="440" y="144" width="76" height="18" fill="var(--surface-muted)"/>
+<rect x="440" y="162" width="76" height="18" fill="var(--surface-muted)"/>
+<text class="mat-lbl" x="118" y="196">Q 投影</text>
+<text class="mat-lbl" x="238" y="196">K 投影</text>
+<text class="mat-lbl" x="358" y="196">V 投影</text>
+<text class="mat-lbl" x="478" y="196">O 投影</text>
+<text class="mat-s" x="118" y="212">8192×8192 沿 head 列切</text>
+<text class="mat-s" x="238" y="212">8192×8192 同 Q</text>
+<text class="mat-s" x="358" y="212">8192×8192 同 Q</text>
+<text class="mat-s" x="478" y="212">8192×8192 沿 head 行切</text>
+<text class="mat-k" x="118" y="226" font-size="10.5">每卡 4 头 4.2M</text>
+<text class="mat-k" x="238" y="226" font-size="10.5">每卡 4.2M</text>
+<text class="mat-k" x="358" y="226" font-size="10.5">每卡 4.2M</text>
+<text class="mat-k" x="478" y="226" font-size="10.5">每卡 4.2M</text>
+<path class="ln" d="M308 226 V250" marker-end="url(#m3)"/>
+<text class="lbl" x="320" y="243" text-anchor="start">残差 + LayerNorm</text>
+
+<rect class="grp" x="44" y="254" width="528" height="150" rx="10"/>
+<text class="grp-t" x="60" y="274">FFN (SwiGLU) 32768 通道 → 每卡 2048 ≈ 50M</text>
+<rect x="80" y="286" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="80" y="286" width="19" height="72" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="99" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="118" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="137" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="200" y="286" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="200" y="286" width="19" height="72" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="219" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="238" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect x="257" y="286" width="19" height="72" fill="var(--surface-muted)"/>
+<rect class="bx" x="330" y="306" width="84" height="32" rx="16"/>
+<text class="bx-s" x="372" y="326" font-size="11.5">SwiGLU 激活</text>
+<rect x="450" y="286" width="76" height="72" fill="none" stroke="var(--border-strong)" stroke-width="1.5"/>
+<rect x="450" y="286" width="76" height="18" fill="var(--blue-soft)" stroke="var(--blue)" stroke-width="1.5"/>
+<rect x="450" y="304" width="76" height="18" fill="var(--surface-muted)"/>
+<rect x="450" y="322" width="76" height="18" fill="var(--surface-muted)"/>
+<rect x="450" y="340" width="76" height="18" fill="var(--surface-muted)"/>
+<text class="mat-lbl" x="118" y="374">上投影 up</text>
+<text class="mat-lbl" x="238" y="374">门控 gate</text>
+<text class="mat-lbl" x="488" y="374">下投影 down</text>
+<text class="mat-s" x="118" y="390">8192×32768 沿列切</text>
+<text class="mat-s" x="238" y="390">8192×32768 同 up</text>
+<text class="mat-s" x="488" y="390">32768×8192 沿输入行切</text>
+<text class="mat-k" x="118" y="404" font-size="10.5">每卡 16.8M</text>
+<text class="mat-k" x="238" y="404" font-size="10.5">每卡 16.8M</text>
+<text class="mat-k" x="488" y="404" font-size="10.5">每卡 16.8M</text>
+<path class="ln" d="M308 404 V428" marker-end="url(#m3)"/>
+
+<rect class="bar" x="44" y="432" width="528" height="30" rx="8"/>
+<text class="bar-t" x="308" y="452">各卡输出"部分和" → AG / RS 跨卡归约 → 3520 行完整输出</text>
+
+<rect class="bx" x="44" y="482" width="528" height="128" rx="10" style="fill:var(--blue-soft);stroke:var(--blue);"/>
+<text class="bx-t" x="308" y="506">卡 0 拿到的权重切片（其余 15 卡各拿一份同样的）</text>
+<text class="sum" x="68" y="530">注意力：Q / K / V 沿 head 列切、O 沿 head 行切 → 每卡 4 头（512 维）≈ 16.8M</text>
+<text class="sum" x="68" y="554">FFN：up / gate 沿列切、down 沿输入行切 → 每卡 2048 通道 ≈ 50.3M</text>
+<text class="sum" x="68" y="578">每卡合计 ≈ 67M = 整层 1.1B ÷ 16 —— 权重显存省 16 倍，代价是层边界 AG / RS</text>
+<text class="key" x="44" y="630">· 蓝色高亮 = 卡 0 分到的切片；Q/K/V/up/gate 竖条=列切，O/down 横条=行切</text>
+</svg>
+<p class="desc"><b>一句话</b>：TP 把<b>权重矩阵本身</b>切成 16 份、分发到 16 张卡，而 token 一行不少，每卡都要全算——所以图 2 的 attention（TP 按 head 切）必须收 3520 行全量、出部分和再归约。</p>
+<div class="srcbox">
+<div class="src-h">源码证据 · 图 3</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/models/deepseek_v4/model.py · L498-539（DSA attention 权重的真实切法）</div>
+<div class="src-intro"><b>文件</b> · model.py（deepseek_v4 目录）：同图 1——GLM/DeepSeek V4 模型实现，这一段是 attention 各投影权重的"出生地"。<br><b>方法</b> · __init__ 权重定义段：给每个投影选哪个 Linear 类，就是选哪种切法——ReplicatedLinear = 每卡整份复制、ColumnParallelLinear = 按列切（图 3 竖条）、RowParallelLinear = 按行切（图 3 横条）。注意 DSA-CP 开时 wq_b 从列切改成整份复制：head 归属改由图 4 的 A2A 交换。</div>
+<pre class="code">self.wq_a = ReplicatedLinear(...)          # L498 复制·每卡整份（Q 降维投影）
+wq_b_cls = ReplicatedLinear if self.enable_dsa_cp else ColumnParallelLinear
+self.wq_b = wq_b_cls(...)                  # L508-509 DSA-CP 开时整份复制，关时按 head 列切
+self.wkv = ReplicatedLinear(...)           # L518 复制（MLA 的 KV 单份 latent，无 head 维）
+self.wo_a = ColumnParallelLinear(...)      # L527 列切（竖条）
+self.wo_b = RowParallelLinear(...)         # L539 行切（横条）→ 部分和需归约</pre>
+<div class="src-note"><b>说明</b>：图 3 权重切分的实锤。注意与 70B 示例的差异——DSA-CP 路径下 GLM 实际是：wq_a / wq_b / wkv <b>整份复制</b>（head 归属靠图 4 的 A2A 交换），wo_a 列切 + wo_b 行切（行切产部分和，就是 RS 要归约的对象）。</div>
+</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/models/deepseek_v4/model.py · L234-249（FFN 的切法）</div>
+<div class="src-intro"><b>方法</b> · DenseV4MLP 权重定义段：FFN 三个矩阵的切法——gate_up_proj 把 up/gate 合在一起按<b>列</b>切（竖条）、down_proj 按<b>行</b>切（横条，行切的输出是部分和、必须归约）；L241 的 disable_tp=is_sequence_parallel 同时印证图 1：SP MoE 时这些 FFN 权重整份复制不切。</div>
+<pre class="code"># ... replicated and no collective ops are needed.
+# Otherwise we use standard TP with an allreduce at the end.
+self.gate_up_proj = MergedColumnParallelLinear(     # L236 竖条：列切
+    hidden_size, [intermediate_size] * 2,
+    disable_tp=is_sequence_parallel, ...)           # SP 时整份（不切）
+self.down_proj = RowParallelLinear(                 # L244 横条：行切
+    intermediate_size, hidden_size,
+    reduce_results=reduce_results, ...)</pre>
+<div class="src-note"><b>说明</b>：FFN 的 up/gate 合并成 gate_up_proj 按<b>列</b>切、down_proj 按<b>行</b>切——正是图 3 下半的竖条/横条；L241 的 disable_tp 也印证图 1：SP MoE 时这些 FFN 权重整份复制不切。</div>
+</div>
+</div>
+
+<h2>图 4 · 两者同开，怎么协同：16 卡并行走完一层（分片直通的正常形态）</h2>
+<svg class="static" viewBox="0 0 720 612" role="img" aria-label="SP 分片直通下 16 卡协同">
+<defs>
+<marker id="m4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+<marker id="m4b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
+<marker id="m4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
+</defs>
+<text class="hdr" x="36" y="28">每卡拿图 3 切好的权重（4 头 + FFN 1/16 ≈ 67M），各管各的 220 行，只在两个点跨卡协同</text>
+
+<rect x="64" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
+<rect x="294" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
+<rect x="524" y="44" width="132" height="486" rx="10" fill="var(--surface-muted)" opacity="0.3"/>
+<text class="bx-t" x="159" y="68" font-size="13">NPU 卡 0 · 220 行</text>
+<text class="bx-t" x="389" y="68" font-size="13">NPU 卡 1 · 220 行</text>
+<text class="bx-s" x="590" y="68" font-size="11">卡 2 … 卡 15</text>
+<text class="bx-s" x="590" y="84" font-size="10.5">（同样各 220 行）</text>
+
+<rect class="bx" x="79" y="98" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="120" font-size="12.5">① QKV 投影</text>
+<text class="bx-s" x="159" y="140" font-size="11">220 行 × 本卡 4 头</text>
+<rect class="bx" x="309" y="98" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="120" font-size="12.5">① QKV 投影</text>
+<text class="bx-s" x="389" y="140" font-size="11">220 行 × 本卡 4 头</text>
+<rect x="539" y="98" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M159 152 V166" marker-end="url(#m4)"/><path class="ln" d="M389 152 V166" marker-end="url(#m4)"/>
+
+<rect class="bx" x="79" y="170" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="192" font-size="12.5">② 写 KV + 稀疏注意力</text>
+<text class="bx-s" x="159" y="212" font-size="11">KV 写本卡段 · topk 选块</text>
+<rect class="bx" x="309" y="170" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="192" font-size="12.5">② 写 KV + 稀疏注意力</text>
+<text class="bx-s" x="389" y="212" font-size="11">KV 写本卡段 · topk 选块</text>
+<rect x="539" y="170" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M159 224 V238" marker-end="url(#m4)"/><path class="ln" d="M389 224 V238" marker-end="url(#m4)"/>
+
+<rect class="cap" x="99" y="242" width="120" height="34" rx="8" style="stroke:var(--border-strong);fill:var(--surface);"/>
+<text class="cap-s" x="159" y="264" font-size="11.5">每卡产出：220 行 × 4 头</text>
+<rect class="cap" x="329" y="242" width="120" height="34" rx="8" style="stroke:var(--border-strong);fill:var(--surface);"/>
+<text class="cap-s" x="389" y="264" font-size="11.5">每卡产出：220 行 × 4 头</text>
+<path class="ln" d="M159 276 V290" marker-end="url(#m4b)"/><path class="ln" d="M389 276 V290" marker-end="url(#m4b)"/>
+
+<rect class="cap cap-brd" x="150" y="294" width="250" height="34" rx="8"/>
+<text class="cap-t t-brd" x="275" y="316" font-size="12.5">协同❶ A2A：head 归属互换（16 卡）</text>
+<path class="ln-b" d="M254 340 C 264 352, 284 352, 294 340" marker-end="url(#m4b)"/>
+<path class="ln-b" d="M294 364 C 284 352, 264 352, 254 364" marker-end="url(#m4b)"/>
+<path class="ln-b" d="M484 350 H520" marker-end="url(#m4b)"/>
+<text class="mat-k" x="275" y="382" font-size="10.5">各卡的 220 行×4 头 ⇄ 互换 …… 每卡攒齐全 3520 行</text>
+
+<rect class="cap" x="99" y="394" width="120" height="34" rx="8" style="stroke:var(--blue);fill:var(--blue-soft);"/>
+<text class="cap-s t-mut" x="159" y="416" font-size="11.5">③ 变成：3520 行 × 4 头</text>
+<rect class="cap" x="329" y="394" width="120" height="34" rx="8" style="stroke:var(--blue);fill:var(--blue-soft);"/>
+<text class="cap-s t-mut" x="389" y="416" font-size="11.5">③ 变成：3520 行 × 4 头</text>
+<path class="ln" d="M159 428 V442" marker-end="url(#m4)"/><path class="ln" d="M389 428 V442" marker-end="url(#m4)"/>
+
+<rect class="bx" x="79" y="446" width="160" height="54" rx="8"/>
+<text class="bx-t" x="159" y="468" font-size="12.5">④ o_proj 行并行</text>
+<text class="bx-s" x="159" y="488" font-size="11">部分和 [3520×8192] 未归约</text>
+<rect class="bx" x="309" y="446" width="160" height="54" rx="8"/>
+<text class="bx-t" x="389" y="468" font-size="12.5">④ o_proj 行并行</text>
+<text class="bx-s" x="389" y="488" font-size="11">部分和 [3520×8192] 未归约</text>
+<rect x="539" y="446" width="102" height="54" rx="8" fill="none" stroke="var(--border-strong)" stroke-dasharray="4,3"/>
+<path class="ln" d="M159 500 V514" marker-end="url(#m4)"/><path class="ln" d="M389 500 V514" marker-end="url(#m4)"/><path class="ln" d="M590 500 V514" marker-end="url(#m4)"/>
+
+<rect class="cap cap-brd" x="64" y="518" width="592" height="36" rx="8"/>
+<text class="cap-t t-brd" x="360" y="541" font-size="12.5">协同❷ RS：16 份部分和求和 · 每卡只取回自己那 220 行</text>
+<path class="ln-brd" d="M159 554 V568" marker-end="url(#m4g)"/><path class="ln-brd" d="M389 554 V568" marker-end="url(#m4g)"/><path class="ln-brd" d="M590 554 V568" marker-end="url(#m4g)"/>
+
+<rect class="bar" x="64" y="572" width="592" height="32" rx="8"/>
+<text class="bar-ts" x="360" y="593">每卡拿回完整 220 行 → 直达下一层 MoE（门口零通信，权重仍是每卡 67M 切片）</text>
+</svg>
+<p class="desc"><b>怎么协同</b>：①② 两步 16 卡各干各的（每卡 220 行 × 自己 4 头，KV 各写自己的段）；然后只发生两次跨卡协同——<b>A2A</b> 把"每卡一小段 × 全部 head"换成"全量 3520 行 × 自己的 head"，让 <b>o_proj 能按图 3 的权重切片行并行</b>；各卡算出部分和后 <b>RS</b> 一次求和取回，恢复每卡 220 行。整层就这两笔通信，门口不拼全量。</p>
+<div class="srcbox">
+<div class="src-h">源码证据 · 图 4</div>
+<div class="src-item">
+<div class="src-path">PR #18671 · vllm_ascend/attention/context_parallel/sfa_cp.py · _finalize_sequence_parallel_o_proj（协同❶ A2A + 协同❷ RS）</div>
+<div class="src-intro"><b>文件</b> · sfa_cp.py：SFA（GLM 稀疏注意力）版的 DSA-CP 实现——PR #18671 的主战场，"SP 分片直通"的支持就补在这个文件里。<br><b>方法</b> · _finalize_sequence_parallel_o_proj：attention 出口收尾三连——A2A 把 [本卡行, 全 head] 换成 [全行, 本卡 head]（协同❶）→ o_proj 行并行出部分和 → reduce_scatter_tensor 一次归约取回 220 行（协同❷）；归约前先乘 output_scale，是为了防止 FP16 部分和溢出。</div>
+<pre class="code"># Convert [local tokens, all heads] to [all tokens, local heads].      ← 协同❶
+# The row-parallel projection is unreduced; scale its partial sums
+# before the single RS restores the caller's local token shard.
+send = (attn_output.view(-1, self.tp_size, self.num_heads * self.v_head_dim)
+        .permute(1, 0, 2).reshape(-1, self.num_heads * self.v_head_dim))
+sharded_output = torch.empty_like(send)
+torch.distributed.all_to_all_single(sharded_output, send, group=tp_group.device_group)
+projected_output = self.o_proj(sharded_output)[0]      # 行并行投影 → 未归约部分和
+if output_scale != 1.0:
+    projected_output.mul_(output_scale)                # FP16 溢出保护（先缩放再归约）
+torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
+    output, projected_output.contiguous(), group=tp_group.device_group)</pre>
+<div class="src-note"><b>说明</b>：图 4 两个协同点的完整实锤——view/permute 重排 + all_to_all_single 完成 head 归属互换（❶）；o_proj 用图 3 行切权重算出部分和后，reduce_scatter_tensor 一次求和并各卡取回自己的 220 行（❷）。</div>
+</div>
+<div class="src-item">
+<div class="src-path">vllm_ascend/attention/context_parallel/dsa_cp.py · L77-91（restore_tp_heads：老路径的同型 A2A）</div>
+<div class="src-intro"><b>文件</b> · dsa_cp.py：同图 2——DeepSeek 老路径的 DSA-CP 实现，这个函数是它自带的 head 互换工具。<br><b>方法</b> · restore_tp_heads：head 归属互换的独立小工具——docstring 一句话就是全部职责："[local tokens, all heads] 换 [all tokens, local heads]"，即图 4 协同❶ 的老路径同型实现。</div>
+<pre class="code">def restore_tp_heads(output, tp_group):
+    """Exchange [local tokens, all heads] for [all tokens, local heads]."""
+    if tp_group.world_size == 1:
+        return output
+    tokens, heads, width = output.shape
+    local_heads = heads // tp_group.world_size
+    send = (output.view(tokens, tp_group.world_size, local_heads, width)
+            .permute(1, 0, 2, 3).contiguous().view(-1, local_heads, width))
+    recv = torch.empty_like(send)
+    dist.all_to_all_single(recv, send, group=tp_group.device_group)
+    return recv</pre>
+<div class="src-note"><b>说明</b>：docstring 就是图 4 协同❶的文字版——"[local tokens, all heads] 换 [all tokens, local heads]"。这是 DeepSeek 老路径（dsa_cp.py）里的同型函数，#18671 给 GLM 的 SFA 路径补上了等价能力。</div>
+</div>
+</div>
+
+<h2>图 5 · 两者同开：层边界的冲突与修复（PR #18671）</h2>
+<svg class="static" viewBox="0 0 720 472" role="img" aria-label="SP 与 DSA-CP 衔接布局转换修复前后对比">
+<defs>
+<marker id="md" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+<marker id="mdb" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
+</defs>
+<text class="hdr" x="36" y="30">修复前 · 每层 attention 门口三笔转换</text>
+<text class="lbl" x="36" y="97">上一层 MoE · 220 行</text>
+<path class="ln" d="M36 110 H164" marker-end="url(#md)"/>
+<rect class="cap cap-acc" x="168" y="80" width="116" height="60" rx="8"/>
+<text class="cap-t t-acc" x="226" y="106">❶ all-gather</text>
+<text class="cap-s t-mut" x="226" y="126">220 → 3520 拼全量</text>
+<path class="ln" d="M284 110 H312" marker-end="url(#md)"/>
+<rect class="bx" x="316" y="70" width="200" height="80" rx="12"/>
+<text class="bx-t" x="416" y="92">Attention · DSA-CP</text>
+<text class="bx-s" x="416" y="112">TP 按 head 切 · 约定全量进出</text>
+<text class="bx-s" x="416" y="130">❷ A2A 互换 head 归属（必要）</text>
+<path class="ln" d="M516 110 H544" marker-end="url(#md)"/>
+<rect class="cap cap-acc" x="548" y="80" width="116" height="60" rx="8"/>
+<text class="cap-t t-acc" x="606" y="106">❸ 垫零 + RS</text>
+<text class="cap-s t-mut" x="606" y="126">3520 → 220 切回</text>
+<path class="ln" d="M664 110 H704" marker-end="url(#md)"/>
+<text class="lbl" x="704" y="64" text-anchor="end">下一层 MoE · 220 行</text>
+<text class="note-acc" x="36" y="176">× 78 层：每层拼一次全量、再切回来 —— 长文 prefill TTFT 劣化的主因②</text>
+
+<text class="hdr" x="36" y="224">修复后（PR #18671）· SP 分片直通</text>
+<text class="lbl" x="36" y="279">上一层 MoE · 220 行</text>
+<path class="ln" d="M36 292 H166" marker-end="url(#md)"/>
+<rect class="cap cap-brd" x="170" y="262" width="120" height="60" rx="8"/>
+<text class="cap-t t-brd" x="230" y="288">分片直通</text>
+<text class="cap-s t-mut" x="230" y="308">校验 + 垫零 · 零通信</text>
+<path class="ln" d="M290 292 H318" marker-end="url(#mdb)"/>
+<rect class="bx" x="322" y="252" width="200" height="80" rx="12"/>
+<text class="bx-t" x="422" y="274">Attention · DSA-CP</text>
+<text class="bx-s" x="422" y="294">吃本地 220 行 · 出本地 220 行</text>
+<text class="bx-s" x="422" y="312">内部 A2A + 单次 RS（必要）</text>
+<path class="ln-brd" d="M522 292 H704" marker-end="url(#mdb)"/>
+<text class="lbl" x="704" y="279" text-anchor="end">下一层 MoE · 220 行</text>
+<text class="note-brd" x="36" y="358">模型层零冗余通信；head 互换与投影归约收编进 attention 后端一次完成</text>
+<text class="note-brd" x="36" y="378">实测：TTFT −9.4%（并发1）／ −10.7%（并发24），吞吐 +10~12%（follow-up #18929 A/B）</text>
+
+<rect class="leg-sw" x="36" y="398" width="14" height="14" rx="4" style="stroke:var(--accent);fill:var(--accent-soft);"/>
+<text class="leg-t" x="58" y="409">❶❸ 冗余转换（all-gather / reduce-scatter）—— 修复后消除</text>
+<rect class="leg-sw" x="36" y="422" width="14" height="14" rx="4" style="stroke:var(--border-strong);fill:var(--surface-muted);"/>
+<text class="leg-t" x="58" y="433">❷ 必要通信（head 互换、投影归约）—— 保留在后端内部</text>
+<rect class="leg-sw" x="36" y="446" width="14" height="14" rx="4" style="stroke:var(--brand);fill:var(--brand-soft);"/>
+<text class="leg-t" x="58" y="457">分片直通路径 —— #18671 新增（V1 + PP=1 + SP MoE + DSA-CP）</text>
+</svg>
+<p class="desc"><b>冲突</b>：图 1 的 MoE 递出 220 行分片，图 2/3 的 attention 只收 3520 行全量——模型层只能每层"AG 拼全量 → 算 → RS 切回"（上栏）。<b>修复</b>：<code>#18671</code> 新增 <code>supports_sequence_parallel_input</code> / <code>forward_sequence_parallel</code> / <code>already_sequence_parallel</code> 协商接口，让 220 行分片原样穿过 attention（下栏）——也就是回到图 4 的正常形态；必要的 A2A 与单次 RS 收编进后端；仅 V1 + PP=1 + SP MoE + DSA-CP 全满足时启用，其余自动回退老路径。</p>
+<div class="srcbox">
+<div class="src-h">源码证据 · 图 5</div>
+<div class="src-item">
+<div class="src-path">修复前 · vllm_ascend/attention/context_parallel/dsa_cp.py · L1822-1824（冗余❶：门口 all-gather）</div>
+<div class="src-intro"><b>文件</b> · dsa_cp.py：同图 2——DSA-CP 老实现，这三行是修复前每层门口第一笔冗余的出处。<br><b>方法</b> · _forward 的 need_gather_q_kv 分支：SP 分片进门先 all-gather 拼回 3520 行全量——因为老实现只认"全量进"的口径（图 5 上栏❶）。</div>
+<pre class="code">hidden_states = hidden_states_local
+if need_gather_q_kv:
+    hidden_states = tensor_model_parallel_all_gather(hidden_states_local, dim=0)
+    # ↑ 220 行 → 3520 行：把 SP 分片拼回全量才能进 attention（每层都来一次）</pre>
+<div class="src-note"><b>说明</b>：图 5 上栏❶的出处——SP 分片进来，attention 入口先 all-gather 拼全量。</div>
+</div>
+<div class="src-item">
+<div class="src-path">修复前 · vllm_ascend/models/common/ops/sequence_parallel.py · L67-78（冗余❸：垫零 + reduce-scatter）</div>
+<div class="src-intro"><b>文件</b> · sequence_parallel.py：同图 1 的 SP 工具箱——这里是"归约切回"那把刀。<br><b>方法</b> · _ascend_sp_reduce_scatter_impl：行数不整除卡数时先垫零，再 reduce-scatter——16 卡各持有全量输出的一段部分和，求和后各取回自己的 220 行（图 5 上栏❸）。</div>
+<pre class="code">def _ascend_sp_reduce_scatter_impl(x: torch.Tensor) -&gt; torch.Tensor:
+    """Pad rows to the TP multiple, then reduce-scatter across TP ranks."""
+    tp_size = get_tensor_model_parallel_world_size()
+    sp_pad = (-x.shape[0]) % tp_size
+    if sp_pad &gt; 0:                      # 3520 不整除时垫零
+        pad_shape = [sp_pad, x.shape[1]]
+        x = torch.cat([x, x.new_zeros(pad_shape)], dim=0)
+    output = _custom_collective("custom_reduce_scatter", x)
+    if output is not None:
+        return output
+    return tensor_model_parallel_reduce_scatter(x, 0)   # 全量 → 本卡 220 行</pre>
+<div class="src-note"><b>说明</b>：图 5 上栏❸的出处——attention 出来是全量 3520 行，模型层垫零凑整后 reduce-scatter 切回 220 行给下一层 MoE。❶+❸ 每层两次全量搬运，就是主因②。</div>
+</div>
+<div class="src-item">
+<div class="src-path">修复后 · PR #18671 · vllm_ascend/models/deepseek_mtp.py · L1096-1105（路由条件）与 L1001-1025（判定与直通）</div>
+<div class="src-intro"><b>文件</b> · deepseek_mtp.py：模型层的"路由胶水"——决定 GLM 用哪个模型类 / decoder 路径（新的 SP 直通路径还是通用路径），#18671 的入口改动就在这。<br><b>方法</b> · __init__ 路由 / input_is_sequence_parallel 判定 / mlp(already_sequence_parallel=True)：四条件全满足才换 AscendDSACPModel；每层用"hidden 行数是否等于 positions 行数"识别分片（第一层 embedding 后仍是全量，自动走老路径）；最后一句把"分片口径"传给 MoE——三方握手完成，门口两笔冗余从此关闭。</div>
+<pre class="code">class AscendGlmMoeDsaForCausalLM(GlmMoeDsaForCausalLM):
+    def __init__(self, *, vllm_config: VllmConfig, prefix: str = ""):
+        if (
+            not vllm_config.use_v2_model_runner                    # V1
+            and vllm_config.parallel_config.pipeline_parallel_size == 1   # PP=1
+            and vllm_config.parallel_config.use_sequence_parallel_moe     # SP MoE
+            and enable_dsa_cp()                                     # DSA-CP
+        ):
+            self.model_cls = AscendDSACPModel          # ← 四条件全满足才走新路径
+...
+input_is_sequence_parallel = (        # L1001 形状判定：hidden 行数 != positions 行数
+    self.use_sequence_parallel_moe and residual is not None
+    and hidden_states.shape[0] != positions.shape[0])
+...
+hidden_states = self.mlp(hidden_states, already_sequence_parallel=True)  # L1025
+# ↑ 告诉 MoE："进来的已是分片，出去的也保持分片"</pre>
+<div class="src-note"><b>说明</b>：图 5 下栏的实锤——四条件路由决定是否启用新 decoder；形状判定识别"输入已是分片"（第一层 residual 为 None、embedding 后仍是全量，自动走老路径）；<code>already_sequence_parallel=True</code> 就是 MoE 与 attention 的"分片口径"握手。</div>
+</div>
+</div>
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
