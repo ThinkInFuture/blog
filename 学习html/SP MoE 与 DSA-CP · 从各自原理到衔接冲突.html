@@ -342,13 +342,22 @@ self.down_proj = RowParallelLinear(                 # L244 横条：行切
 </div>
 
 <h2>图 4 · 两者同开，怎么协同：16 卡并行走完一层（分片直通的正常形态）</h2>
-<svg class="static" viewBox="0 0 720 612" role="img" aria-label="SP 分片直通下 16 卡协同">
+<svg class="static" viewBox="0 0 720 670" role="img" aria-label="SP 分片直通下 16 卡协同">
 <defs>
 <marker id="m4" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
 <marker id="m4b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
 <marker id="m4g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
 </defs>
-<text class="hdr" x="36" y="28">每卡拿图 3 切好的权重（4 头 + FFN 1/16 ≈ 67M），各管各的 220 行，只在两个点跨卡协同</text>
+<text class="hdr" x="36" y="24">每卡拿图 3 切好的权重（4 头 + FFN 1/16 ≈ 67M），各管各的 220 行，只在两个点跨卡协同</text>
+<rect class="bx" x="64" y="36" width="592" height="40" rx="8"/>
+<text class="bx-t" x="360" y="61" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自：路由 → 专家 FFN → 取回（同图 1）</text>
+<path class="ln" d="M 159 76 V 96" marker-end="url(#m4)"/>
+<path class="ln" d="M 389 76 V 96" marker-end="url(#m4)"/>
+<path class="ln" d="M 590 76 V 96" marker-end="url(#m4)"/>
+<text class="lbl" x="170" y="92">220 行</text>
+<text class="lbl" x="400" y="92">220 行</text>
+<text class="lbl" x="598" y="92">220 行</text>
+<g transform="translate(0,58)">
 
 <rect x="64" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
 <rect x="294" y="44" width="190" height="486" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
@@ -410,6 +419,7 @@ self.down_proj = RowParallelLinear(                 # L244 横条：行切
 
 <rect class="bar" x="64" y="572" width="592" height="32" rx="8"/>
 <text class="bar-ts" x="360" y="593">每卡拿回完整 220 行 → 直达下一层 MoE（门口零通信，权重仍是每卡 67M 切片）</text>
+</g>
 </svg>
 <p class="desc"><b>怎么协同</b>：①② 两步 16 卡各干各的（每卡 220 行 × 自己 4 头，KV 各写自己的段）；然后只发生两次跨卡协同——<b>A2A</b> 把"每卡一小段 × 全部 head"换成"全量 3520 行 × 自己的 head"，让 <b>o_proj 能按图 3 的权重切片行并行</b>；各卡算出部分和后 <b>RS</b> 一次求和取回，恢复每卡 220 行。整层就这两笔通信，门口不拼全量。</p>
 <div class="srcbox">
@@ -450,26 +460,30 @@ torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
 </div>
 
 <h2>图 5 · 修复前的真实形态：图 4 的骨架 ＋ 门口/出口两笔全量搬运</h2>
-<svg class="static" viewBox="0 0 720 716" role="img" aria-label="修复前形态：图4骨架叠加门口AG与出口RS冗余">
+<svg class="static" viewBox="0 0 720 760" role="img" aria-label="修复前形态：图4骨架叠加门口AG与出口RS冗余">
 <defs>
 <marker id="m5" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
 <marker id="m5b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
 <marker id="m5g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--brand)"/></marker>
 </defs>
 <text class="hdr" x="36" y="24">修复前的真实形态 —— 骨架同图 4，门口与出口各多一笔全量搬运（橙色 ❌）</text>
+<rect class="bx" x="64" y="36" width="592" height="40" rx="8"/>
+<text class="bx-t" x="360" y="61" font-size="12">上一层 MoE · SP 分片 —— 每卡 220 行各自：路由 → 专家 FFN → 取回（同图 1）</text>
+<path class="ln" d="M 159 76 V 92" marker-end="url(#m5)"/>
+<path class="ln" d="M 389 76 V 92" marker-end="url(#m5)"/>
+<path class="ln" d="M 590 76 V 92" marker-end="url(#m5)"/>
+<rect class="cap cap-acc" x="64" y="96" width="592" height="40" rx="8"/>
+<text class="cap-t t-acc" x="360" y="113" font-size="12">❌❶ all-gather：220 行分片 → 拼回 3520 行全量（每层门口都来一次）</text>
+<text class="cap-s t-mut" x="360" y="129" font-size="11">此后每张卡都在 3520 行全量上重复计算</text>
+<path class="ln" d="M 159 136 V 152" marker-end="url(#m5)"/>
+<path class="ln" d="M 389 136 V 152" marker-end="url(#m5)"/>
+<path class="ln" d="M 590 136 V 152" marker-end="url(#m5)"/>
+<text class="lbl" x="170" y="148">全量</text>
+<text class="lbl" x="400" y="148">全量</text>
+<text class="lbl" x="590" y="148" text-anchor="middle">全量</text>
+<g transform="translate(0,44)">
 
-<text class="lbl" x="36" y="64">上一层 MoE · 220 行（分片）</text>
-<path class="ln" d="M 192 58 H 208" marker-end="url(#m5)"/>
-<rect class="cap cap-acc" x="212" y="40" width="150" height="42" rx="8"/>
-<text class="cap-t t-acc" x="287" y="60" font-size="12">❌❶ all-gather</text>
-<text class="cap-s t-mut" x="287" y="76" font-size="11">220 → 3520 拼全量</text>
-<path class="ln" d="M 362 58 H 380" marker-end="url(#m5)"/>
-<text class="lbl" x="384" y="62">3520 行全量进入每张卡</text>
-<path class="ln" d="M 287 82 V 96" fill="none"/>
-<path class="ln" d="M 159 96 H 590" fill="none"/>
-<path class="ln" d="M 159 96 V 112" marker-end="url(#m5)"/>
-<path class="ln" d="M 389 96 V 112" marker-end="url(#m5)"/>
-<path class="ln" d="M 590 96 V 112" marker-end="url(#m5)"/>
+
 
 <rect x="64" y="116" width="190" height="464" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
 <rect x="294" y="116" width="190" height="464" rx="10" fill="var(--surface-muted)" opacity="0.6"/>
@@ -533,6 +547,7 @@ torch.distributed.reduce_scatter_tensor(               ← 协同❷ 单次 RS
 <rect class="bar" x="64" y="654" width="592" height="32" rx="8"/>
 <text class="bar-ts" x="360" y="675">下一层 MoE · 220 行 —— 门口 AG ＋ 出口 RS，每层两笔全量通信 × 78 层</text>
 <text class="note-acc" x="36" y="704">橙色 ❌ = 冗余搬运（对照图 4 的全绿形态：分片直通时这两笔不存在）；绿色协同 = 必要通信，修复前后都在</text>
+</g>
 </svg>
 <p class="desc"><b>对照图 4 读</b>：中间的计算骨架一步不少——①QKV、②写 KV＋稀疏注意力、协同 A2A、④o_proj 全都还在；差别只在<b>门口</b>和<b>出口</b>：SP 递来的 220 行分片先被 <b>❌❶ all-gather 拼回 3520 行全量</b>（此后每卡都在全量上重复计算），出门时全量输出再被 <b>❌❸ 垫零 + reduce-scatter 切回 220 行</b>。两笔橙色搬运每层都来一次（×78 层），就是长文 prefill TTFT 劣化的主因②；修复后（图 6 下栏）分片原样直通，只剩必要的 A2A 与单次 RS。两笔冗余的源码证据见图 6 的源码框。</p>
 
