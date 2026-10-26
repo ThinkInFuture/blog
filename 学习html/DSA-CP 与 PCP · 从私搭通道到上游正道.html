@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSA-CP 与 PCP · 从私搭通道到上游正道</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>:root{--bg:#fff;--surface:#f7f8fa;--border:#dde1e7;--text:#1a1f27;--muted:#6b7280;
+--brand:#2563eb;--brand-bg:#eff6ff;--brand-t:#1d4ed8;--ok:#15803d;--ok-bg:#f0fdf4;
+--bad:#c0392b;--bad-bg:#fdf0ef;--accent:#0d9488;--accent-bg:#f0fdfa;--code-bg:#f3f4f6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:15.5px;line-height:1.9;-webkit-font-smoothing:antialiased}
+.wrap{max-width:880px;margin:0 auto;padding:44px 26px 90px}
+h1{font-size:26px;line-height:1.4;margin:0 0 8px}
+h2{font-size:20px;margin:56px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+h3{font-size:16px;margin:28px 0 8px;color:var(--brand-t)}
+p{margin:13px 0}b{color:var(--text)}
+.subtitle{color:var(--muted);font-size:13.5px;margin-bottom:26px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:.87em;word-break:break-word}
+.codetag{font-size:12.5px;font-weight:700;margin:16px 0 4px;color:var(--muted)}
+pre{background:var(--code-bg);border:1px solid var(--border);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:ui-monospace,Consolas,monospace;font-size:12.6px;line-height:1.7;margin:6px 0 14px}
+pre code{background:none;border:none;padding:0;white-space:pre;font-size:inherit}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 12px 12px 0;padding:14px 18px;margin:18px 0;font-size:14.5px}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:#b45309;background:#fffbeb}
+.kp b:first-child{display:block;margin-bottom:6px}
+.kp p{margin:7px 0;font-size:14px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 26px;font-size:14px}
+.toc ol{margin:6px 0 0;padding-left:20px}
+.toc a{color:var(--brand-t);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+table{width:100%;border-collapse:collapse;font-size:13.4px;line-height:1.7;margin:16px 0}
+th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--surface);font-weight:700;white-space:nowrap}
+tbody tr:nth-child(even){background:var(--surface)}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+ul,ol{padding-left:24px}li{margin:7px 0}
+.dim{color:var(--muted);font-size:13px}
+.note{color:var(--muted);font-size:12.8px;line-height:1.8;border-top:1px dashed var(--border);padding-top:14px;margin-top:44px}
+@media(max-width:720px){.wrap{padding:30px 16px 70px}h1{font-size:21px}h2{font-size:18px}
+ li,p,h1,h2,h3{overflow-wrap:anywhere}
+ pre{white-space:pre-wrap;word-break:break-word}
+ table{display:block;table-layout:fixed;width:100%;max-width:100%;min-width:0}
+ table th,table td{white-space:normal;word-break:break-word}}</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>DSA-CP 与 PCP · 从私搭通道到上游正道</h1>
+<div class="subtitle">口径：vllm-ascend 主线快照（vllm_ascend/）· 2026-10 源码实读 · 姊妹篇《SP MoE 与 DSA-CP》讲协同，本篇讲接班</div>
+
+<nav class="toc"><b>目录</b>
+<ol>
+<li><a href="#s1">先给结论：说法成立，但要精确到"哪个开关"</a></li>
+<li><a href="#s2">Legacy DSA-CP：一条私搭的 prefill 通道</a></li>
+<li><a href="#s3">PCP：接上上游的"正道"</a></li>
+<li><a href="#s4">同文件的三个类：一次换班的现场</a></li>
+<li><a href="#s5">两代怎么选：互斥开关与选路代码</a></li>
+<li><a href="#s6">迁移清单：换 PCP 要满足什么条件</a></li>
+<li><a href="#s7">怎么理解这次换班</a></li>
+</ol></nav>
+
+<h2 id="s1">1. 先给结论：说法成立，但要精确到"哪个开关"</h2>
+<p>"v2 之后 DSA-CP 日落、换成 PCP"——<b>方向对，细节要校准</b>。源码里的实际情况分三层：</p>
+<ul>
+<li><b>层一 · 文件级标注</b>：dsa_cp.py（2291 行）里，Legacy 实现与 PCP 实现同住一个文件，中间一条分界注释写着 <code>Legacy DSA-CP implementation (TP/SP group)</code>——"Legacy"是源码自己的用词，不是社区传言；</li>
+<li><b>层二 · 开关级互斥</b>：两套实现各有开关（Legacy 靠 <code>additional_config "enable_dsa_cp": true</code>，PCP 靠启动参数 <code>--prefill-context-parallel-size &gt; 1</code>），同时打开直接抛错——<b>互斥说明它们是同一问题的两代答案，不是两个特性</b>；</li>
+<li><b>层三 · 引擎级绑定</b>：PCP 只在 Model Runner V2 上可用（v1 引擎配 PCP 直接启动失败，报错原文就是"PCP is not supported"）——"v2 之后换 PCP"在引擎层面完全成立。</li>
+</ul>
+<div class="kp"><b>一句话结论</b>DSA-CP 没有被删除（Legacy 路径仍在、开关仍生效），但<b>主线的新增量都在 PCP 上</b>：上游 vLLM 把 prefill 上下文并行做成了通用能力（PCPManager），vllm-ascend 的动作是"写个壳接上去"，而不是继续养自己的私搭通道。DSA-CP 进入维护态，PCP 是它的继任者。</div>
+
+<h2 id="s2">2. Legacy DSA-CP：一条私搭的 prefill 通道</h2>
+<p>先回忆 DSA-CP 是干什么的（展开版见姊妹篇《SP MoE 与 DSA-CP》）：DSA 的 KV cache 按 sequence 分片存在 TP 组各卡上（省显存），但 prefill 的 query 要看全序列——Legacy DSA-CP 的全部复杂性，都在<b>自己管理这层分片</b>：</p>
+<ul>
+<li>自己的 metadata 族（<code>DSACPMetadata / AscendDSAReqMetadata / AscendDSACPLayerMetadata</code>），自己的分片布局与 slot 换算；</li>
+<li>自己的通信编排：门口 all-gather 拼全量（或 #18671 后的"SP 分片直通"协商）、o_proj 的 A2A head 互换、部分和归约——全是 DSA-CP 文件内的私有逻辑；</li>
+<li>自己的调度耦合：跟 SP MoE 的握手（<code>supports_sequence_parallel_input</code> 那套三方协商）也是它私有的。</li>
+</ul>
+<p>私搭通道的代价在《SP MoE 与 DSA-CP》里已经踩过一轮：每加一个邻居（SP、PD 分离、投机解码）都要在通道口协商一次，#18671 修的"每层 AG 拼全量"冗余正是这类协商的学费。vLLM 上游也意识到了这个问题的通用性——<b>prefill 长上下文切分到多卡，是所有长序列模型都要的，不该由 DSA 一家私搭</b>——于是上游 vLLM 自己做了 PCP。</p>
+
+<h2 id="s3">3. PCP：接上上游的"正道"</h2>
+<p>PCP（Prefill Context Parallelism）的原理一句话：<b>把 prefill 的输入 token 序列切成 N 份分给 N 张卡并行算，算完合并</b>。它与 DSA-CP 解决的是同一件事（单卡 prefill 太长太慢），但位置完全不同：</p>
+<table>
+<tr><th></th><th>Legacy DSA-CP</th><th>PCP</th></tr>
+<tr><td><b>开关</b></td><td><code>additional_config "enable_dsa_cp"</code>（昇腾私有）</td><td><code>--prefill-context-parallel-size</code>（上游通用参数）</td></tr>
+<tr><td><b>切分发生地</b></td><td>attention 后端内部（metadata 层私搭）</td><td>Model Runner 的 batch 分区（引擎层统一做）</td></tr>
+<tr><td><b>引擎要求</b></td><td>v1/v2 均可</td><td><b>仅 v2</b>（v1 直接报错拒绝）</td></tr>
+<tr><td><b>调度器感知</b></td><td>无（后端自旋）</td><td>有（scheduler 知道 batch 被切了）</td></tr>
+<tr><td><b>邻居兼容</b></td><td>逐个协商（SP 直通是 #18671 补的）</td><td>框架位（PP/MM/LoRA/投机 显式边界）</td></tr>
+<tr><td><b>KV cache 形态</b></td><td>分片存储、按需聚合</td><td>各 rank 写<b>复制的全局视图</b>（见第 4 章）</td></tr>
+<tr><td><b>状态</b></td><td><span class="bad">Legacy 维护态</span></td><td><span class="ok">主线增量</span></td></tr>
+</table>
+<p>关键差别在<b>引擎层参与度</b>：Legacy DSA-CP 是 attention 后端"闷头自己切"，调度器对此无知；PCP 是 Model Runner 在 batch 分区时就切好（<code>partition_batch</code>），调度器、metadata、attention 全链路都知道"这个 batch 是切过的"。这就是"私搭通道"和"正道"的本质区别。</p>
+
+<h2 id="s4">4. 同文件的三个类：一次换班的现场</h2>
+<p>最有意思的现场在 dsa_cp.py 一个文件里：Legacy 与 PCP 两代实现<b>同文件共存、共享全部 DSA 计算内核</b>。文件里有三个关键类，继承关系就是换班交接书：</p>
+<div class="codetag">vllm_ascend/attention/context_parallel/dsa_cp.py · L57（Legacy 标注）与 L2129-2133（PCP 版类头）</div>
+<pre><code># =============================================================================
+# Legacy DSA-CP implementation (TP/SP group)
+# =============================================================================
+
+class AscendDSAPCPImpl(dsa_v1.AscendDSAImpl):
+    &quot;&quot;&quot;Run batched global DSA cache updates before rank-local PCP attention.&quot;&quot;&quot;
+
+    supports_pcp: ClassVar[bool] = True</code></pre>
+<p>PCP 版的 Impl 类直接继承 Legacy 同文件的基类链（<code>dsa_v1.AscendDSAImpl</code>），<b>DSA 的稀疏注意力内核、indexer、compressor 一概不动</b>——换班换的不是计算，是"输入怎么来、缓存怎么写"的外围编排：</p>
+<ul>
+<li><b>输入侧</b>：PCP 各 rank 拿到的是本地分片的 padded batch，attention 前先 all-gather 拼回全局、按 <code>hidden_restore_idx</code> 恢复调度器原序；</li>
+<li><b>缓存侧</b>：SWA/compressor/indexer 三类缓存的写入用<b>全局 slot_mapping</b>——每个 rank 都基于全局视图写自己负责的那份复制缓存（写入前有 fence，写入后注意力读本地副本）；</li>
+<li><b>输出侧</b>：<code>_get_o_proj_input_shape</code> 报本地行数，o_proj 只算本地段，跨 rank 合并交回引擎层。</li>
+</ul>
+<div class="codetag">vllm_ascend/attention/context_parallel/dsa_cp.py · L2139-2152（PCP：全局聚合还原调度序）</div>
+<pre><code>def _gather_and_restore_hidden_states(self, hidden_states, metadata):
+    &quot;&quot;&quot;All-gather one padded rank slice and restore scheduler token order.&quot;&quot;&quot;
+    gathered_hidden_states = get_pcp_group().all_gather(
+        hidden_states.contiguous(),
+        dim=0,
+    )
+    return torch.index_select(
+        gathered_hidden_states,
+        0,
+        metadata.hidden_restore_idx,     # ← 恢复调度器原序（去 padding）
+    )</code></pre>
+<div class="codetag">vllm_ascend/attention/context_parallel/dsa_cp.py · L2160-2180（PCP：复制的 SWA 缓存全局更新一次）</div>
+<pre><code>def _update_global_swa_cache(self, layer_name, global_hidden_states, swa_kv_cache, swa_metadata):
+    &quot;&quot;&quot;Update the replicated SWA cache from the canonical global batch.&quot;&quot;&quot;
+    req_metadata = dsa_v1._require_req_metadata(swa_metadata)
+    assert req_metadata.slot_mapping is not None
+
+    kv = self.kv_norm(self.wkv(global_hidden_states))
+    kv = kv.view(-1, 1, self.nope_head_dim + self.rope_head_dim)
+    torch.ops._C_ascend.inplace_partial_rotary_mul(kv.unsqueeze(1), ...)
+    get_dsa_attn_kv_plan(self.vllm_config).dsa_kv_compress_scatter(
+        swa_kv_cache,
+        kv,
+        req_metadata.slot_mapping,     # ← 全局 slot_mapping：每 rank 用同一份全局视图写缓存
+    )</code></pre>
+<p>再看引擎侧：vllm-ascend 没有重写 PCP 调度，只写了一个 218 行的壳：</p>
+<div class="codetag">vllm_ascend/worker/v2/pcp_manager.py · L24 与 L44-45（继承上游）</div>
+<pre><code>from vllm.v1.worker.gpu.pcp_manager import PCPManager      # ← 上游 vLLM 的 PCP 实现
+
+@dataclass(frozen=True)
+class AscendPCPAttentionContext:
+    &quot;&quot;&quot;Canonical global PCP view for one attention step.&quot;&quot;&quot;
+    global_batch: AscendInputBatch
+    global_block_tables: tuple[torch.Tensor, ...]
+    global_slot_mappings: torch.Tensor
+    hidden_restore_idx: torch.Tensor
+    local_num_tokens_after_padding: int
+
+class AscendPCPManager(PCPManager):
+    &quot;&quot;&quot;PCP manager that refreshes Ascend-only local-batch metadata.&quot;&quot;&quot;</code></pre>
+<p><code>AscendPCPManager</code> 继承上游 <code>PCPManager</code>，只做三件昇腾特有的事：FULL decode graph 的 pad 布局对齐、slot mapping 按 rank 展开填充、给 attention metadata builders 组装全局上下文。分区的"正道部分"——怎么切、怎么合并、怎么让调度器知情——全部复用上游。</p>
+<div class="kp w"><b>代价与边界</b>PCP 用"缓存复制"换工程简洁：每个 PCP rank 持有全局 KV 视图的复制副本（写入去重靠全局 slot_mapping），显存开销高于 DSA-CP 的分片存储。这是设计取舍——它把复杂性交还给引擎统一调度，换取的是不再需要为每个邻居单点协商。另外 sparse MLA 场景下 PCP 暂只支持 eager 或 FULL_DECODE_ONLY 图模式。</div>
+
+<h2 id="s5">5. 两代怎么选：互斥开关与选路代码</h2>
+<p>后端入口的选路代码只有十几行，把两代关系写得明明白白：</p>
+<div class="codetag">vllm_ascend/attention/dsa_v1.py · L110-131（get_builder_cls：入口三分支）</div>
+<pre><code>from vllm_ascend.utils import enable_dsa_cp
+
+use_dsa_cp = enable_dsa_cp()
+use_pcp = enable_pcp()
+if use_dsa_cp and use_pcp:
+    raise ValueError(&quot;Legacy DSACP and PCP cannot be enabled at the same time.&quot;)
+if use_dsa_cp:
+    from vllm_ascend.attention.context_parallel.dsa_cp import AscendDSACPMetadataBuilder
+
+    return AscendDSACPMetadataBuilder          # ← Legacy DSA-CP（additional_config 开关）
+if use_pcp:
+    from vllm_ascend.attention.context_parallel.dsa_cp import AscendDSAPCPMetadataBuilder
+
+    return AscendDSAPCPMetadataBuilder         # ← PCP（--prefill-context-parallel-size 开关）
+return AscendDSAMetadataBuilder</code></pre>
+<p>同一套互斥判断在 <code>get_impl_cls</code>（选实现类）里再来一遍——builder 和 impl 两层都拒绝共存。<code>enable_pcp()</code> 读的是上游通用并行配置（<code>prefill_context_parallel_size &gt; 1</code>），<code>enable_dsa_cp()</code> 读的是昇腾私有配置（且自动收敛到 <code>get_ascend_config()</code> 校验路径，模型没有 indexer 时强制回 false）。<b>两个开关管的是同一个位置的两代人，新开关打开时必须关掉旧的</b>。</p>
+
+<h2 id="s6">6. 迁移清单：换 PCP 要满足什么条件</h2>
+<p>把散在各文件的校验集中成一张清单（每条都有源码行号背书）：</p>
+<ul>
+<li><b>引擎必须是 v2</b>：v1 配 PCP 直接 <code>ValueError</code>（platform.py L1483）；</li>
+<li><b>四不开</b>：PP&gt;1、encoder-decoder 模型、多模态输入、LoRA（pcp_manager.py 逐项 <code>NotImplementedError</code>）；</li>
+<li><b>投机解码暂不支持</b>（<code>speculative_config</code> 非空即拒）——MTP 用户暂留 Legacy；</li>
+<li><b>与 Legacy DSA-CP 互斥</b>：开了 <code>enable_dsa_cp</code> 就不能开 PCP，反之亦然；</li>
+<li><b>sparse MLA 图模式受限</b>：仅 eager 或 FULL_DECODE_ONLY；</li>
+<li><b>SP 开着时</b>：<code>max_num_batched_tokens</code> 会被自动改写成 <code>tp_size × pcp_size</code> 的整数倍（有 warning 日志，属于自动适配非报错）。</li>
+</ul>
+<div class="codetag">vllm_ascend/worker/v2/pcp_manager.py · L51-64（PCP 边界清单）</div>
+<pre><code>pcp_size = parallel_config.prefill_context_parallel_size
+if pcp_size &lt;= 1:
+    return
+
+if parallel_config.pipeline_parallel_size &gt; 1:
+    raise NotImplementedError(&quot;MRV2 PCP does not support PP yet.&quot;)
+if model_config.is_encoder_decoder:
+    raise NotImplementedError(&quot;MRV2 PCP does not support encoder-decoder models yet.&quot;)
+if supports_mm_inputs:
+    raise NotImplementedError(&quot;MRV2 PCP does not support MM inputs yet.&quot;)
+if vllm_config.lora_config is not None:
+    raise NotImplementedError(&quot;MRV2 PCP does not support LoRA yet.&quot;)
+if vllm_config.speculative_config is not None:
+    raise NotImplementedError(&quot;MRV2 PCP does not support speculative decoding yet.&quot;)</code></pre>
+<div class="codetag">vllm_ascend/ascend_config.py · L539-551（PCP×SP 的 max_num_batched_tokens 自动改写）</div>
+<pre><code>if vc.parallel_config.prefill_context_parallel_size &gt; 1 and enable_sp(vllm_config=vc):
+    tp_pcp_size = vc.parallel_config.tensor_parallel_size * vc.parallel_config.prefill_context_parallel_size
+    if vc.scheduler_config.max_num_batched_tokens % tp_pcp_size != 0:
+        vc.scheduler_config.max_num_batched_tokens = (
+            cdiv(vc.scheduler_config.max_num_batched_tokens, tp_pcp_size) * tp_pcp_size
+        )
+        logger.warning_once(
+            &quot;When using sequence parallelism, the max_num_batched_tokens should be divisible &quot;
+            &quot;by tp_size * pcp_size (%s). It has been adjusted to %s.&quot;, ...)</code></pre>
+<p class="dim">上游 PCP 还在快速演进（pcp_manager.py 头部注明适配 vLLM 0.27.x 的兼容层），清单以当期源码为准。</p>
+
+<h2 id="s7">7. 怎么理解这次换班</h2>
+<p>把三层事实叠起来看，"日落"是个准确的词：<b>不是枪毙，是不再灌注</b>。Legacy DSA-CP 的代码还在、开关还在、v1 用户还能用；但它标志着一条分界线——此前的 vllm-ascend 习惯"缺什么自己搭"（DSA-CP 如此，SP 直通协商也如此），此后上游把长序列 prefill 并行收编为通用能力，vllm-ascend 的正确姿势变成<b>写薄壳对齐上游</b>（218 行的 pcp_manager 壳对峙 2291 行的 legacy 文件，就是两种姿势的体量对比）。</p>
+<p>对使用者的操作含义：新部署（尤其 GLM/DeepSeek 长序列 prefill 场景）优先评估 PCP 路线（v2 引擎 + <code>--prefill-context-parallel-size</code>），对照第 6 章清单过一遍边界；存量 v1 + DSA-CP 部署不用慌——Legacy 路径仍是当期能跑的正式路径，迁移等上游 PCP 把投机解码等边界补齐再动不迟。</p>
+
+<div class="note">源码来源：vllm-ascend 主线快照（dsa_v1.py 选路、context_parallel/dsa_cp.py 两代实现、worker/v2/pcp_manager.py 引擎壳、platform.py 校验、ascend_config.py 开关收敛）。姊妹篇：《SP MoE 与 DSA-CP · 从各自原理到衔接冲突》（SP 与 DSA-CP 协同与 #18671 修复）。PCP 原理部分以上游 vLLM PCPManager 行为为准。</div>
+
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
