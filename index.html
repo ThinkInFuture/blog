@@ -121,9 +121,9 @@ footer{padding:40px 0;border-top:1px solid #eee}
 
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
-<div class="cc-title">DSA-CP 与 PCP · 从私搭通道到上游正道</div>
-<div class="cc-desc">DSA-CP 没被删但进入维护态：上游把 prefill 上下文并行收编为通用能力 PCP，vllm-ascend 写 218 行壳接入而非继续养 2291 行私搭通道。两代选路代码、同文件三个类的继承关系、迁移条件六条清单</div>
-<a class="cc-link" href="学习html/DSA-CP 与 PCP · 从私搭通道到上游正道.html">阅读 &rarr;</a>
+<div class="cc-title">DSA-CP 与 PCP：两代上下文并行方案对比</div>
+<div class="cc-desc">同一件事的两代做法：DSA-CP 在 attention 后端私搭切分（Legacy），PCP 在引擎 batch 分区统一做（现行，仅 v2）——计算内核同一套，差的是切分位置、缓存形态与邻居兼容；218 行壳对 2291 行私搭，七维对照+边界清单</div>
+<a class="cc-link" href="学习html/DSA-CP 与 PCP：两代上下文并行方案对比.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
@@ -179,7 +179,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
-<li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/DSA-CP 与 PCP · 从私搭通道到上游正道.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">DSA-CP 与 PCP · 从私搭通道到上游正道<span class="li-tag">vLLM 源码</span></span><span class="li-desc">"v2 之后 DSA-CP 日落换 PCP"源码核实：Legacy 标注与互斥开关（同时打开直接报错）、PCP 仅 v2 可用、AscendPCPManager 218 行壳继承上游 PCPManager——换班换的不是计算内核而是输入/缓存编排；迁移条件六条清单</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/DSA-CP 与 PCP：两代上下文并行方案对比.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">DSA-CP 与 PCP：两代上下文并行方案对比<span class="li-tag">vLLM 源码</span></span><span class="li-desc">DSA-CP 在 attention 后端私搭切分（Legacy，v1/v2 均可），PCP 在引擎 batch 分区统一切（现行，仅 v2）——计算内核同一套，差的是切分位置/缓存形态/邻居兼容；选路互斥代码、七维对照表、部署边界清单</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突<span class="li-tag">vLLM 源码</span></span><span class="li-desc">SP MoE 按 token 行切（每卡 220 行直通下一层），DSA-CP 按 head 切（token 维必须全量）——两者同开时层边界冲突：每层 AG 拼全量再 RS 切回；PR #18671 分片直通修复，TTFT −9~11%、吞吐 +10~12%。5 图 + 5 组源码证据</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261021"><a href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">GLM 系列启动 · vllm-ascend 视角解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</span></span></a></li>
 <li class="li" data-topic="dsinfer" data-ts="20261021"><a href="学习html/DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">DeepInfer SWA Bounded Replay 深挖：YOCO 截断的两模式与命中账本<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">最懂 V4.1 架构的特性：CED 下块 KV 免算、SWA KV 只重算最近 128 token（精确重建需 2560 token×20 层），prefill 计算近乎减半；yoco.py 逐字段精读 mask/compact 两模式；命中三步（L-134 上限/块 KV 定长/SWA 退一块）；SWA state 账（20 层×134×528B=1.4MB/序列）</span></span></a></li>
