@@ -37,6 +37,9 @@ tbody tr:nth-child(even){background:var(--surface)}
 .ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
 ul,ol{padding-left:24px}li{margin:7px 0}
 .dim{color:var(--muted);font-size:13px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:16px 0}
+.mermaid{display:flex;justify-content:center}
+.mermaid svg{max-width:100%}
 .note{color:var(--muted);font-size:12.8px;line-height:1.8;border-top:1px dashed var(--border);padding-top:14px;margin-top:44px}
 @media(max-width:720px){.wrap{padding:30px 16px 70px}h1{font-size:21px}h2{font-size:18px}
  li,p,h1,h2,h3{overflow-wrap:anywhere}
@@ -67,9 +70,32 @@ ul,ol{padding-left:24px}li{margin:7px 0}
 <pre><code># =============================================================================
 # Legacy DSA-CP implementation (TP/SP group)
 # =============================================================================</code></pre>
-<p>"Legacy"这个词是源码自己写下的。往下翻还能看到更直接的证据：两套实现各有开关，<b>同时打开会直接抛错</b>；PCP 那套只在 Model Runner V2 引擎上可用，v1 引擎配了直接拒绝启动。一个文件、两代人、互不相容——这就是本文要讲清楚的：它们分别怎么工作、交接班交接了什么、部署时该选哪条。</p>
+<p>"Legacy"这个词是源码自己写下的。往下翻还能看到更直接的证据：两套实现各有开关，<b>同时打开会直接抛错</b>；PCP 那套只在 Model Runner V2 引擎上可用，v1 引擎配了直接拒绝启动。一个文件、两代人、互不相容（图 1）——这就是本文要讲清楚的：它们分别怎么工作、交接班交接了什么、部署时该选哪条。</p>
 <div class="kp"><b>两代的身份</b>DSA-CP：vllm-ascend 为 DSA 模型的长 prefill 自研的上下文并行，靠 <code>additional_config "enable_dsa_cp": true</code> 打开；PCP（Prefill Context Parallelism）：上游 vLLM 的通用 prefill 上下文并行，靠启动参数 <code>--prefill-context-parallel-size</code> 打开。计算内核是同一套，差别全在"切分发生在哪一层、缓存怎么写、谁来管通信"。</div>
 
+<div class="card"><div class="mermaid">
+flowchart TD
+    A["dsa_cp.py · 2291 行（一个文件）"] --> B["前半 · Legacy DSA-CP
+（TP/SP 组内私搭）"]
+    A --> C["L57 分界注释
+Legacy DSA-CP implementation (TP/SP group)"]
+    A --> D["后半 · PCP 版
+（接上游引擎切分）"]
+    B --> B1["自有一套 metadata 族
+自有通信编排
+v1 / v2 引擎均可"]
+    D --> D1["继承 dsa_v1 基类链
+全局缓存视图
+仅 v2 引擎"]
+    classDef file fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    classDef legacy fill:#fdf0ef,stroke:#c0392b,stroke-width:1.5px
+    classDef pcp fill:#f0fdf4,stroke:#15803d,stroke-width:1.5px
+    classDef mark fill:#fffbeb,stroke:#b45309,stroke-width:1.5px
+    class A file
+    class B,B1 legacy
+    class D,D1 pcp
+    class C mark
+</div><div class="figcap">图 1 · dsa_cp.py 现场地图：一个文件、两套实现、一条分界注释</div></div>
 <h2 id="s2">2. Legacy DSA-CP：一条私搭的 prefill 通道</h2>
 <p>DSA 模型的 KV cache 按 sequence 切成两段、分片存在 TP 组各卡上（省显存的代价）。prefill 时 query 要看全序列的 KV，于是需要一个"把分片重新组织起来算注意力"的机制——DSA-CP 就是这个机制，它是 vllm-ascend 为 DSA 一家私搭的，复杂度也全在"私搭"上：</p>
 <ul>
@@ -77,8 +103,31 @@ ul,ol{padding-left:24px}li{margin:7px 0}
 <li><b>自己的通信编排</b>：门口 all-gather 拼全量、o_proj 的 A2A head 互换、部分和归约——每一步都是文件内的私有逻辑；</li>
 <li><b>自己的邻居协商</b>：想跟 SP MoE 配合，要靠 <code>supports_sequence_parallel_input</code> 那套三方握手（姊妹篇《SP MoE 与 DSA-CP》里的 #18671，修的正是这条通道上一笔"每层拼全量"的冗余）。</li>
 </ul>
-<p>私搭通道的问题不在"跑不通"，在于<b>每来一个新邻居都要重新协商一次</b>：SP 来了协商一次，PD 分离来了再协商一次。这笔学费交过之后，问题的通用性也暴露了——长 prefill 切多卡是所有长序列模型的公共需求，不该由 DSA 一家在 attention 后端里私搭。上游 vLLM 后来自己做了这件事，就是 PCP。</p>
+<p>私搭通道的问题不在"跑不通"，在于<b>每来一个新邻居都要重新协商一次</b>：SP 来了协商一次，PD 分离来了再协商一次。这条全链见图 2。这笔学费交过之后，问题的通用性也暴露了——长 prefill 切多卡是所有长序列模型的公共需求，不该由 DSA 一家在 attention 后端里私搭。上游 vLLM 后来自己做了这件事，就是 PCP。</p>
 
+<div class="card"><div class="mermaid">
+flowchart TD
+    IN["prefill 输入 · 全量 token"] --> ATT
+    subgraph ATT["DSA-CP（attention 后端内部 · Legacy）"]
+        direction TB
+        M["自有 metadata 族
+分片布局与 slot 换算私有"]
+        G["门口 all-gather
+拼回全量（或 SP 直通握手）"]
+        K["稀疏注意力计算
+（DSA 内核 · indexer + compressor）"]
+        O["o_proj · A2A head 互换 + 部分和归约"]
+        M --> G --> K --> O
+    end
+    ATT --> OUT["输出 → 下一层"]
+    SCH["调度器 · 不知道 batch 被切过"] -.无感知.-> ATT
+    classDef io fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    classDef step fill:#fdf0ef,stroke:#c0392b,stroke-width:1.5px
+    classDef sch fill:#f7f8fa,stroke:#9aa4ae,stroke-width:1.2px
+    class IN,OUT io
+    class M,G,K,O step
+    class SCH sch
+</div><div class="figcap">图 2 · Legacy DSA-CP 全链：切分、通信、协商都收在 attention 后端内部，调度器无感知</div></div>
 <h2 id="s3">3. PCP：上游收编的通用能力</h2>
 <p>PCP 的原理一句话：<b>在 Model Runner 的 batch 分区阶段，就把 prefill 的输入 token 切成 N 份分给 N 张卡，算完在引擎层合并</b>。与 DSA-CP 的根本差别是<b>位置</b>：切分从 attention 后端内部上移到了引擎层，调度器、metadata、attention 全链路都知道"这个 batch 是切过的"——邻居们（SP、PD、投机解码）从此跟引擎层打交道，不用再跟 DSA-CP 一个个握手。</p>
 <table>
@@ -92,7 +141,7 @@ ul,ol{padding-left:24px}li{margin:7px 0}
 <tr><td><b>状态</b></td><td><span class="bad">Legacy 维护态</span></td><td><span class="ok">主线增量</span></td></tr>
 </table>
 <div class="figcap">表 1 · DSA-CP 与 PCP 七维对照</div>
-<p>PCP 在 vllm-ascend 侧的落点是一个 218 行的 <code>AscendPCPManager</code>：直接继承上游 <code>vllm.v1.worker.gpu.pcp_manager.PCPManager</code>，分区的"正道部分"——怎么切、怎么合并、怎么让调度器知情——全部复用上游，昇腾侧只补三件事：FULL decode graph 的 pad 布局对齐、slot mapping 按 rank 展开、给 attention 组装全局上下文数据。</p>
+<p>PCP 在 vllm-ascend 侧的落点是一个 218 行的 <code>AscendPCPManager</code>：直接继承上游 <code>vllm.v1.worker.gpu.pcp_manager.PCPManager</code>，切分上移后的全链见图 3。分区的"正道部分"——怎么切、怎么合并、怎么让调度器知情——全部复用上游，昇腾侧只补三件事：FULL decode graph 的 pad 布局对齐、slot mapping 按 rank 展开、给 attention 组装全局上下文数据。</p>
 <div class="codetag">vllm_ascend/worker/v2/pcp_manager.py · L24 与 L44-45（继承上游）</div>
 <pre><code>from vllm.v1.worker.gpu.pcp_manager import PCPManager      # ← 上游 vLLM 的 PCP 实现
 
@@ -108,6 +157,36 @@ class AscendPCPAttentionContext:
 class AscendPCPManager(PCPManager):
     &quot;&quot;&quot;PCP manager that refreshes Ascend-only local-batch metadata.&quot;&quot;&quot;</code></pre>
 
+<div class="card"><div class="mermaid">
+flowchart TD
+    IN["prefill 输入 · 全量 token"] --> MR
+    subgraph MR["Model Runner V2 · 引擎层（正道）"]
+        direction TB
+        P["partition_batch
+输入 token 切成 N 份"]
+        PM["AscendPCPManager · 218 行壳
+继承上游 PCPManager
+pad 对齐 / slot 展开 / 全局上下文"]
+        P --> PM
+    end
+    MR -->|"每卡一份本地分片"| ATT
+    subgraph ATT["DSA attention（内核不变）"]
+        A1["all-gather 拼全局
+hidden_restore_idx 恢复调度序"]
+        A2["稀疏注意力计算（同一套内核）"]
+        A3["o_proj 只算本地段
+合并交回引擎"]
+        A1 --> A2 --> A3
+    end
+    ATT --> OUT["引擎层合并 → 输出"]
+    SCH["调度器 · 全链路知道 batch 被切过"] --- MR
+    classDef io fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
+    classDef eng fill:#f0fdf4,stroke:#15803d,stroke-width:1.5px
+    classDef step fill:#f7f8fa,stroke:#6b7280,stroke-width:1.2px
+    class IN,OUT io
+    class P,PM,MR eng
+    class A1,A2,A3,SCH step
+</div><div class="figcap">图 3 · PCP 全链：切分上移到引擎 batch 分区，调度器知情，昇腾侧只剩 218 行壳</div></div>
 <h2 id="s4">4. 三个类与一条继承链：交接班交接了什么</h2>
 <p>回到 dsa_cp.py。文件后半的 PCP 实现与 Legacy 的继承关系，就是这次交接班的交接书：</p>
 <div class="codetag">vllm_ascend/attention/context_parallel/dsa_cp.py · L2129-2133（PCP 版 Impl 类头）</div>
@@ -147,8 +226,39 @@ class AscendPCPManager(PCPManager):
         kv,
         req_metadata.slot_mapping,     # ← 全局 slot_mapping：每 rank 用同一份全局视图写缓存
     )</code></pre>
-<div class="kp w"><b>取舍</b>PCP 用"缓存复制"换工程简洁：每个 PCP rank 持有全局 KV 视图的副本（显存开销高于 DSA-CP 的分片存储），换来的是不再需要为每个邻居单点协商。另外 sparse MLA 场景下，PCP 暂只支持 eager 或 FULL_DECODE_ONLY 图模式。</div>
+<div class="kp w"><b>取舍</b>PCP 用"缓存复制"换工程简洁：每个 PCP rank 持有全局 KV 视图的副本（显存开销高于 DSA-CP 的分片存储（数据面差异见图 4）），换来的是不再需要为每个邻居单点协商。另外 sparse MLA 场景下，PCP 暂只支持 eager 或 FULL_DECODE_ONLY 图模式。</div>
 
+<div class="card"><div class="mermaid">
+flowchart TD
+    subgraph L["DSA-CP · 分片存储（省显存）"]
+        direction LR
+        S0["卡0
+token 0-249
+KV 分片"] --- S1["卡1
+token 250-499
+KV 分片"] --- S2["…
+…
+KV 分片"]
+        LN["读全序列 = 按需聚合
+（通信编排在后端内）"] -.-> S0
+    end
+    subgraph R["PCP · 复制全局视图（换工程简洁）"]
+        direction LR
+        R0["卡0
+全局视图副本"] --- R1["卡1
+全局视图副本"] --- R2["…
+全局视图副本"]
+        RN["写缓存 = 全局 slot_mapping
+各 rank 写同一视图的自己的份"] -.-> R0
+    end
+    L ~~~ R
+    classDef shard fill:#fdf0ef,stroke:#c0392b,stroke-width:1.3px
+    classDef repl fill:#f0fdf4,stroke:#15803d,stroke-width:1.3px
+    classDef note fill:#f7f8fa,stroke:#9aa4ae,stroke-width:1.2px
+    class S0,S1,S2 shard
+    class R0,R1,R2 repl
+    class LN,RN note
+</div><div class="figcap">图 4 · 数据面核心差异：DSA-CP 各存一段按需聚合，PCP 各持一份全局视图按全局 slot 写入</div></div>
 <h2 id="s5">5. 选路代码：两个开关为何互斥</h2>
 <p>后端入口的选路函数把两代关系写得最直白（builder 与 impl 两层各有一份同样的判断）：</p>
 <div class="codetag">vllm_ascend/attention/dsa_v1.py · L110-131（get_builder_cls：入口三分支）</div>
@@ -212,22 +322,9 @@ if vllm_config.speculative_config is not None:
 <div class="note">源码来源：vllm-ascend 主线快照（dsa_v1.py 选路、context_parallel/dsa_cp.py 两代实现、worker/v2/pcp_manager.py 引擎壳、platform.py 校验、ascend_config.py 开关收敛）。姊妹篇：《SP MoE 与 DSA-CP · 从各自原理到衔接冲突》。PCP 引擎侧行为以上游 vLLM PCPManager 为准。</div>
 
 </div>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:"neutral",themeVariables:{fontSize:"15px"},flowchart:{nodePadding:"12px"}});</script>
 <script defer src="../qrcode.min.js"></script>
 <script defer src="../share.js?v=2"></script>
-
-<style>
-.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
-.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
-.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
-.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
-@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
-@media print{.hs-fnav{display:none}}
-</style>
-<div class="hs-fnav" id="hs-fnav">
-<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
-<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
-</div>
-<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
-
 </body>
 </html>
