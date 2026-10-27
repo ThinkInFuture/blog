@@ -8,7 +8,7 @@
 <link rel="shortcut icon" href="/favicon.ico">
 <style>:root{--bg:#fff;--surface:#f7f8fa;--border:#dde1e7;--text:#1a1f27;--muted:#6b7280;
 --brand:#2563eb;--brand-bg:#eff6ff;--brand-t:#1d4ed8;--ok:#15803d;--ok-bg:#f0fdf4;
---bad:#c0392b;--bad-bg:#fdf0ef;--accent:#0d9488;--accent-bg:#f0fdfa;--code-bg:#f3f4f6}
+--blue:#0969da;--blue-soft:#ddf4ff;--border-strong:#9aa4ae;--accent-soft:#f0fdfa;--bad:#c0392b;--bad-bg:#fdf0ef;--accent:#0d9488;--accent-bg:#f0fdfa;--code-bg:#f3f4f6}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:15.5px;line-height:1.9;-webkit-font-smoothing:antialiased}
 .wrap{max-width:880px;margin:0 auto;padding:44px 26px 90px}
@@ -38,6 +38,27 @@ tbody tr:nth-child(even){background:var(--surface)}
 ul,ol{padding-left:24px}li{margin:7px 0}
 .dim{color:var(--muted);font-size:13px}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin:16px 0}
+svg.static{width:100%;height:auto;display:block}
+.bar{fill:var(--surface);stroke:var(--border-strong);stroke-width:1.5}
+.bar-t{font:600 13px sans-serif;fill:var(--text);text-anchor:middle}
+.bx{fill:var(--surface);stroke:var(--border-strong);stroke-width:1.5}
+.bx-t{font:600 13.5px sans-serif;fill:var(--text);text-anchor:middle}
+.step{font:400 12.5px sans-serif;fill:var(--text)}
+.step-n{font:600 12.5px sans-serif;fill:var(--blue)}
+.key{font:400 12.5px sans-serif;fill:var(--muted)}
+.ln{stroke:var(--border-strong);stroke-width:1.6;fill:none}
+.ln-b{stroke:var(--blue);stroke-width:1.6;fill:none}
+.lbl{font:400 12px sans-serif;fill:var(--muted)}
+.cap{stroke-width:2;fill:var(--surface)}
+.cap-acc{stroke:var(--bad);fill:var(--bad-bg)}
+.cap-brd{stroke:var(--ok);fill:var(--ok-bg)}
+.cap-t{font:600 13px sans-serif;text-anchor:middle}
+.cap-s{font:400 12px sans-serif;text-anchor:middle}
+.t-acc{fill:var(--bad)}
+.t-brd{fill:var(--ok)}
+.mat-k{font:600 11px sans-serif;fill:var(--blue);text-anchor:middle}
+.hdr{font:600 14px sans-serif;fill:var(--text)}
+.figcap{text-align:center;color:var(--muted);font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
 .mermaid{display:flex;justify-content:center}
 .mermaid svg{max-width:100%}
 .note{color:var(--muted);font-size:12.8px;line-height:1.8;border-top:1px dashed var(--border);padding-top:14px;margin-top:44px}
@@ -103,31 +124,32 @@ v1 / v2 引擎均可"]
 <li><b>自己的通信编排</b>：门口 all-gather 拼全量、o_proj 的 A2A head 互换、部分和归约——每一步都是文件内的私有逻辑；</li>
 <li><b>自己的邻居协商</b>：想跟 SP MoE 配合，要靠 <code>supports_sequence_parallel_input</code> 那套三方握手（姊妹篇《SP MoE 与 DSA-CP》里的 #18671，修的正是这条通道上一笔"每层拼全量"的冗余）。</li>
 </ul>
-<p>私搭通道的问题不在"跑不通"，在于<b>每来一个新邻居都要重新协商一次</b>：SP 来了协商一次，PD 分离来了再协商一次。这条全链见图 2。这笔学费交过之后，问题的通用性也暴露了——长 prefill 切多卡是所有长序列模型的公共需求，不该由 DSA 一家在 attention 后端里私搭。上游 vLLM 后来自己做了这件事，就是 PCP。</p>
+<p>私搭通道的问题不在"跑不通"，在于<b>每来一个新邻居都要重新协商一次</b>：SP 来了协商一次，PD 分离来了再协商一次。这条全链见图 2——它与姊妹篇《SP MoE 与 DSA-CP》的图 2 是同一张图（同样的全量进、同样的四步、同样的 A2A/RS），先把 Legacy 的样子钉在这里，下一张图逐项对照。这笔学费交过之后，问题的通用性也暴露了——长 prefill 切多卡是所有长序列模型的公共需求，不该由 DSA 一家在 attention 后端里私搭。上游 vLLM 后来自己做了这件事，就是 PCP。</p>
 
-<div class="card"><div class="mermaid">
-flowchart TD
-    IN["prefill 输入 · 全量 token"] --> ATT
-    subgraph ATT["DSA-CP（attention 后端内部 · Legacy）"]
-        direction TB
-        M["自有 metadata 族
-分片布局与 slot 换算私有"]
-        G["门口 all-gather
-拼回全量（或 SP 直通握手）"]
-        K["稀疏注意力计算
-（DSA 内核 · indexer + compressor）"]
-        O["o_proj · A2A head 互换 + 部分和归约"]
-        M --> G --> K --> O
-    end
-    ATT --> OUT["输出 → 下一层"]
-    SCH["调度器 · 不知道 batch 被切过"] -.无感知.-> ATT
-    classDef io fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
-    classDef step fill:#fdf0ef,stroke:#c0392b,stroke-width:1.5px
-    classDef sch fill:#f7f8fa,stroke:#9aa4ae,stroke-width:1.2px
-    class IN,OUT io
-    class M,G,K,O step
-    class SCH sch
-</div><div class="figcap">图 2 · Legacy DSA-CP 全链：切分、通信、协商都收在 attention 后端内部，调度器无感知</div></div>
+<div class="card">
+<svg class="static" viewBox="0 0 720 386" role="img" aria-label="Legacy DSA-CP 全链：attention 后端内部私搭切分">
+<defs>
+<marker id="m2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+<marker id="m2b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
+</defs>
+<rect class="bar" x="36" y="20" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="41">hidden_states · 3520 行 全量进入（token 维不切）</text>
+<path class="ln-b" d="M360 52 V76" marker-end="url(#m2b)"/>
+<rect class="bx" x="36" y="80" width="648" height="140" rx="12"/>
+<text class="bx-t" x="360" y="104">Attention · DSA-CP（每张卡视角：16 份 head 中的 1 份）</text>
+<text x="64" y="130"><tspan class="step-n">① QKV 投影 · 按 head 切</tspan><tspan class="step" dx="8">每卡只算自己那份 head 的 Q / K / V</tspan></text>
+<text x="64" y="154"><tspan class="step-n">② 写 KV cache（全序列）</tspan><tspan class="step" dx="8">indexer 按 topk 选出相关的 KV 块</tspan></text>
+<text x="64" y="178"><tspan class="step-n">③ 稀疏注意力</tspan><tspan class="step" dx="8">只算选中的块 → 得到本卡 head 的部分结果</tspan></text>
+<text x="64" y="202"><tspan class="step-n">④ o_proj · 行并行</tspan><tspan class="step" dx="8">各卡各有一份"部分和"，需跨卡归约（A2A / RS）</tspan></text>
+<path class="ln-b" d="M360 220 V244" marker-end="url(#m2b)"/>
+<rect class="bar" x="36" y="248" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="269">hidden_states · 3520 行 全量输出（部分和已归约）</text>
+<text class="key" x="36" y="308">· 切的是 head 维（TP 的责任）：token 维必须全量 —— 写 KV、算注意力都要看到整个序列</text>
+<text class="key" x="36" y="328">· 开关：additional_config enable_dsa_cp · 门口的 A2A / RS 是 head 归并与投影归约，属必要通信</text>
+<text class="mat-k" x="360" y="360" font-size="11.5">※ 与姊妹篇《SP MoE 与 DSA-CP》图 2 同一张图 —— 本篇的 PCP（下一张图）逐项对照这张看</text>
+</svg>
+<div class="figcap">图 2 · Legacy DSA-CP 全链：切分、通信、协商全在 attention 后端内部，调度器无感知（与姊妹篇图 2 同款视觉）</div>
+</div>
 <h2 id="s3">3. PCP：上游收编的通用能力</h2>
 <p>PCP 的原理一句话：<b>在 Model Runner 的 batch 分区阶段，就把 prefill 的输入 token 切成 N 份分给 N 张卡，算完在引擎层合并</b>。与 DSA-CP 的根本差别是<b>位置</b>：切分从 attention 后端内部上移到了引擎层，调度器、metadata、attention 全链路都知道"这个 batch 是切过的"——邻居们（SP、PD、投机解码）从此跟引擎层打交道，不用再跟 DSA-CP 一个个握手。</p>
 <table>
@@ -141,7 +163,7 @@ flowchart TD
 <tr><td><b>状态</b></td><td><span class="bad">Legacy 维护态</span></td><td><span class="ok">主线增量</span></td></tr>
 </table>
 <div class="figcap">表 1 · DSA-CP 与 PCP 七维对照</div>
-<p>PCP 在 vllm-ascend 侧的落点是一个 218 行的 <code>AscendPCPManager</code>：直接继承上游 <code>vllm.v1.worker.gpu.pcp_manager.PCPManager</code>，切分上移后的全链见图 3。分区的"正道部分"——怎么切、怎么合并、怎么让调度器知情——全部复用上游，昇腾侧只补三件事：FULL decode graph 的 pad 布局对齐、slot mapping 按 rank 展开、给 attention 组装全局上下文数据。</p>
+<p>PCP 在 vllm-ascend 侧的落点是一个 218 行的 <code>AscendPCPManager</code>：直接继承上游 <code>vllm.v1.worker.gpu.pcp_manager.PCPManager</code>，PCP 的全链见图 3——结构就是上面那张图的"引擎版"：①～④ 步骤一一对应，切分却从后端内部挪到了引擎的 batch 分区。分区的"正道部分"——怎么切、怎么合并、怎么让调度器知情——全部复用上游，昇腾侧只补三件事：FULL decode graph 的 pad 布局对齐、slot mapping 按 rank 展开、给 attention 组装全局上下文数据。</p>
 <div class="codetag">vllm_ascend/worker/v2/pcp_manager.py · L24 与 L44-45（继承上游）</div>
 <pre><code>from vllm.v1.worker.gpu.pcp_manager import PCPManager      # ← 上游 vLLM 的 PCP 实现
 
@@ -157,36 +179,34 @@ class AscendPCPAttentionContext:
 class AscendPCPManager(PCPManager):
     &quot;&quot;&quot;PCP manager that refreshes Ascend-only local-batch metadata.&quot;&quot;&quot;</code></pre>
 
-<div class="card"><div class="mermaid">
-flowchart TD
-    IN["prefill 输入 · 全量 token"] --> MR
-    subgraph MR["Model Runner V2 · 引擎层（正道）"]
-        direction TB
-        P["partition_batch
-输入 token 切成 N 份"]
-        PM["AscendPCPManager · 218 行壳
-继承上游 PCPManager
-pad 对齐 / slot 展开 / 全局上下文"]
-        P --> PM
-    end
-    MR -->|"每卡一份本地分片"| ATT
-    subgraph ATT["DSA attention（内核不变）"]
-        A1["all-gather 拼全局
-hidden_restore_idx 恢复调度序"]
-        A2["稀疏注意力计算（同一套内核）"]
-        A3["o_proj 只算本地段
-合并交回引擎"]
-        A1 --> A2 --> A3
-    end
-    ATT --> OUT["引擎层合并 → 输出"]
-    SCH["调度器 · 全链路知道 batch 被切过"] --- MR
-    classDef io fill:#eff6ff,stroke:#2563eb,stroke-width:1.5px
-    classDef eng fill:#f0fdf4,stroke:#15803d,stroke-width:1.5px
-    classDef step fill:#f7f8fa,stroke:#6b7280,stroke-width:1.2px
-    class IN,OUT io
-    class P,PM,MR eng
-    class A1,A2,A3,SCH step
-</div><div class="figcap">图 3 · PCP 全链：切分上移到引擎 batch 分区，调度器知情，昇腾侧只剩 218 行壳</div></div>
+<div class="card">
+<svg class="static" viewBox="0 0 720 430" role="img" aria-label="PCP 全链：引擎层按 token 切分">
+<defs>
+<marker id="m3" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--border-strong)"/></marker>
+<marker id="m3b" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--blue)"/></marker>
+<marker id="m3g" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="var(--ok)"/></marker>
+</defs>
+<rect class="bar" x="36" y="20" width="648" height="32" rx="8"/>
+<text class="bar-t" x="360" y="41">prefill 输入 · 3520 行（在引擎层被切成 16 份 × 220 行）</text>
+<path class="ln" d="M360 52 V76" marker-end="url(#m3)"/>
+<rect class="bx" x="36" y="80" width="648" height="66" rx="12" style="stroke:var(--ok);fill:var(--ok-bg)"/>
+<text class="bx-t" x="360" y="102">引擎 · Model Runner V2 batch 分区（PCP 的切分地）</text>
+<text x="64" y="126"><tspan class="step-n">partition_batch → AscendPCPManager（218 行壳）</tspan><tspan class="step" dx="8">切分 / 合并 / 调度器知情，全在引擎层</tspan></text>
+<path class="ln" d="M360 146 V170" marker-end="url(#m3)"/>
+<rect class="bx" x="36" y="174" width="648" height="140" rx="12"/>
+<text class="bx-t" x="360" y="198">DSA attention（内核与 DSA-CP 完全同一套 · 每卡 220 行本地分片）</text>
+<text x="64" y="224"><tspan class="step-n">① all-gather 拼全局</tspan><tspan class="step" dx="8">hidden_restore_idx 恢复调度器原序（去 padding）</tspan></text>
+<text x="64" y="248"><tspan class="step-n">② 写 KV cache</tspan><tspan class="step" dx="8">全局 slot_mapping 写"复制的全局视图"（非分片存储）</tspan></text>
+<text x="64" y="272"><tspan class="step-n">③ 稀疏注意力</tspan><tspan class="step" dx="8">同一套 indexer / compressor 内核，本卡 head</tspan></text>
+<text x="64" y="296"><tspan class="step-n">④ o_proj · 只算本地段</tspan><tspan class="step" dx="8">跨卡合并交回引擎层（不在后端内自旋）</tspan></text>
+<path class="ln" d="M360 314 V338" marker-end="url(#m3g)"/>
+<rect class="bar" x="36" y="342" width="648" height="32" rx="8" style="stroke:var(--ok)"/>
+<text class="bar-t" x="360" y="363">引擎层合并 → 输出（合并逻辑也复用上游 PCPManager）</text>
+<text class="key" x="36" y="398">· 切的是 token 维（引擎 batch 分区的职责）：每卡 220 行进出 —— 对照上图：DSA-CP 切 head 维、token 全量进</text>
+<text class="key" x="36" y="418">· 开关：--prefill-context-parallel-size（上游通用参数）· 仅 v2 引擎 · 计算内核同 DSA-CP，换的只是切分位置与缓存形态</text>
+</svg>
+<div class="figcap">图 3 · PCP 全链：切分上移到引擎 batch 分区，①～④ 与图 2 逐项对应，调度器与合并全在引擎层</div>
+</div>
 <h2 id="s4">4. 三个类与一条继承链：交接班交接了什么</h2>
 <p>回到 dsa_cp.py。文件后半的 PCP 实现与 Legacy 的继承关系，就是这次交接班的交接书：</p>
 <div class="codetag">vllm_ascend/attention/context_parallel/dsa_cp.py · L2129-2133（PCP 版 Impl 类头）</div>
