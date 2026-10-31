@@ -118,7 +118,19 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow prev" onclick="moveCarousel(-1)">&lsaquo;</button>
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
+<div class="cc-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</div>
+<div class="cc-desc">DP 堆 QPS、TP 切权重、PCP 切输入序列（仅 prefill 阶段）——三组开关的卡位关系用网格图逐例展开：例1 每卡一份完整权重、例2 两个独立副本、例3 2 行权重分片 × 4 列输入段 = 8 卡；另有总账表与 DP1~3 卡位总览</div>
+<a class="cc-link" href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html">阅读 &rarr;</a>
+</div>
 
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">模型演进</span><span class="cc-date">2026-10-29</span></div>
+<div class="cc-title">MemT-1.0-Nano · 双分支架构与记忆读写通路</div>
+<div class="cc-desc">记忆矩阵怎么读（隐状态投影 q 线性读出+输出门旁路）、上下文怎么压缩进存储记忆（GDN-2 四门逐 token 擦写）——两张通路专题图逐项解答；双分支 L_base+L_mem 离策略蒸馏，128K 下 66 倍存储压缩与 1.86 倍加速</div>
+<a class="cc-link" href="学习html/MemT-1.0-Nano · 双分支架构与记忆读写通路.html">阅读 &rarr;</a>
+</div>
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
 <div class="cc-title">DSA-CP 与 PCP：两代上下文并行方案对比</div>
@@ -137,25 +149,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
 <a class="cc-link" href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">推理加速</span><span class="cc-date">2026-10-19</span></div>
-<div class="cc-title">DeepSeek V4.1 的 KV Cache 汇总：改了什么、HCA 为什么退场、CED+CSA2 复现实测</div>
-<div class="cc-desc">四步递进的推理配置与量化四笔账；MLA→V4.0→V4.1 演进台阶（70,272→3,514→890 B/token）与 HCA 相位根因；老师-学生训练结构图与 Qwen3.5-4B 复现实测——13 图 4 段代码，取自 Flash 解读与复现记录</div>
-<a class="cc-link" href="学习html/DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">基础理论</span><span class="cc-date">2026-10-18</span></div>
-<div class="cc-title">QKV 与 KV Cache：从注意力计算到推理缓存（图解 + PyTorch 源码）</div>
-<div class="cc-desc">Q/K/V 怎么算、causal mask 挡什么、无缓存为什么平方级重算、Prefill 与 Decode 怎么写缓存、逐层缓存与显存公式、以及 GQA/MLA/量化怎么省——11 张图配 10 段可运行 PyTorch</div>
-<a class="cc-link" href="学习html/KV Cache 讲解 · 从注意力缓存到块池与压缩.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">50</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">52</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -163,15 +163,15 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">50 篇 · 9 个专题</div>
+<div class="sec-badge">52 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">50</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">52</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
-<button class="chip" data-topic="evolve">模型演进<span class="count">2</span></button>
+<button class="chip" data-topic="evolve">模型演进<span class="count">3</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">15</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">16</span></button>
 <button class="chip" data-topic="dsinfer">DeepSeek 推理<span class="count">3</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">5</span></button>
@@ -179,6 +179,8 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList">
+<li class="li" data-topic="vllm" data-ts="20261031"><a href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html"><span class="li-date">2026-10-31</span><span class="li-main"><span class="li-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡<span class="li-tag">vLLM 源码</span></span><span class="li-desc">DP 堆 QPS、TP 切权重、PCP 切输入序列（仅 prefill 阶段）——三组开关的卡位关系用网格图逐例展开：例1 每卡一份完整权重、例2 两个独立副本、例3 2 行权重分片 × 4 列输入段 = 8 卡；另有总账表与 DP1~3 卡位总览</span></span></a></li>
+<li class="li" data-topic="evolve" data-ts="20261029"><a href="学习html/MemT-1.0-Nano · 双分支架构与记忆读写通路.html"><span class="li-date">2026-10-29</span><span class="li-main"><span class="li-title">MemT-1.0-Nano · 双分支架构与记忆读写通路<span class="li-tag">模型演进</span></span><span class="li-desc">记忆做成前向传播的一部分：10 个全注意力层并联 Hyper Memory——读取是隐状态投影 q 对固定 shape 记忆矩阵的线性读出（旁路相加），写入是每轮 commit 逐 token 走 GDN-2 四门（遗忘→擦除→写入），任意长历史收敛进约 40 MiB；双分支离策略蒸馏训练</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/DSA-CP 与 PCP：两代上下文并行方案对比.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">DSA-CP 与 PCP：两代上下文并行方案对比<span class="li-tag">vLLM 源码</span></span><span class="li-desc">DSA-CP 在 attention 后端私搭切分（Legacy，v1/v2 均可），PCP 在引擎 batch 分区统一切（现行，仅 v2）——计算内核同一套，差的是切分位置/缓存形态/邻居兼容；选路互斥代码、七维对照表、部署边界清单</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261023"><a href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html"><span class="li-date">2026-10-23</span><span class="li-main"><span class="li-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突<span class="li-tag">vLLM 源码</span></span><span class="li-desc">SP MoE 按 token 行切（每卡 220 行直通下一层），DSA-CP 按 head 切（token 维必须全量）——两者同开时层边界冲突：每层 AG 拼全量再 RS 切回；PR #18671 分片直通修复，TTFT −9~11%、吞吐 +10~12%。5 图 + 5 组源码证据</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261021"><a href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html"><span class="li-date">2026-10-21</span><span class="li-main"><span class="li-title">GLM 系列启动 · vllm-ascend 视角解读<span class="li-tag">vLLM 源码</span></span><span class="li-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</span></span></a></li>
