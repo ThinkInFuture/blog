@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</title>
+<style>
+
+*{box-sizing:border-box}
+body{background:#f7f9fc;color:#1f2937;margin:0;padding:36px 28px 80px;
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.65}
+.wrap{max-width:1000px;margin:0 auto}
+h1{font-size:23px;margin:0 0 6px}
+h2{font-size:18px;margin:26px 0 12px}
+.card{background:#fff;border:1px solid #e3e8ef;border-radius:14px;padding:20px 22px;margin-bottom:22px;
+  box-shadow:0 1px 3px rgba(16,24,40,.04)}
+.card svg.static{width:100%;height:auto;display:block}
+.figcap{text-align:center;color:#64748b;font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;line-height:1.7}
+.formula{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:14px 20px;font-size:14px;color:#334155;margin-bottom:16px}
+.formula code{background:#eef2f8;padding:2px 6px;border-radius:5px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 20px;font-size:12.5px;color:#64748b}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:14px;height:14px;border-radius:4px;border:1.5px solid;display:inline-block}
+.pcp0{background:#eff6ff;border-color:#93c5fd}.pcp1{background:#f0fdf4;border-color:#86efac}
+.pcp2{background:#fff7ed;border-color:#fdba74}.pcp3{background:#fdf2f8;border-color:#f9a8d4}
+.wt0{background:#ede9fe;border-color:#a78bfa}.wt1{background:#cffafe;border-color:#67e8f9}
+.ex-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
+.ex-title{font-size:16px;font-weight:600}
+.ex-cfg{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#0f766e;background:#e8f7f4;padding:2px 8px;border-radius:6px}
+.ex-note{color:#6b7280;font-size:13.5px;margin:0 0 14px}
+.ex-note b{color:#334155}
+.dplbl{font:600 12.5px sans-serif;fill:#475569}
+.tiny{font:400 10.5px sans-serif;fill:#94a3b8;text-anchor:middle}
+.mini-grid{display:grid;grid-template-columns:repeat(4,76px);gap:8px;margin-top:10px}
+.mini{border:1.5px solid #e2e8f0;border-radius:8px;background:#fff;padding:6px 8px;font-size:10.5px;
+  font-family:ui-monospace,Menlo,Consolas,monospace;color:#475569;text-align:center}
+.mini.r0{border-color:#a78bfa}.mini.r1{border-color:#67e8f9}
+.dpmini-head{font-size:12px;color:#475569;font-weight:600;margin-top:14px}
+table.tbl{border-collapse:collapse;margin:12px auto;font-size:13px;width:100%}
+table.tbl th,table.tbl td{border:1px solid #d7dde6;padding:7px 10px;text-align:center}
+table.tbl th{background:#f1f5f9;color:#334155;font-weight:600}
+table.tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+@media(max-width:720px){.mini-grid{grid-template-columns:repeat(4,64px)}.wrap{padding:0 4px}}
+
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>DP 与 TP 与 PCP 卡位关系：输入切分和权重切分如何落到每张卡</h1>
+<div class="formula">
+  <b>核心关系：</b><br>
+  · <b>DP</b> = 完整模型副本的份数，每个副本独立跑请求，用来堆 QPS；<br>
+  · <b>TP</b> = 权重切分：把<b>权重</b>切成 TP 份，每份常驻一组卡；<br>
+  · <b>PCP</b> = prefill 上下文并行（prefill context parallelism）：把<b>一条请求的输入序列</b>切成 PCP 段，各卡并行算自己那段，切分只作用输入、不影响权重，且一般只在 prefill 阶段生效（decode 不走 PCP）；<br>
+  · 一个副本内部，<b>每张卡 = 一个权重分片 × 一段输入</b>，单副本卡数 = <code>TP × PCP</code>，全局总卡 = <code>DP × TP × PCP</code>。
+</div>
+
+<div class="legend">
+  <span><i class="sw pcp0"></i>输入段 1/4</span><span><i class="sw pcp1"></i>输入段 2/4</span>
+  <span><i class="sw pcp2"></i>输入段 3/4</span><span><i class="sw pcp3"></i>输入段 4/4</span>
+  <span><i class="sw wt0"></i>权重分片 0/2</span><span><i class="sw wt1"></i>权重分片 1/2</span>
+</div>
+
+<div class="card">
+  <div class="ex-head"><span class="ex-title">例 1</span><span class="ex-cfg">DP=1 · TP=1 · PCP=4</span></div>
+  <div class="ex-note"><b>1 份</b>完整模型副本：TP=1 → 权重不切，<b>4 张卡各持一份完整权重</b>；PCP=4 → 完整输入序列切成 4 段，分别送进 4 张卡并行算 prefill。</div>
+  <svg class="static" viewBox="0 0 960 234" role="img" aria-label="DP TP PCP 卡位关系">
+<defs>
+<marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mp" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#a78bfa"/></marker>
+<marker id="mc" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#0e7490"/></marker>
+</defs>
+<rect x="20" y="20" width="200" height="30" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="120.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">完整权重</text>
+<rect x="240" y="20" width="482" height="30" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="481.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">完整输入序列（请求 A）</text>
+<rect x="20" y="62" width="200" height="30" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="120.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">TP=1 · 不切分</text>
+<path d="M 120 92 V 176 H 238" stroke="#a78bfa" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<text class="tiny" x="60" y="122">每卡持一份完整权重</text>
+<rect x="240" y="62" width="110" height="30" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="295.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">输入 1/4</text>
+<path d="M 295.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="364" y="62" width="110" height="30" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="419.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">输入 2/4</text>
+<path d="M 419.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="488" y="62" width="110" height="30" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="543.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9a3412">输入 3/4</text>
+<path d="M 543.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="612" y="62" width="110" height="30" rx="8" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="667.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9d174d">输入 4/4</text>
+<path d="M 667.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="240" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="295.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 0</text>
+<text x="295.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="295.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#1e40af">输入 1/4</text>
+<rect x="364" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="419.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 1</text>
+<text x="419.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="419.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#166534">输入 2/4</text>
+<rect x="488" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="543.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 2</text>
+<text x="543.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="543.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9a3412">输入 3/4</text>
+<rect x="612" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="667.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 3</text>
+<text x="667.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="667.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9d174d">输入 4/4</text>
+</svg>
+  <div class="figcap">图 1 · 例 1：输入按 PCP 切成 4 列，权重不切（TP=1），卡网格只有一行 —— 每张卡 = 完整权重 + 一段输入</div>
+</div>
+
+<div class="card">
+  <div class="ex-head"><span class="ex-title">例 2</span><span class="ex-cfg">DP=2 · TP=1 · PCP=4</span></div>
+  <div class="ex-note">2 份互相独立的完整模型副本，各自承接不同请求（拉高 QPS）。每个副本内部都是「4 卡各持完整权重 + 各算 1/4 输入」，两个 DP 组之间没有 PCP 通信。</div>
+  <svg class="static" viewBox="0 0 960 494" role="img" aria-label="例 2 两个 DP 副本">
+<defs>
+<marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mp" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#a78bfa"/></marker>
+<marker id="mc" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#0e7490"/></marker>
+</defs>
+<text class="dplbl" x="20" y="16">DP 0 · 请求 A</text>
+<rect x="20" y="20" width="200" height="30" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="120.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">完整权重</text>
+<rect x="240" y="20" width="482" height="30" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="481.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">完整输入序列（请求 A）</text>
+<rect x="20" y="62" width="200" height="30" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="120.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">TP=1 · 不切分</text>
+<path d="M 120 92 V 176 H 238" stroke="#a78bfa" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<text class="tiny" x="60" y="122">每卡持一份完整权重</text>
+<rect x="240" y="62" width="110" height="30" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="295.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">输入 1/4</text>
+<path d="M 295.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="364" y="62" width="110" height="30" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="419.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">输入 2/4</text>
+<path d="M 419.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="488" y="62" width="110" height="30" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="543.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9a3412">输入 3/4</text>
+<path d="M 543.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="612" y="62" width="110" height="30" rx="8" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="667.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9d174d">输入 4/4</text>
+<path d="M 667.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="240" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="295.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 0</text>
+<text x="295.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="295.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#1e40af">输入 1/4</text>
+<rect x="364" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="419.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 1</text>
+<text x="419.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="419.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#166534">输入 2/4</text>
+<rect x="488" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="543.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 2</text>
+<text x="543.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="543.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9a3412">输入 3/4</text>
+<rect x="612" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="667.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 3</text>
+<text x="667.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="667.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9d174d">输入 4/4</text>
+<text class="dplbl" x="20" y="276">DP 1 · 请求 B</text>
+<rect x="20" y="280" width="200" height="30" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="120.0" y="300.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">完整权重</text>
+<rect x="240" y="280" width="482" height="30" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="481.0" y="300.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">完整输入序列（请求 B）</text>
+<rect x="20" y="322" width="200" height="30" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="120.0" y="342.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">TP=1 · 不切分</text>
+<path d="M 120 352 V 436 H 238" stroke="#a78bfa" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<text class="tiny" x="60" y="382">每卡持一份完整权重</text>
+<rect x="240" y="322" width="110" height="30" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="295.0" y="342.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">输入 1/4</text>
+<path d="M 295.0 352 V 394" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="364" y="322" width="110" height="30" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="419.0" y="342.0" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">输入 2/4</text>
+<path d="M 419.0 352 V 394" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="488" y="322" width="110" height="30" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="543.0" y="342.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9a3412">输入 3/4</text>
+<path d="M 543.0 352 V 394" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="612" y="322" width="110" height="30" rx="8" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="667.0" y="342.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9d174d">输入 4/4</text>
+<path d="M 667.0 352 V 394" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="240" y="396" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="295.0" y="418" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 0</text>
+<text x="295.0" y="440" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="295.0" y="460" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#1e40af">输入 1/4</text>
+<rect x="364" y="396" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="419.0" y="418" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 1</text>
+<text x="419.0" y="440" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="419.0" y="460" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#166534">输入 2/4</text>
+<rect x="488" y="396" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="543.0" y="418" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 2</text>
+<text x="543.0" y="440" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="543.0" y="460" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9a3412">输入 3/4</text>
+<rect x="612" y="396" width="110" height="80" rx="9" fill="#fff" stroke="#e2e8f0" stroke-width="1.5"/>
+<text x="667.0" y="418" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 3</text>
+<text x="667.0" y="440" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#475569">权重: 完整</text>
+<text x="667.0" y="460" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9d174d">输入 4/4</text>
+</svg>
+  <div class="figcap">图 2 · 例 2：两个 DP 组结构完全相同、请求不同；每组 4 卡，总卡 = 2 × 1 × 4 = 8</div>
+</div>
+
+<div class="card">
+  <div class="ex-head"><span class="ex-title">例 3</span><span class="ex-cfg">DP=4 · TP=2 · PCP=4</span></div>
+  <div class="ex-note">4 份独立副本。下面以 DP 0 详细画切分过程：权重按 TP 切成 <b>2 片（对应 2 行）</b>，输入按 PCP 切成 <b>4 段（对应 4 列）</b>，每张卡 = 行 × 列 的交点。</div>
+  <svg class="static" viewBox="0 0 960 328" role="img" aria-label="DP TP PCP 卡位关系">
+<defs>
+<marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mp" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#a78bfa"/></marker>
+<marker id="mc" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#0e7490"/></marker>
+</defs>
+<text class="dplbl" x="20" y="16">DP 0 · 请求 A</text>
+<rect x="20" y="20" width="200" height="30" rx="8" fill="#f5f3ff" stroke="#c4b5fd" stroke-width="1.5"/>
+<text x="120.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">完整权重</text>
+<rect x="240" y="20" width="482" height="30" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="481.0" y="40.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">完整输入序列（请求 A）</text>
+<rect x="20" y="62" width="90" height="30" rx="8" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="65.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#5b21b6">片 0/2</text>
+<path d="M 65 50 V 60" stroke="#a78bfa" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<rect x="130" y="62" width="90" height="30" rx="8" fill="#cffafe" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="175.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#155e75">片 1/2</text>
+<path d="M 175 50 V 60" stroke="#a78bfa" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<path d="M 65 92 V 176 H 238" stroke="#5b21b6" stroke-width="1.6" fill="none" marker-end="url(#mp)"/>
+<path d="M 175 92 V 270 H 238" stroke="#155e75" stroke-width="1.6" fill="none" marker-end="url(#mc)"/>
+<rect x="240" y="62" width="110" height="30" rx="8" fill="#eff6ff" stroke="#93c5fd" stroke-width="1.5"/>
+<text x="295.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#1e40af">输入 1/4</text>
+<path d="M 295.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="364" y="62" width="110" height="30" rx="8" fill="#f0fdf4" stroke="#86efac" stroke-width="1.5"/>
+<text x="419.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#166534">输入 2/4</text>
+<path d="M 419.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="488" y="62" width="110" height="30" rx="8" fill="#fff7ed" stroke="#fdba74" stroke-width="1.5"/>
+<text x="543.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9a3412">输入 3/4</text>
+<path d="M 543.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="612" y="62" width="110" height="30" rx="8" fill="#fdf2f8" stroke="#f9a8d4" stroke-width="1.5"/>
+<text x="667.0" y="82.0" text-anchor="middle" font-size="13" font-weight="600" fill="#9d174d">输入 4/4</text>
+<path d="M 667.0 92 V 134" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma)"/>
+<rect x="240" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="295.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 0</text>
+<text x="295.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#5b21b6">权重片 0/2</text>
+<text x="295.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#1e40af">输入 1/4</text>
+<rect x="364" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="419.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 1</text>
+<text x="419.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#5b21b6">权重片 0/2</text>
+<text x="419.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#166534">输入 2/4</text>
+<rect x="488" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="543.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 2</text>
+<text x="543.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#5b21b6">权重片 0/2</text>
+<text x="543.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9a3412">输入 3/4</text>
+<rect x="612" y="136" width="110" height="80" rx="9" fill="#fff" stroke="#a78bfa" stroke-width="1.5"/>
+<text x="667.0" y="158" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 3</text>
+<text x="667.0" y="180" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#5b21b6">权重片 0/2</text>
+<text x="667.0" y="200" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9d174d">输入 4/4</text>
+<rect x="240" y="230" width="110" height="80" rx="9" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="295.0" y="252" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 4</text>
+<text x="295.0" y="274" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#155e75">权重片 1/2</text>
+<text x="295.0" y="294" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#1e40af">输入 1/4</text>
+<rect x="364" y="230" width="110" height="80" rx="9" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="419.0" y="252" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 5</text>
+<text x="419.0" y="274" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#155e75">权重片 1/2</text>
+<text x="419.0" y="294" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#166534">输入 2/4</text>
+<rect x="488" y="230" width="110" height="80" rx="9" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="543.0" y="252" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 6</text>
+<text x="543.0" y="274" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#155e75">权重片 1/2</text>
+<text x="543.0" y="294" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9a3412">输入 3/4</text>
+<rect x="612" y="230" width="110" height="80" rx="9" fill="#fff" stroke="#67e8f9" stroke-width="1.5"/>
+<text x="667.0" y="252" text-anchor="middle" font-size="12.5" font-weight="700" fill="#1f2937">卡 7</text>
+<text x="667.0" y="274" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#155e75">权重片 1/2</text>
+<text x="667.0" y="294" text-anchor="middle" font-family="ui-monospace,Menlo,Consolas,monospace" font-size="10.5" fill="#9d174d">输入 4/4</text>
+</svg>
+  <div class="figcap">图 3 · 例 3（DP 0）：2 行权重分片 × 4 列输入段 = 8 卡；行箭头来自权重片，列箭头来自输入段</div>
+  <div class="dpmini-head">其余 DP 1 ~ 3 切分过程与 DP 0 完全相同，只展示卡位编号：</div>
+  <div class="dpmini-head">DP 0 · 卡 0 – 7</div><div class="mini-grid"><div class="mini r0">卡 0</div><div class="mini r0">卡 1</div><div class="mini r0">卡 2</div><div class="mini r0">卡 3</div><div class="mini r1">卡 4</div><div class="mini r1">卡 5</div><div class="mini r1">卡 6</div><div class="mini r1">卡 7</div></div><div class="dpmini-head">DP 1 · 卡 8 – 15</div><div class="mini-grid"><div class="mini r0">卡 8</div><div class="mini r0">卡 9</div><div class="mini r0">卡 10</div><div class="mini r0">卡 11</div><div class="mini r1">卡 12</div><div class="mini r1">卡 13</div><div class="mini r1">卡 14</div><div class="mini r1">卡 15</div></div><div class="dpmini-head">DP 2 · 卡 16 – 23</div><div class="mini-grid"><div class="mini r0">卡 16</div><div class="mini r0">卡 17</div><div class="mini r0">卡 18</div><div class="mini r0">卡 19</div><div class="mini r1">卡 20</div><div class="mini r1">卡 21</div><div class="mini r1">卡 22</div><div class="mini r1">卡 23</div></div>
+  <div class="figcap">图 4 · 例 3 全部 4 个 DP 组的卡位总览（DP 0 已在图 3 详画）</div>
+</div>
+
+<div class="card">
+  <div class="ex-head"><span class="ex-title">总账对照</span></div>
+  <table class="tbl">
+    <tr><th>例子</th><th>DP</th><th>TP</th><th>PCP</th><th>单副本卡数</th><th>总卡数</th><th>每卡权重</th><th>每卡输入</th></tr>
+    <tr><td>例 1</td><td class="mono">1</td><td class="mono">1</td><td class="mono">4</td><td class="mono">4</td><td class="mono">4</td><td>完整</td><td class="mono">1/4 段</td></tr>
+    <tr><td>例 2</td><td class="mono">2</td><td class="mono">1</td><td class="mono">4</td><td class="mono">4</td><td class="mono">8</td><td>完整</td><td class="mono">1/4 段</td></tr>
+    <tr><td>例 3</td><td class="mono">4</td><td class="mono">2</td><td class="mono">4</td><td class="mono">8</td><td class="mono">32</td><td class="mono">片 0 或 1 /2</td><td class="mono">1/4 段</td></tr>
+  </table>
+  <div class="figcap">表 1 · 三个例子的卡数与每卡职责对照</div>
+</div>
+
+<div class="card">
+  <b>读图要点</b><br>
+  · <b>列是输入，行是权重</b>：输入段颜色沿列贯穿，权重片颜色沿行贯穿，卡的位置由行×列唯一确定。<br>
+  · <b>PCP 只作用 prefill</b>：prefill 阶段各卡并行处理自己的输入段；decode 阶段一般走主卡，不沿用 PCP 切分。<br>
+  · <b>DP 之间完全独立</b>：不同 DP 组跑不同请求，没有跨组的输入或权重通信，总卡数直接相乘。
+</div>
+</div>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
