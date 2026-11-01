@@ -11,6 +11,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Micr
 .nav-inner{max-width:1000px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center}
 .nav-logo{font-size:16px;font-weight:700}
 .nav-sub{font-size:12px;font-weight:400;color:#999;margin-left:10px;padding-left:10px;border-left:1px solid #e5e5e5}
+.nav-tool{font-size:13px;color:#3b82f6;text-decoration:none;margin-left:10px;padding:4px 10px;border:1px solid #d8dde3;border-radius:6px;background:#f4f6f8}
+.nav-tool:hover{background:#eef2f7;color:#1d6fa5}
 .nav-links{display:flex;gap:24px}
 .nav-links a{text-decoration:none;color:#888;font-size:14px}
 .nav-links a:hover{color:#111}
@@ -106,7 +108,7 @@ footer{padding:40px 0;border-top:1px solid #eee}
 </head>
 <body>
 <nav class="navbar"><div class="nav-inner">
-<div class="nav-logo">华杉的技术博客<span class="nav-sub">大模型研究</span></div>
+<div class="nav-logo">华杉的技术博客<span class="nav-sub">大模型研究</span><a class="nav-tool" href="学习html/模型架构交互分析 · GLM5.3 · DS4.1-Flash · DS4-Flash.html">工具</a></div>
 <div class="nav-links">
 <a href="#learning">学习专区</a>
 <a href="#experiments">实验专区</a>
@@ -119,10 +121,10 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">算子与编程</span><span class="cc-date">2026-10-31</span></div>
-<div class="cc-title">模型架构交互分析 · GLM-5.3 / DeepSeek-V4.1 / DeepSeek-V4-Flash 三模型算子流·KV cache·显存·PD仿真</div>
-<div class="cc-desc">一个下拉切换三模型的交互工具：算子 tensor 数据流框图、KV cache 分组明细、每 rank 显存计算器、纯 P / 纯 D 吞吐仿真四页签；DS4-Flash 数据来自官方 config.json 与 46 个 safetensors 分片 header 实测聚合，浅色主题重制</div>
-<a class="cc-link" href="学习html/模型架构交互分析 · GLM5.3 · DS4.1-Flash · DS4-Flash.html">打开工具 &rarr;</a>
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-21</span></div>
+<div class="cc-title">GLM 系列启动 · vllm-ascend 视角解读</div>
+<div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
+<a class="cc-link" href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
