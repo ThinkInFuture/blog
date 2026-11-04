@@ -288,6 +288,20 @@ flowchart TD
     B --> C["训练完成的草稿模型\n（与大模型同源，接受率高）"]
 </pre>
 </div>
+<div class="fig-caption">图 3.5 · 老师-学生教学模型：老师（大模型）示范并出题，学生（草稿模型）模仿分布与特征，考试（校验）只判接受前缀——教学闭环只发生在训练期，推理期学生独立猜、老师验</div>
+<div class="mermaid-wrap">
+<pre class="mermaid">
+flowchart TD
+    T["老师：目标大模型"] -->|"示范：前向一遍"| S["示范结果：每位置 logits + 隐藏特征"]
+    S -->|"出题：监督样本"| L["学生：轻量草稿模型"]
+    L -->|"模仿学习：分布 KL 损失 + 特征回归损失"| U["学生学会近似老师的分布"]
+    U -->|"推理期：学生独立猜草稿"| K["老师并行校验：接受前缀 / 拒绝重采样"]
+    classDef teach fill:#e8f0f8,stroke:#355469,stroke-width:1.5px
+    classDef learn fill:#ecfdf5,stroke:#059669,stroke-width:1.5px
+    class T,S,K teach
+    class L,U learn
+</pre>
+</div>
 
 <h3>3.2 通用推理方式：草稿 — 大模型协同加速</h3>
 <p>推理阶段由<strong>草稿模型与大模型协同</strong>循环完成，大模型始终掌握最终拍板权：</p>
