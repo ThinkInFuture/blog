@@ -125,7 +125,7 @@
             <span class="tag red">只取最后一位 · 其余全部丢弃</span>
         </div>
         <div class="chart-desc">
-            💬 <strong>场景说明</strong>：输入为已知上下文“风急天高猿啸”。因每一步都需等待前一个采样结果，本次前向传播虽并行算出全部6个位置 Logits，但前5个（急天高猿啸）无法利用，只能丢弃，仅用位置5的 Logits 采样生成“哀”。
+            💬 <strong>场景说明</strong>：输入为已知上下文“风急天高猿啸”。因每一步都需等待前一个采样结果，本次前向传播虽并行算出全部6个位置 Logits，但前5个（急天高猿啸）无法利用，只能丢弃，仅用位置5的 Logits 采样生成“哀”。<br><span style="color:#6b7280;font-size:14px">特征维度：输入 [batch=1, seq_len=6, hidden_dim]，前向输出 [1, 6, hidden_dim]，经 LM Head 得 [1, 6, vocab] 的 logits 矩阵——只有最后一行的 logits 被采样，其余行丢弃。</span>
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
@@ -309,7 +309,28 @@
     </div>
 
     <!-- 底部核心结论 -->
-    <div class="footnote">
+    
+    <!-- ================= 图5：老师-学生训练模型 ================= -->
+    <div class="chart-box">
+        <div class="header">
+            <h2>📌 图5：草稿模型怎么练出来的 · 老师-学生教学模型</h2>
+            <span class="tag green">教学闭环只在训练期 · 推理期学生独立猜、老师验</span>
+        </div>
+        <div class="mermaid-wrapper">
+            <div class="mermaid">
+                flowchart TD
+                    T["老师：目标大模型<br>输入 [B, L, hidden]<br>输出 [B, L, hidden] + [B, L, vocab]"] -->|"示范：前向一遍"| S["示范结果：每位置 logits + 隐藏特征"]
+                    S -->|"出题：监督样本"| L["学生：轻量草稿模型<br>输入 [B, L, hidden]（次顶层特征）<br>输出 [B, L, vocab] 草稿分布"]
+                    L -->|"模仿学习：分布 KL 损失 + 特征回归损失"| U["学生学会近似老师的分布"]
+                    U -->|"推理期：学生独立猜草稿"| K["老师并行校验：输入 [B, L+k, hidden]<br>逐位置 logits 对比 → 接受前缀 / 拒绝位重采样"]
+                    classDef teach fill:#e8f0f8,stroke:#355469,stroke-width:1.5px
+                    classDef learn fill:#ecfdf5,stroke:#059669,stroke-width:1.5px
+                    class T,S,K teach
+                    class L,U learn
+            </div>
+        </div>
+    </div>
+<div class="footnote">
         <strong>💡 完整结论（图1-3每个位置独立，图4数字全展开）：</strong><br>
         1. <span class="purple">微观（图4）</span>：模型一次前向算出 <span class="matrix-code">[7×4]</span> Logits矩阵，7行数字全部展示。<br>
         2. <span class="blue">串行（图1）</span>：位置0-4（急天高猿啸）的Logits算完即弃，只取位置5（哀）采样。<br>
