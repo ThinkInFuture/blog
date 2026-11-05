@@ -23,6 +23,15 @@
 - flowchart 配置参考（效果好）：`themeVariables` 里 `fontSize:'22px'`、`nodePadding:'14px'`、primaryColor 蓝系；配 CSS `.mermaid svg text{font-size:20px !important}`。
 - 判断 mermaid 是否渲染成功：看 `.mermaid` 里有无 `svg` 和 `.node` 数量；svg 内嵌样式含 `.error-icon` 字样属正常，别误判成语法错误。
 
+## 短链接（shotlink，2026-11-05 立）
+
+- **概念**：给长文章地址配随机数字短链，URL 形如 `https://huashanblogllm.xyz/shotlink/<10位随机数字>`，打开即跳原文。ID 与文章的对应关系以后用数据库查（未建），当前唯一映射源是 `功能代码/short_ids.json`。
+- **实现（纯静态方案）**：仓库根目录 `shotlink/<id>/index.html` 跳转页——meta refresh 0 秒 + JS `location.replace` 双保险，带 canonical 指原文；`/shotlink/<id>` 与 `/shotlink/<id>/` 实测都可达（ESA 把无斜杠路径按目录 index 解析）。静态站做不了服务端 302，ESA 边缘 rewrite 规则要动云控制台，不采用。
+- **ID 规则**：10 位随机数字字符串（可前导零），全局唯一；新增时随机生成并与 json 里现有 ID 去重。
+- **加短链流程**：`short_ids.json` 的 `shotlink` 段加一条 `{"<新10位ID>": {"url": "学习html/xxx.html", "title": "标题"}}` → `python 功能代码/build_short_ids.py`（生成 `shotlink/<id>/index.html`）→ `publish_all.py "加短链 <id>" --new "shotlink/<id>/index.html"`。
+- **兼容**：旧别名短链（顶层散键，如 `kv` → 根目录 `/kv/`）继续生效，生成器同时支持两种段；新短链一律走 shotlink 段。
+- **现有短链**：`7429106583`→投机解码 v0.3；`3085271649`→DeepSeek V4.1 KV Cache 汇总；`6951843027`→KV Cache 讲解；旧链 `kv`→KV Cache 汇总。
+
 ## 前端与验证技巧
 
 - **Web Share**：手机端分享面板用 `navigator.share`（用户仍需在系统面板里手动点微信，这是无认证网站的上限）；必须加 `matchMedia('(pointer: coarse)')` 限制，否则桌面 Edge/Chrome（Windows 也实现了 share）会弹出没有微信的系统面板。
