@@ -413,7 +413,7 @@
 </div>
         </div>
         <p style="margin-top:16px;font-size:15px;">
-            <strong>循环里的浪费</strong>：每轮"模型前向"其实把<strong>所有位置</strong>的 Logits 都并行算了出来，但只有末位被采样、其余丢弃。下一图把单轮前向放大看清这个浪费——它也正是投机解码"并行验证"能省算力的原因。
+            <strong>循环里的浪费</strong>：每轮"模型前向"其实把<strong>所有位置</strong>的 token 概率分布都并行算了出来，但只有末位被采样、其余丢弃。下一图把单轮前向放大看清这个浪费——它也正是投机解码"并行验证"能省算力的原因。
         </p>
     </div>
 
@@ -424,7 +424,7 @@
             <span class="tag red">只取最后一位 · 其余全部丢弃</span>
         </div>
         <div class="chart-desc">
-            💬 <strong>场景说明</strong>：输入为已知上下文“风急天高猿啸”。因每一步都需等待前一个采样结果，本次前向传播虽并行算出全部6个位置 Logits，但前5个（急天高猿啸）无法利用，只能丢弃，仅用位置5的 Logits 采样生成“哀”。<br><span style="color:#6b7280;font-size:14px">特征维度：输入 [batch=1, seq_len=6, hidden_dim]，前向输出 [1, 6, hidden_dim]，经 LM Head 得 [1, 6, vocab] 的 logits 矩阵——只有最后一行的 logits 被采样，其余行丢弃。</span>
+            💬 <strong>场景说明</strong>：输入为已知上下文“风急天高猿啸”。因每一步都需等待前一个采样结果，本次前向传播虽并行算出全部 6 个位置的 token 概率分布，但前5个（急天高猿啸）无法利用，只能丢弃，仅用位置5 的概率分布采样生成“哀”。<br><span style="color:#6b7280;font-size:14px">特征维度：输入 [batch=1, seq_len=6, hidden_dim]，前向输出 [1, 6, hidden_dim]，经 LM Head 得 [1, 6, vocab] 的 token 概率分布——只有最后一行被采样，其余行丢弃。</span>
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
@@ -434,17 +434,17 @@
                     end
 
                     subgraph M1["因果 Transformer (单次前向传播)"]
-                        M1_core["并行计算所有位置 Logits"]
+                        M1_core["并行计算所有位置的 token 概率分布"]
                     end
 
                     subgraph O1["输出处理 (6个位置全部独立)"]
                         direction LR
-                        O1_0["位置0 Logits<br>预测 急"] --> R1_0["❌ 丢弃"]
-                        O1_1["位置1 Logits<br>预测 天"] --> R1_1["❌ 丢弃"]
-                        O1_2["位置2 Logits<br>预测 高"] --> R1_2["❌ 丢弃"]
-                        O1_3["位置3 Logits<br>预测 猿"] --> R1_3["❌ 丢弃"]
-                        O1_4["位置4 Logits<br>预测 啸"] --> R1_4["❌ 丢弃"]
-                        O1_5["位置5 Logits<br>预测 哀"] --> R1_5["✅ 采样输出<br>生成 哀"]
+                        O1_0["位置0 概率分布<br>预测 急"] --> R1_0["❌ 丢弃"]
+                        O1_1["位置1 概率分布<br>预测 天"] --> R1_1["❌ 丢弃"]
+                        O1_2["位置2 概率分布<br>预测 高"] --> R1_2["❌ 丢弃"]
+                        O1_3["位置3 概率分布<br>预测 猿"] --> R1_3["❌ 丢弃"]
+                        O1_4["位置4 概率分布<br>预测 啸"] --> R1_4["❌ 丢弃"]
+                        O1_5["位置5 概率分布<br>预测 哀"] --> R1_5["✅ 采样输出<br>生成 哀"]
                     end
 
                     I1 --> M1 --> O1
@@ -466,7 +466,7 @@
             <span class="tag highlight">草稿到“啸”全接受 · 验证再产出“哀”</span>
         </div>
         <div class="chart-desc">
-            💬 <strong>场景说明</strong>：草稿模型只提前填入“急天高猿啸”（到“啸”为止），消除了因果依赖。本次前向传播算出的全部位置 Logits 同时参与验证，前5个（急天高猿啸）全部命中（概率达标）被接受；与此同时，大模型在<strong>同一次前向</strong>中直接基于位置5 的 Logits <strong>保底新产出“哀”</strong>这一个新 Token。于是一次性拿到“风急天高猿啸哀”，无需回退——这也体现了“一次验证还能额外输出一个新 Token”。
+            💬 <strong>场景说明</strong>：草稿模型只提前填入“急天高猿啸”（到“啸”为止），消除了因果依赖。本次前向传播算出的全部位置的 token 概率分布同时参与验证，前5个（急天高猿啸）全部命中（概率达标）被接受；与此同时，大模型在<strong>同一次前向</strong>中直接基于位置5 的概率分布 <strong>保底新产出“哀”</strong>这一个新 Token。于是一次性拿到“风急天高猿啸哀”，无需回退——这也体现了“一次验证还能额外输出一个新 Token”。
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
@@ -476,17 +476,17 @@
                     end
 
                     subgraph M2["因果 Transformer (单次前向传播)"]
-                        M2_core["并行计算所有位置 Logits"]
+                        M2_core["并行计算所有位置的 token 概率分布"]
                     end
 
                     subgraph O2["验证结果：草稿位接受 + 大模型保底新产出"]
                         direction LR
-                        O2_0["位置0 Logits<br>验证 急"] --> R2_0["✅ 接受"]
-                        O2_1["位置1 Logits<br>验证 天"] --> R2_1["✅ 接受"]
-                        O2_2["位置2 Logits<br>验证 高"] --> R2_2["✅ 接受"]
-                        O2_3["位置3 Logits<br>验证 猿"] --> R2_3["✅ 接受"]
-                        O2_4["位置4 Logits<br>验证 啸"] --> R2_4["✅ 接受"]
-                        O2_new["位置5 Logits<br>大模型新产出 哀"] --> R2_new["✅ 新 Token 输出"]
+                        O2_0["位置0 概率分布<br>验证 急"] --> R2_0["✅ 接受"]
+                        O2_1["位置1 概率分布<br>验证 天"] --> R2_1["✅ 接受"]
+                        O2_2["位置2 概率分布<br>验证 高"] --> R2_2["✅ 接受"]
+                        O2_3["位置3 概率分布<br>验证 猿"] --> R2_3["✅ 接受"]
+                        O2_4["位置4 概率分布<br>验证 啸"] --> R2_4["✅ 接受"]
+                        O2_new["位置5 概率分布<br>大模型新产出 哀"] --> R2_new["✅ 新 Token 输出"]
                         R2_0 --> OUT["🎉 输出完整句子<br>风急天高猿啸哀"]
                         R2_1 --> OUT
                         R2_2 --> OUT
@@ -515,7 +515,7 @@
             <span class="tag orange">前5个接受 · 最后1个回退重采样</span>
         </div>
         <div class="chart-desc">
-            💬 <strong>场景说明</strong>：草稿模型填入“急天高猿啸<strong>叫</strong>”。验证时前5个（急天高猿啸）命中，最后一个“叫”因概率不达标被拒绝。此时 <strong>无需重新计算</strong>，直接利用本次已算出的位置5 Logits 重采样，生成正确的“哀”，最终输出“风急天高猿啸哀”。这是投机解码中典型的“部分接受”加速场景。
+            💬 <strong>场景说明</strong>：草稿模型填入“急天高猿啸<strong>叫</strong>”。验证时前5个（急天高猿啸）命中，最后一个“叫”因概率不达标被拒绝。此时 <strong>无需重新计算</strong>，直接利用本次已算出的位置5 概率分布重采样，生成正确的“哀”，最终输出“风急天高猿啸哀”。这是投机解码中典型的“部分接受”加速场景。
         </div>
         <div class="mermaid-wrapper">
             <div class="mermaid">
@@ -525,23 +525,23 @@
                     end
 
                     subgraph M3["因果 Transformer (单次前向传播)"]
-                        M3_core["并行计算所有位置 Logits"]
+                        M3_core["并行计算所有位置的 token 概率分布"]
                     end
 
                     subgraph O3["验证结果 (6个位置全部独立)"]
                         direction LR
-                        O3_0["位置0 Logits<br>验证 急"] --> R3_0["✅ 接受"]
-                        O3_1["位置1 Logits<br>验证 天"] --> R3_1["✅ 接受"]
-                        O3_2["位置2 Logits<br>验证 高"] --> R3_2["✅ 接受"]
-                        O3_3["位置3 Logits<br>验证 猿"] --> R3_3["✅ 接受"]
-                        O3_4["位置4 Logits<br>验证 啸"] --> R3_4["✅ 接受"]
-                        O3_5["位置5 Logits<br>验证 叫"] --> R3_5["❌ 拒绝"]
+                        O3_0["位置0 概率分布<br>验证 急"] --> R3_0["✅ 接受"]
+                        O3_1["位置1 概率分布<br>验证 天"] --> R3_1["✅ 接受"]
+                        O3_2["位置2 概率分布<br>验证 高"] --> R3_2["✅ 接受"]
+                        O3_3["位置3 概率分布<br>验证 猿"] --> R3_3["✅ 接受"]
+                        O3_4["位置4 概率分布<br>验证 啸"] --> R3_4["✅ 接受"]
+                        O3_5["位置5 概率分布<br>验证 叫"] --> R3_5["❌ 拒绝"]
                     end
 
                     subgraph O3b["回退重采样 → 生成 哀"]
                         R3_0 --> PART["📝 保留前5个<br>风急天高猿啸"]
                         R3_5 --> ROLL["⏪ 回退到位置5<br>丢弃草稿 '叫'"]
-                        PART --> RES["🔄 用位置5 Logits 重采样<br>→ 生成 <strong>哀</strong>"]
+                        PART --> RES["🔄 用位置5 概率分布 重采样<br>→ 生成 <strong>哀</strong>"]
                         ROLL --> RES
                         RES --> FINAL["✅ 最终输出<br>风急天高猿啸哀"]
                     end
@@ -589,7 +589,7 @@
                     subgraph S4["④ 输出投影 (LM Head) → Logits 矩阵（无省略）"]
                         H --> HEAD["线性层 (权重 W_out)<br>d_model → |Vocab| (设定 V=4)"]
                         HEAD --> MATRIX["**Logits 矩阵 [7 × 4]**<br><br>位置0 (预测'急'): [0.12, -0.34, 0.89, 2.41]<br>位置1 (预测'天'): [0.55, 1.82, -1.13, 0.22]<br>位置2 (预测'高'): [2.31, 0.74, 1.55, -0.88]<br>位置3 (预测'猿'): [-0.44, 1.14, 0.66, 3.22]<br>位置4 (预测'啸'): [0.92, -0.71, 2.21, 1.33]<br>位置5 (预测'哀'): [1.12, 2.54, -0.24, 0.95]<br>位置6 (预测下一个词): [0.78, -0.53, 1.46, 2.12]<br><br>⭐ 共7行，每行4个数字，全部逐个写出"]
-                        MATRIX --> PROB["(可选) Softmax"]
+                        MATRIX --> PROB["(可选) Softmax<br>→ token 概率分布"]
                     end
 
                     S1 --> S2 --> S3 --> S4
@@ -620,12 +620,12 @@
                 flowchart TD
                     subgraph TT["① 老师路线 · 目标大模型（权重冻结）"]
                         TA["输入 [B, L, hidden]"] --> TB["多层 Transformer 前向"]
-                        TB --> TC["老师 logits [B, L, vocab]"]
+                        TB --> TC["老师概率分布 [B, L, vocab]"]
                         TB --> TD["次顶层隐藏特征 [B, L, hidden]"]
                     end
                     subgraph SS["② 学生路线 · 轻量草稿模型（被训练）"]
                         SA["输入 [B, L, hidden]（老师次顶层特征）"] --> SB["草稿模型一次前向"]
-                        SB --> SC["学生 logits [B, L, vocab]"]
+                        SB --> SC["学生概率分布 [B, L, vocab]"]
                     end
                     TC --> LL["Loss 汇合：KL(老师‖学生) + 特征 MSE"]
                     TD --> LL
@@ -640,11 +640,11 @@
         </div>
     </div>
 <div class="footnote">
-        <strong>💡 完整结论（图1-3每个位置独立，图4数字全展开）：</strong><br>
-        1. <span class="purple">微观（图4）</span>：模型一次前向算出 <span class="matrix-code">[7×4]</span> Logits矩阵，7行数字全部展示。<br>
-        2. <span class="blue">串行（图1）</span>：位置0-4（急天高猿啸）的Logits算完即弃，只取位置5（哀）采样。<br>
-        3. <span class="green">全接受（图2）</span>：草稿填到“啸”（位置0-4）全部接受，大模型同一次前向再保底产出“哀”，直接出句。<br>
-        4. <span class="orange">末位拒接（图3）</span>：草稿为“急天高猿啸<strong>叫</strong>”，位置0-4接受，位置5（叫）拒绝，直接用图4第6行 <span class="matrix-code">[1.12, 2.54, -0.24, 0.95]</span> 重采样，成功生成“哀”，输出“风急天高猿啸哀”。
+        <strong>💡 完整结论（图2-4每个位置独立，图5数字全展开）：</strong><br>
+        1. <span class="purple">微观（图5）</span>：模型一次前向算出 <span class="matrix-code">[7×4]</span> Logits矩阵，7行数字全部展示。<br>
+        2. <span class="blue">串行（图2）</span>：位置0-4（急天高猿啸）的概率分布算完即弃，只取位置5（哀）采样。<br>
+        3. <span class="green">全接受（图3）</span>：草稿填到“啸”（位置0-4）全部接受，大模型同一次前向再保底产出“哀”，直接出句。<br>
+        4. <span class="orange">末位拒接（图4）</span>：草稿为“急天高猿啸<strong>叫</strong>”，位置0-4接受，位置5（叫）拒绝，直接用图5第6行 <span class="matrix-code">[1.12, 2.54, -0.24, 0.95]</span> 重采样，成功生成“哀”，输出“风急天高猿啸哀”。
     </div>
 
     <script>
