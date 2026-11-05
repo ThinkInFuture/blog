@@ -630,8 +630,26 @@ flowchart TD
                 </pre>
         </div>
 
+        <div class="note-supplement">
+            <strong>🗣️ 同一个对话例子：DSpark 如何把「好K」救回「好吧」</strong><br/>
+            先用一个对话例子看图 13 的架构怎么落地。同样 A 说「搞定了」，B 回「好的 / OK」。DSpark 阶段一与 DFlash 一样是并行多头，所以<strong>第一轮也会产出乱码</strong>：
+            <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
+                <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段一（并行粗猜）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头1</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">好 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">O — 0.7</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">吧 — 0.7</td></tr>
+            </table>
+            取各自最高概率 → 仍是乱码「<span style="color:#dc2626;font-weight:bold;">好K</span>」。<br/>
+            但 DSpark 还有<strong>阶段二：轻量串行 Markov 头</strong>，它会用前一位（头1 的「好」）作为条件，对头2 的分布做低秩转移偏置校正。校正后头2 的分布被「拉」向与「好」连贯的续写：
+            <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
+                <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段二（串行校正后）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头1</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">好 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">O — 0.7</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">吧 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.7</td></tr>
+            </table>
+            此时头2 最高概率已变成「吧」，拼出来就是通顺的「<span style="color:#16a34a;font-weight:bold;">好吧</span>」。一句话：<strong>DFlash 的并行断点靠「互不可见」产生乱码；DSpark 用「又并行又串行」的 Markov 校正把断点重新串回连贯序列</strong>。
+        </div>
+
         <div class="note-supplement" style="margin-top:18px;">
-            <strong>🧭 上图讲了「草稿怎么又并行又有依赖」</strong>。但生产环境里，草稿块全交给主模型校验是浪费算力的——高并发下校验越长越拖垮吞吐。下图拆解置信度调度机制。
+            <strong>🧭 图 13 讲了「草稿怎么又并行又有依赖」</strong>。但生产环境里，草稿块全交给主模型校验是浪费算力的——高并发下校验越长越拖垮吞吐。下图拆解置信度调度机制。
         </div>
 
         <div class="mermaid-wrap">
@@ -699,23 +717,7 @@ flowchart TD
         </ul>
 
         
-        <div class="note-supplement">
-            <strong>🗣️ 同一个对话例子：DSpark 如何把「好K」救回「好吧」</strong><br/>
-            同样 A 说「搞定了」，B 回「好的 / OK」。DSpark 阶段一与 DFlash 一样是并行多头，所以<strong>第一轮也会产出乱码</strong>：
-            <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
-                <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段一（并行粗猜）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
-                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头1</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">好 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">O — 0.7</td></tr>
-                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">吧 — 0.7</td></tr>
-            </table>
-            取各自最高概率 → 仍是乱码「<span style="color:#dc2626;font-weight:bold;">好K</span>」。<br/>
-            但 DSpark 还有<strong>阶段二：轻量串行 Markov 头</strong>，它会用前一位（头1 的「好」）作为条件，对头2 的分布做低秩转移偏置校正。校正后头2 的分布被「拉」向与「好」连贯的续写：
-            <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
-                <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段二（串行校正后）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
-                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头1</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">好 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">O — 0.7</td></tr>
-                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">吧 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.7</td></tr>
-            </table>
-            此时头2 最高概率已变成「吧」，拼出来就是通顺的「<span style="color:#16a34a;font-weight:bold;">好吧</span>」。一句话：<strong>DFlash 的并行断点靠「互不可见」产生乱码；DSpark 用「又并行又串行」的 Markov 校正把断点重新串回连贯序列</strong>。
-        </div>
+        
 
 <p><strong>优势深度剖析（含论文实测数据）：</strong></p>
         <ul>
