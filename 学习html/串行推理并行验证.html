@@ -560,7 +560,43 @@
                     style FINAL fill:#dcfce7,stroke:#4ade80,color:#166534
             </div>
         </div>
-    </div>
+    
+        <div class="chart-desc" style="margin-top:14px">
+            💬 <strong>位置5 的 token 概率分布示例</strong>：重采样用的就是这份分布——由图5 第 6 行 logits <span class="matrix-code">[1.12, 2.54, -0.24, 0.95]</span> 经 softmax 得到（保留两位小数）。草稿猜的“叫”只有 0.04，概率不达标被拒绝；按真实分布重采样，大概率选中概率最高的“哀”：
+        </div>
+        <table style="margin:12px auto 4px;border-collapse:collapse;box-shadow:0 1px 4px rgba(0,0,0,0.05)">
+            <thead>
+                <tr style="background:#f1f5f9">
+                    <th style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;font-weight:600">候选 token</th>
+                    <th style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;font-weight:600">概率</th>
+                    <th style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;font-weight:600">本轮结局</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr style="background:#ecfdf5">
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px"><strong>哀</strong></td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px"><strong style="color:#059669">0.66</strong></td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;text-align:left">概率最高 —— 重采样选中 ✅</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px">啼</td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px">0.16</td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;text-align:left;color:#6b7280">未被选中</td>
+                </tr>
+                <tr>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px">悲</td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px">0.14</td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;text-align:left;color:#6b7280">未被选中</td>
+                </tr>
+                <tr style="background:#fef2f2">
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px"><strong>叫</strong></td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px"><strong style="color:#dc2626">0.04</strong></td>
+                    <td style="border:1px solid #d9e2ec;padding:7px 20px;text-align:center;font-size:14px;text-align:left">草稿猜的 token —— 概率不达标 ❌ 拒绝</td>
+                </tr>
+            </tbody>
+        </table>
+        <p style="margin:6px 0 2px;text-align:center;font-size:13px;color:#6b7280">表 1 · 位置5 的 token 概率分布（图5 第 6 行 logits 经 softmax，保留两位小数）</p>
+</div>
 
     <!-- ================= 图4：微观原理拆解（无省略） ================= -->
     <div class="chart-box">
