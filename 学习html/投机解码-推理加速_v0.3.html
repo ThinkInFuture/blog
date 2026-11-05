@@ -839,23 +839,28 @@ flowchart TD
 
         <!-- ============================================================ -->
         <!-- ===================== 重点扩充部分 ========================== -->
-        <div class="fig-caption">图 3.5 · 老师-学生教学模型：老师（大模型）示范并出题，学生（草稿模型）模仿分布与特征，考试（校验）只判接受前缀——教学闭环只发生在训练期，推理期学生独立猜、老师验</div>
+        <div class="fig-caption">图 16 · 老师-学生训练模型：①老师路线与②学生路线是两条独立的推理路线，各自前向，最后用 Loss 汇合（KL + 特征 MSE），只更新学生权重——教学闭环只在训练期，推理期学生猜草稿、老师并行校验</div>
 <div class="mermaid-wrap">
 <pre class="mermaid">
 flowchart TD
-    T["老师：目标大模型
-输入 [B, L, hidden]
-输出 [B, L, hidden] + [B, L, vocab]"] -->|"示范：前向一遍"| S["示范结果：每位置 logits [B, L, vocab] + 隐藏特征 [B, L, hidden]"]
-    S -->|"出题：监督样本"| L["学生：轻量草稿模型
-输入 [B, L, hidden]（次顶层特征）
-输出 [B, L, vocab] 草稿分布"]
-    L -->|"模仿学习：分布 KL 损失 + 特征回归损失"| U["学生学会近似老师的分布"]
-    U -->|"推理期：学生独立猜草稿"| K["老师并行校验：输入 [B, L+k, hidden] → 逐位置 logits 对比
-接受前缀 / 拒绝位重采样"]
+    subgraph TT["① 老师路线 · 目标大模型（权重冻结）"]
+        TA["输入 [B, L, hidden]"] --> TB["多层 Transformer 前向"]
+        TB --> TC["老师 logits [B, L, vocab]"]
+        TB --> TD["次顶层隐藏特征 [B, L, hidden]"]
+    end
+    subgraph SS["② 学生路线 · 轻量草稿模型（被训练）"]
+        SA["输入 [B, L, hidden]（老师次顶层特征）"] --> SB["草稿模型一次前向"]
+        SB --> SC["学生 logits [B, L, vocab]"]
+    end
+    TC --> LL["Loss 汇合：KL(老师‖学生) + 特征 MSE"]
+    TD --> LL
+    SC --> LL
+    LL --> UP["反传：只更新学生权重"]
     classDef teach fill:#e8f0f8,stroke:#355469,stroke-width:1.5px
     classDef learn fill:#ecfdf5,stroke:#059669,stroke-width:1.5px
-    class T,S,K teach
-    class L,U learn
+    class TA,TB,TC,TD,TT teach
+    class SA,SB,SC,SS learn
+    class LL,UP fill:#fef3c7,stroke:#9c6b2b,stroke-width:1.5px
 </pre>
 </div>
 <h2>六、总结</h2>
