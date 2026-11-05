@@ -319,14 +319,24 @@
         <div class="mermaid-wrapper">
             <div class="mermaid">
                 flowchart TD
-                    T["老师：目标大模型<br>输入 [B, L, hidden]<br>输出 [B, L, hidden] + [B, L, vocab]"] -->|"示范：前向一遍"| S["示范结果：每位置 logits + 隐藏特征"]
-                    S -->|"出题：监督样本"| L["学生：轻量草稿模型<br>输入 [B, L, hidden]（次顶层特征）<br>输出 [B, L, vocab] 草稿分布"]
-                    L -->|"模仿学习：分布 KL 损失 + 特征回归损失"| U["学生学会近似老师的分布"]
-                    U -->|"推理期：学生独立猜草稿"| K["老师并行校验：输入 [B, L+k, hidden]<br>逐位置 logits 对比 → 接受前缀 / 拒绝位重采样"]
+                    subgraph TT["① 老师路线 · 目标大模型（权重冻结）"]
+                        TA["输入 [B, L, hidden]"] --> TB["多层 Transformer 前向"]
+                        TB --> TC["老师 logits [B, L, vocab]"]
+                        TB --> TD["次顶层隐藏特征 [B, L, hidden]"]
+                    end
+                    subgraph SS["② 学生路线 · 轻量草稿模型（被训练）"]
+                        SA["输入 [B, L, hidden]（老师次顶层特征）"] --> SB["草稿模型一次前向"]
+                        SB --> SC["学生 logits [B, L, vocab]"]
+                    end
+                    TC --> LL["Loss 汇合：KL(老师‖学生) + 特征 MSE"]
+                    TD --> LL
+                    SC --> LL
+                    LL --> UP["反传：只更新学生权重"]
                     classDef teach fill:#e8f0f8,stroke:#355469,stroke-width:1.5px
                     classDef learn fill:#ecfdf5,stroke:#059669,stroke-width:1.5px
-                    class T,S,K teach
-                    class L,U learn
+                    class TA,TB,TC,TD,TT teach
+                    class SA,SB,SC,SS learn
+                    class LL,UP fill:#fef3c7,stroke:#9c6b2b,stroke-width:1.5px
             </div>
         </div>
     </div>
