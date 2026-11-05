@@ -116,12 +116,311 @@
 <body>
 
     <div class="main-title">⚡ 统一架构 · 推理全景解析（3+1 视角）</div>
-    <div class="sub-desc">图1-3：宏观策略（每个位置独立展示，无缩写） ｜ 图4：微观原理（Logits 矩阵全部展开）</div>
+    <div class="sub-desc">图1：逐轮自回归解码循环（生成"模型适配部"） ｜ 图2-4：宏观策略（每个位置独立展示，无缩写） ｜ 图5：微观原理（Logits 矩阵全部展开） ｜ 图6：老师-学生训练模型</div>
+
+    <!-- ================= 图1：逐轮自回归解码循环 ================= -->
+    <style>
+  /* 核心画布容器 */
+  .diagram-container {
+    position: relative;
+    width: 100%;
+    background: #ffffff;
+    padding: 28px 12px;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+  }
+
+  /* 单轮循环的布局 */
+  .round-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* 统一的节点卡片样式 */
+  .node {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 10px 8px;
+    border-radius: 8px;
+    border: 2px solid #333;
+    font-size: 12px;
+    line-height: 1.4;
+    background: #fff;
+    box-shadow: 2px 2px 0 rgba(0,0,0,0.06);
+    width: 118px; 
+    text-align: center;
+  }
+
+  .node-title {
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    opacity: 0.7;
+  }
+
+  /* 节点颜色区分 */
+  .node.text { border-color: #6b7280; background: #f9fafb; }
+  .node.token { border-color: #3b82f6; background: #eff6ff; }
+  .node.emb { border-color: #10b981; background: #ecfdf5; }
+  .node.model { border-color: #f59e0b; background: #fffbeb; width: 142px;} /* 模型框加宽 */
+  .node.extract { border-color: #ec4899; background: #fdf2f8; }
+  .node.sample { border-color: #8b5cf6; background: #f5f3ff; }
+
+  /* 示例预测文字样式 */
+  .example-text {
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed #fcd34d;
+    font-size: 11px;
+    text-align: left;
+  }
+  
+  .pos-pred {
+    color: #6b7280;
+    font-size: 11px;
+    margin-bottom: 2px;
+  }
+
+  .highlight-pred {
+    color: #ef4444;
+    font-weight: bold;
+    background: #fee2e2;
+    padding: 1px 4px;
+    border-radius: 4px;
+  }
+
+  .normal-pred {
+    color: #047857;
+    font-weight: bold;
+  }
+
+  /* 箭头符号 */
+  .arrow {
+    font-size: 18px;
+    color: #9ca3af;
+    font-weight: bold;
+    margin: 0 2px;
+  }
+
+  /* 行与行之间的折返连线容器 */
+  .curve-container {
+    height: 75px;
+    position: relative;
+    z-index: 1;
+    margin: -5px 0;
+  }
+
+  .curve-container svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    filter: drop-shadow(0px 2px 2px rgba(0,0,0,0.05));
+  }
+
+    </style>
+    <div class="chart-box">
+        <div class="header">
+            <h2>📌 图1：逐轮自回归解码循环（生成"模型适配部"）</h2>
+            <span class="tag orange">每轮完整前向 · 形状 [1,1,H] → [1,4,H]</span>
+        </div>
+        <div class="chart-desc">
+            💬 <strong>场景说明</strong>：先看一遍标准推理的完整循环。生成"模型适配部"四个字，模型完整前向了 4 遍——每轮把已有 token 全部重新 Embedding、重新前向，形状从 [1,1,H] 一路涨到 [1,4,H]，却只取最后一个位置的预测，这就是自回归的"串行"代价。
+        </div>
+        <div style="overflow-x:auto;padding:4px 0;">
+<div class="diagram-container" id="diagram">
+  
+  <!-- ================= 第 1 轮 ================= -->
+  <div class="round-row">
+    <div class="node text">
+      <div class="node-title">初始文本 (Prompt)</div>
+      "模"
+    </div>
+    <div class="arrow">→</div>
+    <div class="node token">
+      <div class="node-title">Tokenizer</div>
+      序列: [t0]
+    </div>
+    <div class="arrow">→</div>
+    <div class="node emb">
+      <div class="node-title">Embedding</div>
+      输入: [t0]<br>输出: <b>[1, 1, H]</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node model">
+      <div class="node-title">模型前向 (推理)</div>
+      输入: [1, 1, H]<br>输出: [1, 1, H]
+      <div class="example-text">
+        <div class="pos-pred">输出各位置预测:</div>
+        <span class="highlight-pred">型</span>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node extract">
+      <div class="node-title">取末尾</div>
+      提取最后一个<br>位置向量
+    </div>
+    <div class="arrow">→</div>
+    <div class="node sample">
+      <div class="node-title">采样</div>
+      经 LM Head<br>采样得到 <b>t1 ("型")</b>
+    </div>
+  </div>
+
+  <!-- 折返连线 1 -->
+  <div class="curve-container">
+    <svg viewBox="0 0 1280 75" preserveAspectRatio="none">
+      <path d="M 1170 0 C 1170 75, 100 15, 100 60" 
+            fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="6 4" 
+            marker-end="url(#arrowhead-blue)"/>
+    </svg>
+  </div>
+
+  <!-- ================= 第 2 轮 ================= -->
+  <div class="round-row">
+    <div class="node token">
+      <div class="node-title">Token 序列拼接</div>
+      [t0] + [t1]<br>→ <b>[t0, t1] ("模型")</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node emb">
+      <div class="node-title">重新 Embedding</div>
+      输入: [t0, t1]<br>输出: <b>[1, 2, H]</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node model">
+      <div class="node-title">模型前向 (推理)</div>
+      输入: [1, 2, H]<br>输出: [1, 2, H]
+      <div class="example-text">
+        <div class="pos-pred">输出各位置预测:</div>
+        <span class="normal-pred">型</span>, <span class="highlight-pred">适</span>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node extract">
+      <div class="node-title">取末尾</div>
+      提取最后 1 个<br>位置向量 (对应"适")
+    </div>
+    <div class="arrow">→</div>
+    <div class="node sample">
+      <div class="node-title">采样</div>
+      经 LM Head<br>采样得到 <b>t2 ("适")</b>
+    </div>
+  </div>
+
+  <!-- 折返连线 2 -->
+  <div class="curve-container">
+    <svg viewBox="0 0 1280 75" preserveAspectRatio="none">
+      <path d="M 1170 0 C 1170 75, 100 15, 100 60" 
+            fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="6 4" 
+            marker-end="url(#arrowhead-blue)"/>
+    </svg>
+  </div>
+
+  <!-- ================= 第 3 轮 ================= -->
+  <div class="round-row">
+    <div class="node token">
+      <div class="node-title">Token 序列拼接</div>
+      [t0, t1] + [t2]<br>→ <b>[t0..t2] ("模型适")</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node emb">
+      <div class="node-title">重新 Embedding</div>
+      输入: [t0..t2]<br>输出: <b>[1, 3, H]</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node model">
+      <div class="node-title">模型前向 (推理)</div>
+      输入: [1, 3, H]<br>输出: [1, 3, H]
+      <div class="example-text">
+        <div class="pos-pred">输出各位置预测:</div>
+        <span class="normal-pred">型</span>, <span class="normal-pred">适</span>, <span class="highlight-pred">配</span>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node extract">
+      <div class="node-title">取末尾</div>
+      提取最后 1 个<br>位置向量 (对应"配")
+    </div>
+    <div class="arrow">→</div>
+    <div class="node sample">
+      <div class="node-title">采样</div>
+      经 LM Head<br>采样得到 <b>t3 ("配")</b>
+    </div>
+  </div>
+
+  <!-- 折返连线 3 -->
+  <div class="curve-container">
+    <svg viewBox="0 0 1280 75" preserveAspectRatio="none">
+      <path d="M 1170 0 C 1170 75, 100 15, 100 60" 
+            fill="none" stroke="#3b82f6" stroke-width="2.5" stroke-dasharray="6 4" 
+            marker-end="url(#arrowhead-blue)"/>
+    </svg>
+  </div>
+
+  <!-- ================= 第 4 轮 ================= -->
+  <div class="round-row">
+    <div class="node token">
+      <div class="node-title">Token 序列拼接</div>
+      [t0..t2] + [t3]<br>→ <b>[t0..t3] ("模型适配")</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node emb">
+      <div class="node-title">重新 Embedding</div>
+      输入: [t0..t3]<br>输出: <b>[1, 4, H]</b>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node model">
+      <div class="node-title">模型前向 (推理)</div>
+      输入: [1, 4, H]<br>输出: [1, 4, H]
+      <div class="example-text">
+        <div class="pos-pred">输出各位置预测:</div>
+        <span class="normal-pred">型</span>, <span class="normal-pred">适</span>, <span class="normal-pred">配</span>, <span class="highlight-pred">部</span>
+      </div>
+    </div>
+    <div class="arrow">→</div>
+    <div class="node extract">
+      <div class="node-title">取末尾</div>
+      提取最后 1 个<br>位置向量 (对应"部")
+    </div>
+    <div class="arrow">→</div>
+    <div class="node sample">
+      <div class="node-title">采样</div>
+      经 LM Head<br>采样得到 <b>t4 ("部")</b>
+    </div>
+  </div>
+
+  <!-- 底部结束提示 -->
+  <div style="margin-top: 30px; text-align: center; color: #10b981; font-weight: bold; font-size: 14px; background: #ecfdf5; padding: 10px; border-radius: 8px; border: 1px dashed #10b981;">
+    ✅ 拼接完成！最终输出："模型适配部" (若继续推理，下一轮将预测出 EOS 结束符)
+  </div>
+
+  <!-- 定义 SVG 箭头标记 -->
+  <svg width="0" height="0">
+    <defs>
+      <marker id="arrowhead-blue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+        <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
+      </marker>
+    </defs>
+  </svg>
+
+</div>
+        </div>
+        <p style="margin-top:16px;font-size:15px;">
+            <strong>循环里的浪费</strong>：每轮"模型前向"其实把<strong>所有位置</strong>的 Logits 都并行算了出来，但只有末位被采样、其余丢弃。下一图把单轮前向放大看清这个浪费——它也正是投机解码"并行验证"能省算力的原因。
+        </p>
+    </div>
 
     <!-- ================= 图1：标准串行推理 ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图1：标准串行生成</h2>
+            <h2>📌 图2：标准串行生成</h2>
             <span class="tag red">只取最后一位 · 其余全部丢弃</span>
         </div>
         <div class="chart-desc">
@@ -163,7 +462,7 @@
     <!-- ================= 图2：草稿全接受 ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图2：草稿并行验证（全部接受）</h2>
+            <h2>📌 图3：草稿并行验证（全部接受）</h2>
             <span class="tag highlight">草稿到“啸”全接受 · 验证再产出“哀”</span>
         </div>
         <div class="chart-desc">
@@ -212,7 +511,7 @@
     <!-- ================= 图3：草稿末位拒接（拒绝“叫”，生成“哀”） ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图3：草稿并行验证（拒绝“叫”，回退生成“哀”）</h2>
+            <h2>📌 图4：草稿并行验证（拒绝“叫”，回退生成“哀”）</h2>
             <span class="tag orange">前5个接受 · 最后1个回退重采样</span>
         </div>
         <div class="chart-desc">
@@ -266,7 +565,7 @@
     <!-- ================= 图4：微观原理拆解（无省略） ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图4：微观视角 · Logits 矩阵的诞生</h2>
+            <h2>📌 图5：微观视角 · Logits 矩阵的诞生</h2>
             <span class="tag purple">V=4 · 7行 · 全部展开无省略</span>
         </div>
         <div class="mermaid-wrapper">
@@ -313,7 +612,7 @@
     <!-- ================= 图5：老师-学生训练模型 ================= -->
     <div class="chart-box">
         <div class="header">
-            <h2>📌 图5：草稿模型怎么练出来的 · 老师-学生教学模型</h2>
+            <h2>📌 图6：草稿模型怎么练出来的 · 老师-学生教学模型</h2>
             <span class="tag green">教学闭环只在训练期 · 推理期学生独立猜、老师验</span>
         </div>
         <div class="mermaid-wrapper">
