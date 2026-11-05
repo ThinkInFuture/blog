@@ -631,7 +631,7 @@ flowchart TD
         </div>
 
         <div class="note-supplement">
-            <strong>🗣️ 同一个对话例子：DSpark 如何把「好K」救回「好吧」</strong><br/>
+            <strong>🗣️ 同一个对话例子：DSpark 如何把「好K」救回「好的」</strong><br/>
             先用一个对话例子看图 13 的架构怎么落地。同样 A 说「搞定了」，B 回「好的 / OK」。DSpark 阶段一与 DFlash 一样是并行多头，所以<strong>第一轮也会产出乱码</strong>：
             <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
                 <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段一（并行粗猜）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
@@ -643,9 +643,9 @@ flowchart TD
             <table style="border-collapse:collapse; margin:10px 0; font-size:14px;">
                 <tr style="background:#f1f5f9;"><th style="border:1px solid #cbd5e1; padding:4px 10px;">阶段二（串行校正后）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选1（概率）</th><th style="border:1px solid #cbd5e1; padding:4px 10px;">候选2（概率）</th></tr>
                 <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头1</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">好 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">O — 0.7</td></tr>
-                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">吧 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.7</td></tr>
+                <tr><td style="border:1px solid #cbd5e1; padding:4px 10px;">头2</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">的 — 0.8</td><td style="border:1px solid #cbd5e1; padding:4px 10px;">K — 0.7</td></tr>
             </table>
-            此时头2 最高概率已变成「吧」，拼出来就是通顺的「<span style="color:#16a34a;font-weight:bold;">好吧</span>」。一句话：<strong>DFlash 的并行断点靠「互不可见」产生乱码；DSpark 用「又并行又串行」的 Markov 校正把断点重新串回连贯序列</strong>。
+            此时头2 最高概率已变成「的」，拼出来就是通顺的「<span style="color:#16a34a;font-weight:bold;">好的</span>」。一句话：<strong>DFlash 的并行断点靠「互不可见」产生乱码；DSpark 用「又并行又串行」的 Markov 校正把断点重新串回连贯序列</strong>。
         </div>
 
         <div class="note-supplement" style="margin-top:18px;">
