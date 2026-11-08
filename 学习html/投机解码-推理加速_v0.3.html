@@ -572,13 +572,13 @@ flowchart TD
             <div class="fig-caption">图 13 · DSpark ① 半自回归架构：并行多头产出 base logit + 串行 Markov 头逐位链接（又并行又串行）</div>
                 <pre class="mermaid">
                     flowchart TD
-                        subgraph TM["🎯 目标模型（一次前向产出锚点 token D）"]
+                        subgraph TM["🎯 目标模型（产出锚点 D）"]
                             direction LR
                             P["Prompt A B C"] --> F1["目标模型前向"] --> D["锚点 D"]
                         end
-                        D --> PB
+                        D --> IN
 
-                        subgraph PB["⚡ 并行主干 Parallel Backbone（单前向 · 多头并行产出 γ 个 base logit）"]
+                        subgraph PB["⚡ 并行主干（多头并行产出 base logit）"]
                             direction LR
                             IN["输入：锚点 D"] --> FWD["一次前向计算（复用目标特征 / KV 注入）"]
                             FWD --> U1["U₁"]
@@ -587,7 +587,7 @@ flowchart TD
                             FWD --> U4["U₄"]
                         end
 
-                        subgraph SEQ["🔗 轻量串行序列头 Sequential Block（Markov 头 · 逐位串行链接）"]
+                        subgraph SEQ["🔗 串行 Markov 头（逐位链接）"]
                             direction LR
                             X0["x₀ = D（锚点）"]
                             X0 -->|"B(x₀,·) 低秩转移偏置<br/>W₁[x₀] · W₂"| X1["x₁"]
