@@ -121,12 +121,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">学习日报</span><span class="cc-date">2026-11-08</span></div>
-<div class="cc-title">学习日报 2026-11-08</div>
-<div class="cc-desc">桌面摄像头全天监测：学习 2 段、合计约 2 分钟；平时 10 分钟一次、感应到人 1 分钟一次，PIR 人形侦测 + 本地人形检测双通道记录</div>
-<a class="cc-link" href="学习html/%E5%AD%A6%E4%B9%A0%E6%97%A5%E6%8A%A5%202026-11-08.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
 <div class="cc-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</div>
 <div class="cc-desc">DP 堆 QPS、TP 切权重、PCP 切输入序列（仅 prefill 阶段）——三组开关的卡位关系用网格图逐例展开：例1 每卡一份完整权重、例2 两个独立副本、例3 2 行权重分片 × 4 列输入段 = 8 卡；另有总账表与 DP1~3 卡位总览</div>
@@ -150,13 +144,19 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">SP MoE 按 token 行切、DSA-CP 按 head 切——同开时每层门口 AG 拼全量再 RS 切回；PR #18671 让 220 行分片直通 attention，TTFT −9~11%、吞吐 +10~12%。TP 权重切割、16 卡协同、冲突修复，5 图配 5 组源码证据</div>
 <a class="cc-link" href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html">阅读 &rarr;</a>
 </div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-21</span></div>
+<div class="cc-title">GLM 系列启动 · vllm-ascend 视角解读</div>
+<div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
+<a class="cc-link" href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html">阅读 &rarr;</a>
+</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">55</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">54</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -164,12 +164,11 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">55 篇 · 10 个专题</div>
+<div class="sec-badge">54 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">55</span></button>
-<button class="chip" data-topic="daily">学习日报<span class="count">1</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">54</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">3</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
@@ -181,7 +180,6 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
 <ul class="list" id="learningList"><li class="li" data-topic="dsinfer" data-ts="20261108"><a href="学习html/扩散模型混进投机解码 · FlashMap 草稿昇腾复现 4.70x.html"><span class="li-date">2026-11-08</span><span class="li-main"><span class="li-title">扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">用 DiT 扩散模型一步跳出 16 Token 草稿：多层隐状态+Anchor+KV Cache 三路条件、单步 Flow Map、复用 Target lm_head；Qwen3-8B + FlashMap 昇腾 10k 实测平均加速 4.696x、平均接受 8.55 Token——对比 DSpark 的先并行后修正，FlashMap 靠架构原生自洽</span></span></a></li>
-<li class="li" data-topic="daily" data-ts="20261108"><a href="学习html/%E5%AD%A6%E4%B9%A0%E6%97%A5%E6%8A%A5%202026-11-08.html"><span class="li-date">2026-11-08</span><span class="li-main"><span class="li-title">学习日报 2026-11-08<span class="li-tag">学习日报</span></span><span class="li-desc">今日检测到学习 2 段、合计约 2 分钟；全天时间线与时段明细</span></span></a></li>
 <li class="li" data-topic="ops" data-ts="20261031"><a href="学习html/模型架构交互分析 · GLM5.3 · DS4.1-Flash · DS4-Flash.html"><span class="li-date">2026-10-31</span><span class="li-main"><span class="li-title">模型架构交互分析 · GLM-5.3 / DeepSeek-V4.1 / DeepSeek-V4-Flash 三模型算子流·KV cache·显存·PD仿真<span class="li-tag">算子与编程</span></span><span class="li-desc">一个下拉切换三模型的交互工具：算子 tensor 数据流框图、KV cache 分组明细、每 rank 显存计算器、纯 P / 纯 D 吞吐仿真四页签；DS4-Flash 数据来自官方 config.json 与 46 个 safetensors 分片 header 实测聚合，浅色主题重制</span></span></a></li>
 
 <li class="li" data-topic="vllm" data-ts="20261031"><a href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html"><span class="li-date">2026-10-31</span><span class="li-main"><span class="li-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡<span class="li-tag">vLLM 源码</span></span><span class="li-desc">DP 堆 QPS、TP 切权重、PCP 切输入序列（仅 prefill 阶段）——三组开关的卡位关系用网格图逐例展开：例1 每卡一份完整权重、例2 两个独立副本、例3 2 行权重分片 × 4 列输入段 = 8 卡；另有总账表与 DP1~3 卡位总览</span></span></a></li>
