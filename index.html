@@ -127,29 +127,28 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <a class="cc-link" href="学习html/%E5%AD%A6%E4%B9%A0%E6%97%A5%E6%8A%A5%202026-11-08.html">阅读 &rarr;</a>
 </div>
 <div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">学习日报</span><span class="cc-date">2026-11-08</span></div>
-<div class="cc-title">学习日报 2026-11-08</div>
-<div class="cc-desc">桌面摄像头全天监测：学习 2 段、合计约 2 分钟；平时 10 分钟一次、感应到人 1 分钟一次，PIR 人形侦测 + 本地人形检测双通道记录</div>
-<a class="cc-link" href="学习html/%E5%AD%A6%E4%B9%A0%E6%97%A5%E6%8A%A5%202026-11-08.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-21</span></div>
-<div class="cc-title">GLM 系列启动 · vllm-ascend 视角解读</div>
-<div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
-<a class="cc-link" href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
 <div class="cc-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</div>
 <div class="cc-desc">DP 堆 QPS、TP 切权重、PCP 切输入序列（仅 prefill 阶段）——三组开关的卡位关系用网格图逐例展开：例1 每卡一份完整权重、例2 两个独立副本、例3 2 行权重分片 × 4 列输入段 = 8 卡；另有总账表与 DP1~3 卡位总览</div>
 <a class="cc-link" href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html">阅读 &rarr;</a>
 </div>
-
 <div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">模型演进</span><span class="cc-date">2026-10-29</span></div>
 <div class="cc-title">MemT-1.0-Nano · 双分支架构与记忆读写通路</div>
 <div class="cc-desc">记忆矩阵怎么读（隐状态投影 q 线性读出+输出门旁路）、上下文怎么压缩进存储记忆（GDN-2 四门逐 token 擦写）——两张通路专题图逐项解答；双分支 L_base+L_mem 离策略蒸馏，128K 下 66 倍存储压缩与 1.86 倍加速</div>
 <a class="cc-link" href="学习html/MemT-1.0-Nano · 双分支架构与记忆读写通路.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
+<div class="cc-title">DSA-CP 与 PCP：两代上下文并行方案对比</div>
+<div class="cc-desc">同一件事的两代做法：DSA-CP 在 attention 后端私搭切分（Legacy），PCP 在引擎 batch 分区统一做（现行，仅 v2）——计算内核同一套，差的是切分位置、缓存形态与邻居兼容；218 行壳对 2291 行私搭，七维对照+边界清单</div>
+<a class="cc-link" href="学习html/DSA-CP 与 PCP：两代上下文并行方案对比.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
+<div class="cc-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突</div>
+<div class="cc-desc">SP MoE 按 token 行切、DSA-CP 按 head 切——同开时每层门口 AG 拼全量再 RS 切回；PR #18671 让 220 行分片直通 attention，TTFT −9~11%、吞吐 +10~12%。TP 权重切割、16 卡协同、冲突修复，5 图配 5 组源码证据</div>
+<a class="cc-link" href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html">阅读 &rarr;</a>
 </div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
