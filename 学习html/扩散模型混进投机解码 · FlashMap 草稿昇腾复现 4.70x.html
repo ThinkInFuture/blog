@@ -268,7 +268,23 @@ blockquote { border-left: 3px solid #cbd5e1; padding: 4px 14px; margin: 12px 0; 
 <h3>1. 纯自回归（Autoregressive）</h3>
 <p>最早的投机解码直接拿一个小语言模型逐字生成草稿。优点是结构简单，但致命缺点是<strong>草稿生成依然是串行的</strong>。如果一次要猜 5 个 Token，小模型就得跑 5 次前向。一旦遇到长序列，小模型自己的耗时就成了新瓶颈。</p>
 
-<div class="fig-placeholder">图 2 · 纯自回归草稿架构：草稿头依赖上一步隐层特征逐位串行循环（图待补）</div>
+<div class="mermaid-wrap">
+<pre class="mermaid">
+                flowchart TD
+                    A["用户输入：请解释注意力机制"] --> B["模型前向计算"]
+                    B --> C["生成第1个Token：注意力"]
+                    C --> D["拼接上下文：请解释注意力机制 注意力"]
+                    D --> B
+                    B --> E["生成第2个Token：机制"]
+                    E --> F["拼接上下文：请解释注意力机制 注意力 机制"]
+                    F --> B
+                    B --> G["生成第3个Token：是"]
+                    G --> H["继续循环生成下一个Token……"]
+                    H --> B
+                    note[""真实生成：每新增一个Token，都要重新执行一次前向计算<br/>问题：长文本轮次多、延迟高、GPU并行潜力没有充分释放""]
+            </pre>
+<div class="fig-caption">图 2 · 纯自回归草稿架构：逐 Token 串行生成，每新增一个 Token 都要完整重跑一次前向</div>
+</div>
 
 <h3>2. 并行（Parallel）</h3>
 <p>为了打破串行限制，研究人员提出了并行架构。其核心思想是"<strong>多头齐发</strong>"。主模型（Target）通过跨层融合提取多层隐状态并注入 KV，轻量的草稿模型通过一次前向，由 K 个输出头同时预测出未来 K 个位置的 Token。速度极快，但因为各个位置的预测互相独立，丢失了 Token 之间的因果依赖关系，导致接受率大打折扣。</p>
