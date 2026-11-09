@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<script src="https://cdn.jsdmirror.com/npm/mermaid@10.9.8/dist/mermaid.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #f4f6f9; font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; color: #1e293b; display: flex; flex-direction: column; align-items: center; padding: 40px 16px 60px; }
+.wrap { max-width: 920px; width: 100%; }
+h1 { font-size: 26px; line-height: 1.35; margin-bottom: 10px; }
+.meta { font-size: 13px; color: #6b7280; margin-bottom: 28px; }
+h2 { font-size: 20px; margin: 34px 0 14px; padding-left: 10px; border-left: 4px solid #2563eb; }
+h3 { font-size: 16px; margin: 24px 0 10px; color: #1d4ed8; }
+p { font-size: 15px; line-height: 1.8; margin: 10px 0; }
+ul { margin: 8px 0 12px 22px; }
+li { font-size: 15px; line-height: 1.75; margin: 4px 0; }
+strong { color: #111; }
+.fig-block { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px 14px; margin: 16px 0; }
+.fig-caption { text-align: center; font-size: 13px; color: #64748b; margin-top: 10px; }
+.mermaid-wrap svg { display: block; margin: 0 auto; }
+.mermaid-wrap { background: #fafbfc; border: 1px solid #edf2f7; border-radius: 12px; padding: 16px 8px; margin: 16px 0; overflow-x: auto; }
+.fig-placeholder { border: 2px dashed #cbd5e1; border-radius: 12px; padding: 46px 20px; text-align: center; color: #94a3b8; font-size: 14px; margin: 16px 0; background: #fbfdfe; }
+pre.code { background: #0f172a; color: #e2e8f0; border-radius: 10px; padding: 16px 18px; overflow-x: auto; font-family: Consolas, monospace; font-size: 12.5px; line-height: 1.6; margin: 14px 0; }
+.note { background: #f0f9ff; border-left: 3px solid #38bdf8; padding: 10px 14px; border-radius: 6px; font-size: 13.5px; color: #475569; margin: 12px 0; }
+blockquote { border-left: 3px solid #cbd5e1; padding: 4px 14px; margin: 12px 0; color: #64748b; font-size: 14px; }
+
+  .figA .container {
+    background: #fff; border-radius: 12px; padding: 30px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.04); max-width: 1100px; width: 100%;
+  }
+
+
+  .figA .box { fill: #fff; stroke: #cbd5e1; stroke-width: 1.5; rx: 6; }
+
+  .figA .box-blue { fill: #eff6ff; stroke: #93c5fd; }
+
+  .figA .box-green { fill: #ecfdf5; stroke: #6ee7b7; }
+
+  .figA .box-red { fill: #fef2f2; stroke: #fca5a5; }
+
+  .figA .box-purple { fill: #f5f3ff; stroke: #c4b5fd; }
+
+  .figA .box-gray { fill: #f8fafc; stroke: #e2e8f0; stroke-dasharray: 4 4; }
+
+
+  .figA .text-main { font-size: 14px; fill: #1e293b; text-anchor: middle; dominant-baseline: middle; font-weight: 500;}
+
+  .figA .text-sm { font-size: 12px; fill: #64748b; text-anchor: middle; dominant-baseline: middle; }
+
+  .figA .text-left { text-anchor: start; }
+
+
+  .figA .arrow { stroke: #94a3b8; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+
+  .figA .arrow-red { stroke: #ef4444; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-red); }
+
+  .figA .arrow-purple { stroke: #8b5cf6; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-purple); }
+
+  .figA .draft-badge { fill: #3b82f6; }
+
+  .figA .draft-badge-text { font-size: 12px; fill: #fff; font-weight: bold; text-anchor: middle; dominant-baseline: middle; }
+
+
+  .figA .legend { display: flex; gap: 20px; margin-top: 20px; font-size: 13px; color: #64748b; justify-content: center;}
+
+  .figA .legend span { display: flex; align-items: center; gap: 6px; }
+
+  .figA .dot { width: 12px; height: 12px; border-radius: 3px; }
+
+  .figB .container {
+    background: #fff; border-radius: 12px; padding: 30px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.04); max-width: 1150px; width: 100%;
+  }
+
+
+  .figB .box { fill: #fff; stroke: #cbd5e1; stroke-width: 1.5; rx: 6; }
+
+  .figB .box-blue { fill: #f0f7ff; stroke: #93c5fd; }
+
+  .figB .box-orange { fill: #fffaf0; stroke: #fdba74; }
+
+  .figB .box-gray { fill: #f8fafc; stroke: #e2e8f0; stroke-dasharray: 4 4; }
+
+  .figB .box-inner { fill: #ffffff; stroke: #fdba74; stroke-width: 1.5; rx: 4; }
+
+  .figB .box-green { fill: #f0fdf4; stroke: #86efac; }
+
+  .figB .box-purple { fill: #f5f3ff; stroke: #c4b5fd; }
+
+
+  .figB .mod-bg { fill-opacity: 0.3; rx: 8; }
+
+  .figB .mod-bg-blue { fill: #e0f2fe; stroke: #bae6fd; stroke-width: 2; stroke-dasharray: 6 4;}
+
+  .figB .mod-bg-orange { fill: #ffedd5; stroke: #f97316; stroke-width: 2; }
+
+
+  .figB .text-main { font-size: 13px; fill: #1e293b; text-anchor: middle; dominant-baseline: middle; font-weight: 500; }
+
+  .figB .text-sm { font-size: 11px; fill: #64748b; text-anchor: middle; dominant-baseline: middle; }
+
+  .figB .text-title { font-size: 15px; fill: #0f172a; text-anchor: middle; font-weight: 700; }
+
+  .figB .text-math { font-family: "Times New Roman", Times, serif; font-style: italic; font-size: 14px; fill: #1e293b;}
+
+
+  .figB .arrow { stroke: #94a3b8; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead); }
+
+  .figB .arrow-blue { stroke: #3b82f6; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-blue); }
+
+  .figB .arrow-orange { stroke: #f97316; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-orange); }
+
+  .figB .arrow-purple { stroke: #8b5cf6; stroke-width: 1.5; fill: none; marker-end: url(#arrowhead-purple); }
+
+
+  .figB .text-left { text-anchor: start; }
+
+
+  .figB .legend { display: flex; gap: 18px; margin-top: 20px; font-size: 13px; color: #64748b; justify-content: center; flex-wrap: wrap;}
+
+  .figB .legend span { display: flex; align-items: center; gap: 6px; }
+
+  .figB .dot { width: 12px; height: 12px; border-radius: 3px; }
+.foot { max-width: 920px; margin: 44px auto 0; padding: 16px 0 0; border-top: 1px solid #e5e7eb; font-size: 13px; color: #9ca3af; text-align: center; }
+.foot a { color: #9ca3af; text-decoration: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x</h1>
+<div class="meta">2026-11-08 · 投机解码 × 扩散模型 · FlashMap-Qwen3-8B 昇腾实测</div>
+
+<h2>一、投机解码：让大模型跑得更快</h2>
+<p>在如今的大模型时代，推理速度就是生命线。生成式模型自回归的特性决定了它必须一个词一个词地往外蹦，这极大地限制了吞吐量。为了解决这个问题，<strong>投机解码（Speculative Decoding）</strong>应运而生，并迅速成为当前工业界（如 vLLM、SGLang）最主流的加速方案之一。</p>
+<p>它的核心逻辑非常简单：<strong>小模型猜，大模型校验</strong>。用一个极轻量的草稿模型一次性猜出好几个 Token，然后再丢给庞大的目标模型进行一次前向并行验证。如果猜对了，大模型就直接"白嫖"；如果猜错了，就从第一个错误的 Token 处截断重新采样。因为经过了严格的拒绝采样设计，所以这种加速在理论上是<strong>完全无损</strong>的。</p>
+
+<div class="fig-block figA">
+<svg style="width:100%;height:auto;display:block" viewBox="0 0 1080 520" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="figA-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/>
+      </marker>
+      <marker id="figA-arrowhead-red" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#ef4444"/>
+      </marker>
+      <marker id="figA-arrowhead-purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+        <path d="M0,0 L8,4 L0,8 Z" fill="#8b5cf6"/>
+      </marker>
+    </defs>
+
+    <!-- ================= 1. 输入上下文 & 草稿 (左侧) ================= -->
+    <rect x="20" y="20" width="140" height="480" rx="8" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+    <text x="90" y="45" class="text-main" font-weight="600">输入序列</text>
+    <text x="90" y="65" class="text-sm">(上文 + 草稿)</text>
+
+    <!-- Context -->
+    <rect x="30" y="90" width="120" height="50" class="box box-gray"/>
+    <text x="90" y="110" class="text-main" fill="#475569">上文 Context</text>
+    <text x="90" y="128" class="text-sm" fill="#475569">"先帝创业未半而"</text>
+    <line x1="90" y1="140" x2="90" y2="165" class="arrow"/>
+
+    <!-- 草稿推理高亮圈 + 徽标 -->
+    <rect x="28" y="150" width="126" height="282" rx="10" class="draft-ring"/>
+    <rect x="42" y="422" width="96" height="20" rx="6" class="draft-badge"/>
+    <text x="90" y="432" class="draft-badge-text">① 草稿推理</text>
+
+    <!-- Draft Tokens -->
+    <rect x="40" y="165" width="100" height="36" class="box box-blue"/>
+    <text x="90" y="183" class="text-main">草稿0: 中</text>
+    <line x1="90" y1="201" x2="90" y2="220" class="arrow"/>
+
+    <rect x="40" y="220" width="100" height="36" class="box box-blue"/>
+    <text x="90" y="238" class="text-main">草稿1: 道</text>
+    <line x1="90" y1="256" x2="90" y2="275" class="arrow"/>
+
+    <rect x="40" y="275" width="100" height="36" class="box box-blue"/>
+    <text x="90" y="293" class="text-main">草稿2: 崩</text>
+    <line x1="90" y1="311" x2="90" y2="330" class="arrow"/>
+
+    <rect x="40" y="330" width="100" height="36" class="box box-blue"/>
+    <text x="90" y="348" class="text-main">草稿3: 溃</text>
+
+    <text x="90" y="390" class="text-sm" fill="#3b82f6" font-weight="500">↑ 1 次前向整块生成</text>
+    <text x="90" y="406" class="text-sm" fill="#3b82f6">(FlashMap)</text>
+
+    <!-- ================= 2. Target 并行验证 (中间) ================= -->
+    <rect x="240" y="70" width="300" height="420" rx="8" fill="none" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="6 4"/>
+    <text x="390" y="95" class="text-main" font-weight="600">Target: DeepSeek-V4.1-Flash</text>
+    <text x="390" y="115" class="text-sm">单次前向并行验证所有位置</text>
+
+    <!-- 草稿 → 验证：4 条水平直线 -->
+    <line x1="160" y1="183" x2="270" y2="183" class="arrow"/>
+    <line x1="160" y1="238" x2="270" y2="238" class="arrow"/>
+    <line x1="160" y1="293" x2="270" y2="293" class="arrow"/>
+    <line x1="160" y1="348" x2="270" y2="348" class="arrow-red"/>
+
+    <!-- 验证框 0 -->
+    <rect x="270" y="161" width="220" height="44" class="box box-green"/>
+    <text x="380" y="175" class="text-main" font-size="13">位置0 概率分布 验证「中」</text>
+    <text x="380" y="193" class="text-sm" fill="#10b981" font-weight="bold">✓ 接受</text>
+
+    <!-- 验证框 1 -->
+    <rect x="270" y="216" width="220" height="44" class="box box-green"/>
+    <text x="380" y="230" class="text-main" font-size="13">位置1 概率分布 验证「道」</text>
+    <text x="380" y="248" class="text-sm" fill="#10b981" font-weight="bold">✓ 接受</text>
+
+    <!-- 验证框 2 -->
+    <rect x="270" y="271" width="220" height="44" class="box box-green"/>
+    <text x="380" y="285" class="text-main" font-size="13">位置2 概率分布 验证「崩」</text>
+    <text x="380" y="303" class="text-sm" fill="#10b981" font-weight="bold">✓ 接受</text>
+
+    <!-- 验证框 3 (拒绝) -->
+    <rect x="270" y="326" width="220" height="44" class="box box-red"/>
+    <text x="380" y="340" class="text-main" font-size="13">位置3 概率分布 验证「溃」</text>
+    <text x="380" y="358" class="text-sm" fill="#ef4444" font-weight="bold">✗ 拒绝</text>
+
+    <!-- ================= 3. 接受 & 回退重采样 (右侧) ================= -->
+    <!-- 接受：3 条水平直线汇入保留框 -->
+    <line x1="490" y1="183" x2="560" y2="183" class="arrow"/>
+    <line x1="490" y1="238" x2="560" y2="238" class="arrow"/>
+    <line x1="490" y1="293" x2="560" y2="293" class="arrow"/>
+
+    <!-- 接受汇聚框 -->
+    <rect x="560" y="165" width="160" height="150" rx="8" fill="#ecfdf5" stroke="#6ee7b7" stroke-width="1.5"/>
+    <text x="640" y="205" class="text-main" font-weight="600" fill="#047857">保留前 3 个 Token</text>
+    <text x="640" y="235" class="text-main" fill="#047857">"中道崩"</text>
+    <text x="640" y="265" class="text-sm" fill="#047857">（概率全部对齐）</text>
+
+    <!-- 拒绝：直线进入回退框 -->
+    <line x1="490" y1="348" x2="560" y2="348" class="arrow-red"/>
+    <rect x="560" y="328" width="160" height="40" class="box box-red"/>
+    <text x="640" y="343" class="text-main" font-size="13" fill="#b91c1c">❌ 回退到位置 3</text>
+    <text x="640" y="360" class="text-sm" fill="#b91c1c">丢弃草稿「溃」</text>
+
+    <!-- 重采样：回退框底部 → 重采样框顶部 -->
+    <line x1="640" y1="368" x2="640" y2="395" class="arrow-purple"/>
+    <rect x="560" y="395" width="160" height="50" class="box box-purple"/>
+    <text x="640" y="415" class="text-main" font-size="13" fill="#6d28d9">Target 重新采样</text>
+    <text x="640" y="433" class="text-sm" fill="#6d28d9">生成「殂」</text>
+
+    <!-- 最终输出：两条正交折线 -->
+    <path d="M 720 240 L 750 240 L 750 275 L 780 275" class="arrow"/>
+    <path d="M 720 420 L 750 420 L 750 325 L 780 325" class="arrow-purple"/>
+
+    <rect x="780" y="240" width="230" height="120" rx="8" fill="#fff" stroke="#10b981" stroke-width="2"/>
+    <text x="895" y="270" class="text-main" font-weight="600" fill="#047857">最终输出序列</text>
+    <text x="895" y="300" class="text-main" font-size="16" font-weight="bold">"先帝创业未半而中道崩殂"</text>
+    <text x="895" y="330" class="text-sm" fill="#64748b">(接受 3 个 + 修正 1 个)</text>
+
+    <!-- 右侧说明文字 -->
+    <text x="780" y="400" class="text-main text-left" font-weight="600">核心机制：</text>
+    <text x="780" y="422" class="text-sm text-left">1. Target 单次前向，每个位置得到概率分布。</text>
+    <text x="780" y="442" class="text-sm text-left">2. 「溃」被拒，其后草稿全部作废。</text>
+    <text x="780" y="462" class="text-sm text-left">3. 在拒绝点按 Target 分布重采样，得「殂」。</text>
+    <text x="780" y="482" class="text-sm text-left">4. 输出无损：接受 3 个 + 修正 1 个。</text>
+
+  </svg>
+<div class="fig-caption">图 1 · 投机解码微观流程：草稿「中道崩溃」→ Target 并行验证 → 接受「中道崩」、拒绝「溃」重采样「殂」</div>
+</div>
+
+<h2>二、解码架构的演进：从纯自回归到扩散模型</h2>
+<p>既然核心是"草稿模型猜得准不准、快不快"，业界对草稿模型的架构探索就从未停止。为了让大模型能一次性校验更多的 Token，草稿模型的架构经历了四个重要阶段：</p>
+
+<h3>1. 纯自回归（Autoregressive）</h3>
+<p>最早的投机解码直接拿一个小语言模型逐字生成草稿。优点是结构简单，但致命缺点是<strong>草稿生成依然是串行的</strong>。如果一次要猜 5 个 Token，小模型就得跑 5 次前向。一旦遇到长序列，小模型自己的耗时就成了新瓶颈。</p>
+
+<div class="fig-placeholder">图 2 · 纯自回归草稿架构：草稿头依赖上一步隐层特征逐位串行循环（图待补）</div>
+
+<h3>2. 并行（Parallel）</h3>
+<p>为了打破串行限制，研究人员提出了并行架构。其核心思想是"<strong>多头齐发</strong>"。主模型（Target）通过跨层融合提取多层隐状态并注入 KV，轻量的草稿模型通过一次前向，由 K 个输出头同时预测出未来 K 个位置的 Token。速度极快，但因为各个位置的预测互相独立，丢失了 Token 之间的因果依赖关系，导致接受率大打折扣。</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+                flowchart TD
+                    subgraph MAIN["目标模型骨干（frozen，仅前向取特征）"]
+                        direction TB
+                        E["Embedding"] --> L2["层 2"]
+                        L2 --> LMID["… 中间若干层 …"]
+                        LMID --> LN2["层 N-2（倒数第二层）"]
+                        LN2 --> LN["层 N（顶层 / LM Head）<br/>→ logits / Token（主干自身输出）"]
+                    end
+                    subgraph FUSE["跨层融合 + KV 注入"]
+                        direction TB
+                        H["抽取并融合多层隐层特征 h"]
+                        KV["F 拆为 K / V 注入草稿模型"]
+                        H --> KV
+                    end
+                    subgraph PREDICT["并行草稿预测器（轻量 Transformer · K 个输出头）"]
+                        direction TB
+                        H1["输出头 1 → logits 1"]
+                        H2["输出头 2 → logits 2"]
+                        HK["输出头 K → logits K"]
+                    end
+                    L2 -->|"隐层特征 h"| H
+                    LMID -->|"隐层特征 h"| H
+                    LN2 -->|"隐层特征 h"| H
+                    KV --> H1
+                    KV --> H2
+                    KV --> HK
+
+                    classDef tFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
+                    classDef fFill fill:#fef9e7,stroke:#d97706,stroke-width:1px;
+                    classDef headFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
+                    class MAIN tFill;
+                    class FUSE fFill;
+                    class PREDICT headFill;
+            </pre>
+<div class="fig-caption">图 3 · 并行草稿架构：目标模型多层隐状态跨层融合 + KV 注入，草稿模型 K 个输出头并行预测（以 DFlash 架构为例）</div>
+</div>
+
+<h3>3. 半自回归（Semi-Autoregressive）</h3>
+<p>为了在"并行的速度"和"自回归的质量"之间找到平衡，当前的明星架构 DSpark 采用了"<strong>并行主干 + 串行轻量头</strong>"。主干网络通过一次前向并行算出 K 个位置的 base logits；然后通过一个极轻量的串行头（Markov 头）进行微调修正，把 Token 间的依赖关系补回来。</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+                    flowchart TD
+                        subgraph TM["🎯 目标模型（产出锚点 D）"]
+                            direction LR
+                            P["Prompt A B C"] --> F1["目标模型前向"] --> D["锚点 D"]
+                        end
+                        D --> IN
+
+                        subgraph PB["⚡ 并行主干（多头并行产出 base logit）"]
+                            direction LR
+                            IN["输入：锚点 D"] --> FWD["一次前向计算（复用目标特征 / KV 注入）"]
+                            FWD --> U1["U₁"]
+                            FWD --> U2["U₂"]
+                            FWD --> U3["U₃"]
+                            FWD --> U4["U₄"]
+                        end
+
+                        subgraph SEQ["🔗 串行 Markov 头（逐位链接）"]
+                            direction LR
+                            X0["x₀ = D（锚点）"]
+                            X0 -->|"B(x₀,·) 低秩转移偏置<br/>W₁[x₀] · W₂"| X1["x₁"]
+                            X1 -->|"B(x₁,·)"| X2["x₂"]
+                            X2 -->|"B(x₂,·)"| X3["x₃"]
+                            X3 -->|"B(x₃,·)"| X4["x₄"]
+                        end
+
+                        U1 -->|"+B 校正"| X1
+                        U2 -->|"+B 校正"| X2
+                        U3 -->|"+B 校正"| X3
+                        U4 -->|"+B 校正"| X4
+
+                        X1 --> C1["c₁ 置信度"]
+                        X2 --> C2["c₂"]
+                        X3 --> C3["c₃"]
+                        X4 --> C4["c₄"]
+
+                        C1 --> SCH
+                        C2 --> SCH
+                        C3 --> SCH
+                        C4 --> SCH
+
+                        SCH["🧮 硬件感知前缀调度器<br/>累计存活概率 ∏cᵢ 全局贪心选取"] --> KEEP["✅ 保留高置信前缀 E F G"]
+                        SCH --> DROP["🗑 丢弃低置信 H"]
+                        KEEP --> VER["目标模型并行校验（一次前向）"]
+                        DROP --> VER
+                        VER --> OUT["接受 E,F · 拒绝 G · 纠正生成 G*"]
+
+                        classDef tFill fill:#e1effe,stroke:#2563eb,stroke-width:1px;
+                        classDef pFill fill:#fff3e0,stroke:#f59e0b,stroke-width:1px;
+                        classDef sFill fill:#e6f7e6,stroke:#16a34a,stroke-width:1px;
+                        classDef cFill fill:#fef9e7,stroke:#d97706,stroke-width:1px;
+                        classDef vFill fill:#ede9fe,stroke:#7c3aed,stroke-width:1px;
+                        class TM tFill;
+                        class PB pFill;
+                        class SEQ sFill;
+                        class C1,C2,C3,C4 cFill;
+                        class SCH,KEEP,DROP,VER,OUT vFill;
+                </pre>
+<div class="fig-caption">图 4 · DSpark 半自回归架构：并行主干一次产出 base logits，串行 Markov 头逐位链接校正</div>
+</div>
+
+<h3>4. 扩散模型（Diffusion / Flow Map）</h3>
+<p>最新的 FlashMap 给出了一个极其大胆的方案：<strong>用扩散模型（DiT 架构）直接一步到位跳出整块草稿</strong>。</p>
+<p>FlashMap 抛弃了离散 Token 预测，将整块草稿（16 个 Token）当作连续特征矩阵。从高斯噪声出发，通过一次 Flow Map 跳跃（单步去噪），利用全局注意力机制一次性捕获块内所有 Token 的依赖关系。</p>
+
+<div class="fig-block figB">
+<svg style="width:100%;height:auto;display:block" viewBox="0 0 1150 760" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <marker id="figB-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#94a3b8"/></marker>
+      <marker id="figB-arrowhead-blue" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#3b82f6"/></marker>
+      <marker id="arrowhead-orange" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#f97316"/></marker>
+      <marker id="figB-arrowhead-purple" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#8b5cf6"/></marker>
+    </defs>
+
+    <!-- ============ 高斯噪声：模型外部采样（在 FlashMap 大框之外） ============ -->
+    <rect x="200" y="15" width="190" height="46" class="box box-gray"/>
+    <text x="295" y="31" class="text-main">🎲 高斯噪声 Z (4096)</text>
+    <text x="295" y="49" class="text-sm">RMSNorm + noise_gate · 模型外采样</text>
+
+    <!-- ============ 1. FlashMap 扩散模型大框（左） ============ -->
+    <rect x="90" y="70" width="640" height="500" class="mod-bg mod-bg-orange"/>
+    <text x="105" y="95" class="text-title text-left" fill="#c2410c">⚡ FlashMap Drafter</text>
+    <text x="105" y="112" class="text-sm text-left" fill="#c2410c">扩散模型 · 单步映射主干</text>
+
+    <!-- Jump Time 条件 -->
+    <rect x="120" y="120" width="150" height="36" class="box box-green"/>
+    <text x="195" y="135" class="text-main">Jump Time (s->t)</text>
+    <text x="195" y="150" class="text-sm">TimeEmb dim 256</text>
+
+    <!-- Target 特征 → Linear 投影 -->
+    <rect x="310" y="190" width="150" height="30" class="box box-orange"/>
+    <text x="385" y="205" class="text-main">Linear 20480 -> 2048</text>
+    <rect x="490" y="190" width="180" height="30" class="box"/>
+    <text x="580" y="205" class="text-main text-math">[5 × 4096] = 20480</text>
+    <line x1="490" y1="205" x2="460" y2="205" class="arrow"/>
+
+    <rect x="310" y="235" width="150" height="30" class="box box-orange"/>
+    <text x="385" y="250" class="text-main">Linear 4096 -> 2048</text>
+    <rect x="490" y="235" width="180" height="30" class="box"/>
+    <text x="580" y="250" class="text-main text-math">Emb(anchor) [4096]</text>
+    <line x1="490" y1="250" x2="460" y2="250" class="arrow"/>
+
+    <!-- 核心 6 层主干 -->
+    <rect x="110" y="310" width="600" height="240" class="box box-orange" fill="#fffdfa"/>
+    <text x="140" y="330" class="text-main text-left" font-weight="600">连续 6 层 FlashMapLayer</text>
+
+    <!-- 单层展开 -->
+    <rect x="130" y="345" width="560" height="185" class="box" fill="#fff" stroke="#fdba74"/>
+
+    <!-- AdaLN -->
+    <rect x="145" y="365" width="110" height="75" class="box box-green"/>
+    <text x="200" y="385" class="text-main" font-weight="600">AdaLN 调制</text>
+    <text x="200" y="405" class="text-sm">由 Jump Time</text>
+    <text x="200" y="420" class="text-sm">控制缩放与偏移</text>
+
+    <!-- Self Attention -->
+    <rect x="270" y="355" width="150" height="40" class="box-inner"/>
+    <text x="345" y="370" class="text-main">Self-Attention</text>
+    <text x="345" y="386" class="text-sm">(16个 slot 互相看)</text>
+
+    <!-- Cross Attention -->
+    <rect x="270" y="405" width="150" height="50" class="box-inner box-blue"/>
+    <text x="345" y="423" class="text-main" fill="#1e3a8a">Cross-Attention</text>
+    <text x="345" y="441" class="text-sm" fill="#1e3a8a">读取 KV Cache</text>
+
+    <!-- FFN -->
+    <rect x="470" y="380" width="150" height="40" class="box-inner"/>
+    <text x="545" y="395" class="text-main">MLP (GELU)</text>
+    <text x="545" y="411" class="text-sm">FFN 8192</text>
+
+    <!-- 层内数据流 -->
+    <path d="M 360 220 L 360 325 L 335 325 L 335 355" class="arrow-orange"/>
+    <path d="M 385 265 L 385 302 L 545 302 L 545 380" class="arrow-orange"/>
+    <path d="M 255 380 L 270 380" class="arrow"/>
+    <path d="M 255 425 L 262 425 L 262 435 L 270 435" class="arrow"/>
+    <path d="M 345 395 L 345 405" class="arrow"/>
+    <path d="M 420 430 L 445 430 L 445 400 L 470 400" class="arrow"/>
+
+    <!-- ============ 2. Target 模型（DeepSeek）侧（右） ============ -->
+    <rect x="780" y="20" width="350" height="340" class="mod-bg mod-bg-blue"/>
+    <text x="955" y="45" class="text-title">🎯 Target: DeepSeek-V4.1-Flash</text>
+
+    <rect x="830" y="70" width="150" height="32" class="box"/>
+    <text x="905" y="86" class="text-main">Prompt 输入</text>
+    <line x1="905" y1="102" x2="905" y2="120" class="arrow"/>
+
+    <rect x="820" y="120" width="170" height="36" class="box box-blue"/>
+    <text x="905" y="138" class="text-main">DeepSeek 前向计算</text>
+
+    <!-- 三个输出：总线式扇出（右侧走廊 x1075，不穿任何框） -->
+    <path d="M 990 138 L 1075 138 L 1075 296" class="arrow-blue" fill="none" marker-end="none"/>
+    <line x1="1075" y1="205" x2="1050" y2="205" class="arrow-blue"/>
+    <rect x="790" y="190" width="260" height="30" class="box box-blue"/>
+    <text x="920" y="205" class="text-main">取 [1, 9, 17, 25, 33] 层隐状态 (20480)</text>
+
+    <line x1="1075" y1="250" x2="1050" y2="250" class="arrow-blue"/>
+    <rect x="790" y="235" width="260" height="30" class="box box-blue"/>
+    <text x="920" y="250" class="text-main">Anchor Token Embedding (4096)</text>
+
+    <line x1="1075" y1="296" x2="1050" y2="296" class="arrow-blue"/>
+    <rect x="790" y="281" width="260" height="30" class="box box-blue"/>
+    <text x="920" y="296" class="text-main">已提交 Token 的 KV Cache</text>
+
+    <!-- Target → FlashMap：两条水平直线 -->
+    <line x1="790" y1="205" x2="670" y2="205" class="arrow-blue"/>
+    <line x1="790" y1="250" x2="670" y2="250" class="arrow-blue"/>
+    <!-- KV Cache → Cross-Attention：蓝虚线从右侧进入 -->
+    <path d="M 790 296 L 700 296 L 700 430 L 420 430" class="arrow-blue" stroke-dasharray="3 3"/>
+
+    <!-- ============ 3. 输出链 ①→②→③（清晰三步） ============ -->
+    <line x1="410" y1="550" x2="410" y2="600" class="arrow-purple"/>
+    <rect x="260" y="600" width="300" height="48" class="box box-purple"/>
+    <text x="410" y="620" class="text-main" font-weight="600" fill="#6d28d9">① 扩散输出：单步 Flow Map 预测 x₀</text>
+    <text x="410" y="638" class="text-sm" fill="#6d28d9">16 个 slot 的干净隐向量 [16 × 2048]</text>
+
+    <line x1="410" y1="648" x2="410" y2="668" class="arrow-purple"/>
+    <rect x="260" y="668" width="300" height="44" class="box box-purple"/>
+    <text x="410" y="686" class="text-main" font-weight="600" fill="#6d28d9">② Linear 2048 -> 4096</text>
+    <text x="410" y="703" class="text-sm" fill="#6d28d9">映射到 Target 词嵌入空间 [16 × 4096]</text>
+
+    <line x1="560" y1="690" x2="620" y2="690" class="arrow-purple"/>
+    <rect x="620" y="652" width="310" height="76" class="box box-purple"/>
+    <text x="775" y="676" class="text-main" font-weight="600" fill="#6d28d9">③ 复用 DeepSeek 的 lm_head</text>
+    <text x="775" y="696" class="text-sm" fill="#6d28d9">draft_vocab 65536 逐 slot 映射</text>
+    <text x="775" y="714" class="text-sm" fill="#6d28d9">得到 16 个草稿 token 概率分布</text>
+
+      <!-- 连线绘制在最上层，避免被框体遮挡 -->
+    <line x1="295" y1="61" x2="295" y2="355" class="arrow-orange"/>
+    <path d="M 120 138 L 100 138 L 100 402 L 145 402" class="arrow-orange"/>
+
+</svg>
+<div class="fig-caption">图 5 · FlashMap 扩散模型与主模型协同架构：多层隐状态 + Anchor + KV Cache 三路条件，6 层 DiT 主干单步出块，输出链 ①→②→③</div>
+</div>
+
+<p><strong>深入理解 FlashMap 架构</strong>，结合图 5 及配置信息可以看到它的精妙之处：</p>
+<ul>
+<li><strong>多维特征汲取</strong>：抽取 Target 模型的第 <code>[1, 9, 17, 25, 33]</code> 层隐状态拼接（20480 维），降维到 2048 维作为上下文。</li>
+<li><strong>单步跳跃与时间步调制</strong>：将高斯噪声与条件特征融合，用 AdaLN（自适应层归一化）通过 Jump Time 控制缩放偏移。</li>
+<li><strong>DiT 核心机制</strong>：6 层主干中，Self-Attention 让 16 个 slot 互相看，Cross-Attention 读取已提交 Token 的 KV Cache。</li>
+<li><strong>无损映射输出</strong>：预测出的特征映射回主模型维度，复用主模型的 LM Head 打分，并行输出 16 个草稿。</li>
+</ul>
+
+<h2>三、昇腾算力平台上的实测复现与工程拆解</h2>
+<p>看完了架构演进，真正的考验在工程落地。我们在昇腾计算平台上对 FlashMap 进行了完整的复现测试。</p>
+
+<h3>3.1 实验环境与样本设定</h3>
+<ul>
+<li><strong>主模型（Target）</strong>：<strong>Qwen3-8B</strong>（16.4GB）。负责进行并行校验，产出无损结果。</li>
+<li><strong>草稿模型（Drafter）</strong>：<strong>FlashMap-Qwen3-8B</strong>（957MB，约 500M 参数，6 层 DiT 主干）。</li>
+<li><strong>硬件平台</strong>：8×昇腾（两台机器，采用单卡容器隔离串行测试）。</li>
+<li><strong>测试样本（10000 条）</strong>：去重后构建的多场景 Prompt 数据集：GSM8K 训练集 7473 条、GSM8K 测试集 1319 条、HumanEval 代码生成 164 条、MT-Bench 开放对话 80 条、MATH 测试集 546 条、MATH 训练集（截取）418 条。</li>
+</ul>
+<p>数据集高度偏向数学与代码（约占 99%），MT-Bench 作为通用对话的基准。</p>
+
+<h3>3.2 核心跑分结果</h3>
+<p>在 10000 条样本的全量压测下，实测结果如下：</p>
+<ul>
+<li><strong>平均加速比</strong>：<strong>4.696x</strong>（SE 0.0094，95% 置信区间 [4.678, 4.715]）。</li>
+<li><strong>吞吐量对比</strong>：投机解码 <strong>99.3 tok/s</strong>，对比纯自回归基线 <strong>22.6 tok/s</strong>。</li>
+<li><strong>平均接受长度</strong>：每次大模型前向平均能接受 <strong>8.55</strong> 个 Token。</li>
+</ul>
+<p>在具体任务上，越是有逻辑范式、越可预测的任务（如数学题），草稿猜得越准；而在开放性对话中，加速比则有所回落。</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+xychart-beta
+    title "各数据源实测平均加速比 (Speedup)"
+    x-axis ["GSM8K-Train", "GSM8K-Test", "MATH", "HumanEval", "MT-Bench"]
+    y-axis "加速比 (x)" 0 --> 5.5
+    bar [4.835, 4.512, 4.419, 3.286, 2.309]
+</pre>
+<div class="fig-caption">图 6 · 各数据源实测平均加速比（MT-Bench 开放对话明显回落）</div>
+</div>
+<div class="note">注：同一组数据在 4 张不同卡上交叉测试，卡间平均加速比差异小于 0.04，并行环境极度稳定。</div>
+
+<h3>3.3 草稿模型训练架构：老师与学生的对齐</h3>
+<p>FlashMap 如此高的接受率，得益于其前期的蒸馏训练。这是一个典型的 Teacher-Student（老师-学生）训练框架。</p>
+<p><strong>主模型（Teacher）</strong>接收输入文本，输出标准的隐状态和概率分布；<strong>草稿模型（Student，即 FlashMap）</strong>接收完全相同的输入，同时加上高斯噪声和 Jump Time 调制，利用 DiT 架构拟合主模型每一层的隐状态，最终逼近主模型的输出分布。</p>
+
+<div class="mermaid-wrap">
+<pre class="mermaid">
+graph TD
+    Input[输入序列 Prompt] --> Teacher[Teacher: Qwen3-8B]
+    Input --> Student[Student: FlashMap Drafter]
+
+    Teacher -->|提取多层隐状态| Condition[隐状态条件特征 20480维]
+    Condition --> Student_Inner[DiT 主干 + 高斯噪声]
+
+    Student --> Student_Inner
+    Student_Inner -->|Linear 2048->4096| Draft_Logits[草稿模型输出分布]
+
+    Teacher --> Target_Logits[主模型输出分布]
+
+    Target_Logits --> Loss[计算 KL 散度 / 蒸馏 Loss]
+    Draft_Logits --> Loss
+    Loss -->|反向传播| Student_Inner
+
+    style Teacher fill:#e0f2fe,stroke:#0288d1,stroke-width:2px
+    style Student fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style Loss fill:#fee2e2,stroke:#ef4444,stroke-width:2px
+</pre>
+<div class="fig-caption">图 7 · FlashMap 草稿模型 Teacher-Student 训练架构：多层隐状态条件 + KL 蒸馏 Loss 回传 Student</div>
+</div>
+
+<h3>3.4 核心模型推演与测试代码</h3>
+<p>在实际跑测中，最核心的环节是驱动这套扩散草稿模型进行推理。以下是复现脚本中最关键的生成循环，展示如何调用扩散模型进行单步块生成，并交由主模型并行校验：</p>
+
+<pre class="code">import torch
+from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer
+
+DEV = &quot;npu&quot;
+TARGET = &quot;/root/flashmap/models/qwen3-8b&quot;
+
+# 1. 加载主模型 Qwen3-8B 与 FlashMap 扩散草稿模型
+target = AutoModelForCausalLM.from_pretrained(TARGET, dtype=&quot;bfloat16&quot;).to(DEV).eval()
+draft = AutoModel.from_pretrained(
+    &quot;/root/flashmap/models/FlashMap-Qwen3-8B&quot;, 
+    trust_remote_code=True, dtype=&quot;bfloat16&quot;
+).to(DEV).eval()
+
+# 2. 核心推演循环：单步扩散出草稿 -&gt; 主模型并行校验
+for i, p in enumerate(prompts):
+    ids = encode(p)
+    
+    # 调用 spec_generate，内部实现单步 Flow Map 映射与 Target 并行验证
+    spec, ssec = timed(lambda: draft.spec_generate(
+        target, ids, max_new_tokens=512,
+        temperature=0.0, num_steps=1, generator=gen
+    ))
+    
+    # 基线对比：主模型原生 Greedy 自回归生成
+    base, bsec = timed(lambda: target.generate(
+        ids, max_new_tokens=512, do_sample=False
+    ))
+    
+    # 核心指标计算
+    # 统计 FlashMap 生成的吞吐量 (tokens/sec)
+    sp = spec.num_new_tokens / ssec 
+    # 统计原生基线的吞吐量 (tokens/sec)
+    bp = (base.shape[1] - ids.shape[1]) / bsec 
+    
+    # 记录：加速比、接受长度、是否与贪婪解码完全一致
+    speedup = sp / bp
+    acc_mean = sum(spec.acceptance_lengths) / max(len(spec.acceptance_lengths), 1)
+    identical = bool(torch.equal(base, spec.sequences))</pre>
+
+<h3>3.5 工程排雷与实验流程</h3>
+<p>在昇腾环境复现开源代码并非易事，踩了几个坑：<code>torch_npu</code> 的 <code>aclnnCumprod</code> 算子不接受 <code>DT_BOOL</code> 导致校验崩溃；共享文件系统满盘导致 Worker 卡死；部分节点计算卡被其他服务占用。通过修改底层代码、切回本地盘输出以及断点续跑，最终顺利完成了三阶段压测。</p>
+
+<div class="mermaid-wrap" style="max-width:460px;margin:16px auto">
+<pre class="mermaid">
+%%{init: {'flowchart': {'useMaxWidth': false}} }%%
+graph TD
+    A[Stage A: Smoke 测试<br>16 prompts] --> B[Stage B: 矩阵测试<br>7组配置/536 run-pairs]
+    B --> C[Stage C: 10k 全量压测<br>12 卡分片]
+    C --> D[产出 10000 条完整数据]
+    
+    style A fill:#f9f9f9,stroke:#333,stroke-width:2px
+    style B fill:#e1f5fe,stroke:#0288d1,stroke-width:2px
+    style C fill:#fff3e0,stroke:#f57c00,stroke-width:2px
+    style D fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
+</pre>
+<div class="fig-caption">图 8 · 实验推进三阶段：Smoke → 矩阵测试 → 10k 全量压测</div>
+</div>
+
+<h2>四、结语</h2>
+<p>在当前的大模型投机解码领域，通过<strong>并行化来提升草稿生成速度</strong>是业界一致的大趋势。但是，粗暴的并行会带来一个核心痛点：<strong>各个位置独立预测，丢失了 Token 之间的因果依赖，导致生成的草稿逻辑不自洽，接受率变低。</strong></p>
+<p>为了把这个逻辑找补回来，DSpark 和 FlashMap 给出了两种不同的解法。DSpark 采用的是"<strong>先并行产出，再外部修正</strong>"的思路，也就是靠主干快速给出并行的 base logits，再用一个轻量的 Markov 头去打补丁，把因果依赖关系接上。</p>
+<p>而 FlashMap 的解法则更为原生：它利用扩散模型（DiT）的全局注意力机制，在单步去噪的过程中直接完成了整块 Token 的生成，<strong>依靠模型自身的架构来保证并行出来的整块逻辑是自洽的</strong>，而不是事后打补丁。</p>
+<p>不过，这种原生自洽的方案也有其代价——<strong>它高度依赖于训练数据的分布</strong>。也就是说，它在推理生成草稿时，极其需要当前的推理场景与其前期的训练数据分布尽可能保持一致。这直接解释了 10k 实测中观察到的现象：面对逻辑范式固定的数学题时加速比非常高，而一旦切换到分布相对发散的开放对话（如 MT-Bench）时加速比就会回落。这也意味着在实际业务落地中，针对特定业务数据做草稿模型的定向微调，将是必不可少的一步。</p>
+
+</div>
+
+<div class="foot"><a href="../index.html">华杉的技术博客</a> · <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow">苏ICP备2026063680号-1</a></div>
+
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+<script>
+mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+        background: '#ffffff', primaryColor: '#ffffff', primaryTextColor: '#1e293b',
+        primaryBorderColor: '#cbd5e1', lineColor: '#94a3b8', fontSize: '15px',
+        fontFamily: 'Segoe UI, PingFang SC, Microsoft YaHei, sans-serif'
+    },
+    flowchart: { nodeSpacing: 40, rankSpacing: 55 },
+    xyChart: { width: 900, height: 420, xAxis: { labelFontSize: 12, titleFontSize: 13 }, yAxis: { labelFontSize: 12, titleFontSize: 13 } }
+});
+</script>
+</body>
+</html>
