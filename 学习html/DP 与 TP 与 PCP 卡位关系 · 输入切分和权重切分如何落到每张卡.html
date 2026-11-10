@@ -55,7 +55,7 @@ table.tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
   <b>核心关系：</b><br>
   · <b>DP</b> = 完整模型副本的份数，每个副本独立跑请求，用来堆 QPS；<br>
   · <b>TP</b> = 权重切分：把<b>权重</b>切成 TP 份，每份常驻一组卡；<br>
-  · <b>PCP</b> = prefill 上下文并行（prefill context parallelism）：把<b>一条请求的输入序列</b>切成 PCP 段，各卡并行算自己那段，切分只作用输入、不影响权重，且一般只在 prefill 阶段生效（decode 不走 PCP）；<br>
+  · <b>PCP</b> = prefill 上下文并行（prefill context parallelism）：把<b>一条请求的输入序列</b>切成 PCP 段，各卡并行算自己那段；切分直接作用的是输入，<b>dense 层权重不受影响，但 MoE 层的专家权重会把 DP 与 PCP 都折算进切分池</b>（见最后一节）；且一般只在 prefill 阶段生效（decode 不走 PCP）；<br>
   · 一个副本内部，<b>每张卡 = 一个权重分片 × 一段输入</b>，单副本卡数 = <code>TP × PCP</code>，全局总卡 = <code>DP × TP × PCP</code>。
 </div>
 
@@ -373,10 +373,64 @@ table.tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </div>
 
 <div class="card">
+  <h2>MoE 模型：DP 与 PCP 都进权重切分池</h2>
+  <p><b>dense 与 MoE 的切分逻辑不同。</b>例 1-3 的网格适用于 dense 模型：权重切分只由 TP 决定，DP 完整复制，PCP 只是把输入分段。vLLM 源码里 dense 的 <code>ColumnParallelLinear</code> / <code>RowParallelLinear</code> 没有任何 DP 或 PCP 逻辑，所以 dense 权重永远只有 TP 份。</p>
+  <p><b>MoE 层把三个开关折算成一个池。</b>fused MoE 构建权重分片时取 <code>flatten_tp_size = dp_size × pcp_size × tp_size</code>（fused_moe/config.py:1123-1124），docstring 原话「Note that PCP serves the same function as DP here」（config.py:1155）；权重加载按这个池切（fused_moe/routed_experts.py:499-500）。套到例 3（DP=4 · TP=2 · PCP=4）：dense 每卡持 1/2 权重，而 MoE 的专家权重被切成 1/(4×2×4) = 1/32 份，摊在全机 32 张卡上——DP 组之间不再完全独立。</p>
+  <p><b>前向怎么凑齐计算。</b>激活先跨 PCP 组 all-gather 拼成完整序列（vllm-ascend prepare_finalize.py:427-445），专家部分和跨 flatten 池 all-reduce 归约（fused_moe/moe_runner.py:451），最后 reduce_scatter 切回各 PCP 段（prepare_finalize.py:548-550）。也就是说 MoE 层的「每卡 1/32 权重」与「每卡一段输入」并不像 dense 那样各自独立，而是整池协作。</p>
+  <svg class="static" viewBox="0 0 960 250" role="img" aria-label="MoE 层权重切分池 32 卡">
+<rect x="20" y="8" width="940" height="0" fill="none"/>
+<text x="20" y="30" font-size="13" font-weight="600" fill="#334155">例 3 的 32 卡（4 DP 组 × 每组 8 卡）在 MoE 层是同一个切分池：每卡持 1/32 专家权重</text>
+<rect x="20" y="44" width="920" height="192" rx="10" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1.5"/>
+<text class="dplbl" x="34" y="68">DP 0</text><text class="dplbl" x="34" y="120">DP 1</text><text class="dplbl" x="34" y="172">DP 2</text><text class="dplbl" x="34" y="224">DP 3</text>
+<rect x="80" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="132" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="186" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="238" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="292" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="344" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="398" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="450" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="504" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="556" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="610" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="662" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="716" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="768" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="822" y="52" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="874" y="71" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="80" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="132" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="186" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="238" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="292" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="344" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="398" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="450" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="504" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="556" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="610" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="662" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="716" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="768" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="822" y="104" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="874" y="123" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="80" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="132" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="186" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="238" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="292" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="344" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="398" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="450" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="504" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="556" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="610" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="662" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="716" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="768" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="822" y="156" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="874" y="175" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="80" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="132" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="186" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="238" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="292" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="344" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="398" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="450" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="504" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="556" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="610" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="662" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="716" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="768" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+<rect x="822" y="208" width="104" height="30" rx="6" fill="#ede9fe" stroke="#a78bfa" stroke-width="1.2"/><text x="874" y="227" text-anchor="middle" font-size="12" fill="#5b21b6">1/32</text>
+  </svg>
+  <div class="figcap">图 6 · 例 3 的 32 卡在 MoE 层（EP 关闭）同属一个切分池：专家权重按 DP×PCP×TP 摊成 32 份，每卡 1/32——「行 × 列」的网格结构在 MoE 层不再成立，跨 DP 组也参与归约</div>
+  <table class="tbl">
+    <tr><th>层类型</th><th>进权重切分池的开关</th><th>每卡持有什么（例 3）</th><th>代码落点</th></tr>
+    <tr><td>dense 线性层</td><td class="mono">仅 TP</td><td class="mono">1/2 权重</td><td class="mono">linear.py 无 DP/PCP 逻辑</td></tr>
+    <tr><td>MoE · EP 关闭</td><td class="mono">DP × PCP × TP</td><td class="mono">1/32 专家权重</td><td class="mono">config.py:1123-1124</td></tr>
+    <tr><td>MoE · EP 开启</td><td class="mono">DP × PCP × TP（按专家切）</td><td class="mono">1/32 组完整专家，TP 不再切</td><td class="mono">config.py:1238-1241</td></tr>
+  </table>
+  <div class="figcap">表 3 · dense 与 MoE 的权重切分池对照</div>
+  <p><b>一句话结论。</b>核心关系里「DP 只复制、PCP 只切输入」只在 dense 层成立；模型只要有 MoE 层，DP 和 PCP 就与 TP 一起进专家权重的切分池——这正是实测里 MoE 模型「PCP 会切权重」的来源。</p>
+</div>
+
+<div class="card">
   <b>读图要点</b><br>
   · <b>列是输入，行是权重</b>：输入段颜色沿列贯穿，权重片颜色沿行贯穿，卡的位置由行×列唯一确定。<br>
   · <b>PCP 只作用 prefill</b>：prefill 阶段各卡并行处理自己的输入段；decode 阶段一般走主卡，不沿用 PCP 切分。<br>
-  · <b>DP 之间完全独立</b>：不同 DP 组跑不同请求，没有跨组的输入或权重通信，总卡数直接相乘。<br>
+  · <b>DP 的独立只在 dense 层成立</b>：不同 DP 组跑不同请求、总卡数直接相乘；但 MoE 层的专家权重按 DP×PCP×TP 摊进同一个切分池，跨 DP 组参与归约（图 6 · 表 3）。<br>
   · <b>TP 自带归约成本</b>：行切的 o_proj 与 FC2 每 Block 各一次 AllReduce（图 5 · 表 2），这是 TP 通信开销的来源。
 </div>
 </div>
