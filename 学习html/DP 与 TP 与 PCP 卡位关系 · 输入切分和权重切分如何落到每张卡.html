@@ -20,12 +20,14 @@ h2{font-size:18px;margin:26px 0 12px}
 .figcap{text-align:center;color:#64748b;font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;line-height:1.7}
 .formula{background:#fff;border:1px solid #e3e8ef;border-radius:12px;padding:14px 20px;font-size:14px;color:#334155;margin-bottom:16px}
 .formula code{background:#eef2f8;padding:2px 6px;border-radius:5px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+p code{background:#eef2f8;padding:2px 6px;border-radius:5px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12.5px;overflow-wrap:anywhere;word-break:break-word}
 .legend{display:flex;gap:16px;flex-wrap:wrap;margin:14px 0 20px;font-size:12.5px;color:#64748b}
 .legend span{display:inline-flex;align-items:center;gap:6px}
 .sw{width:14px;height:14px;border-radius:4px;border:1.5px solid;display:inline-block}
 .pcp0{background:#eff6ff;border-color:#93c5fd}.pcp1{background:#f0fdf4;border-color:#86efac}
 .pcp2{background:#fff7ed;border-color:#fdba74}.pcp3{background:#fdf2f8;border-color:#f9a8d4}
 .wt0{background:#ede9fe;border-color:#a78bfa}.wt1{background:#cffafe;border-color:#67e8f9}
+.tpcol{background:#dcfce7;border-color:#86efac}.tprw{background:#ede9fe;border-color:#a78bfa}.tare{background:#ffedd5;border-color:#fdba74}
 .ex-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:8px}
 .ex-title{font-size:16px;font-weight:600}
 .ex-cfg{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#0f766e;background:#e8f7f4;padding:2px 8px;border-radius:6px}
@@ -284,10 +286,98 @@ table.tbl td.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
 </div>
 
 <div class="card">
+  <h2>TP 切的不只是权重：每个 Transformer Block 要 2 次 AllReduce</h2>
+  <p><b>权重切分必然带来跨卡汇总。</b>TP 把每层矩阵切给多张卡，切法成对出现：<b>列切</b>（切输出维度）各卡算自己那部分输出，互不相干；<b>行切</b>（切输入维度）每卡只能乘到一部分输入，吐出的是「部分和」，要还原完整结果必须把各卡的部分和加总——这次加总就是 AllReduce。</p>
+  <p><b>一个 Block 正好撞上两次行切。</b>Attention 段：QKV 列切 → 各卡算自己那部分注意力头 → 输出投影 o_proj 行切 → <b>AllReduce #1</b>。MLP 段：FC1 列切 → 激活 → FC2 行切 → <b>AllReduce #2</b>。所以 TP 每多切一层，前向关键路径上就多了两次跨卡归约。</p>
+  <p><b>代码落点。</b>vLLM 的 <code>ColumnParallelLinear</code>（linear.py:407）没有归约步骤；<code>RowParallelLinear</code>（linear.py:1510）在 forward 末尾显式做 <code>tensor_model_parallel_all_reduce(output_parallel)</code>（linear.py:1659-1660），条件正是 <code>reduce_results and tp_size &gt; 1</code>——两次 AllReduce 的出处就在这两行。</p>
+  <div class="legend">
+    <span><i class="sw pcp0"></i>完整复制张量</span>
+    <span><i class="sw tpcol"></i>Column Parallel 列切</span>
+    <span><i class="sw tprw"></i>Row Parallel 行切（部分和）</span>
+    <span><i class="sw tare"></i>AllReduce 归约</span>
+  </div>
+  <svg class="static" viewBox="0 0 1000 840" role="img" aria-label="Transformer Block 张量并行两次 AllReduce">
+<defs>
+<marker id="ma2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mo2" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#f59e0b"/></marker>
+</defs>
+<rect x="390" y="18" width="220" height="44" rx="8" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
+<text x="500" y="44" text-anchor="middle" font-size="13" font-weight="600" fill="#1e3a8a">Block 输入 / 残差流</text>
+<path d="M 500 62 V 84" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="390" y="86" width="220" height="40" rx="8" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+<text x="500" y="110" text-anchor="middle" font-size="13" fill="#075985">LayerNorm</text>
+<path d="M 500 126 V 146 H 305 V 158" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<path d="M 500 126 V 146 H 695 V 158" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="170" y="160" width="270" height="50" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="1.5"/>
+<text x="305" y="180" text-anchor="middle" font-size="13.5" font-weight="600" fill="#065f46">QKV · 列切</text>
+<text x="305" y="199" text-anchor="middle" font-size="11" fill="#047857">每卡独立那部分头</text>
+<rect x="560" y="160" width="270" height="50" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="1.5"/>
+<text x="695" y="180" text-anchor="middle" font-size="13.5" font-weight="600" fill="#065f46">QKV · 列切</text>
+<text x="695" y="199" text-anchor="middle" font-size="11" fill="#047857">每卡独立那部分头</text>
+<path d="M 305 210 V 236" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<path d="M 695 210 V 236" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="170" y="238" width="270" height="44" rx="8" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.5"/>
+<text x="305" y="264" text-anchor="middle" font-size="13" fill="#1d4ed8">本地 Attention 计算</text>
+<rect x="560" y="238" width="270" height="44" rx="8" fill="#eff6ff" stroke="#60a5fa" stroke-width="1.5"/>
+<text x="695" y="264" text-anchor="middle" font-size="13" fill="#1d4ed8">本地 Attention 计算</text>
+<path d="M 305 282 V 310" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<path d="M 695 282 V 310" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="170" y="312" width="270" height="48" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="305" y="332" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5b21b6">o_proj · 行切</text>
+<text x="305" y="351" text-anchor="middle" font-size="11" fill="#6d28d9">部分和</text>
+<rect x="560" y="312" width="270" height="48" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="695" y="332" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5b21b6">o_proj · 行切</text>
+<text x="695" y="351" text-anchor="middle" font-size="11" fill="#6d28d9">部分和</text>
+<path d="M 305 360 V 388 H 445 V 400" stroke="#f59e0b" stroke-width="1.6" fill="none" marker-end="url(#mo2)"/>
+<path d="M 695 360 V 388 H 555 V 400" stroke="#f59e0b" stroke-width="1.6" fill="none" marker-end="url(#mo2)"/>
+<rect x="385" y="402" width="230" height="60" rx="10" fill="#ffedd5" stroke="#f59e0b" stroke-width="2"/>
+<text x="500" y="426" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">AllReduce #1</text>
+<text x="500" y="448" text-anchor="middle" font-size="12" fill="#c2410c">汇总 Attention 部分和</text>
+<path d="M 500 462 V 488" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="390" y="490" width="220" height="42" rx="8" fill="#e0f2fe" stroke="#0ea5e9" stroke-width="1.5"/>
+<text x="500" y="514" text-anchor="middle" font-size="13" fill="#075985">残差 Add + LayerNorm</text>
+<path d="M 500 532 V 552 H 305 V 564" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<path d="M 500 532 V 552 H 695 V 564" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="170" y="566" width="270" height="46" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="1.5"/>
+<text x="305" y="588" text-anchor="middle" font-size="13.5" font-weight="600" fill="#065f46">FC1 · 列切</text>
+<text x="305" y="606" text-anchor="middle" font-size="11" fill="#047857">每卡独立那部分中间神经元</text>
+<rect x="560" y="566" width="270" height="46" rx="8" fill="#dcfce7" stroke="#10b981" stroke-width="1.5"/>
+<text x="695" y="588" text-anchor="middle" font-size="13.5" font-weight="600" fill="#065f46">FC1 · 列切</text>
+<text x="695" y="606" text-anchor="middle" font-size="11" fill="#047857">每卡独立那部分中间神经元</text>
+<path d="M 305 612 V 638" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<path d="M 695 612 V 638" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<rect x="170" y="640" width="270" height="46" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="305" y="662" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5b21b6">激活 + FC2 · 行切</text>
+<text x="305" y="680" text-anchor="middle" font-size="11" fill="#6d28d9">部分和</text>
+<rect x="560" y="640" width="270" height="46" rx="8" fill="#ede9fe" stroke="#8b5cf6" stroke-width="1.5"/>
+<text x="695" y="662" text-anchor="middle" font-size="13.5" font-weight="600" fill="#5b21b6">激活 + FC2 · 行切</text>
+<text x="695" y="680" text-anchor="middle" font-size="11" fill="#6d28d9">部分和</text>
+<path d="M 305 686 V 714 H 445 V 726" stroke="#f59e0b" stroke-width="1.6" fill="none" marker-end="url(#mo2)"/>
+<path d="M 695 686 V 714 H 555 V 726" stroke="#f59e0b" stroke-width="1.6" fill="none" marker-end="url(#mo2)"/>
+<rect x="385" y="728" width="230" height="60" rx="10" fill="#ffedd5" stroke="#f59e0b" stroke-width="2"/>
+<text x="500" y="752" text-anchor="middle" font-size="15" font-weight="700" fill="#9a3412">AllReduce #2</text>
+<text x="500" y="774" text-anchor="middle" font-size="12" fill="#c2410c">汇总 MLP 部分和</text>
+<path d="M 500 788 V 812" stroke="#64748b" stroke-width="1.6" fill="none" marker-end="url(#ma2)"/>
+<text x="500" y="830" text-anchor="middle" font-size="12" fill="#64748b">Block 输出 → 下一 Block 残差流</text>
+  </svg>
+  <div class="figcap">图 5 · TP 下一个 Transformer Block 的前向：列切（绿）各算各的无需通信，行切（紫）产出部分和，两处汇入 AllReduce（橙）——每 Block 至少 2 次跨卡归约</div>
+  <table class="tbl">
+    <tr><th>Block 内位置</th><th>切法</th><th>每卡持有什么</th><th>需要跨卡通信？</th></tr>
+    <tr><td>QKV 投影</td><td class="mono">列切</td><td>那部分注意力头</td><td>否</td></tr>
+    <tr><td>Attention 输出投影 o_proj</td><td class="mono">行切</td><td>完整维度的部分和</td><td class="mono">AllReduce #1</td></tr>
+    <tr><td>MLP FC1</td><td class="mono">列切</td><td>那部分中间神经元</td><td>否</td></tr>
+    <tr><td>MLP FC2</td><td class="mono">行切</td><td>完整维度的部分和</td><td class="mono">AllReduce #2</td></tr>
+  </table>
+  <div class="figcap">表 2 · 一个 Block 里列切/行切的成对关系与通信成本</div>
+  <p><b>与本文前几节的衔接。</b>前面例 1-3 的「每卡 = 权重片 × 输入段」只说明权重怎么摆；本节补上 TP 的另一面——行切那两处部分和必须归约，TP 的通信成本正在于此。在昇腾实现里这两次归约走 NPU 互联，TP 层数越深、卡数越多，归约在关键路径上的占比越高。</p>
+</div>
+
+<div class="card">
   <b>读图要点</b><br>
   · <b>列是输入，行是权重</b>：输入段颜色沿列贯穿，权重片颜色沿行贯穿，卡的位置由行×列唯一确定。<br>
   · <b>PCP 只作用 prefill</b>：prefill 阶段各卡并行处理自己的输入段；decode 阶段一般走主卡，不沿用 PCP 切分。<br>
-  · <b>DP 之间完全独立</b>：不同 DP 组跑不同请求，没有跨组的输入或权重通信，总卡数直接相乘。
+  · <b>DP 之间完全独立</b>：不同 DP 组跑不同请求，没有跨组的输入或权重通信，总卡数直接相乘。<br>
+  · <b>TP 自带归约成本</b>：行切的 o_proj 与 FC2 每 Block 各一次 AllReduce（图 5 · 表 2），这是 TP 通信开销的来源。
 </div>
 </div>
 
