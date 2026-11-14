@@ -121,6 +121,24 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-11-13</span></div>
+<div class="cc-title">DeepSeek V4.1-Flash 显存拆解 · PCP4 DP4 P与D形态逐卡对照</div>
+<div class="cc-desc">16 并发逐卡显存账：单副本权重 292.8 GiB（专家 278.9 可 EP 切、稠密 8.1、词嵌入 5.8 每卡必载）；PCP4 每卡 103.54 GiB，DP4 每卡 107.35 GiB，8 卡 P/D 形态每卡 61.17/64.18 GiB；KV pool 配置建议表</div>
+<a class="cc-link" href="学习html/DeepSeek V4.1-Flash 显存拆解 · PCP4 DP4 P与D形态逐卡对照.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-11-13</span></div>
+<div class="cc-title">DeepSeek V4.1-Flash PD 分离部署 · 参数逐条详解</div>
+<div class="cc-desc">P 端 TP1×PCP8×DP1+EP8 推 KV、D 端 DP8×TP1+EP8 拉 KV 走 FULL_DECODE_ONLY（TPOT 218→16.4ms 的 13 倍功臣）；proxy 两腿转发、kv_transfer_params 红线、fused_mc2 红线；15 张参数表 + P/D 差异速查 + 1P/2P/3P 实测口径</div>
+<a class="cc-link" href="学习html/DeepSeek V4.1-Flash PD 分离部署参数详解.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-11-13</span></div>
+<div class="cc-title">vllm-ascend RFC 15665 解读 · GLM-5.3-Flash 适配路线图</div>
+<div class="cc-desc">KDA 固定状态 + NoPE 稀疏 MLA + KeyPool 两段式索引：三类状态 × 五条链路（prefix/MTP/图执行/长上下文/并行）逐格校验矩阵；核心路径已通，PCP/细粒度 prefix/torch.compile/LI 量化仍 open；附关键源码逐行注释</div>
+<a class="cc-link" href="学习html/vllm-ascend RFC 15665 解读 · GLM-5.3-Flash 适配路线图.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
 <div class="cc-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</div>
 <div class="cc-desc">主流 MoE 部署的卡位网格：专家权重按 DP×PCP×TP 池切分（例3 整机 32 卡每卡 1/32 专家），dense 部分按 TP 切；TP 切 dense 层时每 Block 两次 AllReduce；纯 dense 模型作附录对照</div>
@@ -132,31 +150,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">记忆矩阵怎么读（隐状态投影 q 线性读出+输出门旁路）、上下文怎么压缩进存储记忆（GDN-2 四门逐 token 擦写）——两张通路专题图逐项解答；双分支 L_base+L_mem 离策略蒸馏，128K 下 66 倍存储压缩与 1.86 倍加速</div>
 <a class="cc-link" href="学习html/MemT-1.0-Nano · 双分支架构与记忆读写通路.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
-<div class="cc-title">DSA-CP 与 PCP：两代上下文并行方案对比</div>
-<div class="cc-desc">同一件事的两代做法：DSA-CP 在 attention 后端私搭切分（Legacy），PCP 在引擎 batch 分区统一做（现行，仅 v2）——计算内核同一套，差的是切分位置、缓存形态与邻居兼容；218 行壳对 2291 行私搭，七维对照+边界清单</div>
-<a class="cc-link" href="学习html/DSA-CP 与 PCP：两代上下文并行方案对比.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-23</span></div>
-<div class="cc-title">SP MoE 与 DSA-CP · 从各自原理到衔接冲突</div>
-<div class="cc-desc">SP MoE 按 token 行切、DSA-CP 按 head 切——同开时每层门口 AG 拼全量再 RS 切回；PR #18671 让 220 行分片直通 attention，TTFT −9~11%、吞吐 +10~12%。TP 权重切割、16 卡协同、冲突修复，5 图配 5 组源码证据</div>
-<a class="cc-link" href="学习html/SP MoE 与 DSA-CP · 从各自原理到衔接冲突.html">阅读 &rarr;</a>
-</div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-21</span></div>
-<div class="cc-title">GLM 系列启动 · vllm-ascend 视角解读</div>
-<div class="cc-desc">GLM-5.2/5.3 走 GlmMoeDsaForCausalLM——实现长在 DeepSeek 家族代码里，NPU 侧只打小补丁；GLM-5.3-Flash 走 Glm5NextForCausalLM——昇腾版整套在 vllm_ascend/models/glm5next/，KDA 层调 AscendC 算子。注册表覆盖、三条分支、准入决策树，4 图讲透"models 里为什么没有 glm"</div>
-<a class="cc-link" href="学习html/GLM 系列启动 · vllm-ascend 视角解读.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">54</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">57</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -164,22 +164,25 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">54 篇 · 9 个专题</div>
+<div class="sec-badge">57 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">54</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">57</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">3</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">16</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">19</span></button>
 <button class="chip" data-topic="dsinfer">DeepSeek 推理<span class="count">4</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">6</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">4</span></button>
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
-<ul class="list" id="learningList"><li class="li" data-topic="dsinfer" data-ts="20261108"><a href="学习html/扩散模型混进投机解码 · FlashMap 草稿昇腾复现 4.70x.html"><span class="li-date">2026-11-08</span><span class="li-main"><span class="li-title">扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">用 DiT 扩散模型一步跳出 16 Token 草稿：多层隐状态+Anchor+KV Cache 三路条件、单步 Flow Map、复用 Target lm_head；Qwen3-8B + FlashMap 昇腾 10k 实测平均加速 4.696x、平均接受 8.55 Token——对比 DSpark 的先并行后修正，FlashMap 靠架构原生自洽</span></span></a></li>
+<ul class="list" id="learningList"><li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/DeepSeek V4.1-Flash 显存拆解 · PCP4 DP4 P与D形态逐卡对照.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash 显存拆解：PCP4 / DP4 / 8 卡 P 与 D 形态逐卡对照<span class="li-tag">vLLM 源码</span></span><span class="li-desc">16 并发逐卡显存账：单副本权重 292.8 GiB（专家 278.9 可 EP 切 · 稠密 8.1 · 词嵌入 5.8）；PCP4/DP4 单机 4 卡每卡 103.54/107.35 GiB，PCP8/DP8 8 卡每卡 61.17/64.18 GiB；50%/无/32K 最坏三种 prefix 场景与 kv_cache_memory_bytes 配置建议</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/DeepSeek V4.1-Flash PD 分离部署参数详解.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash PD 分离部署 · 参数逐条详解<span class="li-tag">vLLM 源码</span></span><span class="li-desc">950DT 实战 PD 分离逐参数讲解：P 端 TP1×PCP8×DP1+EP8 推 KV，D 端 DP8×TP1+EP8 拉 KV 走 FULL_DECODE_ONLY（TPOT 218→16.4ms）；proxy 两腿转发与 kv_transfer_params 红线；15 张参数表 + P/D 差异速查 + 1P/2P/3P 实测口径</span></span></a></li>
+<li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/vllm-ascend RFC 15665 解读 · GLM-5.3-Flash 适配路线图.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">vllm-ascend RFC 15665 解读：GLM-5.3-Flash 适配路线图<span class="li-tag">vLLM 源码</span></span><span class="li-desc">GLM-5.3-Flash 官方总跟踪单逐段解读：KDA 固定状态 + NoPE 稀疏 MLA + KeyPool 两段式索引——三类状态 × 五条链路校验矩阵；50+ 已合并 / 20+ open，8 步实施顺序 4/8；末尾附 indexer 解耦与 KDA/SFA 关键源码带逐行注释</span></span></a></li>
+<li class="li" data-topic="dsinfer" data-ts="20261108"><a href="学习html/扩散模型混进投机解码 · FlashMap 草稿昇腾复现 4.70x.html"><span class="li-date">2026-11-08</span><span class="li-main"><span class="li-title">扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">用 DiT 扩散模型一步跳出 16 Token 草稿：多层隐状态+Anchor+KV Cache 三路条件、单步 Flow Map、复用 Target lm_head；Qwen3-8B + FlashMap 昇腾 10k 实测平均加速 4.696x、平均接受 8.55 Token——对比 DSpark 的先并行后修正，FlashMap 靠架构原生自洽</span></span></a></li>
 <li class="li" data-topic="ops" data-ts="20261031"><a href="学习html/模型架构交互分析 · GLM5.3 · DS4.1-Flash · DS4-Flash.html"><span class="li-date">2026-10-31</span><span class="li-main"><span class="li-title">模型架构交互分析 · GLM-5.3 / DeepSeek-V4.1 / DeepSeek-V4-Flash 三模型算子流·KV cache·显存·PD仿真<span class="li-tag">算子与编程</span></span><span class="li-desc">一个下拉切换三模型的交互工具：算子 tensor 数据流框图、KV cache 分组明细、每 rank 显存计算器、纯 P / 纯 D 吞吐仿真四页签；DS4-Flash 数据来自官方 config.json 与 46 个 safetensors 分片 header 实测聚合，浅色主题重制</span></span></a></li>
 
 <li class="li" data-topic="vllm" data-ts="20261031"><a href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html"><span class="li-date">2026-10-31</span><span class="li-main"><span class="li-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡<span class="li-tag">vLLM 源码</span></span><span class="li-desc">主流 MoE 部署的卡位网格：专家权重按 DP×PCP×TP 池切分（例3：32 卡每卡 1/32 专家），dense 部分按 TP 切、DP/PCP 不切；TP 切 dense 层时每 Block 两次 AllReduce；纯 dense 模型作附录对照</span></span></a></li>
