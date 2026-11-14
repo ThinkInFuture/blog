@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek V4.1-Flash PD 分离部署 · 参数逐条详解</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>:root{--bg:#fff;--surface:#f7f8fa;--border:#dde1e7;--text:#1a1f27;--muted:#6b7280;
+--brand:#2563eb;--brand-bg:#eff6ff;--brand-t:#1d4ed8;--ok:#15803d;--ok-bg:#f0fdf4;
+--blue:#0969da;--blue-soft:#ddf4ff;--border-strong:#9aa4ae;--accent-soft:#f0fdfa;--bad:#c0392b;--bad-bg:#fdf0ef;--accent:#0d9488;--accent-bg:#f0fdfa;--code-bg:#f3f4f6}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:15.5px;line-height:1.9;-webkit-font-smoothing:antialiased}
+.wrap{max-width:880px;margin:0 auto;padding:44px 26px 90px}
+h1{font-size:26px;line-height:1.4;margin:0 0 8px}
+h2{font-size:20px;margin:56px 0 14px;padding-top:22px;border-top:1px solid var(--border)}
+h3{font-size:16px;margin:28px 0 8px;color:var(--brand-t)}
+p{margin:13px 0}b{color:var(--text)}
+p,li,td,th,.kp{overflow-wrap:anywhere}
+.subtitle{color:var(--muted);font-size:13.5px;margin-bottom:26px;padding-bottom:20px;border-bottom:1px solid var(--border)}
+code{background:var(--code-bg);border:1px solid var(--border);border-radius:5px;padding:1px 6px;font-family:ui-monospace,Consolas,monospace;font-size:.87em;word-break:break-word}
+.kp{border-left:4px solid var(--brand);background:var(--brand-bg);border-radius:0 12px 12px 0;padding:14px 18px;margin:18px 0;font-size:14.5px}
+.kp.t{border-color:var(--accent);background:var(--accent-bg)}
+.kp.w{border-color:#b45309;background:#fffbeb}
+.kp b:first-child{display:block;margin-bottom:6px}
+.kp p{margin:7px 0;font-size:14px}
+.toc{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px 20px;margin:0 0 26px;font-size:14px}
+.toc ol{margin:6px 0 0;padding-left:20px}
+.toc a{color:var(--brand-t);text-decoration:none}
+.toc a:hover{text-decoration:underline}
+table{width:100%;border-collapse:collapse;font-size:13.4px;line-height:1.7;margin:16px 0}
+th,td{border:1px solid var(--border);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--surface);font-weight:700}
+tbody tr:nth-child(even){background:var(--surface)}
+.ok{color:var(--ok);font-weight:700}.bad{color:var(--bad);font-weight:700}
+ul,ol{padding-left:24px}li{margin:7px 0}
+.dim{color:var(--muted);font-size:13px}
+.figcap{text-align:center;color:var(--muted);font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}
+.mermaid-wrap{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:18px;margin:16px 0;overflow-x:auto}
+.mermaid-wrap svg{display:block;margin:0 auto}
+@media(max-width:720px){table{display:block}tbody,tr{display:block}th,td{display:inline-block;border:1px solid var(--border);padding:5px 9px;font-size:12px;overflow-wrap:anywhere;word-break:break-word}}
+@media(max-width:720px){.mermaid-wrap svg{max-width:100%;height:auto}}
+.redline{color:var(--bad);font-weight:700}
+@media(max-width:720px){table{display:block}tbody,tr{display:block}th,td{display:inline-block;white-space:normal}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>DeepSeek V4.1-Flash PD 分离部署 · 参数逐条详解</h1>
+<div class="subtitle">vLLM-Ascend v0.32.0rc-a5 ｜ 昇腾 950DT 每台 8 卡 ｜ 依据 2026-11 联调与压测记录 ｜ 发布 2026-11-12</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#s1">PD 分离架构总览</a></li>
+    <li><a href="#s2">P 节点参数（Prefill 生产端）</a></li>
+    <li><a href="#s3">D 节点参数（Decode 消费端）</a></li>
+    <li><a href="#s4">P / D 参数差异对照速查</a></li>
+    <li><a href="#s5">proxy 参数详解（请求入口与分流）</a></li>
+    <li><a href="#s6">配套实测口径</a></li>
+  </ol>
+</div>
+
+<div class="kp"><p><b>说明范围</b>：本文按当前实战的 PD 分离部署脚本逐参数讲解，P、D 分章，两侧共有的参数在各自章节内完整重复讲，最后附差异对照速查表。所有「实测」结论均来自 2026-11-06~11-10 的联调与压测记录；镜像为 <code>quay.io/ascend/vllm-ascend:v0.32.0rc-a5</code>，权重为官方 DeepSeek-V4.1-Flash，量化走 <code>--quantization deepseek_v4_fp8</code>（官方原生、零离线转换）。</p></div>
+
+<h2 id="s1">1. PD 分离架构总览</h2>
+<div class="mermaid-wrap">
+<div class="mermaid">
+%%{init:{"flowchart":{"useMaxWidth":false}}}%%
+flowchart TD
+  C["客户端请求"] --> PX["proxy :9100<br/>load_balance_proxy<br/>分数堆 least-load 调度"]
+  PX -->|"腿① prefill<br/>max_tokens=1"| P["P 端 :8300<br/>TP1 × PCP8 × DP1 + EP8<br/>算 prefill · 推 KV"]
+  PX -->|"腿② decode<br/>带 kv_transfer_params"| D["D 端 :8301<br/>DP8 × TP1 + EP8<br/>拉 KV · 逐 token 生成"]
+  P -->|"Mooncake 跨机 KV<br/>约 159 MB/请求 · 8 rank 各 1/8"| D
+  D -->|"流式回包"| C
+  classDef p fill:#f0fdf4,stroke:#15803d,stroke-width:1.5;
+  classDef d fill:#fff8f2,stroke:#c0392b,stroke-width:1.5;
+  classDef px fill:#eff6ff,stroke:#2563eb,stroke-width:1.5;
+  class P p; class D d; class PX px;
+</div>
+</div>
+<div class="figcap">图 1 · PD 分离的请求旅程：proxy 两腿转发（先 prefill 腿、后 decode 腿），KV 经 Mooncake 从 P 单向流向 D</div>
+<div class="kp w"><p><b>核心分工逻辑</b>：P 端解决「第一个字要多快」（TTFT），扩 P 台数直接压缩排队；D 端解决「后面每个字要多快」（TPOT）。三轮实验证明 TPOT 与 P 台数完全解耦（恒定 4.9~6.6ms）。P 端 1~3 台、每台 8 卡，形态 TP1 × PCP8 × DP1 + EP8，enforce-eager，prefix caching 开启；D 端 1 台 8 卡，形态 TP1 × DP8 + EP8，FULL_DECODE_ONLY 图模式 + dspark5 投机。</p></div>
+
+<h2 id="s2">2. P 节点参数（Prefill 生产端）</h2>
+
+<h3>2.1 并行形态与显存</h3>
+<table>
+<tr><th>参数</th><th>当前值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--tensor-parallel-size 1</code></td><td>TP1</td><td>层内张量不切分。P 端选 TP1 是实测定案：TP≥2 在该模型上有全局约束问题（历史 TP16/TP8 形态全部失败），全 TP1 形态是唯一跑通且最快的骨架。</td></tr>
+<tr><td><code>--prefill-context-parallel-size 8</code></td><td>PCP8</td><td><b>P 端核心参数</b>：prefill 序列切 8 份，8 卡各算 1/8 的 token（约 2560 tok/卡）。20K 输入的 prefill 时间被 8 卡分摊，TTFT 直接受益。KV 也按序列切，每卡只存自己那段的 KV——这就是 D 端要从 P 的 8 个 rank 各拉 1/8 KV 的原因。</td></tr>
+<tr><td><code>--data-parallel-size 1</code></td><td>DP1</td><td>P 端无多副本。扩 prefill 吞吐靠「加机器」（2P/3P 多条 PCP8 流水线），已实测 C32 吞吐 1P→3P 提升 2.7 倍。</td></tr>
+<tr><td><code>--enable-expert-parallel</code></td><td>EP8</td><td>MoE 专家切 8 卡，每卡持 1/8 专家。token 过 MoE 时经 All2All 送往持有对应专家的卡。模型大头（专家权重）因此每卡只有 1/8，稠密层（attention/共享参数）每卡完整一份——这正是 MoE 层里 PCP/EP 都进权重切分池的体现。</td></tr>
+<tr><td><code>--gpu-memory-utilization 0.9</code></td><td>0.9</td><td>每卡可用 HBM = 0.9×91.75GB ≈ 82.5GB，剩余给驱动/通信缓冲。0.92（D 端值）也可用，P 端取 0.9 是给 HCCL 通信缓冲与 KV 发送缓冲留空间。</td></tr>
+<tr><td><code>--max-model-len 32768</code></td><td>32K</td><td>单请求最大上下文。压测 20K+385=24K 在限内；设 32K 是为兼容更长输入。</td></tr>
+<tr><td><code>--block-size 32</code></td><td>32</td><td>KV 分块粒度（声明值）。<b>实测注</b>：vLLM 内部强制 block=128，此参数仅具声明意义，改动无效。</td></tr>
+</table>
+<div class="figcap">表 1 · P 端并行形态与显存参数</div>
+
+<h3>2.2 KV 传输参数（P 端作为生产者）</h3>
+<table>
+<tr><th>字段</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>kv_connector</code></td><td>MooncakeHybridConnector</td><td><b>必须用 Hybrid 版</b>。实测：旧版 MooncakeConnector 触发 <code>Compressed caches must be packed</code> 断言崩溃。它负责 prefill 完成后把 KV 推送给 D。</td></tr>
+<tr><td><code>kv_role</code></td><td>kv_producer</td><td>P 端角色为生产者：prefill 算完立即推 KV，不等 D 来拉（推拉结合由 connector 内部调度）。</td></tr>
+<tr><td><code>kv_port</code></td><td>20001</td><td>KV 传输监听基端口。PCP8 的 8 个 rank 各占一个，实际监听 <b>20001~20008</b>（D 端按 rank 分别拉取）。端口冲突排查就是查这 8 个。</td></tr>
+<tr><td><code>kv_buffer_device</code></td><td>npu</td><td>KV 传输缓冲走 NPU HBM（与 D 端 HCCL_BUFFSIZE=4096 配合）。</td></tr>
+<tr><td><code>kv_connector_extra_config.prefill</code></td><td>{tp:1, dp:1}</td><td>向 D 声明「P 端 prefill 的拓扑」——D 端据此确定从哪些 rank 拉多少份 KV。<b>必须与实际拓扑一致</b>，不一致会导致静默重算（D 侧全量重算 prefill → 块荒死锁，联调期三天死锁的根因之一）。</td></tr>
+<tr><td><code>kv_connector_extra_config.decode</code></td><td>{dp:8, tp:1}</td><td>声明 D 端拓扑（dp8×tp1），同理必须与 D 实际一致。</td></tr>
+<tr><td><code>kv_load_failure_policy</code></td><td>v4 默认</td><td>KV 拉取失败时的策略。若允许 fallback 会回退本地重算（20K 重算约 20 秒 TTFT），压测中 TTFT 突刺即此信号。</td></tr>
+</table>
+<div class="figcap">表 2 · P 端 KV 传输（生产侧）参数</div>
+
+<h3>2.3 调度与缓存参数</h3>
+<table>
+<tr><th>参数</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--max-num-batched-tokens 8192</code></td><td>8192</td><td>每调度步 token 预算：20K 输入 3 步铺完。调大（16384）可减步数，但单步耗时与通信量翻倍——待 A/B（本轮未做对照）。</td></tr>
+<tr><td><code>--max-num-seqs 16</code></td><td>16</td><td>P 端并发容量：同时处理的请求数上限。C32/C64 压测时请求在此排队是高并发 TTFT 的组成项。<b>提至 32/64 是明确的优化候选</b>（低风险 A/B）。</td></tr>
+<tr><td><code>--enable-prefix-caching</code></td><td>开启</td><td><b>命中率来源</b>：相同前缀的 KV 复用（mix50 数据集实测 49.3%）。P 端必须开——命中率只在 P 端产生；D 端开反而无意义（见 D 端对应参数）。</td></tr>
+<tr><td><code>--cp-kv-cache-interleave-size 1</code></td><td>1</td><td>PCP 各 rank 的 KV 交织粒度。影响 KV 块组织与 D 端拉取的碎片数。官方默认 1，无调优参考数据，未动。</td></tr>
+<tr><td><code>--dp-sync-interval 1</code></td><td>1</td><td>DP 同步频率。实测对集合形状错位型死锁无救援作用，但保留无害；默认 16 改 1 属保险配置。</td></tr>
+<tr><td><code>--enforce-eager</code></td><td>强制 eager</td><td>P 端禁用图模式（对齐官方 CI 配方定案，无实测对照）。prefill 算子大、launch 占比低，图模式预期收益 5~15%——是待验证的优化候选（去 eager 做 A/B）。</td></tr>
+</table>
+<div class="figcap">表 3 · P 端调度与缓存参数</div>
+
+<h3>2.4 量化与投机参数（P 端）</h3>
+<table>
+<tr><th>参数</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--quantization deepseek_v4_fp8</code></td><td>fp8</td><td>官方原生权重零离线转换。引擎实际执行：MoE=W4A8-MXFP4 动态、稠密层=W8A8-MXFP8。<b>唯一可行路线</b>：modelslim w4a8 离线转换实测失败（weightScale 尺寸不符）。</td></tr>
+<tr><td><code>--speculative-config {"num_speculative_tokens":5,"method":"dspark"}</code></td><td>dspark5</td><td>P 端加载 dspark draft 结构——<b>P 端不做 decode，投机并不真正执行</b>，作用是保持 P/D 模型结构一致（KV 拉取时的结构对齐）。去掉可能导致 PD 握手失败，勿动。</td></tr>
+<tr><td><code>--hf-overrides {"engram_layer_ids":[]}</code></td><td>engram 关闭</td><td>关闭 engram 层注入。官方复刻口径为 off；on 模式（<code>--engram-config</code>）在 PD 形态未实测。</td></tr>
+<tr><td><code>--model-loader-extra-config</code></td><td>64 线程</td><td>多线程并行读权重分片，缩短启动时间（48 分片秒级并发读）。</td></tr>
+<tr><td><code>--tokenizer-mode deepseek_v41</code></td><td>v41</td><td>该模型专用 tokenizer 模式，通用模式解析会出错。</td></tr>
+</table>
+<div class="figcap">表 4 · P 端量化与投机参数</div>
+
+<h3>2.5 P 端环境变量</h3>
+<table>
+<tr><th>变量</th><th>值</th><th>作用</th></tr>
+<tr><td><code>HCCL_SOCKET_IFNAME</code></td><td>自动探测 197.13 网段的卡间网卡</td><td><b>HCCL 走卡间口</b>。硬编码回环网卡导致跨机通信失败（11-06 坑），部署脚本自动探测网段选择网卡。</td></tr>
+<tr><td><code>HCCL_ALGO</code></td><td>level0:fullmesh</td><td>卡间全互联算法——KV 推送与跨机通信依赖，改动会导致传输崩溃，勿动。</td></tr>
+<tr><td><code>HCCL_BUFFSIZE</code></td><td>1024（MB）</td><td>P 端 HCCL 通信缓冲。比 D 端（4096）小，为 KV 发送缓冲让出 HBM。增大可能减少 prefill 通信轮次——待 A/B，与显存占用相互竞争。</td></tr>
+<tr><td><code>HCCL_EXEC_TIMEOUT / HCCL_CONNECT_TIMEOUT</code></td><td>2040 / 1200</td><td>HCCL 执行/连接超时（秒）。PD 长联调期防「等一卡超时全组崩」的保险值，从默认 204/120 放大 10 倍。</td></tr>
+<tr><td><code>VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS</code></td><td>30000</td><td>单次 execute_model 超时。20K prefill 单步耗时长，防误杀。</td></tr>
+<tr><td><code>VLLM_RPC_TIMEOUT / VLLM_ENGINE_READY_TIMEOUT_S</code></td><td>3600000 / 7200</td><td>RPC 与引擎就绪等待超时——启动期防挂配置（加载+编译可超 1 小时）。</td></tr>
+<tr><td><code>VLLM_MQ_MAX_CHUNK_BYTES_MB</code></td><td>64</td><td>消息队列分块上限（API server 与 engine 之间）。实测调大无影响（内部强制 128），保留。</td></tr>
+<tr><td><code>VLLM_USE_FASTOKENS / VLLM_USE_V2_MODEL_RUNNER</code></td><td>开启</td><td>fastokens 快速分词 + V2 模型 runner（昇腾新执行器），官方口径组件。</td></tr>
+<tr><td><code>PYTORCH_NPU_ALLOC_CONF</code></td><td>expandable_segments:True</td><td>HBM 按需扩展分配，减少碎片。显存紧张形态下的标配。</td></tr>
+<tr><td><code>HCCL_OP_EXPANSION_MODE</code></td><td>CCU_SCHED</td><td>HCCL 算子调度扩展模式（官方对齐项）。</td></tr>
+<tr><td><code>OMP_NUM_THREADS / OMP_PROC_BIND</code></td><td>10 / false</td><td>CPU 线程数。过大引发 spin-wait 争抢（日志有 WARNING 提示），10 是对齐值。</td></tr>
+<tr><td><code>GLOO_SOCKET_IFNAME / TP_SOCKET_IFNAME</code></td><td>lo</td><td>Gloo/TP 控制面走本机回环（单机内部通信，与跨机 HCCL 分离）。</td></tr>
+<tr><td><code>ASCEND_RT_VISIBLE_DEVICES</code></td><td>0~7</td><td>8 卡全可见。</td></tr>
+<tr><td><code>TASK_QUEUE_ENABLE</code></td><td>1</td><td>算子任务队列优化（官方对齐项）。</td></tr>
+</table>
+<div class="figcap">表 5 · P 端环境变量</div>
+<div class="kp"><p><b>P 端没有</b> <code>--additional-config</code>：multistream 三路重叠、cpu_binding、fused_mc2 等是 D 端 decode 专用重叠件，P 端 prefill 形态未挂载（无对应收益实测）。</p></div>
+
+<h2 id="s3">3. D 节点参数（Decode 消费端）</h2>
+
+<h3>3.1 并行形态与显存</h3>
+<table>
+<tr><th>参数</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--data-parallel-size 8</code></td><td>DP8</td><td><b>D 端核心参数</b>：8 个独立 decode 副本，各管各的请求（KV 按 DP 分，互不干扰）。TPOT 与并发解耦（C1~C128 恒定）的根源就是每 rank 独立流水。</td></tr>
+<tr><td><code>--tensor-parallel-size 1</code></td><td>TP1</td><td>同 P 端理由（全局约束）。DP8×TP1 = 8 副本，每副本内 EP8 切专家——注意 MoE 层里 DP 也进专家切分池，dense 层才是真复制。</td></tr>
+<tr><td><code>--max-num-seqs 64</code></td><td>64</td><td>D 端单 rank 并发 decode 容量 64。C128=512 条时每 rank 恰好 64 条——正好满载，已验证 C128 承载。</td></tr>
+<tr><td><code>--max-num-batched-tokens 1024</code></td><td>1024</td><td>decode 步的 token 预算（对齐官方 D 侧口径）。decode 每步每 seq 只产 1 token（+投机），预算天然小。</td></tr>
+<tr><td><code>--gpu-memory-utilization 0.92</code></td><td>0.92</td><td>D 端 KV cache 需求大（所有在途请求的完整 KV 都存 D），比 P 端多给 2%。</td></tr>
+<tr><td><code>--no-enable-prefix-caching</code></td><td>禁用</td><td><b>D 端必须禁用</b>：命中率只在 P 端产生（D 只做 decode 无 prefill，无前缀可复用）；且 kv_consumer 模式下开 prefix cache 与 KV 拉取路径冲突。</td></tr>
+</table>
+<div class="figcap">表 6 · D 端并行形态与显存参数</div>
+
+<h3>3.2 KV 传输参数（D 端作为消费者）</h3>
+<table>
+<tr><th>字段</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>kv_role</code></td><td>kv_consumer</td><td>消费端：不接收完整输入，收到请求后按 kv_transfer_params 里 P 给的地址<b>主动拉取 KV</b>（实测 159MB/请求，8 rank 并行拉，1001 次全成功）。</td></tr>
+<tr><td><code>kv_port</code></td><td>20001</td><td>D 端自身 KV 通道基端口（与 P 的 producer 端口同段，作用是本端监听）。</td></tr>
+<tr><td><code>kv_connector_extra_config</code></td><td>prefill{dp:1,tp:1} / decode{dp:8,tp:1}</td><td>与 P 端声明镜像对称。<b>两侧拓扑声明不一致 = KV 元数据错位 = D 全量重算</b>（联调期三天死锁的根因，修正 proxy 后已解决）。</td></tr>
+<tr><td><code>scheduler_config.recompute_scheduler_enable</code></td><td>true</td><td>重算调度器，<b>仅 PD 的 D 端合法</b>（纯 D 启动会被校验拒绝）。KV 拉取失败/部分缺失时按块重算缺失部分而非全量重试——是 KV 传输可靠性的一部分。</td></tr>
+</table>
+<div class="figcap">表 7 · D 端 KV 传输（消费侧）参数</div>
+
+<h3>3.3 编译与图模式（D 端 TPOT 的最大功臣）</h3>
+<table>
+<tr><th>参数</th><th>值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--compilation-config {"cudagraph_mode":"FULL_DECODE_ONLY"}</code></td><td>FULL_DECODE_ONLY</td><td><b>TPOT 218→16.4ms 的 13 倍功臣</b>（10-27 实测）：decode 全程走 ACL Graph replay，消除逐算子 launch 开销。只对 decode 生效（prefill 不图）。</td></tr>
+<tr><td>关联字段 <code>cudagraph_decoder_replay</code> 等</td><td>默认</td><td>decoder replay、capture sizes（实测 1~384 档位自动捕获）、trim_threshold=768——相邻 batch pad 到最近档位执行，相邻并发档 TPOT 持平即此效应（正常现象）。</td></tr>
+<tr><td><code>--speculative-config {"num_speculative_tokens":5,"method":"dspark","enforce_eager":false}</code></td><td>dspark5 + 图模式共存</td><td>D 端<b>真跑</b>投机解码：draft 模型一次提 5 个候选，verify 步并行验证，实测采纳约 2.9 tok/步。官方口径 TPOT = 块口径 ÷ 采纳率 ≈ 16.5/2.9 ≈ 5.7ms。<b>与图模式共存</b>（MTP 才互斥）；<code>enforce_eager:false</code> 是投机路径上图的前提。</td></tr>
+<tr><td>验证锚点</td><td>—</td><td>gsm8k 文本采纳率 2.95 vs random 文本 1.70（+27%）——所以 ais_bench（gsm8k）跑出 4.5~5.9ms 而自研 random 数据 7.2~7.6ms，两框架互证。</td></tr>
+</table>
+<div class="figcap">表 8 · D 端编译与投机参数</div>
+
+<h3>3.4 additional-config 逐字段（D 端 decode 重叠全家桶）</h3>
+<table>
+<tr><th>字段</th><th>值</th><th>作用</th></tr>
+<tr><td><code>multistream_engram_overlap</code></td><td>true</td><td>engram 与主计算流重叠（对齐集群实战配方，打包生效、无单独 A/B）。</td></tr>
+<tr><td><code>multistream_overlap_shared_expert</code></td><td>true</td><td>共享专家计算与主路重叠。</td></tr>
+<tr><td><code>multistream_dsv4_dsa_overlap</code></td><td>true</td><td>DSA（稀疏注意力索引）与主路重叠。</td></tr>
+<tr><td><code>enable_cpu_binding</code></td><td>true</td><td>关键线程绑 CPU 核，降低调度抖动（decode 步时稳定性相关）。</td></tr>
+<tr><td><code>enable_fused_mc2</code></td><td><b class="bad">0（必须）</b></td><td><span class="redline">红线</span>：非零值触发 aclnnMoeDistributeDispatchV4 err 561002，8 rank warmup 集体挂死。已定案勿开。</td></tr>
+<tr><td><code>enable_force_eplb</code></td><td>false</td><td>强制专家负载均衡关闭（专家分布固定，decode 稳定）。</td></tr>
+<tr><td><code>combine_quant_mode</code></td><td>4</td><td>量化执行路径组合模式（W4A8-MXFP4 动态 + W8A8 的执行选择）。</td></tr>
+<tr><td><code>scheduler_config.recompute_scheduler_enable</code></td><td>true</td><td>见 3.2（KV 消费端专属）。</td></tr>
+</table>
+<div class="figcap">表 9 · D 端 additional-config 逐字段</div>
+<div class="kp"><p><b>说明</b>：上述四连重叠件为打包对齐配置，拆分单项收益未测；D 端日志中可见 Engram/DSA 等组件挂载信息。</p></div>
+
+<h3>3.5 D 端环境变量（与 P 端差异项）</h3>
+<table>
+<tr><th>变量</th><th>D 端值</th><th>与 P 端的差异及原因</th></tr>
+<tr><td><code>HCCL_BUFFSIZE</code></td><td><b>4096</b>（P=1024）</td><td>D 端要<b>拉取</b>整份 KV（159MB/请求，8 rank 并行），大 buffer 保证拉取带宽；P 端取 1024 是给 KV 推送缓冲让出 HBM。</td></tr>
+<tr><td><code>HCCL_ALGO</code></td><td>未设置（P 端为 level0:fullmesh）</td><td>D 端 KV 拉取走 Mooncake 自身通道 + 卡内 HCCL 常规算法，不需要 P 端的全互联声明。</td></tr>
+<tr><td>其余（HCCL_EXEC_TIMEOUT、expandable_segments、FASTOKENS、OMP=10、CCU_SCHED、MQ=64 等）</td><td>与 P 端一致</td><td>同为防挂超时族与官方对齐项，两侧语义相同，不再展开。</td></tr>
+</table>
+<div class="figcap">表 10 · D 端环境变量差异</div>
+
+<h2 id="s4">4. P / D 参数差异对照速查</h2>
+<table>
+<tr><th>维度</th><th>P 端（Prefill）</th><th>D 端（Decode）</th><th>为什么不同</th></tr>
+<tr><td>并行形态</td><td>PCP8×TP1×DP1（序列切 8）</td><td>DP8×TP1（8 独立副本）</td><td>P 切序列摊单请求时间；D 副本化保并发与 TPOT</td></tr>
+<tr><td>端口</td><td>8300</td><td>8301</td><td>proxy 按 8300/8301 分 prefill/decode 两腿</td></tr>
+<tr><td>kv_role</td><td>kv_producer（推 KV）</td><td>kv_consumer（拉 KV）</td><td>数据流向：P→D 单向</td></tr>
+<tr><td>prefix caching</td><td>开启（命中率 49.3%）</td><td>禁用</td><td>前缀复用只发生在 prefill 阶段</td></tr>
+<tr><td>batched-tokens / seqs</td><td>8192 / 16</td><td>1024 / 64</td><td>prefill 大步铺序列；decode 小步高并发</td></tr>
+<tr><td>图模式</td><td>enforce-eager</td><td>FULL_DECODE_ONLY（13 倍）</td><td>decode 算子小、launch 占比高；prefill 相反</td></tr>
+<tr><td>additional-config</td><td>无</td><td>四连重叠 + cpu_binding + fused_mc2=0 + recompute</td><td>decode 的重叠件只对 decode 步有效</td></tr>
+<tr><td>HCCL_BUFFSIZE</td><td>1024</td><td>4096</td><td>D 端拉整份 KV 需大 buffer；P 端把 HBM 让给 KV 推送</td></tr>
+<tr><td>投机解码</td><td>仅结构对齐（不执行）</td><td>真跑（采纳 2.9 tok/步）</td><td>投机只在 decode 生效</td></tr>
+<tr><td>gpu-mem</td><td>0.9</td><td>0.92</td><td>D 端 KV 存量大</td></tr>
+</table>
+<div class="figcap">表 11 · P / D 参数差异对照速查</div>
+<div class="kp t"><p><b>两侧完全相同的参数</b>：量化（deepseek_v4_fp8）、dspark5 结构、tokenizer 模式、超时族（HCCL_EXEC/RPC/EXECUTE_MODEL/ENGINE_READY）、expandable_segments、FASTOKENS、OMP=10、CCU_SCHED、MQ=64、dp-sync-interval=1、max-model-len=32768、seed=1024。</p></div>
+
+<h2 id="s5">5. proxy 参数详解（请求入口与分流）</h2>
+
+<h3>5.1 启动参数</h3>
+<table>
+<tr><th>参数</th><th>当前值</th><th>作用与配置理由</th></tr>
+<tr><td><code>--host 0.0.0.0 --port 9100</code></td><td>0.0.0.0:9100</td><td>proxy 监听端口。9100 是定案端口：9000 被宿主机 MindStudio 常驻服务占用（历史坑），9000 不可用。</td></tr>
+<tr><td><code>--prefiller-hosts</code></td><td>P 机 IP 列表（空格分隔）</td><td>⚠ <b>127.0.0.1 陷阱</b>：它指 proxy 所在机自己——proxy 不在 P 机上时这一路是空的。多 P 时建议全用实际 IP，不用 127.0.0.1。</td></tr>
+<tr><td><code>--prefiller-ports</code></td><td>8300 ×N</td><td>与 hosts 一一对应。<b>必须空格分隔</b>（argparse nargs="+"，逗号串会报 invalid int——实测坑，重启脚本已生成空格形态）。</td></tr>
+<tr><td><code>--decoder-hosts / --decoder-ports</code></td><td>D 机卡间口 IP / 8301</td><td>decode 腿目标，用卡间互联网段的 D 机 IP（由部署脚本自动登记）。多 P 时所有 P 机到该 IP 可达即可。</td></tr>
+<tr><td><code>--max-retries 3 / --retry-delay 0.001</code></td><td>默认</td><td>后端请求失败的重试次数与退避基础延迟。</td></tr>
+<tr><td><code>--max-waiting-retries 3 / --waiting-retry-interval</code></td><td>默认</td><td>后端未就绪时的等待重试（proxy 先于 P 起时自动等——但<b>实测建议 proxy 在 P 就绪后再起</b>：旧实例连接池失效会报 "Remote end closed"）。</td></tr>
+<tr><td><code>--workers</code></td><td>1（默认）</td><td>uvicorn worker 进程数。实测单 worker 已承载 C64。</td></tr>
+<tr><td><code>--enable-prefill-affinity</code></td><td><b>不启用</b></td><td>会话亲和：按 conversation key（model+system+首条 user message 的 SHA256）rendezvous hash 粘同一台 P。⚠ <b>对 mix50 数据集不生效</b>——每条请求首条 message 不同（共享前缀藏在正文里），key 各不相同等于没粘。开启后 decode 仍均分。真要前缀粘性需按「前缀 N 字符 hash」改造，现有预热方案已够用故未做。</td></tr>
+<tr><td><code>--log-level</code></td><td>INFO</td><td>DEBUG 可看每个请求的调度选择（排查分流用）。</td></tr>
+</table>
+<div class="figcap">表 12 · proxy 启动参数</div>
+
+<h3>5.2 调度机制（源码级实读，main 分支约 1440 行）</h3>
+<table>
+<tr><th>机制</th><th>说明</th></tr>
+<tr><td>SharedProxyScheduler（分数堆 least-load）</td><td>每个 prefiller 维护 active_tokens 与 kv_cache 两个分数，请求派给总分最低者，完成时 release。<b>实测铁证：2P/3P 各档 Δqueries 逐 token 级相等（164,07x / 2,625,1xx），精确均分</b>。非朴素轮询——快机自然多接单。</td></tr>
+<tr><td>taint（故障摘除）</td><td>实例故障时加入 tainted 集合并重排堆，请求自动避开——<b>多 P 挂一台不全瘫</b>（分数堆重排到健康实例）。</td></tr>
+<tr><td>两腿转发流程</td><td>① prefill 腿：给请求加 <code>do_remote_decode:true</code> 的 kv_transfer_params → POST 选中 P → 等 P 返回（响应里带 KV 元数据）；② decode 腿：<b>把 kv_transfer_params 塞回请求</b> POST 到 D → D 凭元数据拉 KV → 流式回包。</td></tr>
+<tr><td><span class="redline">红线：kv_transfer_params 转发</span></td><td><b>必须用官方 load_balance_proxy</b>。此前简化版 proxy 不转发 kv_transfer_params（P 响应被丢弃）→ D 拿不到元数据 → 全量本地重算 20K → EP 集合错位 → 块荒死锁——11-06~11-07 三天事故的真凶。proxy 重启脚本特意把新旧三种 proxy 全清，防误用。</td></tr>
+<tr><td><span class="redline">重启时机</span></td><td><b>P/D 任一重启后 proxy 必须重启</b>：旧实例到后端的连接池/会话状态失效，表现为请求被切连接（"Remote end closed connection without response"）。重启脚本一条命令完成清旧+bind 校验+重起。</td></tr>
+</table>
+<div class="figcap">表 13 · proxy 调度机制</div>
+
+<h3>5.3 部署与排坑（proxy 重启脚本的防护段）</h3>
+<table>
+<tr><th>防护</th><th>说明</th></tr>
+<tr><td>精确清旧</td><td>容器内按 cmdline 精确匹配（proxy_demo.py / disagg_proxy / load_balance_proxy 三种历史版本全清），不误伤其他进程；杀完输出「已杀实例列表」自证。</td></tr>
+<tr><td>bind 校验</td><td>端口绑定测试确认释放才启动新实例；5 秒未释放拒绝启动并提示人工排查——防「9100 被占」类残留。</td></tr>
+<tr><td>脚本在位校验</td><td>启动前确认镜像内官方 proxy 脚本存在（镜像错版早失败）。</td></tr>
+<tr><td>判活方式</td><td>proxy <b>没有 /health 与 /v1/models 路由</b>——404 属正常，判活看真实 POST 通不通（联通检查工具对应项）。proxy 与检查工具不在同机时，检查工具必须显式带 proxy IP。</td></tr>
+</table>
+<div class="figcap">表 14 · proxy 部署防护段</div>
+
+<h2 id="s6">6. 配套实测口径</h2>
+<table>
+<tr><th>指标</th><th>1P1D</th><th>2P1D</th><th>3P1D</th><th>达标线</th></tr>
+<tr><td>TTFT avg C1/C8/C32</td><td>737.9/1380.8/8428.5 ms</td><td>744.1/879.0/4766.6 ms</td><td><b>630.2/781.8/1453.1 ms</b></td><td>&lt;1s（C8 内达标）</td></tr>
+<tr><td>TPOT 全档</td><td>4.8~6.0 ms</td><td>5.2~5.9 ms</td><td>5.2~6.6 ms</td><td>&lt;10ms 全达标</td></tr>
+<tr><td>PrefixCache 命中率</td><td>49.7%</td><td>49.5%（双 P）</td><td>49.3%（三 P 均分）</td><td>构造 50%</td></tr>
+<tr><td>E2E 总 token 吞吐 @C32</td><td>56,085</td><td>87,707</td><td><b>152,382</b></td><td>—</td></tr>
+</table>
+<div class="figcap">表 15 · 1P/2P/3P 实测口径（2026-11-10 定稿）</div>
+<div class="kp"><p><b>三种吞吐口径必须区分</b>：单请求输出速率（385/E2E 时延，随并发下降）；系统级输出吞吐；总 token 吞吐（输入+输出 ÷ 总墙钟）。三者数值形态与量级完全不同，引用时必须标注口径。</p></div>
+
+<div class="note">素材来源：昇腾 950DT 集群 PD 分离部署（1~3 台 P 各 8 卡 + 1 台 D 8 卡）的启动脚本与 2026-11-06~11-10 压测记录；镜像内官方 proxy 源码（main 分支）逐段实读。profiling 用 <code>--profiler-config</code>（JSON 形态，<code>profiler:"torch"</code>，采集窗口由 /start_profile~stop_profile 控制，平时零开销）。姊妹篇：<a href="DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html">《DP 与 TP 与 PCP 卡位关系》</a>、<a href="DeepSeek V4.1-Flash 显存拆解 · PCP4 DP4 P与D形态逐卡对照.html">《显存逐卡拆解》</a>、<a href="vllm-ascend RFC 15665 解读 · GLM-5.3-Flash 适配路线图.html">《GLM-5.3-Flash 适配路线图》</a>。</div>
+
+</div>
+<script src="https://cdn.jsdmirror.com/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true,theme:"neutral",themeVariables:{fontSize:"15px"},flowchart:{nodePadding:"12px"}});</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
