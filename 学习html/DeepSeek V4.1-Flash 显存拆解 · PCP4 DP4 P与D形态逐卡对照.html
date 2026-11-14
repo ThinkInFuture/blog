@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepSeek V4.1-Flash 显存拆解 · PCP4 / DP4 / 8 卡 P 与 D 形态逐卡对照</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+  :root{
+    --ink:#2563eb;
+    --ink-2:#1a1f27;
+    --muted:#6b7280;
+    --line:#dde1e7;
+    --bg:#fff;
+    --card:#ffffff;
+    --exp:#e67e22;
+    --den:#27ae60;
+    --emb:#2980b9;
+    --noise:#94a3b8;
+    --lm:#c0392b;
+    --kv:#8e44ad;
+    --ok:#2e7d4f;
+    --warn:#a8400f;
+  }
+  *{box-sizing:border-box;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink-2); margin:0; padding:28px 20px 64px;
+    line-height:1.7; font-size:14.5px; -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px; margin:0 auto;}
+
+  h1{font-size:23px; color:var(--ink); margin:0 0 6px; letter-spacing:-0.3px; line-height:1.4;}
+  .subtitle{color:var(--muted); font-size:13.5px; margin:0 0 24px;}
+
+  h2{
+    font-size:18px; color:var(--ink); margin:36px 0 12px;
+    padding-left:12px; border-left:4px solid var(--ink);
+    line-height:1.4;
+  }
+
+  .card{
+    background:var(--card); border:1px solid var(--line); border-radius:12px;
+    padding:20px 24px; margin:12px 0; box-shadow:0 1px 2px rgba(0,0,0,.03);
+  }
+
+  p{margin:8px 0;}
+  code{
+    background:#eef2f6; padding:1px 6px; border-radius:4px;
+    font-family:ui-monospace,SFMono-Regular,Consolas,monospace;
+    font-size:12.5px; color:#b42318;
+  }
+
+  .diagram{margin:0; padding:0;}
+  .fig-svg{width:100%; height:auto; display:block; border-radius:12px;}
+
+  .t-title{font-size:16px; font-weight:700; fill:#1a1f27;}
+  .t-sub{font-size:12.5px; fill:#64748b;}
+  .t-h{font-size:13px; font-weight:600; fill:#334155;}
+  .t-b{font-size:12px; font-weight:600; fill:#1e293b;}
+  .t-n{font-size:11.5px; fill:#334155;}
+  .t-m{font-size:11px; fill:#64748b;}
+  .t-s{font-size:10px; fill:#64748b;}
+  .t-total{font-size:12.5px; font-weight:700; fill:#1e293b;}
+  .t-warn{fill:#a8400f; font-weight:700;}
+
+  .figcap{text-align:center;color:var(--muted);font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line);line-height:1.7}
+  .toc{background:#f7f8fa;border:1px solid var(--line);border-radius:12px;padding:14px 20px;margin:0 0 26px;font-size:14px}
+  .toc ol{margin:6px 0 0;padding-left:20px}
+  .toc a{color:#1d4ed8;text-decoration:none}
+  .fig-no{color:var(--ink-2); font-weight:600; margin-right:6px;}
+
+  .note{
+    background:#f0f7ff; border:1px solid #cfe2f7; border-radius:10px;
+    padding:12px 16px; font-size:13.5px; margin:16px 0 4px; color:#1e3a5f;
+  }
+  .note strong{color:#0b2e4f;}
+
+  .calc{
+    background:#f8fafc; border:1px solid var(--line); border-radius:10px;
+    padding:14px 18px; font-size:13px; margin:12px 0; color:var(--ink-2);
+  }
+  .calc-title{font-weight:600; color:var(--ink); margin-bottom:6px; font-size:13.5px;}
+  .calc-row{display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #e2e8f0;}
+  .calc-row:last-child{border-bottom:none;}
+  .calc-row .lbl{color:var(--muted);}
+  .calc-row .val{font-family:ui-monospace,SFMono-Regular,Consolas,monospace; color:var(--ink-2);}
+  .calc-row .val.ok{color:var(--ok); font-weight:600;}
+
+  .tbl-wrap{overflow-x:auto; border-radius:10px; border:1px solid var(--line); background:#fff;}
+  table{border-collapse:collapse; width:100%; font-size:13px;}
+  th{
+    background:#eef4fa; color:var(--ink); border-bottom:1px solid var(--line);
+    padding:10px 12px; text-align:left; font-weight:600; font-size:12.5px;
+  }
+  td{border-bottom:1px solid #edf1f6; padding:9px 12px; vertical-align:top;}
+  tbody tr:hover{background:#fafcfe;}
+  td.ok{color:var(--ok); font-weight:600;}
+  .tbl-caption{font-size:12.5px; color:var(--muted); margin:10px 2px 0; line-height:1.7;}
+
+  @media (max-width:720px){table{display:block}tbody,tr{display:block}th,td{display:inline-block;border:1px solid var(--line);padding:5px 9px;font-size:12px;overflow-wrap:anywhere;word-break:break-word}}
+  @media (max-width:520px){
+    body{padding:24px 12px 48px;}
+    h1{font-size:20px;}
+    h2{font-size:16px;}
+    .card{padding:16px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>DeepSeek V4.1-Flash 显存拆解：PCP4 / DP4 / 8 卡 P 与 D 形态逐卡对照</h1>
+<p class="subtitle">2026-11-10 压测口径 · Engram 记忆表关闭 · 目标 16 并发 · 20K 输入 / 385 输出 / 50% prefix · max_model_len=32K · 站内发布 2026-11-13 ｜ 姊妹篇：<a href="DeepSeek V4.1-Flash PD 分离部署参数详解.html">《DeepSeek V4.1-Flash PD 分离部署参数详解》</a></p>
+
+<div class="card">
+  <p><b>本页口径</b>：Engram 记忆表关闭，188.8 GiB 不加载。权重三组件（含缩放因子）：
+  <b>专家 + DSpark 草稿头 278.9 GiB</b>、<b>稠密层 8.1 GiB</b>、<b>词嵌入 + 输出头 5.8 GiB</b>，
+  单副本合计约 <b>292.8 GiB</b>。每卡底噪 4.8 GiB。</p>
+  <p><b>KV 假设</b>：32K context 单请求 KV ≈ <b>11 GiB</b>（0.3357 MiB/token）。20K 实际请求（20510+385=20895 tok）≈ <b>7.01 GiB/请求</b>；
+  50% prefix 命中后，每请求新增 10640 tok ≈ 3.57 GiB，共享前缀在 pool 中保留一份 10255 tok ≈ 3.44 GiB。</p>
+  <p><b>业务目标</b>：16 并发 · 20K 输入 / 385 输出 · 50% prefix 命中 · max_model_len=32K。以下各章节逐卡列出所需显存。</p>
+</div>
+
+<div class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#s1">单副本权重构成（292.8 GiB，Engram off）</a></li>
+    <li><a href="#s2">PCP4 形态逐卡显存（单机 4 卡 · 16 并发）</a></li>
+    <li><a href="#s3">DP4 形态逐卡显存（单机 4 卡 · 16 并发）</a></li>
+    <li><a href="#s4">8 卡 P 形态逐卡显存（PCP8 · 16 并发）</a></li>
+    <li><a href="#s5">8 卡 D 形态逐卡显存（DP8 · 16 并发）</a></li>
+    <li><a href="#s6">KV pool 配置建议</a></li>
+  </ol>
+</div>
+
+<!-- ================= 图1 ================= -->
+<h2 id="s1">1.图 1：单副本权重构成（292.8 GiB，Engram off）</h2>
+<div class="card">
+  <figure class="diagram">
+    <svg class="fig-svg" viewBox="0 0 960 360" role="img" aria-labelledby="fig1-title fig1-desc">
+      <title id="fig1-title">单副本权重构成</title>
+      <desc id="fig1-desc">三个组件：专家与草稿头 278.9 GiB 可 EP 切分；稠密层 8.1 GiB 每卡完整；词嵌入 5.8 GiB 每卡完整。Engram 记忆表 188.8 GiB 本次关闭。</desc>
+
+      <rect x="10" y="10" width="940" height="340" rx="14" fill="#f0f3f6" stroke="#dbe1e8"/>
+      <text x="40" y="46" class="t-title">单副本权重构成（292.8 GiB · Engram off）</text>
+      <text x="40" y="68" class="t-sub">三个组件 · 数值独立标注</text>
+
+      <rect x="40" y="96" width="280" height="120" rx="10" fill="#fff" stroke="#e67e22" stroke-width="1.6"/>
+      <rect x="40" y="96" width="280" height="34" rx="10" fill="#e67e22"/>
+      <rect x="40" y="118" width="280" height="12" fill="#e67e22"/>
+      <text x="60" y="118" class="t-b" fill="#fff">路由专家 + DSpark 草稿头</text>
+      <text x="60" y="152" class="t-b" font-size="15">278.9 GiB</text>
+      <text x="200" y="152" class="t-m">占比 95.2%</text>
+      <text x="60" y="174" class="t-n">557.2B · MXFP4 ≈ 3.9 bit/参</text>
+      <text x="60" y="194" class="t-m">EP 按总卡数切分 · 含 scale 19.4</text>
+
+      <rect x="340" y="96" width="280" height="120" rx="10" fill="#fff" stroke="#27ae60" stroke-width="1.6"/>
+      <rect x="340" y="96" width="280" height="34" rx="10" fill="#27ae60"/>
+      <rect x="340" y="118" width="280" height="12" fill="#27ae60"/>
+      <text x="360" y="118" class="t-b" fill="#fff">稠密层（注意力 / 归一化 / 路由器）</text>
+      <text x="360" y="152" class="t-b" font-size="15">8.1 GiB</text>
+      <text x="460" y="152" class="t-m">占比 2.8%</text>
+      <text x="360" y="174" class="t-n">每卡完整加载</text>
+      <text x="360" y="194" class="t-m">仅 TP 可切分 · 含 scale 2.5</text>
+
+      <rect x="640" y="96" width="280" height="120" rx="10" fill="#fff" stroke="#2980b9" stroke-width="1.6"/>
+      <rect x="640" y="96" width="280" height="34" rx="10" fill="#2980b9"/>
+      <rect x="640" y="118" width="280" height="12" fill="#2980b9"/>
+      <text x="660" y="118" class="t-b" fill="#fff">词嵌入 + 输出头</text>
+      <text x="660" y="152" class="t-b" font-size="15">5.8 GiB</text>
+      <text x="760" y="152" class="t-m">占比 2.0%</text>
+      <text x="660" y="174" class="t-n">每卡完整加载</text>
+      <text x="660" y="194" class="t-m">仅 TP 可切分</text>
+
+      <rect x="40" y="232" width="880" height="36" rx="8" fill="#f8fafc" stroke="#dbe1e8"/>
+      <text x="60" y="255" class="t-b">单副本合计：292.8 GiB</text>
+      <text x="240" y="255" class="t-m">= 专家 278.9 + 稠密 8.1 + 词嵌入 5.8</text>
+      <text x="720" y="255" class="t-m">可切部分 278.9 GiB · 每卡必载 13.9 GiB</text>
+
+      <rect x="40" y="284" width="880" height="48" rx="8" fill="#fff" stroke="#94a3b8" stroke-dasharray="4 3"/>
+      <text x="60" y="304" class="t-b">Engram 记忆表 188.8 GiB</text>
+      <text x="60" y="322" class="t-m">196.6B MXFP8 · 第 1/14 层 · 本页 OFF 不加载 · 开启需 cpu_offload + dp_shared_memory</text>
+    </svg>
+    <div class="figcap">图 1 · 三个组件独立成框：专家 278.9 GiB（EP 可切）· 稠密 8.1 GiB · 词嵌入 5.8 GiB（后两者每卡必载）</div>
+  </figure>
+</div>
+
+<!-- ================= 图2 ================= -->
+<h2 id="s2">2.图 2：PCP4 形态（PCP4 × TP1 × DP1，单机 4 卡，16 并发）</h2>
+<div class="card">
+  <figure class="diagram">
+    <svg class="fig-svg" viewBox="0 0 960 560" role="img" aria-labelledby="fig2-title fig2-desc">
+      <title id="fig2-title">PCP4 形态逐卡显存（16 并发）</title>
+      <desc id="fig2-desc">4 张卡，每卡 6 个组件框并列标注：专家 69.7、稠密 8.1、词嵌入 5.8、底噪 4.8、KV(16并发 PCP4 切1/4，50% prefix) 15.14。每卡合计 103.54 GiB。</desc>
+
+      <rect x="10" y="10" width="940" height="540" rx="14" fill="#f0f3f6" stroke="#dbe1e8"/>
+      <text x="40" y="44" class="t-title">PCP4 形态：序列切 4 份，权重按 EP4 切分 · 16 并发</text>
+      <text x="40" y="64" class="t-sub">每卡 6 个组件并列 · 16 并发 / 4 副本 = 4 并发/卡 · 每卡合计 103.54 GiB</text>
+
+      <!-- 卡0 -->
+      <g>
+        <rect x="40" y="88" width="180" height="440" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="88" width="180" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="108" width="180" height="10" fill="#e2e8f0"/>
+        <text x="130" y="108" text-anchor="middle" class="t-b">卡 0 · 序列 1/4</text>
+
+        <rect x="52" y="130" width="156" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="60" y="148" class="t-n">专家（EP4）</text>
+        <text x="60" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="52" y="176" width="156" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="60" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="52" y="212" width="156" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="60" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="52" y="248" width="156" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="60" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="52" y="284" width="156" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="60" y="302" class="t-n">KV（16并发 PCP4）</text>
+        <text x="60" y="318" class="t-b" font-size="13">15.14 GiB</text>
+        <text x="60" y="332" class="t-m">50% prefix · 4 并发/卡</text>
+
+        <rect x="52" y="344" width="156" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="365" class="t-total">合计 103.54 GiB</text>
+
+        <rect x="52" y="384" width="156" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="402" class="t-m">计算：</text>
+        <text x="60" y="418" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="60" y="434" class="t-m">+15.14 = 103.54 GiB</text>
+
+        <text x="130" y="484" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="130" y="498" text-anchor="middle" class="t-s">(16×3.57+3.44)</text>
+        <text x="130" y="512" text-anchor="middle" class="t-s">= 60.56 GiB / 4 卡</text>
+        <text x="130" y="526" text-anchor="middle" class="t-s">= 15.14 GiB/卡</text>
+      </g>
+
+      <!-- 卡1 -->
+      <g>
+        <rect x="240" y="88" width="180" height="440" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="240" y="88" width="180" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="240" y="108" width="180" height="10" fill="#e2e8f0"/>
+        <text x="330" y="108" text-anchor="middle" class="t-b">卡 1 · 序列 2/4</text>
+
+        <rect x="252" y="130" width="156" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="260" y="148" class="t-n">专家（EP4）</text>
+        <text x="260" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="252" y="176" width="156" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="260" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="252" y="212" width="156" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="260" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="252" y="248" width="156" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="260" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="252" y="284" width="156" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="260" y="302" class="t-n">KV（16并发 PCP4）</text>
+        <text x="260" y="318" class="t-b" font-size="13">15.14 GiB</text>
+        <text x="260" y="332" class="t-m">50% prefix · 4 并发/卡</text>
+
+        <rect x="252" y="344" width="156" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="260" y="365" class="t-total">合计 103.54 GiB</text>
+
+        <rect x="252" y="384" width="156" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="260" y="402" class="t-m">计算：</text>
+        <text x="260" y="418" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="260" y="434" class="t-m">+15.14 = 103.54 GiB</text>
+
+        <text x="330" y="484" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="330" y="498" text-anchor="middle" class="t-s">(16×3.57+3.44)</text>
+        <text x="330" y="512" text-anchor="middle" class="t-s">= 60.56 GiB / 4 卡</text>
+        <text x="330" y="526" text-anchor="middle" class="t-s">= 15.14 GiB/卡</text>
+      </g>
+
+      <!-- 卡2 -->
+      <g>
+        <rect x="440" y="88" width="180" height="440" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="440" y="88" width="180" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="440" y="108" width="180" height="10" fill="#e2e8f0"/>
+        <text x="530" y="108" text-anchor="middle" class="t-b">卡 2 · 序列 3/4</text>
+
+        <rect x="452" y="130" width="156" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="460" y="148" class="t-n">专家（EP4）</text>
+        <text x="460" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="452" y="176" width="156" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="460" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="452" y="212" width="156" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="460" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="452" y="248" width="156" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="460" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="452" y="284" width="156" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="460" y="302" class="t-n">KV（16并发 PCP4）</text>
+        <text x="460" y="318" class="t-b" font-size="13">15.14 GiB</text>
+        <text x="460" y="332" class="t-m">50% prefix · 4 并发/卡</text>
+
+        <rect x="452" y="344" width="156" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="460" y="365" class="t-total">合计 103.54 GiB</text>
+
+        <rect x="452" y="384" width="156" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="460" y="402" class="t-m">计算：</text>
+        <text x="460" y="418" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="460" y="434" class="t-m">+15.14 = 103.54 GiB</text>
+
+        <text x="530" y="484" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="530" y="498" text-anchor="middle" class="t-s">(16×3.57+3.44)</text>
+        <text x="530" y="512" text-anchor="middle" class="t-s">= 60.56 GiB / 4 卡</text>
+        <text x="530" y="526" text-anchor="middle" class="t-s">= 15.14 GiB/卡</text>
+      </g>
+
+      <!-- 卡3 -->
+      <g>
+        <rect x="640" y="88" width="180" height="440" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="640" y="88" width="180" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="640" y="108" width="180" height="10" fill="#e2e8f0"/>
+        <text x="730" y="108" text-anchor="middle" class="t-b">卡 3 · 序列 4/4</text>
+
+        <rect x="652" y="130" width="156" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="660" y="148" class="t-n">专家（EP4）</text>
+        <text x="660" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="652" y="176" width="156" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="660" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="652" y="212" width="156" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="660" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="652" y="248" width="156" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="660" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="652" y="284" width="156" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="660" y="302" class="t-n">KV（16并发 PCP4）</text>
+        <text x="660" y="318" class="t-b" font-size="13">15.14 GiB</text>
+        <text x="660" y="332" class="t-m">50% prefix · 4 并发/卡</text>
+
+        <rect x="652" y="344" width="156" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="660" y="365" class="t-total">合计 103.54 GiB</text>
+
+        <rect x="652" y="384" width="156" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="660" y="402" class="t-m">计算：</text>
+        <text x="660" y="418" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="660" y="434" class="t-m">+15.14 = 103.54 GiB</text>
+
+        <text x="730" y="484" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="730" y="498" text-anchor="middle" class="t-s">(16×3.57+3.44)</text>
+        <text x="730" y="512" text-anchor="middle" class="t-s">= 60.56 GiB / 4 卡</text>
+        <text x="730" y="526" text-anchor="middle" class="t-s">= 15.14 GiB/卡</text>
+      </g>
+
+      <!-- 右侧图例 -->
+      <rect x="840" y="88" width="100" height="440" rx="10" fill="#fff" stroke="#cbd5e1"/>
+      <text x="890" y="114" text-anchor="middle" class="t-h">图例</text>
+      <rect x="852" y="132" width="12" height="12" rx="2" fill="#e67e22"/>
+      <text x="870" y="142" class="t-s">专家</text>
+      <rect x="852" y="156" width="12" height="12" rx="2" fill="#27ae60"/>
+      <text x="870" y="166" class="t-s">稠密</text>
+      <rect x="852" y="180" width="12" height="12" rx="2" fill="#2980b9"/>
+      <text x="870" y="190" class="t-s">词嵌入</text>
+      <rect x="852" y="204" width="12" height="12" rx="2" fill="#94a3b8"/>
+      <text x="870" y="214" class="t-s">底噪</text>
+      <rect x="852" y="228" width="12" height="12" rx="2" fill="#8e44ad"/>
+      <text x="870" y="238" class="t-s">KV</text>
+      <rect x="852" y="252" width="12" height="12" rx="2" fill="#f1f5f9" stroke="#cbd5e1"/>
+      <text x="870" y="262" class="t-s">合计</text>
+
+      <text x="890" y="320" text-anchor="middle" class="t-s">PCP 只切序列</text>
+      <text x="890" y="336" text-anchor="middle" class="t-s">与 KV</text>
+      <text x="890" y="360" text-anchor="middle" class="t-s">4 卡 = EP4</text>
+      <text x="890" y="376" text-anchor="middle" class="t-s">专家翻倍</text>
+      <text x="890" y="400" text-anchor="middle" class="t-s">16 并发</text>
+      <text x="890" y="416" text-anchor="middle" class="t-s">4 并发/卡</text>
+      <text x="890" y="440" text-anchor="middle" class="t-s">50% prefix</text>
+      <text x="890" y="456" text-anchor="middle" class="t-s">每卡 15.14 GiB</text>
+    </svg>
+    <div class="figcap">图 2 · PCP4 单机 4 卡 · 16 并发 · 50% prefix 场景：每卡 103.54 GiB</div>
+  </figure>
+
+  <div class="calc">
+    <div class="calc-title">KV 缓存计算过程（PCP4 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">单请求 20K 实际 KV（20510 + 385 tok × 0.3357 MiB/tok）</span><span class="val">7.01 GiB</span></div>
+    <div class="calc-row"><span class="lbl">50% prefix 命中后每请求新增（10640 tok）</span><span class="val">3.57 GiB</span></div>
+    <div class="calc-row"><span class="lbl">共享 prefix 在 pool 中保留一份（10255 tok）</span><span class="val">3.44 GiB</span></div>
+    <div class="calc-row"><span class="lbl">16 并发 KV 总量（16 × 3.57 + 3.44）</span><span class="val">60.56 GiB</span></div>
+    <div class="calc-row"><span class="lbl">PCP4 序列切 1/4 → 每卡 KV 需求（60.56 / 4）</span><span class="val ok">15.14 GiB/卡</span></div>
+    <div class="calc-row"><span class="lbl">无 prefix 场景每卡 KV（16 × 7.01 / 4）</span><span class="val">28.04 GiB/卡</span></div>
+    <div class="calc-row"><span class="lbl">按 32K 上限最坏每卡 KV（16 × 11 / 4）</span><span class="val">44 GiB/卡</span></div>
+  </div>
+
+  <div class="calc">
+    <div class="calc-title">每卡显存需求（PCP4 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">专家（EP4 分片）</span><span class="val">69.7 GiB</span></div>
+    <div class="calc-row"><span class="lbl">稠密（每卡完整）</span><span class="val">8.1 GiB</span></div>
+    <div class="calc-row"><span class="lbl">词嵌入（每卡完整）</span><span class="val">5.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">底噪</span><span class="val">4.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">KV（16 并发 PCP4 · 50% prefix）</span><span class="val">15.14 GiB</span></div>
+    <div class="calc-row"><span class="lbl"><b>每卡合计</b></span><span class="val ok">103.54 GiB</span></div>
+  </div>
+
+  <div class="note">
+    <strong>PCP4 单机 4 卡在 16 并发、50% prefix 场景下，每卡需 103.54 GiB。</strong>其中权重 83.6 GiB、底噪 4.8 GiB、KV 15.14 GiB。<b>无 prefix 场景</b>每卡 KV 28.04 GiB，合计 116.44 GiB；<b>32K 上限最坏</b>每卡 KV 44 GiB，合计 132.4 GiB。<b>8 卡 P/D 分离见章节四、五。</b>
+  </div>
+</div>
+
+<!-- ================= 图3：DP4 单机 4 卡（16 并发） ================= -->
+<h2 id="s3">3.图 3：DP4 形态（DP4 × TP1，单机 4 卡，16 并发）</h2>
+<div class="card">
+  <figure class="diagram">
+    <svg class="fig-svg" viewBox="0 0 960 620" role="img" aria-labelledby="fig3-title fig3-desc">
+      <title id="fig3-title">DP4 形态逐卡显存（16 并发）</title>
+      <desc id="fig3-desc">4 个独立副本，每卡 6 个组件：专家 69.7、稠密 8.1、词嵌入 5.8、底噪 4.8、lm_head 1.23、KV(16并发 DP4 每副本 4 并发，50% prefix) 17.72。每卡合计 107.35 GiB。</desc>
+
+      <rect x="10" y="10" width="940" height="600" rx="14" fill="#f0f3f6" stroke="#dbe1e8"/>
+      <text x="40" y="44" class="t-title">DP4 形态：4 个独立副本，EP4 专家翻倍 · 16 并发</text>
+      <text x="40" y="64" class="t-sub">每卡 6 个组件并列 · 16 并发 / 4 副本 = 每副本 4 并发 · 每卡合计 107.35 GiB</text>
+
+      <!-- 副本0 -->
+      <g>
+        <rect x="40" y="88" width="210" height="490" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="88" width="210" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="108" width="210" height="10" fill="#e2e8f0"/>
+        <text x="145" y="108" text-anchor="middle" class="t-b">副本 0</text>
+
+        <rect x="52" y="130" width="186" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="60" y="148" class="t-n">专家（EP4）</text>
+        <text x="60" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="52" y="176" width="186" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="60" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="52" y="212" width="186" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="60" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="52" y="248" width="186" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="60" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="52" y="284" width="186" height="30" rx="6" fill="#fff" stroke="#c0392b" stroke-width="1.4"/>
+        <text x="60" y="304" class="t-n">lm_head · 1.23 GiB</text>
+
+        <rect x="52" y="320" width="186" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="60" y="338" class="t-n">KV（16并发 DP4）</text>
+        <text x="60" y="354" class="t-b" font-size="13">17.72 GiB</text>
+        <text x="60" y="368" class="t-m">50% prefix · 4 并发/副本</text>
+
+        <rect x="52" y="380" width="186" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="401" class="t-total">合计 107.35 GiB</text>
+
+        <rect x="52" y="420" width="186" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="438" class="t-m">计算：</text>
+        <text x="60" y="454" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="60" y="470" class="t-m">+1.23+17.72</text>
+        <text x="60" y="486" class="t-m">= 107.35 GiB</text>
+
+        <text x="145" y="524" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="145" y="538" text-anchor="middle" class="t-s">4×3.57 + 3.44</text>
+        <text x="145" y="552" text-anchor="middle" class="t-s">= 17.72 GiB/副本</text>
+      </g>
+
+      <!-- 副本1 -->
+      <g>
+        <rect x="270" y="88" width="210" height="490" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="270" y="88" width="210" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="270" y="108" width="210" height="10" fill="#e2e8f0"/>
+        <text x="375" y="108" text-anchor="middle" class="t-b">副本 1</text>
+
+        <rect x="282" y="130" width="186" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="290" y="148" class="t-n">专家（EP4）</text>
+        <text x="290" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="282" y="176" width="186" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="290" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="282" y="212" width="186" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="290" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="282" y="248" width="186" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="290" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="282" y="284" width="186" height="30" rx="6" fill="#fff" stroke="#c0392b" stroke-width="1.4"/>
+        <text x="290" y="304" class="t-n">lm_head · 1.23 GiB</text>
+
+        <rect x="282" y="320" width="186" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="290" y="338" class="t-n">KV（16并发 DP4）</text>
+        <text x="290" y="354" class="t-b" font-size="13">17.72 GiB</text>
+        <text x="290" y="368" class="t-m">50% prefix · 4 并发/副本</text>
+
+        <rect x="282" y="380" width="186" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="290" y="401" class="t-total">合计 107.35 GiB</text>
+
+        <rect x="282" y="420" width="186" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="290" y="438" class="t-m">计算：</text>
+        <text x="290" y="454" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="290" y="470" class="t-m">+1.23+17.72</text>
+        <text x="290" y="486" class="t-m">= 107.35 GiB</text>
+
+        <text x="375" y="524" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="375" y="538" text-anchor="middle" class="t-s">4×3.57 + 3.44</text>
+        <text x="375" y="552" text-anchor="middle" class="t-s">= 17.72 GiB/副本</text>
+      </g>
+
+      <!-- 副本2 -->
+      <g>
+        <rect x="500" y="88" width="210" height="490" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="500" y="88" width="210" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="500" y="108" width="210" height="10" fill="#e2e8f0"/>
+        <text x="605" y="108" text-anchor="middle" class="t-b">副本 2</text>
+
+        <rect x="512" y="130" width="186" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="520" y="148" class="t-n">专家（EP4）</text>
+        <text x="520" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="512" y="176" width="186" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="520" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="512" y="212" width="186" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="520" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="512" y="248" width="186" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="520" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="512" y="284" width="186" height="30" rx="6" fill="#fff" stroke="#c0392b" stroke-width="1.4"/>
+        <text x="520" y="304" class="t-n">lm_head · 1.23 GiB</text>
+
+        <rect x="512" y="320" width="186" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="520" y="338" class="t-n">KV（16并发 DP4）</text>
+        <text x="520" y="354" class="t-b" font-size="13">17.72 GiB</text>
+        <text x="520" y="368" class="t-m">50% prefix · 4 并发/副本</text>
+
+        <rect x="512" y="380" width="186" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="520" y="401" class="t-total">合计 107.35 GiB</text>
+
+        <rect x="512" y="420" width="186" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="520" y="438" class="t-m">计算：</text>
+        <text x="520" y="454" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="520" y="470" class="t-m">+1.23+17.72</text>
+        <text x="520" y="486" class="t-m">= 107.35 GiB</text>
+
+        <text x="605" y="524" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="605" y="538" text-anchor="middle" class="t-s">4×3.57 + 3.44</text>
+        <text x="605" y="552" text-anchor="middle" class="t-s">= 17.72 GiB/副本</text>
+      </g>
+
+      <!-- 副本3 -->
+      <g>
+        <rect x="730" y="88" width="210" height="490" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="730" y="88" width="210" height="30" rx="10" fill="#e2e8f0"/>
+        <rect x="730" y="108" width="210" height="10" fill="#e2e8f0"/>
+        <text x="835" y="108" text-anchor="middle" class="t-b">副本 3</text>
+
+        <rect x="742" y="130" width="186" height="40" rx="6" fill="#fff" stroke="#e67e22" stroke-width="1.4"/>
+        <text x="750" y="148" class="t-n">专家（EP4）</text>
+        <text x="750" y="164" class="t-b" font-size="12">69.7 GiB</text>
+
+        <rect x="742" y="176" width="186" height="30" rx="6" fill="#fff" stroke="#27ae60" stroke-width="1.4"/>
+        <text x="750" y="196" class="t-n">稠密 · 8.1 GiB</text>
+
+        <rect x="742" y="212" width="186" height="30" rx="6" fill="#fff" stroke="#2980b9" stroke-width="1.4"/>
+        <text x="750" y="232" class="t-n">词嵌入 · 5.8 GiB</text>
+
+        <rect x="742" y="248" width="186" height="30" rx="6" fill="#fff" stroke="#94a3b8" stroke-width="1.4"/>
+        <text x="750" y="268" class="t-n">底噪 · 4.8 GiB</text>
+
+        <rect x="742" y="284" width="186" height="30" rx="6" fill="#fff" stroke="#c0392b" stroke-width="1.4"/>
+        <text x="750" y="304" class="t-n">lm_head · 1.23 GiB</text>
+
+        <rect x="742" y="320" width="186" height="54" rx="6" fill="#fff" stroke="#8e44ad" stroke-width="1.6"/>
+        <text x="750" y="338" class="t-n">KV（16并发 DP4）</text>
+        <text x="750" y="354" class="t-b" font-size="13">17.72 GiB</text>
+        <text x="750" y="368" class="t-m">50% prefix · 4 并发/副本</text>
+
+        <rect x="742" y="380" width="186" height="32" rx="6" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="750" y="401" class="t-total">合计 107.35 GiB</text>
+
+        <rect x="742" y="420" width="186" height="80" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="750" y="438" class="t-m">计算：</text>
+        <text x="750" y="454" class="t-m">69.7+8.1+5.8+4.8</text>
+        <text x="750" y="470" class="t-m">+1.23+17.72</text>
+        <text x="750" y="486" class="t-m">= 107.35 GiB</text>
+
+        <text x="835" y="524" text-anchor="middle" class="t-s">KV 计算：</text>
+        <text x="835" y="538" text-anchor="middle" class="t-s">4×3.57 + 3.44</text>
+        <text x="835" y="552" text-anchor="middle" class="t-s">= 17.72 GiB/副本</text>
+      </g>
+    </svg>
+    <div class="figcap">图 3 · DP4 单机 4 卡 · 16 并发 · 50% prefix 场景：每卡 107.35 GiB</div>
+  </figure>
+
+  <div class="calc">
+    <div class="calc-title">KV 缓存计算过程（DP4 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">单请求 20K 实际 KV（20510 + 385 tok × 0.3357 MiB/tok）</span><span class="val">7.01 GiB</span></div>
+    <div class="calc-row"><span class="lbl">50% prefix 命中后每请求新增（10640 tok）</span><span class="val">3.57 GiB</span></div>
+    <div class="calc-row"><span class="lbl">共享 prefix 在 pool 中保留一份（10255 tok）</span><span class="val">3.44 GiB</span></div>
+    <div class="calc-row"><span class="lbl">16 并发 / 4 副本 = 每副本 4 并发</span><span class="val">4</span></div>
+    <div class="calc-row"><span class="lbl">每副本 KV（4 × 3.57 + 3.44）</span><span class="val ok">17.72 GiB/副本</span></div>
+    <div class="calc-row"><span class="lbl">无 prefix 场景每副本 KV（4 × 7.01）</span><span class="val">28.04 GiB/副本</span></div>
+    <div class="calc-row"><span class="lbl">按 32K 上限最坏每副本 KV（4 × 11）</span><span class="val">44 GiB/副本</span></div>
+  </div>
+
+  <div class="calc">
+    <div class="calc-title">每卡显存需求（DP4 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">专家（EP4 分片）</span><span class="val">69.7 GiB</span></div>
+    <div class="calc-row"><span class="lbl">稠密（每卡完整）</span><span class="val">8.1 GiB</span></div>
+    <div class="calc-row"><span class="lbl">词嵌入（每卡完整）</span><span class="val">5.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">底噪</span><span class="val">4.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">draft lm_head</span><span class="val">1.23 GiB</span></div>
+    <div class="calc-row"><span class="lbl">KV（16 并发 DP4 · 50% prefix）</span><span class="val">17.72 GiB</span></div>
+    <div class="calc-row"><span class="lbl"><b>每卡合计</b></span><span class="val ok">107.35 GiB</span></div>
+  </div>
+
+  <div class="note">
+    <strong>DP4 单机 4 卡在 16 并发、50% prefix 场景下，每卡需 107.35 GiB。</strong>其中权重 + 底噪 + lm_head = 89.63 GiB，KV 17.72 GiB。<b>无 prefix 场景</b>每副本 KV 28.04 GiB，合计 117.67 GiB；<b>32K 上限最坏</b>每副本 KV 44 GiB，合计 133.63 GiB。<b>8 卡 P/D 分离见章节四、五。</b>
+  </div>
+</div>
+
+<!-- ================= 图4：8卡 P 形态（16 并发） ================= -->
+<h2 id="s4">4.图 4：8 卡 P 形态（PCP8 × TP1 × DP1，16 并发）</h2>
+<div class="card">
+  <figure class="diagram">
+    <svg class="fig-svg" viewBox="0 0 960 860" role="img" aria-labelledby="fig4-title fig4-desc">
+      <title id="fig4-title">8 卡 P 形态逐卡显存（16 并发）</title>
+      <desc id="fig4-desc">P 形态 PCP8 × TP1 × DP1，8 张卡排成 4×2。每卡 5 个组件：专家 34.9、稠密 8.1、词嵌入 5.8、底噪 4.8、KV(16并发 PCP8 切 1/8，50% prefix) 7.57。每卡合计 61.17 GiB。</desc>
+
+      <rect x="10" y="10" width="940" height="840" rx="14" fill="#f0f3f6" stroke="#dbe1e8"/>
+      <text x="40" y="44" class="t-title">P 形态：PCP8 × TP1 × DP1（8 卡 · 4×2 网格 · 16 并发）</text>
+      <text x="40" y="64" class="t-sub">每卡 5 个组件并列 · 16 并发 / 8 卡 = 2 并发等效 · 50% prefix · 每卡合计 61.17 GiB</text>
+
+      <!-- 卡0 -->
+      <g>
+        <rect x="40" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="145" y="107" text-anchor="middle" class="t-b">卡 0 · 序列 1/8</text>
+
+        <rect x="52" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="60" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="52" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="60" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="52" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="60" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="52" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="60" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="52" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="60" y="285" class="t-n">KV（16并发 PCP8）</text>
+        <text x="60" y="302" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="52" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="338" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="52" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="60" y="390" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="60" y="406" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡1 -->
+      <g>
+        <rect x="266" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="266" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="266" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="371" y="107" text-anchor="middle" class="t-b">卡 1 · 序列 2/8</text>
+
+        <rect x="278" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="286" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="278" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="286" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="278" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="286" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="278" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="286" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="278" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="286" y="285" class="t-n">KV（16并发 PCP8）</text>
+        <text x="286" y="302" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="278" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="286" y="338" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="278" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="286" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="286" y="390" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="286" y="406" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡2 -->
+      <g>
+        <rect x="492" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="492" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="492" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="597" y="107" text-anchor="middle" class="t-b">卡 2 · 序列 3/8</text>
+
+        <rect x="504" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="512" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="504" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="512" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="504" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="512" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="504" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="512" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="504" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="512" y="285" class="t-n">KV（16并发 PCP8）</text>
+        <text x="512" y="302" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="504" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="512" y="338" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="504" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="512" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="512" y="390" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="512" y="406" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡3 -->
+      <g>
+        <rect x="718" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="718" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="718" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="823" y="107" text-anchor="middle" class="t-b">卡 3 · 序列 4/8</text>
+
+        <rect x="730" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="738" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="730" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="738" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="730" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="738" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="730" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="738" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="730" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="738" y="285" class="t-n">KV（16并发 PCP8）</text>
+        <text x="738" y="302" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="730" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="738" y="338" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="730" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="738" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="738" y="390" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="738" y="406" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡4 -->
+      <g>
+        <rect x="40" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="145" y="465" text-anchor="middle" class="t-b">卡 4 · 序列 5/8</text>
+
+        <rect x="52" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="60" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="52" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="60" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="52" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="60" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="52" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="60" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="52" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="60" y="643" class="t-n">KV（16并发 PCP8）</text>
+        <text x="60" y="660" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="52" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="696" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="52" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="60" y="748" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="60" y="764" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡5 -->
+      <g>
+        <rect x="266" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="266" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="266" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="371" y="465" text-anchor="middle" class="t-b">卡 5 · 序列 6/8</text>
+
+        <rect x="278" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="286" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="278" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="286" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="278" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="286" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="278" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="286" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="278" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="286" y="643" class="t-n">KV（16并发 PCP8）</text>
+        <text x="286" y="660" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="278" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="286" y="696" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="278" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="286" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="286" y="748" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="286" y="764" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡6 -->
+      <g>
+        <rect x="492" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="492" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="492" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="597" y="465" text-anchor="middle" class="t-b">卡 6 · 序列 7/8</text>
+
+        <rect x="504" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="512" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="504" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="512" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="504" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="512" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="504" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="512" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="504" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="512" y="643" class="t-n">KV（16并发 PCP8）</text>
+        <text x="512" y="660" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="504" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="512" y="696" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="504" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="512" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="512" y="748" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="512" y="764" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+
+      <!-- 卡7 -->
+      <g>
+        <rect x="718" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="718" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="718" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="823" y="465" text-anchor="middle" class="t-b">卡 7 · 序列 8/8</text>
+
+        <rect x="730" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="738" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="730" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="738" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="730" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="738" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="730" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="738" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="730" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="738" y="643" class="t-n">KV（16并发 PCP8）</text>
+        <text x="738" y="660" class="t-b" font-size="12">7.57 GiB · 50% prefix</text>
+
+        <rect x="730" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="738" y="696" class="t-total">合计 61.17 GiB</text>
+
+        <rect x="730" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="738" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="738" y="748" class="t-m">+4.8+7.57 = 61.17</text>
+        <text x="738" y="764" class="t-m">KV：(16×3.57+3.44)/8</text>
+      </g>
+    </svg>
+    <div class="figcap">图 4 · P 形态 PCP8 · 8 卡 4×2 · 16 并发 · 50% prefix：每卡 34.9 + 8.1 + 5.8 + 4.8 + 7.57 = 61.17 GiB</div>
+  </figure>
+
+  <div class="calc">
+    <div class="calc-title">KV 缓存计算过程（P 形态 PCP8 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">单请求 20K 实际 KV</span><span class="val">7.01 GiB</span></div>
+    <div class="calc-row"><span class="lbl">50% prefix 命中后每请求新增（10640 tok）</span><span class="val">3.57 GiB</span></div>
+    <div class="calc-row"><span class="lbl">共享 prefix 在 pool 中保留一份（10255 tok）</span><span class="val">3.44 GiB</span></div>
+    <div class="calc-row"><span class="lbl">16 并发 KV 总量（16 × 3.57 + 3.44）</span><span class="val">60.56 GiB</span></div>
+    <div class="calc-row"><span class="lbl">PCP8 序列切 1/8 → 每卡 KV（60.56 / 8）</span><span class="val ok">7.57 GiB/卡</span></div>
+    <div class="calc-row"><span class="lbl">无 prefix 场景每卡 KV（16 × 7.01 / 8）</span><span class="val">14.02 GiB/卡</span></div>
+    <div class="calc-row"><span class="lbl">按 32K 上限最坏每卡 KV（16 × 11 / 8）</span><span class="val">22 GiB/卡</span></div>
+  </div>
+
+  <div class="calc">
+    <div class="calc-title">每卡显存需求（P 形态 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">专家（EP8 分片）</span><span class="val">34.9 GiB</span></div>
+    <div class="calc-row"><span class="lbl">稠密（每卡完整）</span><span class="val">8.1 GiB</span></div>
+    <div class="calc-row"><span class="lbl">词嵌入（每卡完整）</span><span class="val">5.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">底噪</span><span class="val">4.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">KV（16 并发 PCP8 · 50% prefix）</span><span class="val">7.57 GiB</span></div>
+    <div class="calc-row"><span class="lbl"><b>每卡合计</b></span><span class="val ok">61.17 GiB</span></div>
+  </div>
+
+  <div class="note">
+    <strong>P 形态 PCP8 在 16 并发、50% prefix 场景下，每卡需 61.17 GiB。</strong>其中权重 48.8 GiB、底噪 4.8 GiB、KV 7.57 GiB。<b>无 prefix 场景</b>每卡 KV 14.02 GiB，合计 67.62 GiB；<b>32K 上限最坏</b>每卡 KV 22 GiB，合计 75.6 GiB。建议 KV pool 显式设为 <code>22 GiB/卡</code>，对应 <code>gpu_memory_utilization ≈ 0.80</code>。
+  </div>
+</div>
+
+<!-- ================= 图5：8卡 D 形态（16 并发） ================= -->
+<h2 id="s5">5.图 5：8 卡 D 形态（DP8 × TP1，16 并发）</h2>
+<div class="card">
+  <figure class="diagram">
+    <svg class="fig-svg" viewBox="0 0 960 860" role="img" aria-labelledby="fig5-title fig5-desc">
+      <title id="fig5-title">8 卡 D 形态逐卡显存（16 并发）</title>
+      <desc id="fig5-desc">D 形态 DP8 × TP1，8 张卡排成 4×2。每卡 5 个组件：专家 34.9、稠密 8.1、词嵌入 5.8、底噪 4.8、KV(16并发 DP8 每副本 2 并发，50% prefix) 10.58。每卡合计 64.18 GiB。</desc>
+
+      <rect x="10" y="10" width="940" height="840" rx="14" fill="#f0f3f6" stroke="#dbe1e8"/>
+      <text x="40" y="44" class="t-title">D 形态：DP8 × TP1（8 卡 · 4×2 网格 · 16 并发）</text>
+      <text x="40" y="64" class="t-sub">每卡 5 个组件并列 · 16 并发 / 8 副本 = 每副本 2 并发 · 50% prefix · 每卡合计 64.18 GiB</text>
+
+      <!-- 卡0 -->
+      <g>
+        <rect x="40" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="145" y="107" text-anchor="middle" class="t-b">副本 0</text>
+
+        <rect x="52" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="60" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="52" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="60" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="52" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="60" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="52" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="60" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="52" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="60" y="285" class="t-n">KV（16并发 DP8）</text>
+        <text x="60" y="302" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="52" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="338" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="52" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="60" y="390" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="60" y="406" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡1 -->
+      <g>
+        <rect x="266" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="266" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="266" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="371" y="107" text-anchor="middle" class="t-b">副本 1</text>
+
+        <rect x="278" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="286" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="278" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="286" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="278" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="286" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="278" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="286" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="278" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="286" y="285" class="t-n">KV（16并发 DP8）</text>
+        <text x="286" y="302" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="278" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="286" y="338" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="278" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="286" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="286" y="390" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="286" y="406" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡2 -->
+      <g>
+        <rect x="492" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="492" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="492" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="597" y="107" text-anchor="middle" class="t-b">副本 2</text>
+
+        <rect x="504" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="512" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="504" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="512" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="504" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="512" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="504" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="512" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="504" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="512" y="285" class="t-n">KV（16并发 DP8）</text>
+        <text x="512" y="302" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="504" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="512" y="338" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="504" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="512" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="512" y="390" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="512" y="406" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡3 -->
+      <g>
+        <rect x="718" y="88" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="718" y="88" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="718" y="106" width="210" height="10" fill="#e2e8f0"/>
+        <text x="823" y="107" text-anchor="middle" class="t-b">副本 3</text>
+
+        <rect x="730" y="126" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="738" y="147" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="730" y="166" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="738" y="184" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="730" y="200" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="738" y="218" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="730" y="234" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="738" y="252" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="730" y="268" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="738" y="285" class="t-n">KV（16并发 DP8）</text>
+        <text x="738" y="302" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="730" y="318" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="738" y="338" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="730" y="356" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="738" y="374" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="738" y="390" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="738" y="406" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡4 -->
+      <g>
+        <rect x="40" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="40" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="40" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="145" y="465" text-anchor="middle" class="t-b">副本 4</text>
+
+        <rect x="52" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="60" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="52" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="60" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="52" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="60" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="52" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="60" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="52" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="60" y="643" class="t-n">KV（16并发 DP8）</text>
+        <text x="60" y="660" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="52" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="60" y="696" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="52" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="60" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="60" y="748" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="60" y="764" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡5 -->
+      <g>
+        <rect x="266" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="266" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="266" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="371" y="465" text-anchor="middle" class="t-b">副本 5</text>
+
+        <rect x="278" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="286" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="278" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="286" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="278" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="286" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="278" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="286" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="278" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="286" y="643" class="t-n">KV（16并发 DP8）</text>
+        <text x="286" y="660" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="278" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="286" y="696" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="278" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="286" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="286" y="748" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="286" y="764" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡6 -->
+      <g>
+        <rect x="492" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="492" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="492" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="597" y="465" text-anchor="middle" class="t-b">副本 6</text>
+
+        <rect x="504" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="512" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="504" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="512" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="504" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="512" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="504" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="512" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="504" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="512" y="643" class="t-n">KV（16并发 DP8）</text>
+        <text x="512" y="660" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="504" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="512" y="696" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="504" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="512" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="512" y="748" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="512" y="764" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+
+      <!-- 卡7 -->
+      <g>
+        <rect x="718" y="446" width="210" height="340" rx="10" fill="#fff" stroke="#cbd5e1"/>
+        <rect x="718" y="446" width="210" height="28" rx="10" fill="#e2e8f0"/>
+        <rect x="718" y="464" width="210" height="10" fill="#e2e8f0"/>
+        <text x="823" y="465" text-anchor="middle" class="t-b">副本 7</text>
+
+        <rect x="730" y="484" width="186" height="34" rx="5" fill="#fff" stroke="#e67e22" stroke-width="1.3"/>
+        <text x="738" y="505" class="t-n">专家（EP8）  34.9 GiB</text>
+
+        <rect x="730" y="524" width="186" height="28" rx="5" fill="#fff" stroke="#27ae60" stroke-width="1.3"/>
+        <text x="738" y="542" class="t-n">稠密  8.1 GiB</text>
+
+        <rect x="730" y="558" width="186" height="28" rx="5" fill="#fff" stroke="#2980b9" stroke-width="1.3"/>
+        <text x="738" y="576" class="t-n">词嵌入  5.8 GiB</text>
+
+        <rect x="730" y="592" width="186" height="28" rx="5" fill="#fff" stroke="#94a3b8" stroke-width="1.3"/>
+        <text x="738" y="610" class="t-n">底噪  4.8 GiB</text>
+
+        <rect x="730" y="626" width="186" height="44" rx="5" fill="#fff" stroke="#8e44ad" stroke-width="1.5"/>
+        <text x="738" y="643" class="t-n">KV（16并发 DP8）</text>
+        <text x="738" y="660" class="t-b" font-size="12">10.58 GiB · 50% prefix</text>
+
+        <rect x="730" y="676" width="186" height="30" rx="5" fill="#f1f5f9" stroke="#cbd5e1"/>
+        <text x="738" y="696" class="t-total">合计 64.18 GiB</text>
+
+        <rect x="730" y="714" width="186" height="60" rx="5" fill="#f8fafc" stroke="#cbd5e1"/>
+        <text x="738" y="732" class="t-m">计算：34.9+8.1+5.8</text>
+        <text x="738" y="748" class="t-m">+4.8+10.58 = 64.18</text>
+        <text x="738" y="764" class="t-m">KV：2×3.57+3.44</text>
+      </g>
+    </svg>
+    <div class="figcap">图 5 · D 形态 DP8 · 8 卡 4×2 · 16 并发 · 50% prefix：每卡 34.9 + 8.1 + 5.8 + 4.8 + 10.58 = 64.18 GiB</div>
+  </figure>
+
+  <div class="calc">
+    <div class="calc-title">KV 缓存计算过程（D 形态 DP8 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">单请求 20K 实际 KV</span><span class="val">7.01 GiB</span></div>
+    <div class="calc-row"><span class="lbl">50% prefix 命中后每请求新增（10640 tok）</span><span class="val">3.57 GiB</span></div>
+    <div class="calc-row"><span class="lbl">共享 prefix 在 pool 中保留一份（10255 tok）</span><span class="val">3.44 GiB</span></div>
+    <div class="calc-row"><span class="lbl">16 并发 / 8 副本 = 每副本 2 并发</span><span class="val">2</span></div>
+    <div class="calc-row"><span class="lbl">每副本 KV（2 × 3.57 + 3.44）</span><span class="val ok">10.58 GiB/副本</span></div>
+    <div class="calc-row"><span class="lbl">无 prefix 场景每副本 KV（2 × 7.01）</span><span class="val">14.02 GiB/副本</span></div>
+    <div class="calc-row"><span class="lbl">按 32K 上限最坏每副本 KV（2 × 11）</span><span class="val">22 GiB/副本</span></div>
+  </div>
+
+  <div class="calc">
+    <div class="calc-title">每卡显存需求（D 形态 · 16 并发 · 50% prefix）</div>
+    <div class="calc-row"><span class="lbl">专家（EP8 分片）</span><span class="val">34.9 GiB</span></div>
+    <div class="calc-row"><span class="lbl">稠密（每卡完整）</span><span class="val">8.1 GiB</span></div>
+    <div class="calc-row"><span class="lbl">词嵌入（每卡完整）</span><span class="val">5.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">底噪</span><span class="val">4.8 GiB</span></div>
+    <div class="calc-row"><span class="lbl">KV（16 并发 DP8 · 50% prefix）</span><span class="val">10.58 GiB</span></div>
+    <div class="calc-row"><span class="lbl"><b>每卡合计</b></span><span class="val ok">64.18 GiB</span></div>
+  </div>
+
+  <div class="note">
+    <strong>D 形态 DP8 在 16 并发、50% prefix 场景下，每卡需 64.18 GiB。</strong>其中权重 48.8 GiB、底噪 4.8 GiB、KV 10.58 GiB。<b>无 prefix 场景</b>每卡 KV 14.02 GiB，合计 67.62 GiB；<b>32K 上限最坏</b>每卡 KV 22 GiB，合计 75.6 GiB。建议 KV pool 显式设为 <code>22 GiB/卡</code>，对应 <code>gpu_memory_utilization ≈ 0.82 ～ 0.84</code>。
+  </div>
+</div>
+
+<!-- ================= 配置建议 ================= -->
+<h2 id="s6">6.KV pool 配置建议（16 并发 · 50% prefix · 32K max_len）</h2>
+<div class="card">
+  <div class="tbl-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>形态</th><th>每卡权重+底噪</th><th>每卡 KV（50% prefix）</th><th>每卡 KV（无 prefix）</th><th>每卡 KV（32K 最坏）</th><th>建议 kv_cache_memory_bytes/卡</th><th>对应 gpu_memory_utilization</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>P 形态 PCP8（8 卡）</td><td>53.6 GiB</td><td>7.57 GiB</td><td>14.02 GiB</td><td>22 GiB</td><td class="ok">20 ～ 22 GiB</td><td class="ok">0.78 ～ 0.80</td>
+        </tr>
+        <tr>
+          <td>D 形态 DP8（8 卡）</td><td>53.6 GiB</td><td>10.58 GiB</td><td>14.02 GiB</td><td>22 GiB</td><td class="ok">22 ～ 24 GiB</td><td class="ok">0.80 ～ 0.84</td>
+        </tr>
+        <tr>
+          <td>PCP4 单机 4 卡</td><td>83.6 GiB</td><td>15.14 GiB</td><td>28.04 GiB</td><td>44 GiB</td><td>—</td><td>—</td>
+        </tr>
+        <tr>
+          <td>DP4 单机 4 卡</td><td>89.63 GiB</td><td>17.72 GiB</td><td>28.04 GiB</td><td>44 GiB</td><td>—</td><td>—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="figcap">表 1 · 
+    口径：Engram off；16 并发 · 20K 输入 / 385 输出 · 50% prefix · 32K max_model_len。KV 单请求 32K ≈ 11 GiB（0.3357 MiB/token），20K 实际请求 ≈ 7.01 GiB，50% prefix 命中后每请求新增 ≈ 3.57 GiB，共享前缀保留一份 ≈ 3.44 GiB。</div>
+
+  <div class="note">
+    <strong>配置建议：</strong>
+    <ul style="margin:6px 0 0; padding-left:20px;">
+      <li><b>P 形态：</b>显式设置 <code>kv_cache_memory_bytes = 20 ～ 22 GiB</code>（每卡），覆盖 32K 最坏 22 GiB；若 <code>max_model_len</code> 改为 21K ～ 24K，可降至 <b>16 ～ 18 GiB</b>。对应 <code>gpu_memory_utilization = 0.80</code>，不要设 0.9 以上，否则 KV pool 会把剩余显存吃光。</li>
+      <li><b>D 形态：</b>显式设置 <code>kv_cache_memory_bytes = 22 ～ 24 GiB</code>（每卡），覆盖 32K 最坏 22 GiB。对应 <code>gpu_memory_utilization = 0.82 ～ 0.84</code>。</li>
+      <li><b>PCP4 / DP4 单机 4 卡：</b>16 并发 20K 输入下每卡分别需 103.54 / 107.35 GiB（50% prefix）。<b>PCP4 主要受 EP4 专家翻倍影响，DP4 还额外叠加 lm_head 1.23 GiB。</b></li>
+      <li><b>max_model_len 建议：</b>实际输入 20K + 输出 385，建议设 <code>max_model_len = 21K ～ 24K</code>，不要死守 32K。若设 21K，P/D 每卡 KV 需求可降到约 14 GiB（无 prefix）/ 7.6 ～ 10.6 GiB（50% prefix），KV pool 设 16 ～ 18 GiB 就够。</li>
+      <li><b>并发控制：</b><code>max_num_seqs = 16</code>，配合 <code>max_num_batched_tokens</code> 控制 P 侧 batch，避免 16 并发把 TTFT 推高。</li>
+    </ul>
+  </div>
+</div>
+
+</div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
