@@ -186,7 +186,7 @@ flowchart TD
 <li>fp16 存储（2 字节）→ <strong>4KB / token / 层</strong>；32 层合计 <strong>128KB / token</strong>；</li>
 <li>本例 6 个 token 的前缀：6 × 128KB ≈ <strong>768KB</strong>——很小；但 32K 上下文的请求：32,000 × 128KB ≈ <strong>4GB</strong>，这就是长上下文贵的原因。</li>
 </ul>
-<div class="warn"><strong>KV Cache 随序列长度线性增长、随 batch 倍增。</strong>站内另外两篇文章讲的正是压它的一套方案——<a href="DeepSeek-V4.1-Flash推理加速解读.html" style="color:var(--accent)">DeepSeek-V4.1-Flash 推理加速解读</a>（CED 层切分 + CSA2 跨层共享）与<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:var(--accent)">CED + CSA2 复现代码检视</a>。</div>
+<div class="warn"><strong>KV Cache 随序列长度线性增长、随 batch 倍增。</strong>站内另外两篇文章讲的正是压它的一套方案——<a href="DS41F-推理加速一文读懂.html" style="color:var(--accent)">DeepSeek-V4.1-Flash 推理加速解读</a>（CED 层切分 + CSA2 跨层共享）与<a href="../实验html/CED-CSA2代码检视-20260920-R1.html" style="color:var(--accent)">CED + CSA2 复现代码检视</a>。</div>
 
 <h2>五、完整形状流转总表（本例 S=6，B=1）</h2>
 <table>
