@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>汽车出行明细 · 家庭财务报表</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#10b981;--red:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:40px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+.hero{padding:22px 0 14px}
+.hero h1{font-size:20px;font-weight:700}
+.hero .sub{font-size:12px;color:var(--muted);margin-top:5px}
+.card{background:var(--card);border-radius:16px;border:1px solid rgba(15,23,42,.05);box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -18px rgba(15,23,42,.35);padding:16px;margin-bottom:12px}
+.metrics{display:flex;gap:18px;flex-wrap:wrap}
+.metrics .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.metrics .l{font-size:11.5px;color:var(--muted)}
+table.data{width:100%;border-collapse:collapse;font-size:12.5px}
+table.data th{background:#f1f5f9;color:#475569;font-weight:600;padding:7px 8px;text-align:left;font-size:11.5px;border-bottom:1px solid var(--line)}
+table.data td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums}
+table.data tr:nth-child(even){background:#fafbfd}
+table.data td.num{text-align:right}
+table.data tr.total-row td{background:#eef6ff;font-weight:700}
+a.back{color:var(--blue);text-decoration:none;font-size:12.5px}
+footer{margin-top:10px;font-size:11px;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>汽车出行明细</h1>
+    <p class="sub">家庭财务报表 · 分类逐笔明细 · 2024-12-15 至 2026-11-14</p>
+  </header>
+  <div class="card">
+    <div class="metrics">
+      <div><div class="v">¥26,069.00</div><div class="l">累计金额</div></div>
+      <div><div class="v">16 个周期</div><div class="l">出现次数</div></div>
+      <div><div class="v">¥1,629.31</div><div class="l">出现周期月均</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <table class="data">
+      <tr><th>记账周期</th><th>条目明细</th><th>小计</th></tr>
+      <tr><td>261015 → 261114</td><td>停车打车费 15 + 停车打车费 15 + 停车打车费 40 + 停车打车费 20 + 停车打车费 10 + 停车打车费 55 + 汽车保养 650 + 加油 300 + 汽车违章罚款 200</td><td class='num'>¥1,305.00</td></tr>
+      <tr><td>260915 → 261014</td><td>停车费 1,050 + 停车费 20 + 停车费 10 + 停车费 10</td><td class='num'>¥1,090.00</td></tr>
+      <tr><td>260815 → 260914</td><td>停车 7 + 加油 300 + 停车费 16 + 停车费 12 + 停车费 5 + 停车费 13 + 停车费 6</td><td class='num'>¥359.00</td></tr>
+      <tr><td>260715 → 260814</td><td>打车 35 + 打车 10 + 打车 30 + 高速费 80</td><td class='num'>¥155.00</td></tr>
+      <tr><td>260615 → 260714</td><td>加油 300 + 高速费 80 + 停车费 1,050</td><td class='num'>¥1,430.00</td></tr>
+      <tr><td>260515 → 260614</td><td>加油 300</td><td class='num'>¥300.00</td></tr>
+      <tr><td>260415 → 260514</td><td>汽车保险 5,940</td><td class='num'>¥5,940.00</td></tr>
+      <tr><td>260315 → 260414</td><td>租车位 1,050 + 加油 400 + 加油 450 + 高速费 46</td><td class='num'>¥1,946.00</td></tr>
+      <tr><td>260215 → 260314</td><td>加油 350 + 加油 300</td><td class='num'>¥650.00</td></tr>
+      <tr><td>260115 → 260214</td><td>汽车保养维修 0 + 汽车保养维修 180</td><td class='num'>¥180.00</td></tr>
+      <tr><td>251215 → 260114</td><td>租车位 1,050</td><td class='num'>¥1,050.00</td></tr>
+      <tr><td>250915 → 251014</td><td>停车费 1,050</td><td class='num'>¥1,050.00</td></tr>
+      <tr><td>250615 → 250714</td><td>车位 1,050</td><td class='num'>¥1,050.00</td></tr>
+      <tr><td>250515 → 250614</td><td>过路费 114</td><td class='num'>¥114.00</td></tr>
+      <tr><td>250415 → 250514</td><td>过路费 300 + 汽车保养 500 + 加油 300 + 保费 7,000</td><td class='num'>¥8,100.00</td></tr>
+      <tr><td>250315 → 250414</td><td>车位费 1,050 + 加油 300</td><td class='num'>¥1,350.00</td></tr>
+      <tr class="total-row"><td>合计</td><td></td><td class="num">¥26,069.00</td></tr>
+    </table>
+  </div>
+  <footer><a class="back" href="https://huashanblogllm.xyz/tmphtml/3dfa072d/index.html">← 返回家庭财务报表</a></footer>
+</div>
+</body>
+</html>
