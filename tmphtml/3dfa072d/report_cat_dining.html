@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>日常餐饮明细 · 家庭财务报表</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#10b981;--red:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:40px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+.hero{padding:22px 0 14px}
+.hero h1{font-size:20px;font-weight:700}
+.hero .sub{font-size:12px;color:var(--muted);margin-top:5px}
+.card{background:var(--card);border-radius:16px;border:1px solid rgba(15,23,42,.05);box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -18px rgba(15,23,42,.35);padding:16px;margin-bottom:12px}
+.metrics{display:flex;gap:18px;flex-wrap:wrap}
+.metrics .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.metrics .l{font-size:11.5px;color:var(--muted)}
+table.data{width:100%;border-collapse:collapse;font-size:12.5px}
+table.data th{background:#f1f5f9;color:#475569;font-weight:600;padding:7px 8px;text-align:left;font-size:11.5px;border-bottom:1px solid var(--line)}
+table.data td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums}
+table.data tr:nth-child(even){background:#fafbfd}
+table.data td.num{text-align:right}
+table.data tr.total-row td{background:#eef6ff;font-weight:700}
+a.back{color:var(--blue);text-decoration:none;font-size:12.5px}
+footer{margin-top:10px;font-size:11px;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>日常餐饮明细</h1>
+    <p class="sub">家庭财务报表 · 分类逐笔明细 · 2024-12-15 至 2026-11-14</p>
+  </header>
+  <div class="card">
+    <div class="metrics">
+      <div><div class="v">¥17,659.00</div><div class="l">累计金额</div></div>
+      <div><div class="v">17 个周期</div><div class="l">出现次数</div></div>
+      <div><div class="v">¥1,038.76</div><div class="l">出现周期月均</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <table class="data">
+      <tr><th>记账周期</th><th>条目明细</th><th>小计</th></tr>
+      <tr><td>261015 → 261114</td><td>吃饭 140 + 吃饭 90 + 吃饭 85 + 吃饭 130 + 吃饭 130 + 吃饭 145 + 吃饭 25 + 买菜 90 + 买菜 100 + 买菜 95 + 买菜 60 + 买菜 123</td><td class='num'>¥1,213.00</td></tr>
+      <tr><td>260915 → 261014</td><td>买菜 120 + 买菜 89 + 买菜 60 + 买菜 20 + 买菜 12 + 买菜 30 + 买菜 93 + 买菜 76 + 吃饭 25 + 吃饭 23 + 吃饭 47 + 吃饭 25 + 吃饭 25 + 吃饭 40</td><td class='num'>¥685.00</td></tr>
+      <tr><td>260815 → 260914</td><td>买菜 65 + 买菜 52 + 买菜 90 + 买菜 15 + 买菜 95 + 买菜 50 + 买菜 40 + 买菜 45 + 买菜 30 + 买菜 40 + 吃饭 334 + 吃饭 450</td><td class='num'>¥1,306.00</td></tr>
+      <tr><td>260715 → 260814</td><td>买菜 90 + 买菜 20 + 买菜 18 + 买菜 30 + 买菜 75 + 买菜 10 + 买菜 100 + 一绪自助 500 + 吃饭 380 + 吃饭 75 + 吃饭 157 + 吃饭 72 + 吃饭 20</td><td class='num'>¥1,547.00</td></tr>
+      <tr><td>260615 → 260714</td><td>吃饭 20 + 吃饭 40 + 吃饭 33 + 吃饭 27 + 家庭自助餐 551 + 买菜 65 + 买菜 100 + 买菜 95 + 巴奴火锅 320 + 巴奴火锅 20</td><td class='num'>¥1,271.00</td></tr>
+      <tr><td>260515 → 260614</td><td>买菜 135 + 买菜 27 + 买菜 20 + 买菜 40 + 买菜 26 + 买菜 105 + 买菜 30 + 买菜 25 + 买菜 15 + 买菜 85 + 买菜 108 + 吃饭 53 + 吃饭 151 + 吃饭 36 + 吃饭 25 + 吃饭 39 + 吃饭 7 + 请文明刘雪冬吃饭 244</td><td class='num'>¥1,171.00</td></tr>
+      <tr><td>260415 → 260514</td><td>吃饭 20 + 吃饭 50 + 吃饭 16 + 吃饭 40 + 吃饭 25 + 吃饭 15 + 吃饭 30 + 吃饭 220 + 吃饭 10 + 吃饭 16 + 吃饭 36 + 吃饭 30 + 吃饭 90 + 吃饭 6 + 吃饭 88 + 吃饭 40 + 吃饭自助 430 + 五四火锅 370 + 五四火锅 60 + 滨寿司 106</td><td class='num'>¥1,698.00</td></tr>
+      <tr><td>260315 → 260414</td><td>买菜 90 + 买菜 52 + 买菜 20 + 买菜 45 + 买菜 60 + 买菜 25 + 买菜 50 + 买菜 20 + 买菜 30 + 买菜 17 + 买菜 20 + 买菜 17 + 买菜 25 + 买菜 16 + 买菜 44 + 吃饭 220 + 吃饭 100 + 吃饭 150</td><td class='num'>¥1,001.00</td></tr>
+      <tr><td>260215 → 260314</td><td>家庭餐饮 750 + 家庭餐饮 30 + 家庭餐饮 36 + 家庭餐饮 40 + 家庭餐饮 50 + 家庭餐饮 20 + 家庭餐饮 50 + 家庭餐饮 22 + 家庭餐饮 35 + 家庭餐饮 38 + 家庭餐饮 70 + 家庭餐饮 36 + 家庭餐饮 36 + 家庭餐饮 45</td><td class='num'>¥1,258.00</td></tr>
+      <tr><td>260115 → 260214</td><td>牛奶蔬菜饮食 180 + 牛奶蔬菜饮食 50 + 牛奶蔬菜饮食 30 + 牛奶蔬菜饮食 38 + 牛奶蔬菜饮食 50 + 牛奶蔬菜饮食 35 + 牛奶蔬菜饮食 70 + 牛奶蔬菜饮食 20 + 牛奶蔬菜饮食 25 + 牛奶蔬菜饮食 30 + 牛奶蔬菜饮食 25 + 牛奶蔬菜饮食 20 + 牛奶蔬菜饮食 170 + 牛奶蔬菜饮食 42 + 牛奶蔬菜饮食 25 + 牛奶蔬菜饮食 40 + 牛奶蔬菜饮食 20 + 自助餐 260 + 自助餐 420 + 饮用水 48</td><td class='num'>¥1,598.00</td></tr>
+      <tr><td>251215 → 260114</td><td>周末家庭吃饭 50 + 周末家庭吃饭 300 + 周末家庭吃饭 180 + 周末家庭吃饭 180 + 周末家庭吃饭 40 + 周末饭菜牛奶 170 + 周末饭菜牛奶 35 + 周末饭菜牛奶 40 + 周末饭菜牛奶 48 + 周末饭菜牛奶 27 + 周末饭菜牛奶 52 + 周末饭菜牛奶 160 + 周末饭菜牛奶 60 + 周末饭菜牛奶 50 + 周末饭菜牛奶 30 + 吃饭 230</td><td class='num'>¥1,652.00</td></tr>
+      <tr><td>251115 → 251214</td><td>家庭吃饭 271 + 水 60 + 米面 160 + 周末饭菜 330 + 吃饭 98 + 牛奶 50</td><td class='num'>¥969.00</td></tr>
+      <tr><td>250815 → 250914</td><td>家庭饭 270 + 家庭饭 120</td><td class='num'>¥390.00</td></tr>
+      <tr><td>250715 → 250814</td><td>家庭吃饭 500</td><td class='num'>¥500.00</td></tr>
+      <tr><td>250615 → 250714</td><td>家庭吃饭 400</td><td class='num'>¥400.00</td></tr>
+      <tr><td>250415 → 250514</td><td>自助 800</td><td class='num'>¥800.00</td></tr>
+      <tr><td>250215 → 250314</td><td>陕西零食 200</td><td class='num'>¥200.00</td></tr>
+      <tr class="total-row"><td>合计</td><td></td><td class="num">¥17,659.00</td></tr>
+    </table>
+  </div>
+  <footer><a class="back" href="https://huashanblogllm.xyz/tmphtml/3dfa072d/index.html">← 返回家庭财务报表</a></footer>
+</div>
+</body>
+</html>
