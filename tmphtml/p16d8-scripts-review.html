@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>P16D8 PD组网启动脚本送审 · perf_test</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>mermaid.initialize({startOnLoad:true, theme:'neutral', flowchart:{useMaxWidth:true}});</script>
+<style>
+body{font-family:"Microsoft YaHei",sans-serif;background:#f5f6f7;margin:0;padding:20px;}
+.wrap{max-width:960px;margin:0 auto;}
+h1{font-size:20px;color:#222;}
+.meta{color:#888;font-size:12px;margin-bottom:16px;}
+.tag{display:inline-block;background:#eef2f8;color:#1a3c6e;border-radius:4px;padding:1px 8px;font-size:12px;margin-right:6px;}
+svg{overflow:visible;}
+.mermaid{background:#fff;border-radius:10px;padding:24px 16px 48px;margin-bottom:14px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<h1>P16D8 PD 组网启动脚本送审（16P + 8D）</h1>
+<div class="meta">生成时间 2026-10-31 07:13 · perf_test · 临时审阅页 · 命名红线自查：容器名 vime-w00899129-x / lzy_glm53_flash-x / ds_p16_d，无违规字样</div>
+
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #e67e22;">
+<h2 style="margin:0 0 8px;color:#9c5a12;font-size:16px;">对照 141 正向原方（p_pcp4.sh / d_std.sh）——3 处待拍板</h2>
+<div style="color:#333;font-size:13.5px;line-height:2.0;">
+<div>① <b>P 端缺 --cp-kv-cache-interleave-size 1</b>：141 P 端有此参数，坑账确认"PCP4 正确配置=interleave-size"。<b>建议补</b>。</div>
+<div>② <b>P 端 kv-transfer 缺 "kv_load_failure_policy":"recompute"</b>：141 producer 侧也带。<b>建议补</b>对齐原方。</div>
+<div>③ <b>prefill.dp_size=4 语义存疑</b>：141 原方=自身 DP 副本数（单进程 DP2 声明 2）；我方=producer 总数（4 个独立引擎各 DP1 声明 4）。若握手不匹配 D 端会静默重算（坑账实锤），实跑后看 D 端 KV 拉取日志 / external metrics 验证。<b>建议先按现状跑</b>。</div>
+<div style="color:#666;">④ 141 P 端 enforce-eager，我方保留纯 P 基准验证过的 FULL_DECODE_ONLY 图模式（PD 下 P 只跑 prefill，无碍）——有意保留。</div>
+<div style="color:#666;">⑤ D 端 dspark5+async-scheduling 为既定要求，保留。⑥ start_d.sh 头注释 DP4 笔误（实际 DP8），待改。</div>
+</div></div>
+
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #27ae60;">
+<h2 style="margin:0 0 8px;color:#1e6e3c;font-size:16px;">图 1 · P16D8 拓扑与 KV 链路</h2>
+<div class="mermaid">
+flowchart TD
+    CLI["客户端 / 压测"] --> PROXY["load_balance_proxy :8900<br/>prefiller 两跳路由"]
+    PROXY --> P1["P25A 25号机:7100<br/>卡0-3 TP1xPCP4<br/>kv_producer 30000"]
+    PROXY --> P2["P25B 25号机:7101<br/>卡4-7 TP1xPCP4<br/>kv_producer 30001"]
+    PROXY --> P3["P26A 26号机:7100<br/>卡0-3 TP1xPCP4<br/>kv_producer 30002"]
+    PROXY --> P4["P26B 26号机:7101<br/>卡4-7 TP1xPCP4<br/>kv_producer 30003"]
+    P1 -. "MooncakeConnectorV2<br/>use_ascend_direct KV拉取" .-> DEC
+    P2 -.-> DEC
+    P3 -.-> DEC
+    P4 -.-> DEC
+    DEC["D 24号机:8122<br/>DP8xTP1 dspark5+async<br/>kv_consumer 30100"]
+    DEC --> OUT1["响应(1 tok 输出)"]
+</div>
+<div style="color:#666;font-size:12.5px;line-height:1.9;">启动顺序：D 先点火挂起等 KV → 25/26 P 点火（基本同时起，连不上对方会退出）→ P 注册后 D 拉 KV。P 端四实例独享 kv_port 30000~30003，engine_id 唯一。</div>
+</div>
+
+
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #2f6fed;">
+<h2 style="margin:0 0 6px;color:#1a3c6e;font-size:16px;">P 端单实例（25/26 每台 2 份，只差注入变量） <code style="background:#eef2f8;padding:1px 6px;border-radius:4px;font-size:12px;">serve_p_inst_fixed.sh</code></h2>
+<div style="color:#555;font-size:13px;line-height:1.8;margin-bottom:10px;">TP1×PCP4×DP1，纯 P 计算配方 + MooncakeConnectorV2 kv_producer。25 注入 KV_PORT=30000/30001 ENGINE=P25A/P25B；26 注入 30002/30003 ENGINE=P26A/P26B。</div>
+<pre style="background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.55;color:#24292f;margin:0;"><code>#!/bin/bash
+# P 实例 TP1xPCP4xDP1 — 纯P计算配方 + kv_producer (PD组网)
+# 注入: CARDS, PORT, LOCAL_IP, KV_PORT, ENGINE_ID
+set -uo pipefail
+WEIGHT=/mnt/weight/DeepSeek-V4-Flash-FP8
+CARDS=&quot;${CARDS:-0,1,2,3}&quot;
+PORT=&quot;${PORT:-7100}&quot;
+LOCAL_IP=&quot;${LOCAL_IP:-$(hostname -I | tr &#x27; &#x27; &#x27;\n&#x27; | grep &#x27;^197\.13&#x27; | head -1)}&quot;
+KV_PORT=&quot;${KV_PORT:-30000}&quot;
+ENGINE_ID=&quot;${ENGINE_ID:-P$KV_PORT}&quot;
+export ZSH_VERSION=&quot;${ZSH_VERSION:-}&quot;; set +u
+source /usr/local/Ascend/ascend-toolkit/set_env.sh 2&gt;/dev/null || true
+for f in /usr/local/Ascend/cann-*/share/info/ascendnpu-ir/bin/set_env.sh; do source &quot;$f&quot; 2&gt;/dev/null || true; done
+source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=${ATB_CXX_ABI:-1} 2&gt;/dev/null || true
+set -u
+unset https_proxy http_proxy ftp_proxy HTTP_PROXY HTTPS_PROXY FTP_PROXY
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/
+export HCCL_IF_IP=$LOCAL_IP GLOO_SOCKET_IFNAME=enp39s0f0 TP_SOCKET_IFNAME=enp39s0f0 HCCL_SOCKET_IFNAME=enp39s0f0
+export VLLM_USE_V2_MODEL_RUNNER=1 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=3000
+export HCCL_EXEC_TIMEOUT=204 HCCL_CONNECT_TIMEOUT=120 HCCL_BUFFSIZE=1024
+export HCCL_OP_EXPANSION_MODE=CCU_SCHED VLLM_PREFIX_CACHE_RETENTION_INTERVAL=4096 VLLM_USE_FASTOKENS=1
+export OMP_PROC_BIND=false OMP_NUM_THREADS=10 PYTORCH_NPU_ALLOC_CONF=expandable_segments:True TASK_QUEUE_ENABLE=1
+export ASCEND_RT_VISIBLE_DEVICES=&quot;$CARDS&quot;
+export ASCEND_LOCAL_COMM_RES=&#x27;{&quot;version&quot;:&quot;1.3&quot;}&#x27;
+echo &quot;[P-$CARDS@$PORT] start $(date &#x27;+%F %T&#x27;) ip=$LOCAL_IP kv_port=$KV_PORT engine=$ENGINE_ID&quot;
+vllm serve &quot;$WEIGHT&quot; \
+  --host 0.0.0.0 --port $PORT --served-model-name ds-flash-fp8 \
+  --data-parallel-size 1 --tensor-parallel-size 1 --prefill-context-parallel-size 4 \
+  --enable-expert-parallel --seed 1024 \
+  --max-model-len 1048576 --max-num-batched-tokens 8192 --max-num-seqs 16 \
+  --block-size 32 \
+  --no-disable-hybrid-kv-cache-manager --enable-prefix-caching \
+  --compilation-config &#x27;{&quot;cudagraph_mode&quot;:&quot;FULL_DECODE_ONLY&quot;}&#x27; \
+  --kv-cache-dtype fp8 --attention-config &#x27;{&quot;indexer_kv_dtype&quot;: &quot;fp8&quot;}&#x27; \
+  --tokenizer-mode deepseek_v4 --tool-call-parser deepseek_v4 \
+  --enable-auto-tool-choice --reasoning-parser deepseek_v4 \
+  --gpu-memory-utilization 0.8 \
+  --model-loader-extra-config &#x27;{&quot;enable_multithread_load&quot;:true,&quot;num_threads&quot;:128}&#x27; \
+  --trust-remote-code \
+  --additional-config &#x27;{&quot;enable_cpu_binding&quot;:true,&quot;enable_fused_mc2&quot;:0,&quot;multistream_overlap_shared_expert&quot;:true,&quot;enable_shared_expert_dp&quot;:true}&#x27; \
+  --kv-transfer-config &#x27;{&quot;kv_connector&quot;:&quot;MooncakeConnectorV2&quot;,&quot;kv_role&quot;:&quot;kv_producer&quot;,&quot;kv_port&quot;:&quot;&#x27;$KV_PORT&#x27;&quot;,&quot;engine_id&quot;:&quot;&#x27;$ENGINE_ID&#x27;&quot;,&quot;kv_connector_extra_config&quot;:{&quot;use_ascend_direct&quot;:true,&quot;prefill&quot;:{&quot;dp_size&quot;:4,&quot;tp_size&quot;:1,&quot;pp_size&quot;:1},&quot;decode&quot;:{&quot;dp_size&quot;:8,&quot;tp_size&quot;:1,&quot;pp_size&quot;:1}}}&#x27; \
+  2&gt;&amp;1 | tee /root/p_inst_$PORT.log</code></pre>
+</div>
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #2f6fed;">
+<h2 style="margin:0 0 6px;color:#1a3c6e;font-size:16px;">D 端实例（24 号，单进程 DP8） <code style="background:#eef2f8;padding:1px 6px;border-radius:4px;font-size:12px;">serve_d_p16.sh</code></h2>
+<div style="color:#555;font-size:13px;line-height:1.8;margin-bottom:10px;">DP8×TP1 + dspark5(enforce_eager) + async-scheduling + FULL_DECODE_ONLY 图模式，kv_consumer kv_port 30100，kv_load_failure_policy recompute。</div>
+<pre style="background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.55;color:#24292f;margin:0;"><code>#!/bin/bash
+# D 实例 DP8xTP1 (141正向 PD通信参数 + dspark5 eager + async-scheduling)
+set -uo pipefail
+WEIGHT=/mnt/weight/DeepSeek-V4-Flash-FP8
+PORT=&quot;${PORT:-8122}&quot;
+LOCAL_IP=&quot;${LOCAL_IP:-$(hostname -I | tr &#x27; &#x27; &#x27;\n&#x27; | grep &#x27;^197\.13&#x27; | head -1)}&quot;
+export ZSH_VERSION=&quot;${ZSH_VERSION:-}&quot;; set +u
+source /usr/local/Ascend/ascend-toolkit/set_env.sh 2&gt;/dev/null || true
+for f in /usr/local/Ascend/cann-*/share/info/ascendnpu-ir/bin/set_env.sh; do source &quot;$f&quot; 2&gt;/dev/null || true; done
+source /usr/local/Ascend/nnal/atb/set_env.sh --cxx_abi=${ATB_CXX_ABI:-1} 2&gt;/dev/null || true
+set -u
+unset https_proxy http_proxy ftp_proxy HTTP_PROXY HTTPS_PROXY FTP_PROXY
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib/
+export HCCL_IF_IP=$LOCAL_IP GLOO_SOCKET_IFNAME=enp39s0f0 TP_SOCKET_IFNAME=enp39s0f0 HCCL_SOCKET_IFNAME=enp39s0f0
+export VLLM_USE_V2_MODEL_RUNNER=1 VLLM_EXECUTE_MODEL_TIMEOUT_SECONDS=3000
+export HCCL_EXEC_TIMEOUT=204 HCCL_CONNECT_TIMEOUT=120 HCCL_BUFFSIZE=1024
+export HCCL_OP_EXPANSION_MODE=CCU_SCHED VLLM_USE_FASTOKENS=1
+export OMP_PROC_BIND=false OMP_NUM_THREADS=10 PYTORCH_NPU_ALLOC_CONF=expandable_segments:True TASK_QUEUE_ENABLE=1
+export ASCEND_RT_VISIBLE_DEVICES=&#x27;0,1,2,3,4,5,6,7&#x27;
+export ASCEND_LOCAL_COMM_RES=&#x27;{&quot;version&quot;:&quot;1.3&quot;}&#x27;
+echo &quot;[D@$PORT] start $(date &#x27;+%F %T&#x27;) ip=$LOCAL_IP DP8 dspark5-eager async&quot;
+vllm serve &quot;$WEIGHT&quot; \
+  --host 0.0.0.0 --port $PORT --served-model-name ds-flash-fp8 \
+  --data-parallel-size 8 --tensor-parallel-size 1 --pipeline-parallel-size 1 \
+  --data-parallel-rpc-port 19000 --prefill-context-parallel-size 1 \
+  --enable-expert-parallel --seed 1024 \
+  --max-model-len 1048576 --max-num-batched-tokens 1024 --max-num-seqs 72 \
+  --async-scheduling --block-size 32 \
+  --no-enable-prefix-caching --no-disable-hybrid-kv-cache-manager \
+  --cp-kv-cache-interleave-size 1 \
+  --model-loader-extra-config &#x27;{&quot;enable_multithread_load&quot;:true,&quot;num_threads&quot;:128}&#x27; \
+  --trust-remote-code --kv-cache-dtype fp8 \
+  --attention-config &#x27;{&quot;indexer_kv_dtype&quot;: &quot;fp8&quot;}&#x27; --tokenizer-mode deepseek_v4 \
+  --tool-call-parser deepseek_v4 --enable-auto-tool-choice --reasoning-parser deepseek_v4 \
+  --gpu-memory-utilization 0.85 \
+  --compilation-config &#x27;{&quot;cudagraph_mode&quot;:&quot;FULL_DECODE_ONLY&quot;,&quot;cudagraph_capture_sizes&quot;:[1,2,4,8,16,24,32,48,56,64,72]}&#x27; \
+  --additional-config &#x27;{&quot;ascend_compilation_config&quot;:{&quot;enable_npugraph_ex&quot;:true,&quot;enable_static_kernel&quot;:false},&quot;enable_cpu_binding&quot;:true,&quot;multistream_overlap_shared_expert&quot;:true,&quot;recompute_scheduler_enable&quot;:false,&quot;enable_shared_expert_dp&quot;:true,&quot;combine_quant_mode&quot;:4}&#x27; \
+  --speculative-config &#x27;{&quot;method&quot;:&quot;dspark&quot;,&quot;model&quot;:&quot;/mnt/share/ds_weights/DSpark_ms&quot;,&quot;num_speculative_tokens&quot;:5,&quot;enforce_eager&quot;:true}&#x27; \
+  --kv-transfer-config &#x27;{&quot;kv_connector&quot;:&quot;MooncakeConnectorV2&quot;,&quot;kv_role&quot;:&quot;kv_consumer&quot;,&quot;kv_port&quot;:&quot;30100&quot;,&quot;engine_id&quot;:&quot;1&quot;,&quot;kv_load_failure_policy&quot;:&quot;recompute&quot;,&quot;kv_connector_extra_config&quot;:{&quot;use_ascend_direct&quot;:true,&quot;prefill&quot;:{&quot;dp_size&quot;:4,&quot;tp_size&quot;:1,&quot;pp_size&quot;:1},&quot;decode&quot;:{&quot;dp_size&quot;:8,&quot;tp_size&quot;:1,&quot;pp_size&quot;:1}}}&#x27; \
+  2&gt;&amp;1 | tee /root/d_8122.log</code></pre>
+</div>
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #2f6fed;">
+<h2 style="margin:0 0 6px;color:#1a3c6e;font-size:16px;">25 号宿主机一键启动（= /root/start.sh） <code style="background:#eef2f8;padding:1px 6px;border-radius:4px;font-size:12px;">start_p25.sh</code></h2>
+<div style="color:#555;font-size:13px;line-height:1.8;margin-bottom:10px;">KV_BASE=30000、EPREFIX=P25、容器 vime-w00899129-x。26 号版只有 KV_BASE=30002、EPREFIX=P26、容器 lzy_glm53_flash-x 三处不同，其余逐字一致。</div>
+<pre style="background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.55;color:#24292f;margin:0;"><code>#!/bin/bash
+# ============================================================
+# 16卡纯P 四实例启动脚本 v3 (PD组网版: 实例带 kv_producer)
+# 用法: 登上 25 或 26 号宿主机, bash /root/start.sh
+# ============================================================
+set -u
+IMG=vllm-ascend:dev-26.2.0.B106-day20261015-A5-py311-openEuler24.03-lts-aarch64
+INST_SRC=/tmp/serve_p_inst_fixed.sh
+KV_BASE=30000
+EPREFIX=P25
+
+if hostname -I | grep -q &#x27;197\.13\.49\.1&#x27;; then
+  C=vime-w00899129-x
+elif hostname -I | grep -q &#x27;197\.13\.50\.1&#x27;; then
+  C=lzy_glm53_flash-x
+else
+  echo &quot;[ERR] 不是25/26, 退出&quot;; exit 1
+fi
+LIP=$(hostname -I | tr &quot; &quot; &quot;\n&quot; | grep -E &quot;^197\.13&quot; | head -1)
+HPIP=$(hostname -I | tr &#x27; &#x27; &#x27;\n&#x27; | grep -E &#x27;^177\.11&#x27; | head -1)
+echo &quot;== 本机=$HPIP  容器=$C ==&quot;
+
+[ -f &quot;$INST_SRC&quot; ] || { echo &quot;[ERR] 缺少 $INST_SRC&quot;; exit 1; }
+docker info &gt;/dev/null 2&gt;&amp;1 || { echo &quot;[ERR] docker 不可用&quot;; exit 1; }
+
+if [ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27; 2&gt;/dev/null)&quot; != &quot;true&quot; ]; then
+  docker rm -f $C &gt;/dev/null 2&gt;&amp;1
+  docker run -d --name $C --network host --shm-size=32g --privileged \
+    -v /mnt:/mnt -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+    -v /usr/local/dcmi:/usr/local/dcmi:ro -v /etc/ascend_install.info:/etc/ascend_install.info:ro \
+    -v /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro -v /root/.cache:/root/.cache \
+    $IMG sleep infinity
+  sleep 1
+fi
+[ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27;)&quot; = &quot;true&quot; ] || { echo &quot;[ERR] 容器未运行&quot;; docker logs --tail 10 $C 2&gt;&amp;1; exit 1; }
+echo &quot;容器 running&quot;
+
+docker cp $INST_SRC $C:/tmp/serve_p_inst.sh
+docker exec $C chmod +x /tmp/serve_p_inst.sh
+
+docker exec $C bash -c &#x27;rm -f /root/p_inst_7100.log /root/p_inst_7101.log&#x27;
+docker exec -d -e LOCAL_IP=$LIP -e CARDS=0,1,2,3 -e PORT=7100 -e KV_PORT=$KV_BASE -e ENGINE_ID=${EPREFIX}A $C bash /tmp/serve_p_inst.sh
+sleep 1
+docker exec -d -e LOCAL_IP=$LIP -e CARDS=4,5,6,7 -e PORT=7101 -e KV_PORT=$((KV_BASE+1)) -e ENGINE_ID=${EPREFIX}B $C bash /tmp/serve_p_inst.sh
+echo &quot;-- 两实例已点火(kv_producer: $KV_BASE/$((KV_BASE+1))) --&quot;
+
+for i in 1 2 3 4 5 6; do
+  sleep 15
+  PROCS=$(docker exec $C bash -c &quot;pgrep -fc &#x27;[v]llm serve&#x27; 2&gt;/dev/null || echo 0&quot;)
+  H0=$(docker exec $C bash -c &quot;curl -s -o /dev/null -w &#x27;%{http_code}&#x27; http://127.0.0.1:7100/health 2&gt;/dev/null || echo 000&quot;)
+  H1=$(docker exec $C bash -c &quot;curl -s -o /dev/null -w &#x27;%{http_code}&#x27; http://127.0.0.1:7101/health 2&gt;/dev/null || echo 000&quot;)
+  echo &quot;[观察$i] vllm进程=$PROCS  7100健康=$H0  7101健康=$H1&quot;
+  docker exec $C bash -c &quot;tail -n 1 /root/p_inst_7100.log 2&gt;/dev/null; tail -n 1 /root/p_inst_7101.log 2&gt;/dev/null&quot;
+  if [ &quot;$H0&quot; = &quot;200&quot; ] &amp;&amp; [ &quot;$H1&quot; = &quot;200&quot; ]; then echo &quot;== 双实例全绿 ==&quot;; break; fi
+done
+echo &quot;== 结束 ==&quot;</code></pre>
+</div>
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #2f6fed;">
+<h2 style="margin:0 0 6px;color:#1a3c6e;font-size:16px;">26 号宿主机一键启动 <code style="background:#eef2f8;padding:1px 6px;border-radius:4px;font-size:12px;">start_p26.sh</code></h2>
+<div style="color:#555;font-size:13px;line-height:1.8;margin-bottom:10px;">与 start_p25.sh 同构。</div>
+<pre style="background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.55;color:#24292f;margin:0;"><code>#!/bin/bash
+# ============================================================
+# 16卡纯P 四实例启动脚本 v3 (PD组网版: 实例带 kv_producer)
+# 用法: 登上 25 或 26 号宿主机, bash /root/start.sh
+# ============================================================
+set -u
+IMG=vllm-ascend:dev-26.2.0.B106-day20261015-A5-py311-openEuler24.03-lts-aarch64
+INST_SRC=/tmp/serve_p_inst_fixed.sh
+KV_BASE=30002
+EPREFIX=P26
+
+if hostname -I | grep -q &#x27;197\.13\.49\.1&#x27;; then
+  C=vime-w00899129-x
+elif hostname -I | grep -q &#x27;197\.13\.50\.1&#x27;; then
+  C=lzy_glm53_flash-x
+else
+  echo &quot;[ERR] 不是25/26, 退出&quot;; exit 1
+fi
+LIP=$(hostname -I | tr &quot; &quot; &quot;\n&quot; | grep -E &quot;^197\.13&quot; | head -1)
+HPIP=$(hostname -I | tr &#x27; &#x27; &#x27;\n&#x27; | grep -E &#x27;^177\.11&#x27; | head -1)
+echo &quot;== 本机=$HPIP  容器=$C ==&quot;
+
+[ -f &quot;$INST_SRC&quot; ] || { echo &quot;[ERR] 缺少 $INST_SRC&quot;; exit 1; }
+docker info &gt;/dev/null 2&gt;&amp;1 || { echo &quot;[ERR] docker 不可用&quot;; exit 1; }
+
+if [ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27; 2&gt;/dev/null)&quot; != &quot;true&quot; ]; then
+  docker rm -f $C &gt;/dev/null 2&gt;&amp;1
+  docker run -d --name $C --network host --shm-size=32g --privileged \
+    -v /mnt:/mnt -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+    -v /usr/local/dcmi:/usr/local/dcmi:ro -v /etc/ascend_install.info:/etc/ascend_install.info:ro \
+    -v /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro -v /root/.cache:/root/.cache \
+    $IMG sleep infinity
+  sleep 1
+fi
+[ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27;)&quot; = &quot;true&quot; ] || { echo &quot;[ERR] 容器未运行&quot;; docker logs --tail 10 $C 2&gt;&amp;1; exit 1; }
+echo &quot;容器 running&quot;
+
+docker cp $INST_SRC $C:/tmp/serve_p_inst.sh
+docker exec $C chmod +x /tmp/serve_p_inst.sh
+
+docker exec $C bash -c &#x27;rm -f /root/p_inst_7100.log /root/p_inst_7101.log&#x27;
+docker exec -d -e LOCAL_IP=$LIP -e CARDS=0,1,2,3 -e PORT=7100 -e KV_PORT=$KV_BASE -e ENGINE_ID=${EPREFIX}A $C bash /tmp/serve_p_inst.sh
+sleep 1
+docker exec -d -e LOCAL_IP=$LIP -e CARDS=4,5,6,7 -e PORT=7101 -e KV_PORT=$((KV_BASE+1)) -e ENGINE_ID=${EPREFIX}B $C bash /tmp/serve_p_inst.sh
+echo &quot;-- 两实例已点火(kv_producer: $KV_BASE/$((KV_BASE+1))) --&quot;
+
+for i in 1 2 3 4 5 6; do
+  sleep 15
+  PROCS=$(docker exec $C bash -c &quot;pgrep -fc &#x27;[v]llm serve&#x27; 2&gt;/dev/null || echo 0&quot;)
+  H0=$(docker exec $C bash -c &quot;curl -s -o /dev/null -w &#x27;%{http_code}&#x27; http://127.0.0.1:7100/health 2&gt;/dev/null || echo 000&quot;)
+  H1=$(docker exec $C bash -c &quot;curl -s -o /dev/null -w &#x27;%{http_code}&#x27; http://127.0.0.1:7101/health 2&gt;/dev/null || echo 000&quot;)
+  echo &quot;[观察$i] vllm进程=$PROCS  7100健康=$H0  7101健康=$H1&quot;
+  docker exec $C bash -c &quot;tail -n 1 /root/p_inst_7100.log 2&gt;/dev/null; tail -n 1 /root/p_inst_7101.log 2&gt;/dev/null&quot;
+  if [ &quot;$H0&quot; = &quot;200&quot; ] &amp;&amp; [ &quot;$H1&quot; = &quot;200&quot; ]; then echo &quot;== 双实例全绿 ==&quot;; break; fi
+done
+echo &quot;== 结束 ==&quot;</code></pre>
+</div>
+<div style="background:#fff;border-radius:10px;padding:18px 22px;margin-bottom:14px;border-left:5px solid #2f6fed;">
+<h2 style="margin:0 0 6px;color:#1a3c6e;font-size:16px;">24 号宿主机一键启动（D 端） <code style="background:#eef2f8;padding:1px 6px;border-radius:4px;font-size:12px;">start_d.sh</code></h2>
+<div style="color:#555;font-size:13px;line-height:1.8;margin-bottom:10px;">容器 ds_p16_d 编排 + D 实例点火（已在跑则跳过）+ 观察窗检测 EngineDead。头注释 DP4 为笔误，实际 DP8。</div>
+<pre style="background:#f6f8fa;border:1px solid #e1e4e8;border-radius:8px;padding:14px;overflow-x:auto;font-size:12.5px;line-height:1.55;color:#24292f;margin:0;"><code>#!/bin/bash
+# ============================================================
+# D 端一键启动 (24/CPU4, DP4xTP1, dspark5+async-scheduling, B106)
+# 用法: bash /root/start_d.sh   (容器没跑就建, 已跑复用)
+# 日志: 容器内 /root/d_8122.log ; D 端单独挂着等 KV 属正常(链路=proxy+P就绪)
+# ============================================================
+set -u
+IMG=vllm-ascend:dev-26.2.0.B106-day20261015-A5-py311-openEuler24.03-lts-aarch64
+INST_SRC=/tmp/serve_d_p16.sh
+C=ds_p16_d
+
+[ -f &quot;$INST_SRC&quot; ] || { echo &quot;[ERR] 缺少 $INST_SRC&quot;; exit 1; }
+docker info &gt;/dev/null 2&gt;&amp;1 || { echo &quot;[ERR] docker 不可用&quot;; exit 1; }
+
+if [ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27; 2&gt;/dev/null)&quot; != &quot;true&quot; ]; then
+  docker rm -f $C &gt;/dev/null 2&gt;&amp;1
+  docker run -d --name $C --network host --shm-size=32g --privileged \
+    -v /mnt:/mnt -v /usr/local/Ascend/driver:/usr/local/Ascend/driver:ro \
+    -v /usr/local/dcmi:/usr/local/dcmi:ro -v /etc/ascend_install.info:/etc/ascend_install.info:ro \
+    -v /usr/local/sbin/npu-smi:/usr/local/sbin/npu-smi:ro -v /root/.cache:/root/.cache \
+    $IMG sleep infinity
+  sleep 1
+fi
+[ &quot;$(docker inspect $C --format &#x27;{{.State.Running}}&#x27;)&quot; = &quot;true&quot; ] || { echo &quot;[ERR] 容器未运行:&quot;; docker logs --tail 10 $C 2&gt;&amp;1; exit 1; }
+echo &quot;容器 running&quot;
+
+docker cp $INST_SRC $C:/tmp/serve_d_p16.sh
+docker exec $C chmod +x /tmp/serve_d_p16.sh
+
+if docker exec $C bash -c &quot;pgrep -f &#x27;[v]llm serve&#x27; &gt;/dev/null 2&gt;&amp;1&quot;; then
+  echo &quot;实例已在跑, 跳过点火(如需重启: docker restart $C 后重跑)&quot;
+else
+  docker exec -d $C bash /tmp/serve_d_p16.sh
+  echo &quot;D 实例已点火(8122), 日志 /root/d_8122.log&quot;
+fi
+
+for i in 1 2 3 4 5 6; do
+  sleep 15
+  PROCS=$(docker exec $C bash -c &quot;pgrep -fc &#x27;[v]llm serve&#x27; 2&gt;/dev/null || echo 0&quot;)
+  DEAD=$(docker exec $C bash -c &quot;grep -c EngineDead /root/d_8122.log 2&gt;/dev/null || echo 0&quot;)
+  echo &quot;[观察$i] vllm进程=$PROCS EngineDead=$DEAD&quot;
+  docker exec $C bash -c &quot;tail -n 1 /root/d_8122.log 2&gt;/dev/null&quot;
+  if [ &quot;$DEAD&quot; != &quot;0&quot; ]; then echo &quot;== 检出 EngineDead, 看日志定位 ==&quot;; break; fi
+done
+echo &quot;== D 端就绪判定: 进程存活即正常(单独挂着等 KV 属正常; 链路=proxy+P kv_producer 就绪) ==&quot;</code></pre>
+</div>
+
+<div style="color:#999;font-size:12px;text-align:center;margin:18px 0;">perf_test · P16D8 脚本送审 · 归档 mail/review/20261031_071315</div>
+</div>
+</body>
+</html>
