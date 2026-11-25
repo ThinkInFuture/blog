@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>老婆专项明细 · 家庭财务报表</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#10b981;--red:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:40px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+.hero{padding:22px 0 14px}
+.hero h1{font-size:20px;font-weight:700}
+.hero .sub{font-size:12px;color:var(--muted);margin-top:5px}
+.card{background:var(--card);border-radius:16px;border:1px solid rgba(15,23,42,.05);box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -18px rgba(15,23,42,.35);padding:16px;margin-bottom:12px}
+.metrics{display:flex;gap:18px;flex-wrap:wrap}
+.metrics .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.metrics .l{font-size:11.5px;color:var(--muted)}
+table.data{width:100%;border-collapse:collapse;font-size:12.5px}
+table.data th{background:#f1f5f9;color:#475569;font-weight:600;padding:7px 8px;text-align:left;font-size:11.5px;border-bottom:1px solid var(--line)}
+table.data td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums}
+table.data tr:nth-child(even){background:#fafbfd}
+table.data td.num{text-align:right}
+table.data tr.total-row td{background:#eef6ff;font-weight:700}
+a.back{color:var(--blue);text-decoration:none;font-size:12.5px}
+footer{margin-top:10px;font-size:11px;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>老婆专项明细</h1>
+    <p class="sub">家庭财务报表 · 分类逐笔明细 · 2024-12-15 至 2026-11-14</p>
+  </header>
+  <div class="card">
+    <div class="metrics">
+      <div><div class="v">¥144,142.00</div><div class="l">累计金额</div></div>
+      <div><div class="v">23 个周期</div><div class="l">出现次数</div></div>
+      <div><div class="v">¥6,267.04</div><div class="l">出现周期月均</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <table class="data">
+      <tr><th>记账周期</th><th>条目明细</th><th>小计</th></tr>
+      <tr><td>261115 → 261214</td><td>青补贴 4,000</td><td class='num'>¥4,000.00</td></tr>
+      <tr><td>261015 → 261114</td><td>青补贴 4,000 + 青补贴 500 + 青补贴 88 + 青补贴 288 + 青补贴 88 + 青补贴 188 + 青补贴 88</td><td class='num'>¥5,240.00</td></tr>
+      <tr><td>260915 → 261014</td><td>青补贴 4,000 + 青补贴 520 + 青补贴 88 + 青补贴 88 + 青补贴 500 + 青补贴 100 + 青补贴 88 + 宛青新苹果手机 12,000</td><td class='num'>¥17,384.00</td></tr>
+      <tr><td>260815 → 260914</td><td>青补贴 4,000 + 青补贴 520 + 青补贴 520 + 青补贴 88 + 青补贴 88 + 青补贴 88 + 青补贴 52 + 青补贴 188 + 宛青手表 2,000</td><td class='num'>¥7,544.00</td></tr>
+      <tr><td>260715 → 260814</td><td>青补贴 7,000 + 青补贴 52 + 青补贴 200 + 青补贴 52 + 宛青衣服 390</td><td class='num'>¥7,694.00</td></tr>
+      <tr><td>260615 → 260714</td><td>青补贴 7,000 + 青补贴 88 + 华恒毅宛青护照快递 30 + 宛青开车违章 50</td><td class='num'>¥7,168.00</td></tr>
+      <tr><td>260515 → 260614</td><td>青补贴 2,000 + 青补贴 188 + 青补贴 520 + 青补贴 188 + 青补贴 300 + 青补贴 600 + 青补贴 88 + 青补贴 500 + 青补贴 88 + 青补贴 100 + 宛青违章 300</td><td class='num'>¥4,872.00</td></tr>
+      <tr><td>260415 → 260514</td><td>青补贴 2,000 + 青补贴 188 + 青补贴 88 + 青补贴 88 + 青补贴 500 + 宛青违停罚款 100 + 宛青违停罚款 50 + 宛青金戒指 2,500</td><td class='num'>¥5,514.00</td></tr>
+      <tr><td>260315 → 260414</td><td>青补贴 2,000 + 青补贴 88 + 青补贴 188 + 青补贴 188 + 青补贴 188 + 青补贴 88 + 青补贴 520 + 宛青项链 1,500</td><td class='num'>¥4,760.00</td></tr>
+      <tr><td>260215 → 260314</td><td>青补贴 2,000 + 青补贴 520 + 青补贴 350 + 青补贴 188 + 宛青感冒药 185</td><td class='num'>¥3,243.00</td></tr>
+      <tr><td>260115 → 260214</td><td>青补贴 4,000 + 青补贴 300 + 青补贴 10,000 + 青补贴 188 + 青补贴 188 + 青补贴 200</td><td class='num'>¥14,876.00</td></tr>
+      <tr><td>251215 → 260114</td><td>青补贴 4,000 + 青补贴 200 + 青补贴 50 + 青补贴 88 + 青补贴 100 + 青补贴 88 + 青补贴 100 + 青补贴 200 + 青补贴 520 + 青补贴 88 + 青补贴 88 + 青补贴 200 + 青补贴 52 + 青补贴 200</td><td class='num'>¥5,974.00</td></tr>
+      <tr><td>251115 → 251214</td><td>青补贴 4,000 + 青补贴 88 + 青补贴 350</td><td class='num'>¥4,438.00</td></tr>
+      <tr><td>251015 → 251114</td><td>青补贴 4,000 + 青补贴 100 + 替宛青交罚款 150</td><td class='num'>¥4,250.00</td></tr>
+      <tr><td>250915 → 251014</td><td>青补贴 4,000 + 青补贴 88 + 青补贴 200 + 青补贴 100 + 青补贴 100 + 青补贴 520</td><td class='num'>¥5,008.00</td></tr>
+      <tr><td>250815 → 250914</td><td>青生日饭 1,662 + 青生日礼物 3,000 + 青生日礼物 1,314 + 青生日礼物 520 + 青补贴 4,400 + 青补贴 600 + 青补贴 100</td><td class='num'>¥11,596.00</td></tr>
+      <tr><td>250715 → 250814</td><td>青补贴 4,000 + 青补贴 200 + 青补贴 100 + 青补贴 100 + 青补贴 100 + 青补贴 100 + 青补贴 100 + 青补贴 50</td><td class='num'>¥4,750.00</td></tr>
+      <tr><td>250615 → 250714</td><td>青补贴 4,000 + 青补贴 52 + 青补贴 88 + 青补贴 88 + 青补贴 88 + 青补贴 88 + 青补贴 100 + 青旅游补贴 2,000 + 青过路费 101</td><td class='num'>¥6,605.00</td></tr>
+      <tr><td>250515 → 250614</td><td>青补贴 5,220 + 青补贴 88</td><td class='num'>¥5,308.00</td></tr>
+      <tr><td>250415 → 250514</td><td>青过路费 338 + 青违章罚款 300 + 补贴青 4,000</td><td class='num'>¥4,638.00</td></tr>
+      <tr><td>250315 → 250414</td><td>青过路费 380 + 另补贴青 4,000</td><td class='num'>¥4,380.00</td></tr>
+      <tr><td>250215 → 250314</td><td>另补贴青 900</td><td class='num'>¥900.00</td></tr>
+      <tr><td>250115 → 250214</td><td>宛青 4,000</td><td class='num'>¥4,000.00</td></tr>
+      <tr class="total-row"><td>合计</td><td></td><td class="num">¥144,142.00</td></tr>
+    </table>
+  </div>
+  <footer><a class="back" href="https://huashanblogllm.xyz/tmphtml/3dfa072d/index.html">← 返回家庭财务报表</a></footer>
+</div>
+</body>
+</html>
