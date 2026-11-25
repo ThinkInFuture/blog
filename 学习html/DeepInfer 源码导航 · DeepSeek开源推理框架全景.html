@@ -254,7 +254,7 @@ flowchart TD
 <div class="figcap">表 3 · csrc/ C++/CUDA 清单：engine/ 内 zos 与 prepare_tensor_input_v4 正是零开销调度与 yoco 截断的 C++ 侧（块加载计划/样本准备/调度器）；graph_timer 分 CUDA 与昇腾两版；asc_utils 昇腾侧工具</div>
 </div>
 
-<p><strong>站内衔接</strong>：六大特性逐个展开见《<a href="DeepInfer 特性地图 · 六大特性与源码对照.html">DeepInfer 特性地图</a>》；SWA bounded replay 的机制与账本见《<a href="DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html">Bounded Replay 深挖</a>》；V4.1-Flash 的模型机制（CED/CSA2/SWA）见《<a href="DeepSeek V4.1 KV Cache 汇总（改动·演进·复现）.html">DeepSeek V4.1 的 KV Cache 汇总</a>》。本页每张文件卡的行数与符号表由 ast 全量提取自源码快照，与仓库当前可能有个位数行的漂移（计数口径含文件末行）。</p>
+<p><strong>站内衔接</strong>：六大特性逐个展开见《<a href="DeepInfer 特性地图 · 六大特性与源码对照.html">DeepInfer 特性地图</a>》；SWA bounded replay 的机制与账本见《<a href="DeepInfer SWA Bounded Replay 深挖 · YOCO截断与命中账本.html">Bounded Replay 深挖</a>》；V4.1-Flash 的模型机制（CED/CSA2/SWA）见《<a href="DS41-KV演进复现总账.html">DeepSeek V4.1 的 KV Cache 汇总</a>》。本页每张文件卡的行数与符号表由 ast 全量提取自源码快照，与仓库当前可能有个位数行的漂移（计数口径含文件末行）。</p>
 
 <p class="dim" style="margin-top:36px">DeepInfer 全景源码导航 · 2026-10-21 发布 · 270 py · 55,199 行 · 218 类 · 951 顶层函数，全部 ast 程序化提取自 deepseek-ai/DeepInfer @ 774ce24；生产数字取自官方 Q&amp;A</p>
 <style>
