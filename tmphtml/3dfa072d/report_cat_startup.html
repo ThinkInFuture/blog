@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>创业明细 · 家庭财务报表</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#0f172a;--muted:#64748b;--line:#e2e8f0;--blue:#2563eb;--green:#10b981;--red:#ef4444}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,'PingFang SC','Microsoft YaHei',Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5;padding-bottom:40px}
+.wrap{max-width:640px;margin:0 auto;padding:0 14px}
+.hero{padding:22px 0 14px}
+.hero h1{font-size:20px;font-weight:700}
+.hero .sub{font-size:12px;color:var(--muted);margin-top:5px}
+.card{background:var(--card);border-radius:16px;border:1px solid rgba(15,23,42,.05);box-shadow:0 1px 2px rgba(15,23,42,.04),0 8px 24px -18px rgba(15,23,42,.35);padding:16px;margin-bottom:12px}
+.metrics{display:flex;gap:18px;flex-wrap:wrap}
+.metrics .v{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.metrics .l{font-size:11.5px;color:var(--muted)}
+table.data{width:100%;border-collapse:collapse;font-size:12.5px}
+table.data th{background:#f1f5f9;color:#475569;font-weight:600;padding:7px 8px;text-align:left;font-size:11.5px;border-bottom:1px solid var(--line)}
+table.data td{padding:6px 8px;border-bottom:1px solid #f1f5f9;font-variant-numeric:tabular-nums}
+table.data tr:nth-child(even){background:#fafbfd}
+table.data td.num{text-align:right}
+table.data tr.total-row td{background:#eef6ff;font-weight:700}
+a.back{color:var(--blue);text-decoration:none;font-size:12.5px}
+footer{margin-top:10px;font-size:11px;color:#94a3b8;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="hero">
+    <h1>创业明细</h1>
+    <p class="sub">家庭财务报表 · 分类逐笔明细 · 2024-12-15 至 2026-11-14</p>
+  </header>
+  <div class="card">
+    <div class="metrics">
+      <div><div class="v">¥32,980.00</div><div class="l">累计金额</div></div>
+      <div><div class="v">6 个周期</div><div class="l">出现次数</div></div>
+      <div><div class="v">¥5,496.67</div><div class="l">出现周期月均</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <table class="data">
+      <tr><th>记账周期</th><th>条目明细</th><th>小计</th></tr>
+      <tr><td>260815 → 260914</td><td>创业AI主机 9,388 + 创业AI主机 2,399 + 创业AI主机 680 + 创业AI主机 53 + 创业AI主机 40 + 创业token费 100 + 创业网站服务器 99 + 创业远程遥控器 260 + 创业显卡 2,900 + 创业token费 290 + 创业token费 1,020</td><td class='num'>¥17,229.00</td></tr>
+      <tr><td>260715 → 260814</td><td>创业焊锡 50 + 创业灯光 380 + 创业投流测试 30 + 创业投流测试 10 + 创业柔光箱 240 + 创业token费 100</td><td class='num'>¥810.00</td></tr>
+      <tr><td>260615 → 260714</td><td>创业PCB练手 20 + 创业剪辑会员 6 + 创业书籍 70 + 创业书籍 60 + 创业补光灯 1,250 + 创业补光灯 25 + 创业三脚架 85 + 创业三脚架 85 + 创业助焊膏 38 + 创业电子琴 30</td><td class='num'>¥1,669.00</td></tr>
+      <tr><td>260515 → 260614</td><td>创业麦克风 150 + 创业桌拍架 30 + 创业墨水屏 135 + 创业软件 15 + 创业进步电机 370 + 创业电脑摄像头 1,500 + 创业电脑摄像头 50 + 创业vlog摄影 3,198 + 创业vlog摄影 25 + 创业vlog摄影 10 + 创业vlog摄影 16 + 创业vlog摄影 36 + 创业vlog摄影 104 + 创业练手桌面机器人 100 + 创业滤光镜 200 + 创业esp32学习套件 205</td><td class='num'>¥6,144.00</td></tr>
+      <tr><td>260415 → 260514</td><td>创业AI硬件板子 100 + 创业AI硬件板子 90 + 创业AI硬件板子 135 + 创业AI硬件板子 20 + 创业AI硬件板子 149 + 创业3D打印机 1,306 + 创业电烙铁 100 + 创业焊接练手套件 60 + 创业面包板 75 + 创业万用表 50 + 创业雕刻垫 20</td><td class='num'>¥2,105.00</td></tr>
+      <tr><td>260315 → 260414</td><td>创业补光灯 50 + 创业假发眼镜 250 + 创业直播教程 50 + 创业电脑 4,500 + 创业电脑 40 + 创业自拍杆 90 + 创业国外代理 43</td><td class='num'>¥5,023.00</td></tr>
+      <tr class="total-row"><td>合计</td><td></td><td class="num">¥32,980.00</td></tr>
+    </table>
+  </div>
+  <footer><a class="back" href="https://huashanblogllm.xyz/tmphtml/3dfa072d/index.html">← 返回家庭财务报表</a></footer>
+</div>
+</body>
+</html>
