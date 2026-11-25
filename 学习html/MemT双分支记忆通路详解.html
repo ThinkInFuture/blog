@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MemT-1.0-Nano：双分支架构与记忆读写通路</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+    <style>
+        :root {
+            --bg: #f8fafc;
+            --text-main: #1e293b;
+            --text-sub: #64748b;
+            --border-blue: #3b82f6;
+            --border-gray: #94a3b8;
+            --bg-gray: #f1f5f9;
+            --bg-blue: #eff6ff;
+            --bg-green: #ecfdf5;
+            --border-green: #10b981;
+            --bg-purple: #f3e8ff;
+            --border-purple: #a855f7;
+            --bg-orange: #fff7ed;
+            --border-orange: #f97316;
+            --bg-red: #fef2f2;
+            --border-red: #ef4444;
+        }
+
+        body {
+            margin: 0; padding: 40px;
+            background-color: var(--bg);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; justify-content: center;
+            color: var(--text-main);
+        }
+
+        svg.static{width:100%;height:auto;display:block}
+.bar{fill:#f1f5f9;stroke:#94a3b8;stroke-width:1.5}
+.bar-t{font:600 13px sans-serif;fill:#1e293b;text-anchor:middle}
+.bx{fill:#f8fafc;stroke:#94a3b8;stroke-width:1.5}
+.bx-t{font:600 13.5px sans-serif;fill:#1e293b;text-anchor:middle}
+.bx-s{font:400 12px sans-serif;fill:#64748b;text-anchor:middle}
+.step{font:400 12.5px sans-serif;fill:#1e293b}
+.step-n{font:600 12.5px sans-serif;fill:#3b82f6}
+.key{font:400 12.5px sans-serif;fill:#64748b}
+.ln{stroke:#94a3b8;stroke-width:1.6;fill:none}
+.ln-b{stroke:#3b82f6;stroke-width:1.6;fill:none}
+.hdr{font:600 14px sans-serif;fill:#1e293b}
+.lbl{font:400 12px sans-serif;fill:#64748b}
+.card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;margin:18px 0}
+.card{position:relative}
+.fsbtn{position:absolute;top:10px;right:10px;z-index:5;padding:6px 14px;border-radius:8px;background:#fff;border:1px solid #d5dbe5;box-shadow:0 2px 8px rgba(15,23,42,.08);font-size:13px;color:#374151;cursor:pointer;font-family:inherit}
+.fsbtn:hover{border-color:#3b82f6;color:#3b82f6}
+.fsmask{display:none;position:fixed;inset:0;z-index:10002;background:#f8fafc;flex-direction:column}
+.fsmask.open{display:flex}
+.fsbar{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 16px;background:#fff;border-bottom:1px solid #e5e7eb;font-size:13px;color:#6b7280;flex-shrink:0}
+.fsx{padding:5px 14px;border-radius:8px;border:1px solid #d5dbe5;background:#fff;font-size:13px;color:#374151;cursor:pointer;font-family:inherit}
+.fsx:hover{border-color:#3b82f6;color:#3b82f6}
+.fsbody{flex:1;overflow:auto;padding:12px}
+.fsbody svg{display:block;max-width:100%;height:auto;margin:0 auto}
+@media print{.fsbtn,.fsmask{display:none!important}}
+.figcap{text-align:center;color:#64748b;font-size:12.5px;margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;line-height:1.7}
+.qa{background:#eff6ff;border-left:4px solid #3b82f6;border-radius:0 12px 12px 0;padding:14px 18px;margin:16px 0;font-size:14.5px;line-height:1.9}
+.qa b.q-t{display:block;color:#1d4ed8;margin-bottom:6px}
+.wrap-article{max-width:980px;margin:0 auto}
+.lead{font-size:15px;line-height:1.9;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:14px 18px}
+h2{font-size:19px;margin:44px 0 10px;padding-top:18px;border-top:1px solid #e2e8f0}
+p.dim{color:#64748b;font-size:13px;line-height:1.8;border-top:1px dashed #e2e8f0;padding-top:12px;margin-top:30px}
+.canvas {
+            position: relative;
+            width: 1250px;
+            height: 900px;
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.06);
+            overflow: hidden;
+        }
+
+        /* 全局连线层 */
+        svg.connections {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none; z-index: 10;
+        }
+
+        /* 基础节点样式 */
+        .node {
+            position: absolute;
+            box-sizing: border-box;
+            border-radius: 8px;
+            display: flex; flex-direction: column;
+            justify-content: center; align-items: center;
+            font-size: 13px; font-weight: 500; text-align: center;
+            background: #fff; border: 2px solid #cbd5e1;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.02);
+            z-index: 5;
+        }
+
+        .node-title { font-weight: 700; margin-bottom: 2px; font-size: 14px; }
+        .node-sub { font-size: 11px; color: var(--text-sub); line-height: 1.3; }
+        .node-code { font-family: monospace; background: rgba(0,0,0,0.05); padding: 1px 4px; border-radius: 4px; }
+
+        /* 样式修饰类 */
+        .style-gray { background: var(--bg-gray); border-color: #cbd5e1; color: #475569; }
+        .style-blue { background: var(--bg-blue); border-color: var(--border-blue); color: #1e3a8a; }
+        .style-green { background: var(--bg-green); border-color: var(--border-green); color: #047857; }
+        .style-purple { background: var(--bg-purple); border-color: var(--border-purple); color: #6b21a8; }
+        .style-orange { background: var(--bg-orange); border-color: var(--border-orange); color: #9a3412; }
+        .style-dashed { border-style: dashed; }
+
+        /* 外层大框 */
+        .panel {
+            position: absolute; border-radius: 12px;
+            background: rgba(255, 255, 255, 0.5);
+            z-index: 1;
+        }
+        .panel-left { border: 3px solid var(--border-gray); }
+        .panel-right { border: 3px solid var(--border-blue); }
+        
+        .panel-header {
+            position: absolute; top: -14px; left: 20px;
+            padding: 2px 12px; border-radius: 12px;
+            font-size: 13px; font-weight: 700; color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .panel-left .panel-header { background: var(--border-gray); }
+        .panel-right .panel-header { background: var(--border-blue); }
+
+        /* 顶部输入 & 底部 Loss */
+        .top-input {
+            top: 20px; left: 50%; transform: translateX(-50%);
+            width: 300px; height: 45px;
+        }
+        .loss-box {
+            bottom: 90px; left: 50%; transform: translateX(-50%);
+            width: 340px; height: 75px;
+            background: var(--bg-red); border-color: var(--border-red);
+            color: #b91c1c;
+        }
+        .loss-box .node-title { font-size: 18px; letter-spacing: 1px; }
+
+        /* 图例 */
+        .legend {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            width: 1150px; height: 50px;
+            background: #f8fafc; border: 1px solid #e2e8f0;
+            border-radius: 8px; display: flex; align-items: center; justify-content: space-around;
+            font-size: 12px; color: var(--text-sub); z-index: 5;
+        }
+        .legend-item { display: flex; align-items: center; gap: 8px; }
+        .legend-line-red { width: 30px; height: 0; border-top: 2px dashed #ef4444; }
+        .legend-box-solid { width: 30px; height: 16px; border: 2px solid #94a3b8; border-radius: 4px; background: #f8fafc; }
+        .legend-box-purple { width: 30px; height: 16px; border: 2px solid var(--border-purple); border-radius: 4px; background: var(--bg-purple); }
+        .legend-line-blue { width: 30px; height: 0; border-top: 2px solid var(--border-blue); }
+    </style>
+</head>
+<body>
+
+<div class="wrap-article">
+<p class="lead"><b>MemT-1.0-Nano</b> 把"记忆"做进了模型前向传播：在 10 个全注意力层旁边并联一条<b>记忆通路</b>——一块固定 shape 的<b>记忆矩阵</b>（存储记忆本体），读取时当"笔记本"查，写入时当"账本"擦写。这篇回答两个最容易被图糊住的问题：<b>模型的权重到底怎么读存储记忆？上下文又是怎么压缩进存储记忆的？</b>图 1 是双分支训练全景，图 2 单独放大读取通路，图 3 单独放大写入通路。</p>
+
+<div class="card">
+<button class="fsbtn" data-fs="fsW1" data-title="图 1 · MemT-1.0-Nano 双分支联合优化架构" type="button">⛶ 全屏查看</button><div id="fsW1">
+<svg class="static" viewBox="0 0 940 860" role="img" aria-label="MemT-1.0-Nano 双分支联合优化架构">
+<defs>
+<marker id="ma" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mab" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#3b82f6"/></marker>
+<marker id="mar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#ef4444"/></marker>
+</defs>
+<!-- 顶部输入居中 x=470，两条垂直分叉直接落在两面板顶边 -->
+<rect class="bx" x="350" y="10" width="240" height="42" rx="10" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="470" y="28">对话文本 / 多轮上下文 Tokens</text>
+<text class="bx-s" x="470" y="44">长文本或 Chunk 输入，两支共享</text>
+<path class="ln" d="M 410 52 V 94" marker-end="url(#ma)"/>
+<path class="ln-b" d="M 530 52 V 94" marker-end="url(#mab)"/>
+
+<!-- 左面板 x24-434 -->
+<rect x="24" y="96" width="410" height="600" rx="14" fill="none" stroke="#94a3b8" stroke-width="2.5"/>
+<rect x="44" y="84" width="320" height="22" rx="11" fill="#94a3b8"/>
+<text x="204" y="99" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">Base 分支（基线大模型）· 权重冻结 Anchor</text>
+
+<rect class="bx" x="49" y="124" width="360" height="46" rx="8"/>
+<text class="bx-t" x="229" y="143">Qwen3.6-35B-A3B（MoE）</text>
+<text class="bx-s" x="229" y="161">基础文本理解与常规序列建模</text>
+<path class="ln" d="M 229 170 V 184" marker-end="url(#ma)"/>
+
+<rect class="bx" x="49" y="188" width="360" height="48" rx="8"/>
+<text class="bx-t" x="229" y="207">40 层 Transformer 堆叠</text>
+<text class="bx-s" x="229" y="225">30 × Linear Attention + 10 × Full Attention</text>
+<path class="ln" d="M 229 236 V 250" marker-end="url(#ma)"/>
+
+<rect class="bx" x="49" y="254" width="360" height="48" rx="8"/>
+<text class="bx-t" x="229" y="273">KV Cache 注意力机制</text>
+<text class="bx-s" x="229" y="291">保留可见明文上下文（滑动窗口 / 局部）</text>
+<path class="ln" d="M 229 302 V 316" marker-end="url(#ma)"/>
+
+<rect class="bx" x="49" y="320" width="360" height="48" rx="8"/>
+<text class="bx-t" x="229" y="339">MoE FFN 路由计算</text>
+<text class="bx-s" x="229" y="357">36B 总参 · 激活约 3B 参数</text>
+<path class="ln" d="M 229 368 V 382" marker-end="url(#ma)"/>
+
+<rect class="bx" x="49" y="386" width="360" height="48" rx="8"/>
+<text class="bx-t" x="229" y="405">标准 LM Head 输出</text>
+<text class="bx-s" x="229" y="423">生成常规 Next-Token</text>
+<path class="ln" d="M 229 434 V 448" marker-end="url(#ma)"/>
+
+<rect x="49" y="452" width="360" height="76" rx="10" style="fill:#fef2f2;stroke:#ef4444;stroke-width:2"/>
+<text class="bx-t" x="229" y="474" style="fill:#b91c1c">L_base（Anchor 锚定损失）</text>
+<text class="bx-s" x="229" y="494">冻结教师的标准 next-token 交叉熵</text>
+<text class="bx-s" x="229" y="512">作用：保住通用能力不掉</text>
+<path d="M 229 528 V 756 H 318" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" fill="none" marker-end="url(#mar)"/>
+
+<!-- 右面板 x466-876 -->
+<rect x="466" y="96" width="410" height="600" rx="14" fill="none" stroke="#3b82f6" stroke-width="2.5"/>
+<rect x="486" y="84" width="340" height="22" rx="11" fill="#3b82f6"/>
+<text x="656" y="99" text-anchor="middle" font-size="12.5" font-weight="700" fill="#fff">MemT 分支（记忆增强）· 记忆通路可训练</text>
+
+<rect class="bx" x="491" y="124" width="360" height="46" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="143">Qwen3.6-35B-A3B（MoE）· 共享主干起点</text>
+<text class="bx-s" x="671" y="161">输入相同的隐状态序列</text>
+<path class="ln-b" d="M 671 170 V 184" marker-end="url(#mab)"/>
+
+<rect class="bx" x="491" y="188" width="360" height="48" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="207">30 × Linear Attention</text>
+<text class="bx-s" x="671" y="225">线性注意力 · 维持全局历史状态</text>
+<path class="ln-b" d="M 671 236 V 250" marker-end="url(#mab)"/>
+
+<rect class="bx" x="491" y="254" width="360" height="48" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="273">10 × Full Attention + Hyper Memory</text>
+<text class="bx-s" x="671" y="291">每 4 层一组 · 记忆读写（见图 2/3）</text>
+<path class="ln-b" d="M 586 302 V 316" marker-end="url(#mab)"/>
+
+<rect x="491" y="320" width="190" height="62" rx="8" style="fill:#f3e8ff;stroke:#a855f7;stroke-width:2"/>
+<text class="bx-t" x="586" y="341" style="fill:#6b21a8">当前层记忆矩阵 S</text>
+<text x="586" y="358" text-anchor="middle" font-family="monospace" font-size="10.5" fill="#6b21a8">[16 通道, 256, 256] FP32</text>
+<text class="bx-s" x="586" y="374">固定 shape · 与长度无关</text>
+
+<rect x="701" y="320" width="130" height="62" rx="8" style="fill:#fff7ed;stroke:#f97316;stroke-width:2" stroke-dasharray="6,4"/>
+<text class="bx-t" x="766" y="341" style="fill:#9a3412">Delta-Rule</text>
+<text class="bx-s" x="766" y="358">衰减 → 擦除 → 写入</text>
+<text class="bx-s" x="766" y="374">逐 token 更新</text>
+<path d="M 681 351 H 699" stroke="#f97316" stroke-width="2" fill="none" marker-end="url(#ma)"/>
+
+<path class="ln-b" d="M 586 382 V 396" marker-end="url(#mab)"/>
+<rect class="bx" x="491" y="400" width="360" height="48" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="419">MemT 记忆读取（Query）</text>
+<text class="bx-s" x="671" y="437">隐状态投 q · 读出 + 输出门 → 旁路</text>
+<path class="ln-b" d="M 671 448 V 462" marker-end="url(#mab)"/>
+
+<rect class="bx" x="491" y="466" width="360" height="48" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="485">MoE FFN 路由计算</text>
+<text class="bx-s" x="671" y="503">正常语言生成与记忆融合</text>
+<path class="ln-b" d="M 671 514 V 528" marker-end="url(#mab)"/>
+
+<rect class="bx" x="491" y="532" width="360" height="40" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="671" y="556">带记忆上下文的标准 LM Head</text>
+<path d="M 671 572 V 596" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" fill="none" marker-end="url(#mar)"/>
+
+<rect x="491" y="600" width="360" height="76" rx="10" style="fill:#fef2f2;stroke:#ef4444;stroke-width:2"/>
+<text class="bx-t" x="671" y="622" style="fill:#b91c1c">L_mem（记忆蒸馏损失）</text>
+<text class="bx-s" x="671" y="642">冻结全上下文教师 top-64 分布 · 前向 KL</text>
+<text class="bx-s" x="671" y="660">离策略蒸馏 · 34B token 两阶段训练</text>
+<path d="M 671 676 V 756 H 622" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4" fill="none" marker-end="url(#mar)"/>
+
+<!-- 总 Loss 居中 -->
+<rect x="320" y="728" width="300" height="56" rx="10" style="fill:#fef2f2;stroke:#ef4444;stroke-width:2"/>
+<text class="bx-t" x="470" y="750" style="fill:#b91c1c">计算总 Loss</text>
+<text class="bx-s" x="470" y="768" font-weight="700">L_total = L_base（Anchor）+ L_mem（Update）</text>
+
+<!-- 图例 -->
+<rect x="24" y="812" width="892" height="32" rx="8" fill="#f8fafc" stroke="#e2e8f0"/>
+<line x1="46" y1="828" x2="78" y2="828" stroke="#3b82f6" stroke-width="2"/>
+<text class="lbl" x="86" y="832">常规前向</text>
+<rect x="160" y="821" width="24" height="14" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+<text class="lbl" x="192" y="832">记忆矩阵 S（状态数据）</text>
+<rect x="352" y="821" width="24" height="14" rx="4" fill="#fff7ed" stroke="#f97316" stroke-width="2" stroke-dasharray="4,3"/>
+<text class="lbl" x="384" y="832">Delta-Rule 读写</text>
+<line x1="502" y1="828" x2="534" y2="828" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"/>
+<text class="lbl" x="542" y="832">损失回传 / 记忆流转</text>
+</svg>
+</div>
+<div class="figcap">图 1 · MemT-1.0-Nano 双分支联合优化架构：左 Base 锚定通用能力（L_base），右 MemT 学记忆旁路（L_mem 离策略蒸馏），总损失两支相加</div>
+</div>
+
+<h2 id="q1">问题① · 权重怎么读存储记忆（图 2）</h2>
+<div class="qa"><b class="q-t">一句话</b>读存储记忆的不是"权重"本身，而是当前 token 的隐状态：h 投影出记忆 query（q = h·W_q_mem，W_q_mem 才是权重），q 对记忆矩阵 S 做一次<b>线性读出</b>（read = q·S），读出值过 RMSNorm + 输出门，与同层主干注意力输出<b>相加</b>——这条支路叫记忆旁路。</div>
+
+<div class="card">
+<button class="fsbtn" data-fs="fsW2" data-title="图 2 · 记忆读取通路" type="button">⛶ 全屏查看</button><div id="fsW2">
+<svg class="static" viewBox="0 0 940 480" role="img" aria-label="记忆读取通路">
+<defs>
+<marker id="mrb" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#3b82f6"/></marker>
+</defs>
+<text class="hdr" x="20" y="30">问题① · 模型里的可训练权重如何"读取"存储记忆 —— 隐状态 h 投影出 q，对记忆矩阵 S 线性读出</text>
+
+<rect class="bx" x="270" y="52" width="300" height="48" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="420" y="71">当前 token 隐状态 h</text>
+<text class="bx-s" x="420" y="89">正走在这一层的那个 token</text>
+<path class="ln-b" d="M 420 100 V 114" marker-end="url(#mrb)"/>
+
+<rect class="bx" x="270" y="118" width="300" height="48" rx="8"/>
+<text class="bx-t" x="420" y="137">记忆 q 投影（可训练权重）</text>
+<text class="bx-s" x="420" y="155">q = h · W_q_mem</text>
+<path class="ln-b" d="M 420 166 V 180" marker-end="url(#mrb)"/>
+
+<rect x="270" y="184" width="300" height="84" rx="10" style="fill:#f3e8ff;stroke:#a855f7;stroke-width:2.5"/>
+<text class="bx-t" x="420" y="204" style="fill:#6b21a8">记忆矩阵 S（存储记忆本体）</text>
+<text x="420" y="222" text-anchor="middle" font-family="monospace" font-size="10.5" fill="#6b21a8">[16 通道, 256, 256] FP32 ≈ 40 MiB</text>
+<text class="bx-s" x="420" y="240">历史压缩后的笔记 · 固定 shape</text>
+<text class="bx-s" x="420" y="258">生成期间只读（冻结快照）</text>
+<path class="ln-b" d="M 420 268 V 282" marker-end="url(#mrb)"/>
+
+<rect class="bx" x="270" y="286" width="300" height="60" rx="8"/>
+<text class="bx-t" x="420" y="306">RMSNorm + 输出门</text>
+<text class="bx-s" x="420" y="324">SiLU 门控逐通道缩放 · tanh 软上限 ±2.0</text>
+<text class="bx-s" x="420" y="342">读出值 = q·S 经门控后的旁路信号</text>
+<path class="ln-b" d="M 420 346 V 358" marker-end="url(#mrb)"/>
+
+<circle cx="420" cy="364" r="6" fill="#3b82f6"/>
+
+<rect class="bx" x="620" y="338" width="300" height="50" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="770" y="357">同层主干注意力输出</text>
+<text class="bx-s" x="770" y="375">full-attention 的结果</text>
+<path class="ln-b" d="M 620 364 H 427" marker-end="url(#mrb)"/>
+
+<path class="ln-b" d="M 420 370 V 384" marker-end="url(#mrb)"/>
+<rect class="bx" x="270" y="388" width="300" height="48" rx="8" style="stroke:#15803d;fill:#ecfdf5"/>
+<text class="bx-t" x="420" y="407" style="fill:#15803d">相加 → 送入 FFN</text>
+<text class="bx-s" x="420" y="425">记忆旁路不替代注意力，只叠加</text>
+
+<text class="key" x="20" y="454">· 记忆矩阵 S 是数据不是权重：W_q_mem 是可训练参数，S 是激活态存储</text>
+<text class="key" x="20" y="472">· 读取开销恒定：q·S 定长矩阵乘 · 256K 上下文 TTFT 104-112ms vs 全上下文约 445ms</text>
+</svg>
+</div>
+<div class="figcap">图 2 · 读取通路：h →（可训练权重）→ q → 对记忆矩阵 S 线性读出 → RMSNorm+输出门 → 与同层主干注意力输出相加（旁路）→ FFN</div>
+</div>
+
+<p><b>三个关键点</b>：① 读的是<b>激活态矩阵</b>不是权重——S 是数据（历史压缩后的"笔记"），投影矩阵 W_q_mem 才是参数；② 读出与注意力<b>并行</b>而非替代——记忆旁路补的是"明文上下文之外的历史"，两条输出相加后一起进 FFN；③ 读取开销<b>恒定</b>——不管历史多长，q·S 都是一次定长矩阵乘，256K 上下文下首 token 延迟 104-112ms，全上下文方案约 445ms。</p>
+
+<h2 id="q2">问题② · 上下文怎么压缩进存储记忆（图 3）</h2>
+<div class="qa"><b class="q-t">一句话</b>每轮对话结束后有个 commit 阶段：把这一轮（输入 + 回复）的隐状态投影成记忆 k/v，<b>逐 token</b> 走 GDN-2 更新式——先通道衰减（遗忘）、再按 key 擦旧（擦除门 b_t）、后按 value 写新（写入门 w_t）。任意长的历史就这样被"反复擦写"收敛进固定 shape 的 S。</div>
+
+<div class="card">
+<button class="fsbtn" data-fs="fsW3" data-title="图 3 · 记忆写入（压缩）通路" type="button">⛶ 全屏查看</button><div id="fsW3">
+<svg class="static" viewBox="0 0 940 480" role="img" aria-label="记忆写入通路">
+<defs>
+<marker id="mw" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#64748b"/></marker>
+<marker id="mwo" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="8" markerHeight="8" markerUnits="userSpaceOnUse" orient="auto"><path d="M1 1 L7 4 L1 7 Z" fill="#f97316"/></marker>
+</defs>
+<text class="hdr" x="20" y="30">问题② · 上下文怎么"压缩进"存储记忆 —— 每轮 commit 时隐状态投成 k/v，逐 token 走 GDN-2 三步更新 S</text>
+
+<rect class="bx" x="20" y="52" width="220" height="54" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="130" y="72">一轮对话的隐状态</text>
+<text class="bx-s" x="130" y="90">输入+回复 · 逐 token 重放</text>
+<path class="ln" d="M 130 106 V 120" marker-end="url(#mw)"/>
+
+<rect class="bx" x="20" y="124" width="220" height="48" rx="8"/>
+<text class="bx-t" x="130" y="143">记忆 k / v 投影（可训练权重）</text>
+<text class="bx-s" x="130" y="161">k = h·W_k_mem · v = h·W_v_mem</text>
+<path class="ln" d="M 130 172 V 207 H 248" marker-end="url(#mw)"/>
+
+<rect class="bx" x="250" y="182" width="150" height="50" rx="8" style="stroke:#f97316;fill:#fff7ed"/>
+<text class="bx-t" x="325" y="201" style="fill:#9a3412">① 遗忘 D_t</text>
+<text class="bx-s" x="325" y="219">通道级衰减 softplus(f)</text>
+<path class="ln" d="M 400 207 H 418" marker-end="url(#mw)"/>
+
+<rect class="bx" x="420" y="182" width="150" height="50" rx="8" style="stroke:#f97316;fill:#fff7ed"/>
+<text class="bx-t" x="495" y="201" style="fill:#9a3412">② 擦除门 b_t</text>
+<text class="bx-s" x="495" y="219">key 轴擦旧坐标（覆盖式）</text>
+<path class="ln" d="M 570 207 H 588" marker-end="url(#mw)"/>
+
+<rect class="bx" x="590" y="182" width="150" height="50" rx="8" style="stroke:#f97316;fill:#fff7ed"/>
+<text class="bx-t" x="665" y="201" style="fill:#9a3412">③ 写入门 w_t</text>
+<text class="bx-s" x="665" y="219">value 轴控提交量 0~1</text>
+<path class="ln" d="M 665 232 V 252" stroke="#f97316" marker-end="url(#mwo)"/>
+
+<rect x="20" y="256" width="860" height="64" rx="10" style="fill:#fff8ed;stroke:#f97316;stroke-width:1.5"/>
+<text x="450" y="284" text-anchor="middle" font-family="monospace" font-size="13" fill="#9a3412">S_t = ( I − k_t (b_t ⊙ k_t)ᵀ ) · D_t · S_{t−1} + k_t (w_t ⊙ v_t)ᵀ</text>
+<text x="450" y="306" text-anchor="middle" font-size="11.5" fill="#9a3412">擦除项：同 key 覆盖旧记忆（改期 = 擦旧再写新）　　写入项：新内容按 w_t 提交进矩阵</text>
+<path class="ln" d="M 450 320 V 356" marker-end="url(#mw)"/>
+
+<rect class="bx" x="20" y="360" width="220" height="64" rx="8" style="stroke:#3b82f6;fill:#eff6ff"/>
+<text class="bx-t" x="130" y="382">任意长的历史上下文</text>
+<text class="bx-s" x="130" y="402">128K token 对话 ≈ 2.6 GiB KV</text>
+<text class="bx-s" x="130" y="420">全部被逐 token 擦写收敛</text>
+<path class="ln" d="M 240 392 H 296" marker-end="url(#mw)"/>
+
+<rect x="300" y="360" width="210" height="64" rx="10" style="fill:#f3e8ff;stroke:#a855f7;stroke-width:2.5"/>
+<text class="bx-t" x="405" y="382" style="fill:#6b21a8">固定 shape 的记忆矩阵 S</text>
+<text class="bx-s" x="405" y="402">10 层 × 16 通道 × 256 × 256</text>
+<text class="bx-s" x="405" y="420">FP32 ≈ 40 MiB · 不随长度增长</text>
+<path class="ln" d="M 510 392 H 566" marker-end="url(#mw)"/>
+
+<rect class="bx" x="570" y="360" width="220" height="64" rx="8" style="stroke:#15803d;fill:#ecfdf5"/>
+<text class="bx-t" x="680" y="382" style="fill:#15803d">这就是"压缩"</text>
+<text class="bx-s" x="680" y="402">128K → 66× · 256K → 约 130×</text>
+<text class="bx-s" x="680" y="420">倍数随长度涨（分母 = 明文 KV）</text>
+
+<text class="key" x="20" y="452">· "压缩"不是一步摘要，是逐 token 擦写平衡：新信息写入，被新 key 覆盖的旧信息擦掉；生成期间 S 冻结只读</text>
+<text class="key" x="20" y="470">· 稳定性：擦除项只缩不放，长序列不发散（token 级→轮次级更新掉分 46.97→40.98）</text>
+</svg>
+</div>
+<div class="figcap">图 3 · 写入通路：隐状态投成 k/v → ①遗忘 ②擦除 ③写入 逐 token 更新，任意长历史收敛进固定 shape 的 S</div>
+</div>
+
+<p><b>"压缩"的准确含义</b>：不是把历史一步摘要成一段话，而是<b>逐 token 的擦写平衡</b>。更新式里擦除项 (I − k_t(b_t⊙k_t)ᵀ) 负责"同 key 覆盖旧记忆"（比如改期的会议时间：同一个 key 先擦旧值再写新值——加性写入做不到这一点），写入项 k_t(w_t⊙v_t)ᵀ 负责提交新内容。128K 对话的 KV cache 约 2.6 GiB，而 S 恒为约 40 MiB（66 倍），256K 时约 130 倍——倍数随长度涨，因为分母（KV）在涨。</p>
+<p><b>两个工程细节</b>：生成期间 S 是<b>冻结只读</b>的快照，写入只发生在每轮结束的 commit；稳定性由擦除项"只缩不放"保证，长序列不发散（消融：token 级改轮次级更新，11 项基准均分 46.97→40.98）。</p>
+
+<h2 id="train">训练怎么保证记忆真能用（图 1 的双分支）</h2>
+<p>图 1 左右两个分支共享主干起点：<b>左 Base 分支权重冻结</b>（Anchor），只算 L_base 保住通用能力；<b>右 MemT 分支加记忆通路联合训练</b>，损失 L_mem 用<b>离策略蒸馏</b>——冻结的全上下文主干当教师，学生（MemT）只看记忆状态，用教师 top-64 token 分布做前向 KL 对齐。总量 34B token（20B 继续预训练 + 14B 后训练），两阶段缺一不可（去后训练掉 10.7 分，去继续预训练掉 2.1 分）。在 11 项记忆基准上，Nano 平均 47.0，居参数化记忆方法前二；128K 历史下端到端推理约 1.86 倍加速。</p>
+<p class="dim">机制口径：论文《MemT-1.0: Towards Memory-Native Evolution》（arXiv:2610.26825）+ HuggingFace modeling_memt.py（erase/write/forget/output 四门、commit 阶段 token 级更新）。记忆矩阵参数量以仓库 config 为准（10 层 × 16 H_kv × 256 × 256 ≈ 10.5M 元素，FP32 约 40 MiB）。</p>
+</div>
+
+<div class="fsmask" id="fsMask">
+<div class="fsbar"><span id="fsTitle">全屏查看</span><button class="fsx" id="fsX" type="button">✕ 关闭（Esc）</button></div>
+<div class="fsbody" id="fsBody"></div>
+</div>
+<script>
+(function(){
+var mask=document.getElementById('fsMask'),body=document.getElementById('fsBody'),x=document.getElementById('fsX'),title=document.getElementById('fsTitle');
+var home=null;
+function open(btn){
+  var w=document.getElementById(btn.getAttribute('data-fs'));
+  var svg=w.querySelector('svg'); home=w;
+  title.textContent=btn.getAttribute('data-title')||'全屏查看';
+  body.appendChild(svg); mask.classList.add('open'); document.body.style.overflow='hidden'; body.scrollTop=0;
+}
+function close(){
+  if(!home) return;
+  var svg=body.querySelector('svg'); home.appendChild(svg);
+  mask.classList.remove('open'); document.body.style.overflow=''; home=null;
+}
+document.querySelectorAll('.fsbtn').forEach(function(b){b.addEventListener('click',function(){open(b);});});
+x.addEventListener('click',close);
+document.addEventListener('keydown',function(e){if(e.key==='Escape')close();});
+})();
+</script>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
