@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ascend 950 msProf 采集链路：从应用打点到 AI Core PMU 的六层落位</title>
+<meta name="description" content="msProf 的采集沿六层链路逐段完成：应用打点 → CANN 参数收敛 → 驱动开通道 → STARS 调度 → AI Core PMU → 存储层次。本文把每层的组件、采集项与硬件取数位置对齐成一张泳道图，并说明 950 上 AIC/AIV 分离、CV 直通与 syscnt 计数带来的读数变化。">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+  :root{
+    --bg:#f6f8fc;
+    --line:#dbe2ea;
+    --line-strong:#b8c4d4;
+    --host:#2563eb;
+    --cann:#7c3aed;
+    --drv:#d97706;
+    --stars:#ea580c;
+    --core:#dc2626;
+    --mem:#0891b2;
+    --pmu:#059669;
+    --text:#1e293b;
+    --muted:#64748b;
+    --faint:#94a3b8;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:radial-gradient(circle at 15% 0%, #eef2ff 0, #f8fafc 50%);
+    color:var(--text);
+    font-family:'Segoe UI',system-ui,-apple-system,'PingFang SC',sans-serif;
+    padding:36px 24px 72px;
+    font-size:14px;
+    line-height:1.65;
+  }
+  .wrap{max-width:1360px;margin:0 auto}
+
+  /* ---------- 标题区 ---------- */
+  h1{font-size:26px;font-weight:680;letter-spacing:.2px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  h1 span{
+    font-size:12.5px;font-weight:400;color:var(--muted);background:#fff;
+    border:1px solid var(--line);padding:5px 12px;border-radius:999px;
+  }
+  .subtitle{color:#526077;font-size:14.5px;margin:12px 0 24px;line-height:1.75;max-width:1000px}
+
+  /* ---------- 导语 ---------- */
+  .intro{
+    background:#fff;border:1px solid var(--line);border-radius:12px;
+    padding:16px 20px;margin-bottom:22px;
+    box-shadow:0 1px 2px rgba(15,23,42,.03);
+    font-size:13.5px;line-height:1.8;color:#3f4d63;
+  }
+  .intro b{color:#1e293b}
+  .intro code{
+    background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 5px;border-radius:4px;
+    font-size:12.5px;color:#6d28d9;
+  }
+
+  /* ---------- 图例 ---------- */
+  .legend{
+    display:flex;gap:20px;flex-wrap:wrap;align-items:center;
+    font-size:12.5px;color:var(--muted);margin-bottom:18px;
+    background:#fff;border:1px solid var(--line);border-radius:9px;
+    padding:10px 16px;
+  }
+  .legend b{color:var(--text);font-weight:650}
+  .lg-dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle}
+
+  /* ---------- 统一三列网格 ---------- */
+  .row{
+    display:grid;
+    grid-template-columns:180px minmax(0,1fr) 250px;
+    align-items:stretch;
+  }
+  .head-row{
+    display:grid;
+    grid-template-columns:180px minmax(0,1fr) 250px;
+    font-size:11.5px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;
+    color:var(--faint);padding:0 4px 9px;
+  }
+  .head-row > div:nth-child(3){padding-left:18px}
+
+  /* ---------- 层卡片 ---------- */
+  .layer{
+    border:1px solid var(--line);
+    border-radius:11px;
+    overflow:hidden;
+    background:#fff;
+    box-shadow:0 1px 3px rgba(15,23,42,.04);
+  }
+  .ltag{
+    padding:14px 14px 14px 16px;
+    border-left:5px solid var(--muted);
+    display:flex;flex-direction:column;gap:4px;
+    justify-content:center;
+  }
+  .ltag .lnum{
+    font-size:11px;font-weight:700;letter-spacing:1.2px;color:var(--faint);
+  }
+  .ltag .lname{font-size:15.5px;font-weight:680;line-height:1.3}
+  .ltag .lscope{
+    font-size:10.5px;font-weight:650;letter-spacing:.5px;
+    padding:2px 8px;border-radius:5px;align-self:flex-start;margin-top:3px;
+  }
+  .scope-host{background:rgba(37,99,235,.08);color:#1d4ed8;border:1px solid rgba(37,99,235,.22)}
+  .scope-dev{background:rgba(220,38,38,.07);color:#b91c1c;border:1px solid rgba(220,38,38,.22)}
+  .scope-both{background:rgba(217,119,6,.08);color:#b45309;border:1px solid rgba(217,119,6,.22)}
+
+  .l1 .ltag{border-left-color:var(--host);background:#f5f8ff}
+  .l2 .ltag{border-left-color:var(--cann);background:#f8f5ff}
+  .l3 .ltag{border-left-color:var(--drv);background:#fffaf2}
+  .l4 .ltag{border-left-color:var(--stars);background:#fff8f3}
+  .l5 .ltag{border-left-color:var(--core);background:#fff6f6}
+  .l6 .ltag{border-left-color:var(--mem);background:#f3fbfd}
+
+  .lbody{padding:14px 18px;border-left:1px solid #eef2f7}
+  .lcollect{
+    padding:14px 18px;border-left:1px solid #eef2f7;
+    background:#fbfdff;
+    display:flex;flex-direction:column;gap:7px;justify-content:center;
+  }
+
+  /* 层说明小字 */
+  .ldesc{
+    font-size:12px;color:#7c8aa0;line-height:1.65;margin-top:8px;
+    padding-left:2px;border-top:1px dashed #e8eef5;padding-top:8px;
+  }
+  .ldesc b{color:#526077;font-weight:600}
+
+  /* ---------- 组件块 ---------- */
+  .comps{display:flex;gap:10px;flex-wrap:wrap}
+  .comp{
+    flex:1;min-width:170px;
+    background:#fbfdff;border:1px solid var(--line);border-radius:8px;
+    padding:10px 13px;position:relative;
+  }
+  .comp h4{font-size:13px;font-weight:660;margin-bottom:5px;display:flex;align-items:center;gap:6px}
+  .comp p{font-size:12px;line-height:1.6;color:#64748b}
+  .comp code{
+    background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:3px;
+    font-size:11px;color:#6d28d9;
+  }
+
+  /* 采集项 chip */
+  .chip{
+    font-size:11.5px;line-height:1.5;
+    background:#fff;border:1px solid var(--line);border-radius:6px;
+    padding:6px 10px;color:#475569;
+    display:flex;align-items:center;gap:6px;
+  }
+  .chip code{font-size:10.5px;color:#6d28d9;background:none;border:none;padding:0}
+  .chip .cd{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  /* ---------- 层间连接 ---------- */
+  .conn{
+    display:grid;
+    grid-template-columns:180px minmax(0,1fr) 250px;
+    height:30px;align-items:center;
+  }
+  .conn .cline{
+    grid-column:2;
+    display:flex;align-items:center;justify-content:center;gap:10px;
+    font-size:11px;color:var(--faint);letter-spacing:.6px;
+  }
+  .conn .cline::before,.conn .cline::after{
+    content:'';height:1px;width:50px;
+    background:linear-gradient(90deg,transparent,#cbd5e1);
+  }
+  .conn .cline::after{background:linear-gradient(90deg,#cbd5e1,transparent)}
+
+  /* Host/Device 边界 */
+  .boundary{
+    display:grid;grid-template-columns:180px minmax(0,1fr) 250px;
+    height:44px;align-items:center;
+  }
+  .boundary .bline{
+    grid-column:1 / -1;position:relative;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .boundary .bline::before{
+    content:'';position:absolute;left:0;right:0;top:50%;
+    border-top:2px dashed #f59e0b;
+  }
+  .boundary .blabel{
+    position:relative;z-index:2;background:#fff7ed;
+    border:1.5px solid #fdba74;border-radius:999px;
+    padding:4px 18px;font-size:11px;font-weight:700;letter-spacing:1.1px;
+    color:#b45309;
+  }
+
+  /* ---------- L5 芯片框图 ---------- */
+  .die-note{
+    font-size:11.5px;color:var(--faint);margin-bottom:10px;
+    display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  }
+  .subsys-grid{
+    display:grid;grid-template-columns:1fr 1fr 1.6fr;gap:9px;
+  }
+  @media(max-width:900px){.subsys-grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:640px){.subsys-grid{grid-template-columns:1fr}}
+
+  .ssys{
+    border:1.5px solid #cbd5e1;border-radius:9px;
+    padding:8px 8px 9px;background:#fff;
+  }
+  .ssys.hi{border-color:#fca5a5;box-shadow:0 0 0 3px rgba(220,38,38,.05)}
+  .ssys .stag{
+    font-size:10px;font-weight:700;letter-spacing:.5px;color:#94a3b8;
+    text-transform:uppercase;margin-bottom:6px;display:flex;justify-content:space-between;gap:4px;
+  }
+  .ssys.hi .stag{color:#b91c1c}
+
+  .unit{
+    border-radius:6px;padding:6px 8px;font-size:11px;line-height:1.45;
+    margin-bottom:5px;border:1px solid;position:relative;
+  }
+  .unit b{font-weight:660;font-size:11.5px}
+  .unit small{display:block;color:var(--muted);font-size:10px;margin-top:1px}
+  .u-aic{background:#fef2f2;border-color:#fecaca}
+  .u-aic b{color:#b91c1c}
+  .u-aiv{background:#eff6ff;border-color:#bfdbfe}
+  .u-aiv b{color:#1d4ed8}
+
+  .bufrow{display:flex;gap:4px;margin-top:5px}
+  .buf{
+    flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:5px;
+    padding:3px 6px;font-size:10px;color:#475569;line-height:1.35;
+  }
+
+  .cvline{
+    display:flex;align-items:center;gap:6px;
+    font-size:10.5px;font-weight:660;color:#0e7490;
+    margin:5px 0;padding:0 3px;
+  }
+  .cvline i{
+    flex:1;height:2px;
+    background:repeating-linear-gradient(90deg,#0891b2 0 5px,transparent 5px 9px);
+  }
+
+  .pdot{
+    width:9px;height:9px;border-radius:50%;background:var(--pmu);
+    border:2px solid #fff;box-shadow:0 0 0 1.5px var(--pmu);
+    display:inline-block;flex-shrink:0;
+  }
+  .pdot.orange{background:var(--drv);box-shadow:0 0 0 1.5px var(--drv)}
+  .pdot.cyan{background:var(--mem);box-shadow:0 0 0 1.5px var(--mem)}
+  .pmutag{
+    font-size:9.5px;font-weight:700;color:#047857;
+    display:inline-flex;align-items:center;gap:4px;float:right;
+  }
+
+  /* L6 存储 */
+  .mem-grid{display:grid;grid-template-columns:1.1fr .9fr;gap:10px}
+  .mem-box{
+    background:#f3fbfd;border:1.5px solid #bae6fd;border-radius:8px;
+    padding:10px 13px;font-size:11.5px;color:#155e75;position:relative;
+  }
+  .mem-box b{font-size:12.5px;color:#0e7490;display:block;margin-bottom:3px}
+  .mem-box small{display:block;font-size:11px;color:#0e7490;opacity:.85;line-height:1.55}
+
+  /* ---------- 图后详解区 ---------- */
+  .section{
+    margin-top:34px;
+  }
+  .section-title{
+    font-size:17px;font-weight:680;margin:0 0 6px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .section-title::before{
+    content:'';width:4px;height:18px;border-radius:2px;background:var(--mem);
+  }
+  .section-sub{font-size:13px;color:#7c8aa0;margin-bottom:16px;padding-left:14px}
+
+  .prose{
+    background:#fff;border:1px solid var(--line);border-radius:12px;
+    padding:22px 26px;box-shadow:0 1px 3px rgba(15,23,42,.04);
+    font-size:13.5px;line-height:1.9;color:#3f4d63;
+  }
+  .prose p{margin-bottom:14px}
+  .prose p:last-child{margin-bottom:0}
+  .prose b{color:#1e293b;font-weight:650}
+  .prose strong{color:#b91c1c;font-weight:660}
+  .prose code{
+    background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 6px;border-radius:4px;
+    font-family:'JetBrains Mono','Fira Code',monospace;
+    font-size:12px;color:#6d28d9;
+  }
+  .prose ul{padding-left:0;list-style:none;margin:10px 0}
+  .prose li{
+    padding-left:20px;position:relative;margin-bottom:8px;
+  }
+  .prose li::before{
+    content:'▸';position:absolute;left:2px;color:var(--mem);font-weight:700;
+  }
+
+  /* 详解卡片网格 */
+  .cards{
+    display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));
+    gap:14px;margin-top:16px;
+  }
+  .card{
+    background:#fff;border:1px solid var(--line);border-radius:11px;
+    padding:16px 18px;box-shadow:0 1px 3px rgba(15,23,42,.04);
+  }
+  .card h3{
+    font-size:14px;font-weight:660;margin-bottom:8px;
+    display:flex;align-items:center;gap:8px;
+  }
+  .card h3 i{
+    display:inline-block;width:10px;height:10px;border-radius:3px;flex-shrink:0;
+  }
+  .card p{font-size:12.5px;line-height:1.75;color:#5a6a80}
+  .card p + p{margin-top:8px}
+  .card code{
+    background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:3px;
+    font-size:11.5px;color:#6d28d9;
+  }
+  .card b{color:#334155}
+
+  /* 映射表 */
+  .map-table{
+    background:#fff;border:1px solid var(--line);border-radius:11px;
+    overflow:hidden;margin-top:16px;
+    box-shadow:0 1px 3px rgba(15,23,42,.04);
+  }
+  .map-table .mrow{
+    display:grid;grid-template-columns:200px 1fr 1fr;
+    border-bottom:1px solid #eef2f7;
+  }
+  .map-table .mrow:last-child{border-bottom:none}
+  .map-table .mh{
+    background:#f8fafc;font-weight:680;font-size:12px;color:#334155;
+    padding:9px 16px;border-bottom:1.5px solid var(--line);
+  }
+  .map-table .mc{
+    padding:9px 16px;font-size:12.5px;line-height:1.6;color:#526077;
+  }
+  .map-table .mrow .mc:first-child{
+    font-weight:600;color:#334155;background:#fbfdff;
+    border-right:1px solid #eef2f7;
+  }
+  .map-table .mrow .mc + .mc{border-right:1px solid #eef2f7}
+  .map-table .mrow .mc:last-child{border-right:none}
+  .map-table code{
+    background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:3px;
+    font-size:11.5px;color:#6d28d9;
+  }
+
+  .footer-note{
+    margin-top:28px;padding-top:18px;border-top:1px solid var(--line);
+    font-size:12px;color:#7c8aa0;line-height:1.8;
+  }
+  .footer-note b{color:#526077}
+
+  /* ---- 站内补充：图注 / 表注 / 小屏 / 断词 ---- */
+  .figcap{
+    text-align:center;color:#64748b;font-size:12.5px;margin-top:10px;
+    padding-top:10px;border-top:1px dashed #dbe2ea;line-height:1.7;
+  }
+  .section-title{scroll-margin-top:12px}
+  .prose a,.card a,.map-table a{color:#1d4ed8;text-decoration:none;border-bottom:1px solid #bfdbfe}
+  .prose a:hover,.card a:hover,.map-table a:hover{border-bottom-color:#1d4ed8}
+  .rel-list{list-style:none;padding:0;margin:0}
+  .rel-list li{
+    padding:10px 14px;border:1px solid #e2e8f0;border-radius:9px;background:#fff;
+    margin-bottom:9px;font-size:13px;color:#526077;line-height:1.7;
+  }
+  .rel-list b{color:#1e293b;font-weight:650}
+  .rel-list a{color:#1d4ed8;text-decoration:none;border-bottom:1px solid #bfdbfe}
+  .rel-list a:hover{border-bottom-color:#1d4ed8}
+  .srcnote{
+    font-size:12px;color:#7c8aa0;line-height:1.8;background:#f8fafc;
+    border:1px solid #e2e8f0;border-radius:9px;padding:12px 15px;margin-top:10px;
+  }
+  .srcnote b{color:#526077}
+
+  @media(max-width:720px){
+    body{padding:20px 14px 56px;font-size:14px}
+    h1{font-size:22px}
+    .subtitle{font-size:14px;margin:10px 0 18px}
+    .intro{padding:14px 16px;font-size:13px}
+    .legend{gap:12px;font-size:12px;padding:9px 13px}
+
+    /* 三列网格改单列堆叠 */
+    .head-row{display:none}
+    .row{grid-template-columns:1fr}
+    .ltag{
+      flex-direction:row;align-items:center;gap:10px;flex-wrap:wrap;
+      padding:10px 12px;border-left-width:4px;
+    }
+    .ltag .lnum{font-size:11px}
+    .ltag .lname{font-size:14.5px}
+    .lbody,.lcollect{border-left:none;padding:12px 14px}
+    .lcollect{border-top:1px dashed #e2e8f0}
+    .lbody::before{
+      content:'组件 / 硬件单元';display:block;font-size:11px;font-weight:700;
+      letter-spacing:1px;color:#94a3b8;margin-bottom:8px;
+    }
+    .lcollect::before{
+      content:'msProf 采集项';display:block;font-size:11px;font-weight:700;
+      letter-spacing:1px;color:#94a3b8;margin-bottom:8px;
+    }
+
+    /* 连接行与边界行单列 */
+    .conn{grid-template-columns:1fr;height:auto;padding:7px 0}
+    .conn .cline{grid-column:1}
+    .boundary{grid-template-columns:1fr;height:auto;padding:9px 0}
+    .boundary .bline{grid-column:1}
+
+    .comps{gap:8px}
+    .comp{min-width:0;flex:1 1 100%}
+    .subsys-grid{grid-template-columns:1fr}
+    .mem-grid{grid-template-columns:1fr}
+    .cards{grid-template-columns:1fr}
+    .map-table .mrow{grid-template-columns:1fr}
+    .map-table .mrow .mc:first-child{
+      border-right:none;border-bottom:1px solid #eef2f7;background:#f1f5f9;
+    }
+    .map-table .mrow .mc + .mc{border-right:none}
+    .prose{padding:16px 17px;font-size:13px;line-height:1.85}
+    .section{margin-top:26px}
+    .section-title{font-size:15.5px}
+    .section-sub{font-size:12.5px;padding-left:12px}
+
+    p,li,td,th,code,.chip,.unit,.buf,.mem-box small,.comp p{overflow-wrap:anywhere;word-break:break-word}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Ascend 950 msProf 采集链路 <span>从应用打点到 AI Core PMU 的六层落位</span></h1>
+  <p class="subtitle">
+    一张图看全 msProf 从应用层打点到 AI Core PMU 寄存器的采集链路。左侧层级、中间组件与硬件框图、
+    右侧采集项三列严格对齐；Host 与 Device 由一条虚线切开；L5 展开 950 的 AI Subsystem 内部结构，
+    并用彩色圆点标出每个采集项在硬件上的实际取数位置。
+  </p>
+
+  <div class="intro">
+    <b>msProf 的采集不是单一动作。</b>它沿「用户打点 → CANN 收敛参数 → 驱动开通道 → 硬件单元出数据」这条链路逐段完成，每一层都有各自的数据来源和采集开销：
+    L1 依赖用户主动埋点，L2 是 Host 侧 CPU 开销，L3 是 Host/Device 之间的传输，L4~L6 才是真正的 NPU 硬件数据。
+    有了这张分层视图，profile 结果里一条异常耗时才能被定位到具体环节——是应用埋点、调度排队，还是计算单元本身。950 的关键变化集中在 L4~L6：STARS2.0 的调度轨迹、AIC/AIV 分离后的 PMU、以及 Cube 的 L0C 与 Vector 的 UB 之间的 <b>CV 直通通道</b>。
+  </div>
+
+  <!-- 图例 -->
+  <div class="legend">
+    <span><span class="lg-dot" style="background:var(--pmu)"></span><b>绿点</b> AI Core PMU 寄存器读取点</span>
+    <span><span class="lg-dot" style="background:var(--drv)"></span><b>橙点</b> STARS 调度器输出点</span>
+    <span><span class="lg-dot" style="background:var(--mem)"></span><b>青点</b> CV 直通 / L2 旁路观测点</span>
+    <span style="margin-left:auto"><b>同一层三列一一对应</b>：层级 → 组件 → 采集项</span>
+  </div>
+
+  <!-- 表头 -->
+  <div class="head-row">
+    <div>层级</div>
+    <div>组件 / 硬件单元</div>
+    <div>msProf 采集项</div>
+  </div>
+
+  <!-- ============ L1 ============ -->
+  <div class="row layer l1">
+    <div class="ltag">
+      <span class="lnum">L1</span>
+      <span class="lname">应用层</span>
+      <span class="lscope scope-host">HOST</span>
+    </div>
+    <div class="lbody">
+      <div class="comps">
+        <div class="comp">
+          <h4>框架 / 训练脚本</h4>
+          <p>PyTorch · MindSpore · 自定义 Python 训练或推理脚本</p>
+        </div>
+        <div class="comp">
+          <h4>打点接口</h4>
+          <p><code>msproftx</code> / <code>torch_npu.profiler</code>，记录上层算子耗时、线程泳道与自定义 domain</p>
+        </div>
+      </div>
+      <div class="ldesc"><b>采集前提：</b>用户必须主动在代码里埋点，否则该层在 timeline 上为空。这一层的数据反映的是「用户视角的耗时」，与底层硬件耗时并不一一对应。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--host)"></span>应用泳道 · 自定义打点</div>
+      <div class="chip"><code>--msproftx=on</code></div>
+    </div>
+  </div>
+
+  <div class="conn"><div class="cline">API 调用 / 上报</div></div>
+
+  <!-- ============ L2 ============ -->
+  <div class="row layer l2">
+    <div class="ltag">
+      <span class="lnum">L2</span>
+      <span class="lname">CANN 层</span>
+      <span class="lscope scope-host">HOST</span>
+    </div>
+    <div class="lbody">
+      <div class="comps">
+        <div class="comp">
+          <h4>msProf 开关收敛</h4>
+          <p>命令行解析后统一转为 <code>ProfileParams</code>，Level0/1/2 控制采集深度</p>
+        </div>
+        <div class="comp">
+          <h4>Host 数据采集</h4>
+          <p>Runtime / GE / HCCL 上报 API 耗时与 Node 算子信息；无锁 buffer + 后台线程落盘</p>
+        </div>
+      </div>
+      <div class="ldesc"><b>采集开销所在层：</b>Host 采集会占用 CPU 与内存带宽，长序列训练里这一层是主要的采集开销来源。无锁队列设计就是为了把这个开销压到最低。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--cann)"></span>API 耗时 · Node 算子信息</div>
+      <div class="chip"><code>--runtime-api=on</code></div>
+    </div>
+  </div>
+
+  <!-- Host / Device 边界 -->
+  <div class="boundary">
+    <div class="bline"><span class="blabel">HOST ⇄ DEVICE · HDC 通道</span></div>
+  </div>
+
+  <!-- ============ L3 ============ -->
+  <div class="row layer l3">
+    <div class="ltag">
+      <span class="lnum">L3</span>
+      <span class="lname">驱动通道层</span>
+      <span class="lscope scope-both">HOST↔DEV</span>
+    </div>
+    <div class="lbody">
+      <div class="comps">
+        <div class="comp">
+          <h4>profiling channel</h4>
+          <p><code>prof_drv_start</code> 打开通道，<code>ChannelPoll</code> 轮询多种数据类型通道</p>
+        </div>
+        <div class="comp">
+          <h4>Platform 抽象</h4>
+          <p>屏蔽 950PR / 950DT 硬件差异，向上提供统一的采集能力描述</p>
+        </div>
+      </div>
+      <div class="ldesc"><b>数据出口：</b>所有 Device 侧数据最终都从这条通道回传 Host。通道按数据类型分组，避免不同类型数据互相阻塞。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--drv)"></span>原始二进制 profile 数据</div>
+      <div class="chip">多通道按数据类型分别封装</div>
+    </div>
+  </div>
+
+  <div class="conn"><div class="cline">task 下发 / 数据回传</div></div>
+
+  <!-- ============ L4 ============ -->
+  <div class="row layer l4">
+    <div class="ltag">
+      <span class="lnum">L4</span>
+      <span class="lname">STARS 调度层</span>
+      <span class="lscope scope-dev">DEVICE</span>
+    </div>
+    <div class="lbody">
+      <div class="comps">
+        <div class="comp">
+          <h4>STARS2.0 硬件调度器 <span class="pdot orange" style="float:right"></span></h4>
+          <p>Host-offload 任务流 · 资源池 · 同步标志，输出 task 级调度轨迹</p>
+        </div>
+      </div>
+      <div class="ldesc"><b>为什么单独一层：</b>task 的排队、下发、完成时刻都由 STARS 决定，这一层能暴露「算子本身不慢，但排队等调度」的问题，是分析气泡（bubble）的关键数据源。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--drv)"></span>task 调度起止轨迹</div>
+      <div class="chip"><code>--task-time=l0 / l1 / l2</code></div>
+    </div>
+  </div>
+
+  <div class="conn"><div class="cline">调度到 AI Core</div></div>
+
+  <!-- ============ L5 ============ -->
+  <div class="row layer l5">
+    <div class="ltag">
+      <span class="lnum">L5</span>
+      <span class="lname">AI Core 计算层</span>
+      <span class="lscope scope-dev">DEVICE</span>
+    </div>
+    <div class="lbody">
+      <div class="die-note">
+        <span>AI Subsystem 阵列简化示意（非物理布局）</span>
+        <span>结构比例：1 AIC + 2 AIV（核数随 SKU 变化，以实测配置为准）</span>
+      </div>
+      <div class="subsys-grid">
+
+        <div class="ssys">
+          <div class="stag"><span>Subsystem 0</span><span>1:2</span></div>
+          <div class="unit u-aic"><b>Cube Core</b><small>L0C 256KB</small></div>
+          <div class="unit u-aiv"><b>Vector 0</b><small>UB 256KB</small></div>
+          <div class="unit u-aiv"><b>Vector 1</b><small>UB 256KB</small></div>
+        </div>
+
+        <div class="ssys">
+          <div class="stag"><span>Subsystem 1</span><span>1:2</span></div>
+          <div class="unit u-aic"><b>Cube Core</b><small>L0C 256KB</small></div>
+          <div class="unit u-aiv"><b>Vector 0</b><small>UB 256KB</small></div>
+          <div class="unit u-aiv"><b>Vector 1</b><small>UB 256KB</small></div>
+        </div>
+
+        <div class="ssys hi">
+          <div class="stag"><span>Subsystem 2 · 展开</span><span style="color:#b91c1c">PMU</span></div>
+          <div class="unit u-aic">
+            <span class="pmutag"><span class="pdot"></span>PMU</span>
+            <b>Cube Core (AIC)</b>
+            <small>L1 512KB · L0A/L0B · <b style="color:#b91c1c">L0C 256KB</b></small>
+            <div class="bufrow">
+              <div class="buf">L1 <b>512K</b></div>
+              <div class="buf">L0C <b>256K</b></div>
+            </div>
+          </div>
+          <div class="cvline">
+            <span>Fixpipe</span><i></i><span>L0C→UB</span><span class="pdot"></span>
+          </div>
+          <div class="unit u-aiv">
+            <span class="pmutag"><span class="pdot"></span>PMU</span>
+            <b>Vector 0 (AIV)</b>
+            <small>SIMD/SIMT · UB 256KB</small>
+          </div>
+          <div class="unit u-aiv">
+            <span class="pmutag"><span class="pdot"></span>PMU</span>
+            <b>Vector 1 (AIV)</b>
+            <small>SIMD/SIMT · UB 256KB</small>
+          </div>
+        </div>
+
+      </div>
+      <div class="ldesc"><b>950 关键变化：</b>Cube 与 Vector 已完全分离为独立核，一个 Subsystem 内 1 个 AIC 配 2 个 AIV。<b>CV 直通通道</b>让 Cube 的 L0C 与 Vector 的 UB 直接相连，中间张量不再绕行 L2——这是与上一代采集解读差异最大的地方。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--pmu)"></span>PMU · 按 <code>coreType</code> 分 AIC / AIV</div>
+      <div class="chip"><span class="cd" style="background:var(--mem)"></span>CV 直通 · Fixpipe 流水事件</div>
+      <div class="chip"><code>--aic-metrics=PipeTimeline</code></div>
+    </div>
+  </div>
+
+  <div class="conn"><div class="cline">访存请求</div></div>
+
+  <!-- ============ L6 ============ -->
+  <div class="row layer l6">
+    <div class="ltag">
+      <span class="lnum">L6</span>
+      <span class="lname">存储层次</span>
+      <span class="lscope scope-dev">DEVICE</span>
+    </div>
+    <div class="lbody">
+      <div class="mem-grid">
+        <div class="mem-box">
+          <span class="pmutag" style="color:#0e7490"><span class="pdot cyan"></span>采集</span>
+          <b>L2 Cache · 128 MB</b>
+          <small>128B Sector-Cache · 共享池 · 读写速率与命中率</small>
+        </div>
+        <div class="mem-box">
+          <b>Memory · HiZQ 2.0 / HiBL 1.0</b>
+          <small>950DT 最高 4 TB/s · 片上 96 GB</small>
+        </div>
+      </div>
+      <div class="ldesc"><b>注意：</b>CV 直通启用后，部分数据不再经过 L2，L2 计数器会「看起来变小」。这不代表访存效率下降，需要结合 L5 的 Fixpipe 流水一起判断。</div>
+    </div>
+    <div class="lcollect">
+      <div class="chip"><span class="cd" style="background:var(--mem)"></span>L2 带宽 / 命中率</div>
+      <div class="chip"><code>--llc-profiling=on</code></div>
+    </div>
+  </div>
+
+  <div class="figcap">图 1 · msProf 采集链路的六层泳道图：左侧层级、中间组件与硬件单元、右侧采集项三列逐层对齐，虚线为 Host / Device 边界，彩色圆点标出各采集项在硬件上的取数位置</div>
+
+  <!-- ================= 图后详解 ================= -->
+  <div class="section">
+    <h2 class="section-title">怎么读这张图</h2>
+    <div class="section-sub">从下往上定位、从上往下归因，是 profile 分析的两条常用路径</div>
+
+    <div class="prose">
+      <p>
+        <b>从下往上定位。</b>拿到一份 msProf 结果，先看 L6 的 L2 带宽和 L5 的 PMU 利用率：如果 Cube 利用率已经饱和，说明计算单元是瓶颈，往上走意义不大；
+        如果 Cube 利用率低但 L4 的 task 排队时间很长，问题就在调度层；如果 L1 应用层打点显示耗时高、而底层所有硬件利用率都低，问题很可能在 Host 侧的调度或同步上。
+      </p>
+      <p>
+        <b>从上往下归因。</b>反过来，当用户报告「某个算子慢」，先从 L1 找到该算子，看它在 L2 的 API 耗时、L4 的 task 轨迹、L5 的 PMU 指标是否一致。
+        一致说明问题就在这个算子本身；不一致则说明上层打点与底层执行之间存在错位，最常见的是异步下发导致的打点时间与实际执行时间不重合。
+      </p>
+      <p>
+        <strong>950 上最需要改变习惯的是 L5 和 L6。</strong>前代芯片 Cube 和 Vector 耦合较紧，很多分析习惯上会把二者作为一个整体看；
+        950 分离之后，AIC 与 AIV 的 PMU 数据是<b>并行产生</b>的，同一个 Subsystem 内 1 个 AIC 和 2 个 AIV 各自的利用率、流水停顿都可能不同，必须按 <code>coreType</code> 分开看，
+        否则会把一个已经饱和的 Cube 和一个大量空转的 Vector 平均成一个「看起来还不错」的中间值。
+      </p>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">950 采集的三个关键变化</h2>
+    <div class="section-sub">相对上一代，profile 数据的解读方式需要相应调整</div>
+
+    <div class="cards">
+      <div class="card">
+        <h3><i style="background:var(--pmu)"></i>syscnt 替代 cycle 计数</h3>
+        <p>950 的 AICore 新增 <code>syscnt</code> 寄存器，task-based 采集得到的 <code>aicore_time</code> 基于系统时钟而非周期计数，因此<b>不再受调频影响</b>。</p>
+        <p>这意味着不同任务、不同算子之间的耗时可以直接横向比较，不必再像以前那样担心频率波动导致的数据失真。</p>
+      </div>
+      <div class="card">
+        <h3><i style="background:var(--mem)"></i>CV 直通后 L2 数据「变少」</h3>
+        <p>L0C 到 UB 的直通通道启用后，Cube 的输出可以直接搬进 Vector 的 UB，不再经过 L2 中转。L2 带宽计数器因此会下降。</p>
+        <p>这不等于访存效率变差。判断是否正常，要看 <code>PipeTimeline</code> 中 Fixpipe 是否在持续工作——只要 Fixpipe 忙，说明数据在走直通通道，L2 数据低是<b>预期行为</b>。</p>
+      </div>
+      <div class="card">
+        <h3><i style="background:var(--core)"></i>1 AIC : 2 AIV 的 PMU 并行</h3>
+        <p>一个 AI Subsystem 内，AIC 与两个 AIV 同时产生 PMU 数据，采集时通过 <code>coreType</code> 字段区分。</p>
+        <p>在 timeline 上必须拆成独立泳道观察。把 AIV 的矢量利用率当作 Cube 的利用率，是 950 上最容易犯的误读。</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">采集项与硬件的映射</h2>
+    <div class="section-sub">每个 msProf 采集项在硬件上的实际来源</div>
+
+    <div class="figcap" style="border-top:none;padding-top:0;margin-top:4px">表 1 · msProf 采集项与硬件来源对照</div>
+    <div class="map-table">
+      <div class="mrow">
+        <div class="mh">采集项</div>
+        <div class="mh">硬件来源</div>
+        <div class="mh">说明</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>aic-metrics</code></div>
+        <div class="mc">AIC / AIV 内部 PMU 寄存器</div>
+        <div class="mc">按指标组枚举采集，不同组互斥；需配合 <code>coreType</code> 区分核类型</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>task-time</code></div>
+        <div class="mc">STARS2.0 调度器</div>
+        <div class="mc">L0 只给起止时间，L1/L2 增加 task 级附加信息</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>PipeTimeline</code></div>
+        <div class="mc">AI Core 流水线事件</div>
+        <div class="mc">观察 Fixpipe / MTE 等流水单元是否在工作，是判断 CV 直通的依据</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>llc-profiling</code></div>
+        <div class="mc">L2 Sector-Cache 计数器</div>
+        <div class="mc">读写速率与命中率；CV 直通启用后需结合流水数据一起解读</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>runtime-api</code></div>
+        <div class="mc">Host 侧 Runtime 埋点</div>
+        <div class="mc">API 执行耗时，与 Device 数据在 timeline 上对齐</div>
+      </div>
+      <div class="mrow">
+        <div class="mc"><code>msproftx</code></div>
+        <div class="mc">用户代码主动打点</div>
+        <div class="mc">不在硬件侧产生数据，完全依赖用户埋点</div>
+      </div>
+    </div>
+  </div>
+
+  <p class="footer-note">
+    <b>怎么用这张图定位问题：</b>同一层里，左侧的层级、中间的组件与右侧的采集项是一一对应的——先确定耗时落在哪一层，再取该层右侧列出的采集项，
+    就能拿到对应的硬件数据。层与层之间的连接行标出数据流向（上报、下发、调度、访存），Host / Device 虚线标出哪些数据要跨过 HDC 通道回到主机侧。
+    L5 是唯一横向展开的层（AI Subsystem 内部结构），它的采集项与上方 L4 的调度轨迹、下方 L6 的存储计数构成一条完整链路。
+  </p>
+
+  <div class="section">
+    <h2 class="section-title">相关阅读</h2>
+    <div class="section-sub">同一套采集工具的另外两个视角</div>
+    <ul class="rel-list">
+      <li><b>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</b> ——
+        站在一次真实排查的现场，看短窗口采集、kernel_details.csv 与 TTFT 回归归因怎么落地；
+        <a href="Profiling 实战解读 · 从采集读数到算子归因.html">学习html/Profiling 实战解读</a></li>
+      <li><b>昇腾算子地图：编排层、自研算子、CANN 三层逐层展开</b> ——
+        把算子从编排到 CANN 落到硬件的族谱摊开，理解本文 L5 的硬件单元在算子执行中的位置；
+        <a href="昇腾算子地图 · 从一层前向到三层算子楼.html">学习html/昇腾算子地图</a></li>
+    </ul>
+  </div>
+
+  <div class="srcnote">
+    <b>口径与版本说明：</b>本文按 <b>Ascend 950</b> 的公开结构口径绘制，L5 中的核数与配比（1 AIC + 2 AIV）、L2 容量、内存带宽与
+    HiZQ / HiBL 等代际名称随 SKU 与 CANN 版本变化，图中数值用于说明层级关系，落地时以本机 <code>npu-smi info</code> 与对应 CANN 版本文档为准；
+    采集项名称（<code>msproftx</code> / <code>runtime-api</code> / <code>task-time</code> / <code>aic-metrics</code> / <code>llc-profiling</code>）以所用版本的 msProf 帮助为准。
+  </div>
+
+</div>
+
+<div style="max-width:1200px;margin:44px auto 10px;padding:16px 20px 0;border-top:1px solid #e5e7eb;font-size:13px;color:#6b7280"><a href="../index.html" style="color:inherit;text-decoration:none">华杉的技术博客</a> &middot; <a href="https://beian.miit.gov.cn/" target="_blank" rel="nofollow" style="color:inherit;text-decoration:none">苏ICP备2026063680号-1</a></div>
+<script defer src="../qrcode.min.js"></script>
+<script defer src="../share.js?v=2"></script>
+
+<style>
+.hs-fnav{position:fixed;right:24px;bottom:78px;display:flex;flex-direction:column;gap:10px;z-index:9998;font-family:inherit}
+.hs-fnav .hs-fnav-b{width:44px;height:44px;border-radius:50%;background:#fff;border:1px solid #e5e5e5;box-shadow:0 2px 12px rgba(0,0,0,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;cursor:pointer;color:#666;font-size:10px;line-height:1;text-decoration:none;padding:0;transition:all .2s}
+.hs-fnav .hs-fnav-b:hover{border-color:#3b82f6;color:#3b82f6;box-shadow:0 4px 16px rgba(59,130,246,.2)}
+.hs-fnav .hs-fnav-b svg{width:15px;height:15px;fill:currentColor;pointer-events:none}
+@media(max-width:720px){.hs-fnav{gap:8px}.hs-fnav .hs-fnav-b{width:42px;height:42px}}
+@media print{.hs-fnav{display:none}}
+</style>
+<div class="hs-fnav" id="hs-fnav">
+<a class="hs-fnav-b" href="../index.html" title="返回首页" aria-label="返回首页"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-4.5v-6h-3v6H6v-9H3z"/></svg>首页</a>
+<button class="hs-fnav-b" type="button" id="hs-fnav-top" title="回到顶部" aria-label="回到顶部"><svg viewBox="0 0 24 24"><path d="M12 4l8 8h-5v8h-6v-8H4z"/></svg>顶部</button>
+</div>
+<script>document.getElementById('hs-fnav-top').addEventListener('click',function(){window.scrollTo({top:0,behavior:'smooth'})});</script>
+
+</body>
+</html>
