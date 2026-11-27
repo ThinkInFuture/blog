@@ -340,6 +340,11 @@
   }
   .map-table .mrow .mc + .mc{border-right:1px solid #eef2f7}
   .map-table .mrow .mc:last-child{border-right:none}
+  /* 四列变体（表 2） */
+  .map-table.m4 .mrow{grid-template-columns:130px 210px 1fr 1fr}
+  @media(max-width:900px){.map-table.m4 .mrow{grid-template-columns:110px 160px 1fr 1fr}}
+  @media(max-width:720px){.map-table.m4 .mrow{grid-template-columns:1fr}}
+  .map-table.m4 .mrow .mc:nth-child(4){border-right:none}
   .map-table code{
     background:#f1f5f9;border:1px solid #e2e8f0;padding:0 4px;border-radius:3px;
     font-size:11.5px;color:#6d28d9;
@@ -351,6 +356,29 @@
   }
   .footer-note b{color:#526077}
 
+  /* ---- 代码块（命令与目录树） ---- */
+  pre.cmd{
+    background:#f8fafc;border:1px solid #dbe2ea;border-radius:10px;
+    padding:14px 16px;margin:12px 0 4px;font-size:12.5px;line-height:1.65;
+    font-family:'JetBrains Mono','Fira Code',Consolas,monospace;
+    color:#334155;overflow-x:auto;white-space:pre;
+  }
+  pre.cmd b{color:#6d28d9;font-weight:600}
+  pre.cmd em{color:#b45309;font-style:normal;font-weight:600}
+  .tree{
+    background:#fff;border:1px solid #dbe2ea;border-radius:10px;
+    padding:14px 16px;margin:12px 0 4px;font-size:12px;line-height:1.7;
+    font-family:'JetBrains Mono','Fira Code',Consolas,monospace;
+    color:#475569;overflow-x:auto;white-space:pre;
+  }
+  .tree .star{color:#b91c1c;font-weight:600}
+  .tree .sz{color:#94a3b8}
+  .pitfall{
+    background:#fffbeb;border:1px solid #fde68a;border-radius:10px;
+    padding:14px 18px;margin-top:12px;font-size:13px;line-height:1.8;color:#526077;
+  }
+  .pitfall b{color:#92400e;font-weight:650}
+  .pitfall code{background:#fff;border:1px solid #f3d9ae;border-radius:4px;padding:1px 6px;font-size:11.5px}
   /* ---- 站内补充：图注 / 表注 / 小屏 / 断词 ---- */
   .figcap{
     text-align:center;color:#64748b;font-size:12.5px;margin-top:10px;
@@ -421,6 +449,7 @@
     .section-title{font-size:15.5px}
     .section-sub{font-size:12.5px;padding-left:12px}
 
+    pre.cmd,.tree{white-space:pre-wrap;word-break:break-word}
     p,li,td,th,code,.chip,.unit,.buf,.mem-box small,.comp p{overflow-wrap:anywhere;word-break:break-word}
   }
 </style>
@@ -756,6 +785,112 @@
     就能拿到对应的硬件数据。层与层之间的连接行标出数据流向（上报、下发、调度、访存），Host / Device 虚线标出哪些数据要跨过 HDC 通道回到主机侧。
     L5 是唯一横向展开的层（AI Subsystem 内部结构），它的采集项与上方 L4 的调度轨迹、下方 L6 的存储计数构成一条完整链路。
   </p>
+
+  <div class="section">
+    <h2 class="section-title">采集命令怎么写</h2>
+    <div class="section-sub">六层各有开关；关键是先跳过爬坡段、再用短窗口采</div>
+
+    <pre class="cmd">msprof --output=&lt;输出目录&gt; \
+       --delay=420 --duration=600 \
+       --runtime-api=on --task-time=l1 \
+       --aic-metrics=PipeTimeline --llc-profiling=on \
+       --storage-limit=500MB \
+       --application="python serve.py &lt;压测参数&gt;"</pre>
+    <p class="ldesc" style="border-top:none;padding-top:2px;margin-top:2px">
+      <b>为什么用 delay + duration</b>：压测刚启动时流量还在爬坡，这段数据不代表真实负载。
+      <code>--delay</code> 跳过爬坡段，<code>--duration</code> 限定窗口，数据量小到能快速分析，
+      而且两版本对比时条件更容易对齐（同压测参数、同窗口长度、同 rank）。
+      整轮采集实测能涨到 257 GB，短窗口压到 13~18 GB（<code>du -sh</code> 实测）。
+    </p>
+
+    <div class="figcap" style="border-top:none;padding-top:0;margin-top:14px">表 2 · 六层开关与落位文件对照（开关名以本机 <code>msprof --help</code> 为准）</div>
+    <div class="map-table m4">
+      <div class="mrow">
+        <div class="mh">层级</div>
+        <div class="mh">采集开关</div>
+        <div class="mh">落位文件</div>
+        <div class="mh">看什么</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L1 应用层</div>
+        <div class="mc"><code>--msproftx=on</code> 或 <code>torch_npu.profiler</code></div>
+        <div class="mc">解析后 <code>msprof_*.json</code> 的 CPU Layer 泳道</div>
+        <div class="mc">埋点是否覆盖关键算子；没有埋点这一层就是空的</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L2 CANN 层</div>
+        <div class="mc"><code>--runtime-api=on</code></div>
+        <div class="mc"><code>api_statistic.csv</code>（很小，直接看） · <code>operator_details.csv</code></div>
+        <div class="mc">AscendCL / Runtime / Node 各级 API 耗时；host 侧瓶颈</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L3 驱动通道层</div>
+        <div class="mc">无独立开关，通道随采集自动开通</div>
+        <div class="mc"><code>collection_host.log</code> · <code>collection_device_0.log</code> · 原始 <code>data/</code></div>
+        <div class="mc">通道是否成功开通、回传数据有没有截断</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L4 STARS 调度层</div>
+        <div class="mc"><code>--task-time=l0 / l1 / l2</code></div>
+        <div class="mc"><code>task_time.csv</code>（大文件） · 解析后 json 的 Ascend Hardware Layer</div>
+        <div class="mc">排队时间 vs 执行时间，定位气泡（bubble）</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L5 AI Core 计算层</div>
+        <div class="mc"><code>--aic-metrics=PipeTimeline</code>（按指标组枚举，组间互斥）</div>
+        <div class="mc"><code>kernel_details.csv</code>（每 kernel 每次执行一行） · <code>device_0/sample.json</code></div>
+        <div class="mc">AIC / AIV 利用率按 <code>coreType</code> 分开看；Fixpipe 是否持续工作</div>
+      </div>
+      <div class="mrow">
+        <div class="mc">L6 存储层次</div>
+        <div class="mc"><code>--llc-profiling=on</code></div>
+        <div class="mc">L2 Sector-Cache 读写与命中计数</div>
+        <div class="mc">CV 直通启用后读数变小是否属于预期</div>
+      </div>
+    </div>
+
+    <div class="pitfall">
+      <b>四条实测踩坑（950DT 联调现场踩过）：</b><br>
+      ① <code>--pid</code> 不能单独作主模式 —— 直接 <code>msprof --pid=…</code> 会报
+      <code>No valid argument found in --application --sys-devices…</code>；
+      要么用 <code>--application=…</code> 从启动即采，要么 <code>--dynamic=on --pid=&lt;PID&gt;</code> 动态 attach。<br>
+      ② 窗口参数名是 <code>--duration</code>，不是 <code>--time-limit</code>。<br>
+      ③ <code>--sys-devices=on</code> 需要设备 ID 列表，而且只是<b>设备级</b>计数器，不是算子级。<br>
+      ④ 容器化环境里设备侧（AI Core task）采集无效 —— 汇总为空、动态 attach 过不了 PID 校验；
+      此时可采集原始 <code>.data</code> 流，离线导入 MindStudio 解析。
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-title">输出落位：采完之后文件在哪</h2>
+    <div class="section-sub">目录名带时间戳，解析结果与原始数据分开放</div>
+
+    <div class="tree">PROF_000001_&lt;时间戳&gt;_&lt;随机串&gt;/          # 每次采集一个目录
+├── host/                                  # L1/L2 host 侧原始
+│   ├── data/                              # 原始二进制流
+│   └── sample.json
+├── device_0/                              # L4~L6 device 侧原始（每卡一个目录）
+│   ├── data/
+│   ├── dev_start.log.0 · host_start.log.0 # 采集起止标记（.done 为完成标志）
+│   ├── info.json.0                        # 设备与采集配置
+│   └── sample.json
+├── mindstudio_profiler_output/            <span class="star">★ 解析结果，分析主要看这里</span>
+│   ├── README.txt                         # 各层含义说明（先读它）
+│   ├── msprof_&lt;时间&gt;.json              <span class="sz">本次 14.6 MB</span>  # 分层泳道时间线
+│   ├── api_statistic_&lt;时间&gt;.csv       <span class="sz">122 B</span>      # AscendCL API 统计
+│   └── step_trace_&lt;时间&gt;.json         <span class="sz">本次为空（未采 iteration 级）</span>
+├── mindstudio_profiler_log/               # 采集过程日志，排错用
+│   ├── collection_host.log · collection_device_0.log
+│   └── msprof_analysis_&lt;id&gt;.log
+└── msprof_&lt;时间&gt;.db                    <span class="sz">本次 2.8 MB</span>  # 原始时序库</div>
+    <p class="ldesc" style="border-top:none;padding-top:2px;margin-top:6px">
+      另一代际/版本的形态是 <code>dp0_pp0_tp0_dcp0_ep0_rank0_&lt;pid&gt;_&lt;时间戳&gt;_ascend_pt/ASCEND_PROFILER_OUTPUT/</code>，
+      解析结果里会有 <code>kernel_details.csv</code>（实测 209 MB / 659657 行）、<code>op_statistic.csv</code>（4.7 KB，按算子聚合，很小可直接看）、
+      <code>task_time.csv</code>（138 MB）、<code>communication.json</code>（85 MB）、<code>analysis.db</code> 与 <code>analyse.done</code>（解析完成标记）。
+      <b>先看小的</b>：api_statistic.csv 与 op_statistic.csv 只有几 KB，能直接定位量级；
+      再钻 kernel_details.csv 这种大文件做逐 kernel 归因。
+    </p>
+  </div>
 
   <div class="section">
     <h2 class="section-title">相关阅读</h2>
