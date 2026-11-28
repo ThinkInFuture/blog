@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DeepEP 昇腾版解读：MoE 专家并行通信的实现与 CANN、vllm-ascend 衔接</title>
+<meta name="description" content="lueelu/DeepEP 是面向 Ascend 950 的 MoE 专家并行通信库：ElasticBuffer 的 dispatch/combine、HT/LL 双路径、MegaMoE 通信计算融合，本文按源码讲清实现分层、与 DeepSeek 上游和 CANN SHMEM 的关系，以及 vllm-ascend 的实验性集成 PR。">
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<link rel="shortcut icon" href="/favicon.ico">
+<style>
+:root{
+  --ink:#2563eb;--ink2:#1a1f27;--muted:#6b7280;--line:#dde1e7;
+  --bg:#fff;--card:#f7f8fa;--warn:#b45309;--warn-bg:#fffbeb;
+  --ok:#15803d;--ok-bg:#f0fdf4;--code-bg:#f3f4f6;--accent:#c0392b;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink2);font-family:-apple-system,'PingFang SC','Microsoft YaHei',sans-serif;
+  font-size:15.5px;line-height:1.85;margin:0;padding:36px 20px 60px}
+.wrap{max-width:1200px;margin:0 auto}
+h1{font-size:26px;font-weight:700;line-height:1.4;margin:0 0 10px}
+.subtitle{color:#526077;font-size:14.5px;margin:0 0 26px}
+h2{font-size:20px;font-weight:700;margin:40px 0 12px;padding-left:12px;border-left:4px solid var(--ink)}
+h3{font-size:16.5px;font-weight:650;margin:24px 0 8px}
+p{margin:10px 0}
+b{font-weight:650;color:#111827}
+.lead{font-weight:700;color:#111827}
+code{background:var(--code-bg);border:1px solid #e5e7eb;border-radius:4px;padding:1px 6px;font-size:12.5px;
+  font-family:Consolas,'JetBrains Mono',monospace;color:#6d28d9;overflow-wrap:anywhere;word-break:break-word}
+.note{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;font-size:14px;color:#526077;margin:14px 0}
+.note b{color:#1e293b}
+.figwrap{margin:18px 0 4px;text-align:center;background:#fff;border:1px solid var(--line);border-radius:10px;padding:16px 10px}
+.figwrap svg{max-width:100%;height:auto}
+.figcap{text-align:center;color:var(--muted);font-size:12.5px;margin-top:8px;padding-top:8px;
+  border-top:1px dashed var(--line);line-height:1.7}
+.mermaid-wrap{margin:18px 0 4px;background:#fff;border:1px solid var(--line);border-radius:10px;
+  padding:18px 10px 10px;overflow-x:auto}
+.mermaid-wrap svg{max-width:100%;height:auto;display:block;margin:0 auto}
+.mermaid{text-align:center}
+table{width:100%;border-collapse:collapse;margin:14px 0;background:#fff;font-size:13.5px}
+th{background:#f1f5f9;color:#334155;font-weight:650;text-align:left;padding:9px 12px;border:1px solid var(--line)}
+td{padding:9px 12px;border:1px solid var(--line);vertical-align:top;color:#526077;line-height:1.7}
+tr:nth-child(even) td{background:#fbfdff}
+pre{background:var(--code-bg);border:1px solid #e5e7eb;border-radius:10px;padding:14px 16px;
+  overflow-x:auto;font-size:12.5px;line-height:1.65;font-family:Consolas,'JetBrains Mono',monospace;color:#334155;margin:12px 0}
+pre code{background:none;border:none;padding:0;color:#334155}
+ul{margin:10px 0;padding-left:6px;list-style:none}
+ul li{padding-left:20px;position:relative;margin:8px 0}
+ul li::before{content:'▸';position:absolute;left:2px;color:var(--ink);font-weight:700}
+.rel-list{list-style:none;padding:0;margin:10px 0}
+.rel-list li{border:1px solid #e2e8f0;border-radius:9px;background:#fff;padding:11px 15px;margin-bottom:9px;font-size:13.5px}
+.rel-list li::before{content:'';padding:0}
+.rel-list a{color:var(--ink);text-decoration:none;border-bottom:1px solid #bfdbfe}
+.rel-list a:hover{border-bottom-color:var(--ink)}
+.srcnote{font-size:12.5px;color:#7c8aa0;line-height:1.8;background:#f8fafc;border:1px solid #e2e8f0;
+  border-radius:9px;padding:13px 16px;margin-top:16px}
+.srcnote b{color:#526077}
+@media(max-width:720px){
+  body{padding:20px 12px 50px;font-size:14.5px}
+  h1{font-size:22px}h2{font-size:18px;margin:30px 0 10px}h3{font-size:15px}
+  p,li,td,th,code,.figcap{overflow-wrap:anywhere;word-break:break-word}
+  pre,pre code{white-space:pre-wrap;word-break:break-word;overflow-wrap:anywhere}
+  table{display:block}
+  tbody,tr,td,th{display:block}
+  tr{border-top:1px solid var(--line)}
+  th{border:none;background:#f1f5f9}
+  td{border:none;border-bottom:1px dashed #eef2f7}
+  td::before{content:attr(data-l);display:inline-block;font-size:11px;color:#94a3b8;margin-right:8px}
+  .mermaid-wrap{padding:12px 4px 6px}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>DeepEP 昇腾版解读：MoE 专家并行通信的实现与 CANN、vllm-ascend 衔接</h1>
+<p class="subtitle">lueelu/DeepEP 是面向 Ascend 950 的专家并行（EP）通信库：高吞吐 Prefill、低时延 Decode 共用一组 dispatch/combine 接口，另有把通信和专家计算融成一次前向的 MegaMoE。本文按源码讲清它的实现分层、与 DeepSeek 上游的关系、踩在 CANN 的哪几块地基上，以及 vllm-ascend 那边正在发生的衔接。</p>
+
+<div class="note">
+<b>先给定位：</b>MoE 模型做专家并行时，每个 rank 只持有一部分专家，前向要把 token 送去看得见对应专家的卡、算完再送回来——这两个动作就是 dispatch（分发）与 combine（归并），是 EP 通信里最吃带宽和时延的环节。这个仓库把这两个动作做成昇腾上的独立通信库，供推理与训练框架直接调用。
+</div>
+
+<h2 id="s1">一、它是什么：一个库、三个能力</h2>
+<p><span class="lead">对外的能力面很收敛：</span>一条 V2 接口 <code>deep_ep.ElasticBuffer.dispatch() / combine()</code> 同时覆盖高吞吐 Prefill 与低时延 Decode；一个实验入口 <code>deep_ep_experimental.megamoe</code> 把通信和专家计算融成一次前向；再加一组部署配置。README 的能力清单是三行：</p>
+<ul>
+<li><b>高吞吐 Prefill：</b>基于 URMA 的 dispatch/combine，集成 notify 与 Server 级 token 去重，覆盖 EP32/64/128/256。</li>
+<li><b>低时延 Decode：</b>同一 V2 接口的小批量路径，覆盖 EP64/128。</li>
+<li><b>MegaMoE（实验性）：</b>W4A8 量化推理（Prefill EP32/64/128，Decode EP64/128）与 BF16 推理、训练（Ascend950，训练走 PyTorch autograd）。</li>
+</ul>
+<p><span class="lead">接口的形状从 README 示例就能看全：</span>模型侧提供 <code>x [T,H]</code>、<code>topk_idx [T,K]</code>、<code>topk_weights [T,K]</code>（BF16 / INT64 / FP32），hidden 约束 <code>0 &lt; H ≤ 7168</code>（BF16 按 16 对齐、FP8 按 128 对齐），topk 取 1~16。前向三步——dispatch、专家计算、combine——反向也复用同一组调用：</p>
+<pre>recv_x, recv_weights, handle = buffer.dispatch(x, topk_idx, topk_weights, num_experts, do_expand=True)
+expert_out = local_experts_forward(recv_x, recv_weights)      # 专家计算由模型负责
+out, _, event = buffer.combine(expert_out, handle)
+event.current_stream_wait()                                   # 事件建立流依赖，CPU 返回 ≠ 设备完成</pre>
+<p><span class="lead">一个容易误读的参数：</span><code>num_max_tokens_per_rank</code> 是<b>每 rank 的容量上限</b>，不是本次实际 token 数；它同时是 HT / LL 的分档开关——≤ 256 走低时延，更大走高吞吐，容量上限 257 正是 vllm-ascend 集成里 <code>DEEPEP_MIN_HIGH_THROUGHPUT_CAPACITY</code> 的取值来源。</p>
+
+<p><span class="lead">先看全景。</span>仓库自带的架构图自上而下六层——推理与训练框架、DeepEP 接口契约、执行准备与启动、MegaMoE 实验入口、共享运行支撑，再往下是 Ascend C 算子层、SHMEM 与 CANN/硬件——整条依赖链一图收尽，后文按这六层展开：</p>
+<div class="figwrap">
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1022" viewBox="0 0 1400 1022" role="img" aria-labelledby="diagram-title diagram-description">
+<title id="diagram-title">DeepEP 软件架构</title>
+<desc id="diagram-description">DeepEP 的核心 EP 接口、实验性 MegaMoE API、执行与运行支撑、Ascend C 算子，以及通信组件和昇腾平台依赖。</desc>
+<rect id="canvas" x="0" y="0" width="1400" height="1022" rx="0" fill="#ffffff" stroke="#ffffff" stroke-width="1.5"/>
+<rect id="library" x="144" y="132" width="1208" height="560" rx="16" fill="#fbfcfe" stroke="#a7b9d0" stroke-width="1.5"/>
+<rect id="host_zone" x="160" y="288" width="800" height="252" rx="10" fill="#f0f5fb" stroke="#d6e1ef" stroke-width="1.5"/>
+<rect id="application" x="160" y="24" width="1176" height="76" rx="10" fill="#f3f6fa" stroke="#d2dbe7" stroke-width="1.5"/>
+<rect id="core_api" x="160" y="178" width="800" height="94" rx="10" fill="#eaf2ff" stroke="#6c91d0" stroke-width="1.5"/>
+<rect id="beta_api" x="984" y="178" width="352" height="94" rx="10" fill="#fff8ee" stroke="#d6a25e" stroke-width="1.5" stroke-dasharray="7 5"/>
+<rect id="beta_api_badge" x="1152" y="192" width="166" height="30" rx="6" fill="#fff0d9" stroke="#d6a25e" stroke-width="1.5"/>
+<rect id="core_semantics" x="176" y="300" width="768" height="106" rx="10" fill="#ffffff" stroke="#b6c9e4" stroke-width="1.5"/>
+<rect id="core_layout" x="192" y="353" width="232" height="36" rx="6" fill="#eaf2ff" stroke="#d6e1ef" stroke-width="1.5"/>
+<rect id="core_dispatch" x="444" y="353" width="232" height="36" rx="6" fill="#eaf2ff" stroke="#d6e1ef" stroke-width="1.5"/>
+<rect id="core_combine" x="696" y="353" width="232" height="36" rx="6" fill="#eaf2ff" stroke="#d6e1ef" stroke-width="1.5"/>
+<rect id="core_execution" x="176" y="438" width="768" height="86" rx="10" fill="#ffffff" stroke="#b6c9e4" stroke-width="1.5"/>
+<rect id="runtime" x="984" y="288" width="352" height="128" rx="10" fill="#f4f0fa" stroke="#b6a6cb" stroke-width="1.5"/>
+<rect id="policies" x="984" y="440" width="352" height="100" rx="10" fill="#f4f0fa" stroke="#b6a6cb" stroke-width="1.5"/>
+<rect id="device_zone" x="160" y="580" width="1176" height="90" rx="10" fill="#eaf2ff" stroke="#6c91d0" stroke-width="1.5"/>
+<rect id="shmem" x="160" y="730" width="562" height="84" rx="10" fill="#edf6f8" stroke="#89aebb" stroke-width="1.5"/>
+<rect id="templates" x="750" y="730" width="586" height="84" rx="10" fill="#fff8eb" stroke="#cba65d" stroke-width="1.5" stroke-dasharray="7 5"/>
+<rect id="cann" x="160" y="850" width="1176" height="58" rx="10" fill="#f3f6fa" stroke="#b9c7d8" stroke-width="1.5"/>
+<rect id="hardware" x="160" y="942" width="1176" height="56" rx="10" fill="#172b4d" stroke="#172b4d" stroke-width="1.5"/>
+<polyline id="core_entry" points="560,100 560,178" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline points="556.0,170.0 560,178 564.0,170.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="beta_entry" points="1160,100 1160,178" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline points="1156.0,170.0 1160,178 1164.0,170.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="core_call" points="560,272 560,300" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline points="556.0,292.0 560,300 564.0,292.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="core_prepare" points="560,406 560,438" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline points="556.0,430.0 560,438 564.0,430.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="core_launch" points="560,524 560,580" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline points="556.0,572.0 560,580 564.0,572.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="runtime_support" points="984,352 960,352" fill="none" stroke="#8b73aa" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="968.0,348.0 960,352 968.0,356.0" fill="none" stroke="#8b73aa" stroke-width="1.8"/>
+<polyline id="policy_input" points="984,490 960,490" fill="none" stroke="#8b73aa" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="968.0,486.0 960,490 968.0,494.0" fill="none" stroke="#8b73aa" stroke-width="1.8"/>
+<polyline id="comm_dependency" points="441,692 441,730" fill="none" stroke="#7896a3" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="437.0,722.0 441,730 445.0,722.0" fill="none" stroke="#7896a3" stroke-width="1.8"/>
+<polyline id="template_dependency" points="1043,692 1043,730" fill="none" stroke="#b28f4f" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="1039.0,722.0 1043,730 1047.0,722.0" fill="none" stroke="#b28f4f" stroke-width="1.8"/>
+<polyline id="shmem_platform" points="441,814 441,850" fill="none" stroke="#647b94" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="437.0,842.0 441,850 445.0,842.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="templates_platform" points="1043,814 1043,850" fill="none" stroke="#647b94" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="1039.0,842.0 1043,850 1047.0,842.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<polyline id="hardware_dependency" points="748,908 748,942" fill="none" stroke="#647b94" stroke-width="1.8" stroke-dasharray="6 5"/>
+<polyline points="744.0,934.0 748,942 752.0,934.0" fill="none" stroke="#647b94" stroke-width="1.8"/>
+<text id="layer_applications" x="24" y="67" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">应用框架</text>
+<text id="layer_interfaces" x="24" y="232" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">接口契约</text>
+<text id="layer_host" x="24" y="383" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">业务与执行</text>
+<text id="layer_device" x="24" y="630" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">设备实现</text>
+<text id="layer_dependencies" x="24" y="778" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">组件依赖</text>
+<text id="layer_platform" x="24" y="884" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">软件平台</text>
+<text id="layer_cluster" x="24" y="975" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#61738a" text-anchor="start" data-max-width="112">硬件资源</text>
+<text id="app_title" x="748.0" y="70" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="25" font-weight="600" fill="#172b4d" text-anchor="middle" data-max-width="1136">推理框架 · 训练框架 · MoE 应用</text>
+<text id="library_label" x="160" y="165" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="23" font-weight="600" fill="#172b4d" text-anchor="start" data-max-width="370">DeepEP</text>
+<text id="core_api_title" x="180" y="216" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="26" font-weight="700" fill="#244f8d" text-anchor="start" data-max-width="760">核心 EP 接口</text>
+<text id="core_api_body" x="180" y="253" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="760">布局 · 分发与归并 · 句柄与事件 · 异步重叠</text>
+<text id="core_sem_title" x="192" y="333" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="23" font-weight="600" fill="#172b4d" text-anchor="start" data-max-width="736">EP 业务语义</text>
+<text id="core_layout_text" x="308.0" y="377" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="600" fill="#244f8d" text-anchor="middle" data-max-width="216">路由与布局</text>
+<text id="core_dispatch_text" x="560.0" y="377" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="600" fill="#244f8d" text-anchor="middle" data-max-width="216">Token 分发</text>
+<text id="core_combine_text" x="812.0" y="377" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="600" fill="#244f8d" text-anchor="middle" data-max-width="216">结果归并</text>
+<text id="core_exec_title" x="192" y="471" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="24" font-weight="600" fill="#172b4d" text-anchor="start" data-max-width="736">执行准备与启动</text>
+<text id="core_exec_body" x="192" y="510" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="736">能力匹配 · 变体选择 · 参数绑定 · 算子启动</text>
+<text id="beta_api_title" x="1002" y="216" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="24" font-weight="600" fill="#9a640b" text-anchor="start" data-max-width="142">MegaMoE</text>
+<text id="beta_api_status" x="1235.0" y="214" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="600" fill="#9a640b" text-anchor="middle" data-max-width="154">实验性 API</text>
+<text id="beta_api_body" x="1002" y="256" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#9a640b" text-anchor="start" data-max-width="316">MoE 超大融合算子 · Beta</text>
+<text id="runtime_title" x="1002" y="325" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="23" font-weight="600" fill="#604987" text-anchor="start" data-max-width="316">共享运行支撑</text>
+<text id="runtime_body1" x="1002" y="364" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="316">通信上下文 · 内存与缓冲</text>
+<text id="runtime_body2" x="1002" y="398" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="316">流与事件 · 完成对象</text>
+<text id="policy_title" x="1002" y="477" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="23" font-weight="600" fill="#604987" text-anchor="start" data-max-width="316">拓扑与执行策略</text>
+<text id="policy_body" x="1002" y="513" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="18" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="316">设备互联 · 分核 · 分块 · 流水</text>
+<text id="device_title" x="748.0" y="616" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="25" font-weight="600" fill="#244f8d" text-anchor="middle" data-max-width="1136">Ascend C 算子层</text>
+<text id="device_body" x="748.0" y="655" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="middle" data-max-width="1136">细粒度流水 · 数据搬运 · 同步 · 通信计算重叠</text>
+<text id="shmem_title" x="180" y="765" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="24" font-weight="600" fill="#2e6476" text-anchor="start" data-max-width="522">SHMEM 通信基础</text>
+<text id="shmem_body" x="180" y="801" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="522">通信资源 · 远端访存 · 同步</text>
+<text id="template_title" x="770" y="764" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="23" font-weight="600" fill="#8f681f" text-anchor="start" data-max-width="546">计算与通算融合模板</text>
+<text id="template_body" x="770" y="801" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="20" font-weight="400" fill="#172b4d" text-anchor="start" data-max-width="546">CATLASS · CatCCOS</text>
+<text id="cann_title" x="748.0" y="889" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="24" font-weight="600" fill="#172b4d" text-anchor="middle" data-max-width="1136">CANN / Ascend C · 运行时与编译工具链</text>
+<text id="hardware_title" x="748.0" y="980" font-family="'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif" font-size="24" font-weight="600" fill="#ffffff" text-anchor="middle" data-max-width="1136">Ascend NPU 集群 · 设备互联与执行资源</text>
+</svg>
+</div>
+<div class="figcap">图 1 · DeepEP 软件架构（来源：仓库 figures/architecture.svg，BSD-2-Clause）</div>
+<h2 id="s2">二、与 DeepSeek 上游的关系：接口参考，实现重写</h2>
+<p><span class="lead">它不是 fork。</span>git 历史根提交是 2026-10-09 的 <code>Initial commit</code>，与 deepseek-ai/DeepEP 不共享任何提交；README 致谢的措辞也说得清楚——「感谢 DeepSeek DeepEP 提供上游<b> EP 接口与工作流参考</b>」。两边共享的只有接口语义：<code>dispatch/combine</code>、Buffer、handle、事件；实现层完全换了一套地基。</p>
+<div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  UP["deepseek-ai/DeepEP（上游 · NVIDIA GPU 栈）"]:::up
+  UE["EP 接口契约：dispatch / combine / Buffer / handle"]:::up
+  UN["NVLink · RDMA · NVSHMEM 通信实现"]:::up
+  AS["lueelu/DeepEP（昇腾版 · Ascend NPU）"]:::as
+  AE["同名接口语义：ElasticBuffer dispatch/combine · handle · 事件"]:::as
+  AK["Ascend C 设备算子（notify / dispatch / combine / low_latency）"]:::as
+  ASH["CANN SHMEM · URMA 远端访存"]:::as
+  AC["CANN 9.2 · Bisheng 工具链 · CATLASS（MegaMoE）"]:::as
+  UP -->|"参考"| UE
+  UE -.->|"复刻接口语义<br/>实现独立重写（非 fork）"| AE
+  UE --> UN
+  AE --> AK
+  AK --> ASH
+  ASH --> AC
+  classDef up fill:#f1f5f9,stroke:#64748b,stroke-width:1.5px,color:#1e293b
+  classDef as fill:#eff6ff,stroke:#2563eb,stroke-width:2px,color:#1e293b
+  classDef as2 fill:#fff,stroke:#2563eb,stroke-dasharray:4 3,color:#1e293b
+</pre></div>
+<div class="figcap">图 2 · 两条实现线：接口契约参考上游，通信与算子地基整体换成昇腾栈</div>
+<p><span class="lead">一个部署上的硬约束随之而来：</span>官方 DeepEP 与本仓<b>共享 <code>deep_ep</code> 导入名</b>，同一 Python 环境只能装一种；文档明确要求用独立环境。发行包名是 <code>ascend-deepep</code>，仓库里还保留 <code>ascend_deepep</code> 旧导入名作为兼容入口——旧子模块动态注册、访问时才加载，但不包含第二份原生库。</p>
+
+<h2 id="s3">三、实现分层：从 Python 接口到 Ascend C 算子</h2>
+<p><span class="lead">图 1 的每一层都能在仓库里找到对应目录。</span>调用链在 docs/architecture.md 里只有一行：<code>deep_ep.ElasticBuffer → deep_ep/buffers/elastic.py → deep_ep._C（csrc/bindings/module.cpp）→ csrc/ops → csrc/kernels 中的对应 kernel</code>，最后落到「Python Runtime → C++ Session → SHMEM / CANN」。Host 层是 C++17，Device 子工程用 Bisheng 编译成 <code>libdeepep_kernels.so</code>——这正是图 1 里「Ascend C 算子层」的产物。</p>
+<table>
+<tr><th>模块</th><th>职责</th></tr>
+<tr><td data-l="模块">deep_ep/buffers/elastic.py · _elastic_layout.py</td><td data-l="职责">V2 参数校验、HT/LL 选择、容量计算、返回组织</td></tr>
+<tr><td data-l="模块">deep_ep/buffers/legacy.py · _config.py</td><td data-l="职责">V1 资源入口与兼容签名</td></tr>
+<tr><td data-l="模块">deep_ep/_runtime.py</td><td data-l="职责">进程级资源 owner、框架通信流与进程组协调</td></tr>
+<tr><td data-l="模块">deep_ep/utils/event.py</td><td data-l="职责">NPU 事件、流等待与 Tensor 引用管理</td></tr>
+<tr><td data-l="模块">csrc/bindings/module.cpp</td><td data-l="职责">Python/C++ 注册入口（deep_ep._C）</td></tr>
+<tr><td data-l="模块">csrc/runtime/session.hpp/.cpp</td><td data-l="职责">SHMEM 初始化、对称工作区、屏障与销毁</td></tr>
+<tr><td data-l="模块">csrc/ops/{notify,dispatch,combine,low_latency}.cpp</td><td data-l="职责">Host 侧校验、tiling 组织与 kernel 启动</td></tr>
+<tr><td data-l="模块">csrc/kernels/（notify/dispatch/combine/low_latency）</td><td data-l="职责">Ascend C 设备算子，Bisheng 编译为 libdeepep_kernels.so</td></tr>
+<tr><td data-l="模块">experiments/megamoe/ · ep_gmm_fused/</td><td data-l="职责">MegaMoE 融合算子；AllToAllV→GMM / GMM→AllToAllV 融合（UDMA）</td></tr>
+<tr><td data-l="模块">ascend_deepep/（兼容入口）</td><td data-l="职责">旧导入名转发到同一套实现，不包含第二份原生库</td></tr>
+</table>
+<div class="figcap">表 1 · 模块职责一览（整理自 docs/architecture.md）</div>
+<p><span class="lead">设备算子的分工在 csrc/kernels/README.md：</span><code>notify/notify.cpp</code> 算路由元数据，<code>dispatch/dispatch.cpp</code> 与 <code>combine/combine.cpp</code> 是高吞吐主路径，<code>dispatch/low_latency.cpp</code> 与 <code>combine/low_latency.cpp</code> 是低时延入口——同一组 Python 方法在 fresh 调用时按 shape、选项与容量自动选路。</p>
+
+<h2 id="s4">四、一次 MoE 前向：dispatch 与 combine 怎么走</h2>
+<p><span class="lead">路径分两种身份：</span>首次进入的 fresh dispatch 要先跑 Notify——交换路由元数据、算出每个 rank 的接收计数和转发归并布局，然后才搬 payload；后续迭代手里已有 handle，cached dispatch 直接复用既有路由，跳过建表。combine 则始终按 handle 汇总专家输出。</p>
+<div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  IN["模型侧输入：x [T,H] · topk_idx [T,K] · topk_weights [T,K]"]:::in
+  Q{"本 token 批是否已有 handle？"}:::q
+  NT["Notify：交换路由元数据<br/>算各 rank 接收计数 · 转发与归并布局"]:::st
+  FD["fresh dispatch：按 Notify 结果搬运 payload<br/>FP8 hidden 与 scale 按各自格式"]:::st
+  CD["cached dispatch：复用 handle 里的路由<br/>跳过建表"]:::st
+  EXP["专家计算（模型侧实现）<br/>保持 dispatch 给出的行顺序"]:::ex
+  CB["combine：按 handle 汇总专家输出<br/>源 rank 归并时乘路由权重（推理）"]:::st
+  OUT["输出 [T,H] · 返回 handle 供下一轮复用"]:::out
+  IN --> Q
+  Q -->|"首次"| NT --> FD --> EXP
+  Q -->|"后续迭代"| CD --> EXP
+  EXP --> CB --> OUT
+  classDef in fill:#eff6ff,stroke:#2563eb
+  classDef q fill:#fffbeb,stroke:#d97706
+  classDef st fill:#f0fdf4,stroke:#15803d
+  classDef ex fill:#fef2f2,stroke:#dc2626
+  classDef out fill:#f1f5f9,stroke:#64748b
+</pre></div>
+<div class="figcap">图 3 · fresh / cached 两种 dispatch 与 combine 的数据流（专家计算由模型侧提供）</div>
+<p><span class="lead">三个设计细节值得注意：</span>其一，展开布局保留每个有效专家槽位（包括重复路由），hidden、FP8 scale、路由权重按各自格式搬运；其二，专家计算<b>保持 dispatch 给出的行顺序</b>，combine 才能对回去；其三，权重乘法只做一次——推理在源 rank 归并时乘，训练在 GMM2 前乘，通信路径不自动对 hidden 乘 gate。HT 的 Session 把固定前半区留给 Notify/dispatch、后半区留给 combine，路由元数据和返回 Tensor 另有框架存储。</p>
+
+<h2 id="s5">五、HT 与 LL：同一个接口的两条路，再加 MegaMoE</h2>
+<p><span class="lead">分档判据只有一个参数：</span>Buffer 初始化时的 <code>num_max_tokens_per_rank</code>。≤ 256 进低时延（固定 8 GiB 对称工作区），否则走高吞吐（容量自动估算）。两条路共用同一组方法名，fresh 时由实现自动选择：</p>
+<div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  INIT["ElasticBuffer 初始化<br/>num_max_tokens_per_rank = 容量上限"]:::in
+  SEL{"容量上限 ≤ 256？"}:::q
+  LL["低时延路径 LL<br/>固定 8 GiB 对称工作区 · 覆盖 EP64/128<br/>独立 low_latency kernel"]:::ll
+  HT["高吞吐路径 HT<br/>容量由 Buffer 自动估算 · 覆盖 EP32/64/128/256<br/>Notify + dispatch/combine kernel"]:::ht
+  MM["MegaMoE（实验性）：通信与计算融合<br/>Dispatch + GMM1 + SwiGLU + GMM2 + Combine 一次前向"]:::mm
+  QA["量化推理 fp8_fp4_mega_moe()<br/>W4A8 · Prefill EP32/64/128 · Decode EP64/128"]:::mm2
+  BF["BF16 推理与训练 bf16_mega_moe()<br/>训练走 PyTorch autograd 反向"]:::mm2
+  INIT --> SEL
+  SEL -->|"是（小批量 decode）"| LL
+  SEL -->|"否（prefill / 大批）"| HT
+  HT -.->|"把通信搬进算子内"| MM
+  LL -.->|"小批量融合形态"| MM
+  MM --> QA
+  MM --> BF
+  classDef in fill:#eff6ff,stroke:#2563eb
+  classDef q fill:#fffbeb,stroke:#d97706
+  classDef ll fill:#fef2f2,stroke:#dc2626
+  classDef ht fill:#f0fdf4,stroke:#15803d
+  classDef mm fill:#f5f3ff,stroke:#7c3aed
+  classDef mm2 fill:#fff,stroke:#7c3aed,stroke-dasharray:4 3
+</pre></div>
+<div class="figcap">图 4 · HT / LL 分档与 MegaMoE 融合：把「分发 → 两次 GMM → 激活 → 归并」搬进一次前向</div>
+<table>
+<tr><th>维度</th><th>高吞吐 HT</th><th>低时延 LL</th></tr>
+<tr><td data-l="维度">进入条件</td><td data-l="高吞吐 HT">num_max_tokens_per_rank > 256（容量上限，非实际 token 数）</td><td data-l="低时延 LL">num_max_tokens_per_rank ≤ 256</td></tr>
+<tr><td data-l="维度">工作区</td><td data-l="高吞吐 HT">容量由 Buffer 自动估算</td><td data-l="低时延 LL">固定 8 GiB 对称工作区</td></tr>
+<tr><td data-l="维度">EP 覆盖</td><td data-l="高吞吐 HT">EP32 / 64 / 128 / 256</td><td data-l="低时延 LL">EP64 / 128</td></tr>
+<tr><td data-l="维度">kernel</td><td data-l="高吞吐 HT">Notify → dispatch / combine</td><td data-l="低时延 LL">独立 low_latency kernel（同组方法进入）</td></tr>
+<tr><td data-l="维度">典型场景</td><td data-l="高吞吐 HT">prefill / 大批量训练</td><td data-l="低时延 LL">小批量 decode</td></tr>
+<tr><td data-l="维度">计数与路由</td><td data-l="高吞吐 HT">Notify 建表，字段与布局公开可解释</td><td data-l="低时延 LL">内部管理，不能按 HT 的字段与布局解释</td></tr>
+</table>
+<div class="figcap">表 2 · HT 与 LL 的行为差异（整理自 docs/architecture.md 与 elastic.md）</div>
+<p><span class="lead">MegaMoE 是把上一节的两步通信再往前推一步：</span>dispatch、GMM1、SwiGLU、GMM2、combine 五个动作融进<b>一次前向调用</b>，量化推理入口 <code>fp8_fp4_mega_moe()</code>，BF16 推理与训练共用 <code>bf16_mega_moe()</code>（训练经 PyTorch autograd 出输入、路由权重、专家权重三路梯度）。两条路共用 <code>SymmBuffer</code>、Host 扩展和 SHMEM 运行时；多机靠所有 rank 设置同一个 <code>DEEPEP_SHMEM_ENDPOINT</code>。另一个实验入口 EpGmmFused 则把 AllToAllV 与 GMM 双向拼接（AllToAllV→GMM、GMM→AllToAllV），走 UDMA 运行时。</p>
+
+<h2 id="s6">六、三种拓扑入口：同一个库，三种组网</h2>
+<p><span class="lead">机器互联形态决定了能走哪条 kernel：</span>仓库把入口分成三个，共 <code>dependencies.lock.json</code> 固定版本的 CANN SHMEM；「域」指物理互联域，不对应 EP/TP/PP 进程组，<code>direct</code> 只是内部实现名（按 EP peer 直接组织通信）。</p>
+<table>
+<tr><th>拓扑入口</th><th>互联形态</th><th>复用实现</th><th>硬件条件</th></tr>
+<tr><td data-l="拓扑入口">Mesh+PCIe（mesh_pcie）</td><td data-l="互联形态">同机四卡 Mesh · PCIe 互联</td><td data-l="复用实现">Direct 的 MTE kernel</td><td data-l="硬件条件">当前适配 board 0x6c 的 Mesh 产品；要求同机 EP 与有效远端内存映射</td></tr>
+<tr><td data-l="拓扑入口">Mesh+Clos（mesh_clos）</td><td data-l="互联形态">域内 Full Mesh · 域间 Clos</td><td data-l="复用实现">HT / LL / MegaMoE 全套</td><td data-l="硬件条件">本仓主力路径，README 的 HT/LL/MegaMoE 描述对应这条</td></tr>
+<tr><td data-l="拓扑入口">Global Clos（global_clos）</td><td data-l="互联形态">全 Clos 组网</td><td data-l="复用实现">Direct 的 UDMA kernel</td><td data-l="硬件条件">大规模跨域场景；与 Mesh+PCIe 共用 direct 接口与资源实现</td></tr>
+</table>
+<div class="figcap">表 3 · Mesh+PCIe / Mesh+Clos / Global Clos 三种拓扑入口（整理自 docs/machine_backends.md）</div>
+<p><span class="lead">Server 级去重的口径也写明了：</span>当前实现按<b>连续 8 个 rank</b> 划分逻辑 Server 做 token 去重，逻辑 Server 不必与物理主机一一对应。装机前用 <code>scripts/check_machine.py</code> 校验物理卡号与期望拓扑（如全 Clos 八卡），输出 JSON 报告。默认分核为 32 AIV：V2 fresh dispatch 默认 32 核，cached dispatch 与 combine 沿用 handle 里的核数（含显式 64 核的 handle）。</p>
+
+<h2 id="s7">七、踩在 CANN 的哪几块地基上</h2>
+<p><span class="lead">把图 1 底下三层拆开看，依赖链非常明确：</span></p>
+<ul>
+<li><b>CANN SHMEM（通信基础）：</b>对称工作区、远端访存、同步原语都从它来；版本由 <code>dependencies.lock.json</code> 锁定，wheel 自带构建所用的 SHMEM 运行库——装好后只需加载匹配的 CANN 环境，不必手动设 <code>SHMEM_ROOT</code>（它只决定构建时用哪个 SDK）。</li>
+<li><b>URMA（高吞吐路径）：</b>Prefill 的 dispatch/combine 基于统一远端内存访问；UDMA 则是 EpGmmFused 融合算子与 Global Clos 拓扑的运行时。</li>
+<li><b>Ascend C / Bisheng（算子与编译）：</b>设备算子用 Ascend C 写，Bisheng 编译成 <code>libdeepep_kernels.so</code>；CANN 9.2.0 配套 Q3 HDK 是 README 写明的性能前提。</li>
+<li><b>CATLASS / CatCCOS（MegaMoE 计算）：</b>融合算子里的两次专家 GMM 与量化由计算模板库承担，MegaMoE 构建脚本会准备 CATLASS 与 SHMEM 依赖。</li>
+</ul>
+<p><span class="lead">版本门槛要念一遍：</span>Linux、Ascend950、CANN 9.2.0（配套 Q3 HDK）、Python ≥ 3.11、PyTorch 与 torch_npu、CMake ≥ 3.20；构建期 <code>DEEPEP_NPU_ARCH=Ascend950</code>；运行期 <code>DEEPEP_SHMEM_ENDPOINT</code>（EP 作业共享初始化）与 <code>ASCEND_RT_VISIBLE_DEVICES</code>（设备分配）。</p>
+
+<h2 id="s8">八、vllm-ascend 的衔接：一个未合入的实验 PR</h2>
+<p><span class="lead">衔接现状一句话：</span>vllm-ascend 从 2026-04 起挂着 feature 请求（#8550），2026-11-06 出现实质进展——PR #21178 <b>为 eager TP1/DP8/EP8 增加实验性 DeepEP HT 通信</b>，硬件验证后移植到 main 分支，但截至本文写作<b>尚未合入</b>（closed, not merged），且默认关闭、opt-in。选它的 wheel 是刻意声明过的：<code>ascend_deepep==0.1.0.dev5</code>，构建自 lueelu/DeepEP 的 <code>89e1939</code> 提交——不是上游 CUDA 包。</p>
+<div class="mermaid-wrap"><pre class="mermaid">
+flowchart TD
+  CFG["additional_config：deepEP 开关（默认关闭 · opt-in）"]:::cfg
+  MCM["moe_comm_method.py：选路<br/>既有通信方法 ↔ DeepEPCommImpl"]:::va
+  IMPL["DeepEPCommImpl（PR 21178 新增 213 行）<br/>PrepareAndFinalizeWithDeepEP：DP 各 rank token 数不齐 → 补齐对齐 · 失效填充路由<br/>TokenDispatcherWithDeepEP：token_dispatch / token_combine"]:::va
+  BUF["deep_ep.ElasticBuffer（ascend_deepep wheel）<br/>同 shape 层共享一个通信 Buffer"]:::dep
+  LD["加载 wheel 自带 SHMEM 库<br/>ctypes.RTLD_DEEPBIND 隔离 HYBM 符号<br/>避免绑到 memfabric_hybrid 的未初始化设备态"]:::dep
+  SH["CANN SHMEM 运行时（memfabric_hybrid 等）"]:::cann
+  CFG --> MCM --> IMPL --> BUF
+  BUF --> LD --> SH
+  classDef cfg fill:#fffbeb,stroke:#d97706
+  classDef va fill:#eff6ff,stroke:#2563eb
+  classDef dep fill:#f5f3ff,stroke:#7c3aed
+  classDef cann fill:#f1f5f9,stroke:#64748b
+</pre></div>
+<div class="figcap">图 5 · PR 21178 的集成链：additional_config 开关 → MoE 通信选路 → dispatch/combine 封装 → ElasticBuffer → SHMEM 运行时</div>
+<p><span class="lead">集成代码不长，213 行新增里做了四件事：</span></p>
+<ul>
+<li><b>token 分发封装：</b><code>TokenDispatcherWithDeepEP</code> 把 dispatch/combine 接进 MoE 的 token 流；<b>同 shape 的层共享一个通信 Buffer</b>，避免每层重建。</li>
+<li><b>DP 不齐的处理：</b><code>PrepareAndFinalizeWithDeepEP</code> 对各 rank token 数不一致做补齐与对齐、对填充位做路由失效、最后裁掉填充输出；接收不到专家行的 rank 仍参与 combine（EP 通信要求全组同序到场）。</li>
+<li><b>乘权口径：</b>路由权重在专家 MLP 之后<b>只乘一次</b>，与本文第四节的库侧口径对齐。</li>
+<li><b>私有 SHMEM 隔离：</b>加载 wheel 自带 SHMEM 库时用 <code>RTLD_DEEPBIND</code>——<code>memfabric_hybrid</code> 导出同名的 C++ HYBM 符号，不加隔离时 SHMEM 设备 getter 会绑到 memfabric 的未初始化设备态（-1）。</li>
+</ul>
+<table>
+<tr><th>文件</th><th>改动</th><th>内容</th></tr>
+<tr><td data-l="文件">vllm_ascend/ops/fused_moe/deepep_comm.py</td><td data-l="改动">新增 +213</td><td data-l="内容">DeepEPCommImpl / TokenDispatcherWithDeepEP / PrepareAndFinalizeWithDeepEP / 私有 SHMEM 加载</td></tr>
+<tr><td data-l="文件">vllm_ascend/ops/fused_moe/moe_comm_method.py</td><td data-l="改动">修改 +8</td><td data-l="内容">在 MoE 通信方法里接入 DeepEP 选路</td></tr>
+<tr><td data-l="文件">vllm_ascend/ascend_config.py</td><td data-l="改动">修改 +14</td><td data-l="内容">additional_config 增加 DeepEP 开关（默认关闭）</td></tr>
+<tr><td data-l="文件">tests/ut/ops/test_deepep_comm.py</td><td data-l="改动">新增 +167</td><td data-l="内容">补齐对齐、路由失效、combine 参与等单测</td></tr>
+<tr><td data-l="文件">docs/source/user_guide/configuration/additional_config.md</td><td data-l="改动">修改 +63</td><td data-l="内容">配置文档与不支持组合的拒绝说明</td></tr>
+<tr><td data-l="文件">release_notes/fragments/21178.yaml 等 4 个</td><td data-l="改动">小改动</td><td data-l="内容">发行说明、forward context、typos 词表</td></tr>
+</table>
+<div class="figcap">表 4 · PR 21178 的改动清单（9 个文件，+488 / −2）</div>
+<p><span class="lead">这个 PR 同时是 DeepEP 侧约束的活标本：</span><code>DEEPEP_MIN_HIGH_THROUGHPUT_CAPACITY = 257</code> 把容量上限钉在 257 以强制走 HT——正是第五节那条 ≤ 256 分档线的下游应用；单测覆盖补齐对齐、路由失效、combine 全员参与。也就是说，vllm-ascend 的实验主要在<b>框架侧适配</b>（路由对齐、Buffer 共享、动态库隔离），通信本体全部压在 DeepEP 库内。</p>
+
+<h2 id="s9">九、上手路径与几条边界</h2>
+<p><span class="lead">把仓库自述的路径压缩成四步：</span></p>
+<pre>git clone https://github.com/lueelu/DeepEP.git &amp;&amp; cd DeepEP
+export DEEPEP_NPU_ARCH=Ascend950
+python -m pip install -r requirements-build.txt
+python -m pip install -v --no-build-isolation --no-deps .          # 发行包 ascend-deepep，导入名 deep_ep</pre>
+<p><span class="lead">几条边界读完源码就该知道：</span></p>
+<ul>
+<li><b>性能数字别提前引用：</b>仓库自带 performance 图里，Decode 一张明确标着「待补充——BS 32 / 96 / 256 实测时延」；docs/performance.md 用整节篇幅立规矩——kernel 耗时 ≠ 端到端时延、单 rank 结果不能标为全作业耗时、dispatch 与 combine 的独立测量不能相加当作 roundtrip。</li>
+<li><b>拓扑选择是一次性的：</b>构造 Buffer 时选定后端，后续 dispatch/combine 直接调对应实现；Mesh+PCIe 目前只对已适配的四卡 Mesh 产品开放。</li>
+<li><b>事件语义要按文档来：</b>Python 方法返回和向流添加等待都不等于 CPU 已观察到设备完成；事件只是给消费流建立数据依赖。</li>
+<li><b>销毁要同序：</b>所有 rank 以一致顺序执行通信与 <code>buffer.destroy()</code>，训练时 handle 要保留到反向结束。</li>
+</ul>
+
+<div class="note">
+<b>收个尾：</b>这个仓库把「EP 通信」从推理框架里拆出来单独做厚——接口收成 dispatch/combine 一对，底下按拓扑分三条 kernel 路径，再往上叠一个把通信和专家计算融成一体的 MegaMoE。对 vllm-ascend 而言，它补的是 MoE 专家并行在昇腾上一直缺的那块通信地基；PR 21178 尚未合入，但 213 行集成代码已经把「框架侧要做什么」演示得很具体。
+</div>
+
+<h2 id="s10">相关阅读</h2>
+<ul class="rel-list">
+<li><b>DP 与 TP 与 PCP 卡位关系</b> —— 专家权重按 DP×PCP×TP 池切分的卡位账，与本文 EP 通信是同一件事的两面；
+<a href="DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html">学习html/DP 与 TP 与 PCP</a></li>
+<li><b>Profiling 实战解读：从采集、读数到把变慢钉到单个算子</b> —— dispatch/combine 的耗时异常可以按那套流程钉到具体算子；
+<a href="Profiling 实战解读 · 从采集读数到算子归因.html">学习html/Profiling 实战解读</a></li>
+<li><b>昇腾算子地图</b> —— 本文 Ascend C 算子层在整层前向中的位置可对照那张三层楼；
+<a href="昇腾算子地图 · 从一层前向到三层算子楼.html">学习html/昇腾算子地图</a></li>
+</ul>
+
+<div class="srcnote">
+<b>口径与出处：</b>本文素材来自 lueelu/DeepEP 仓库（commit 5eab714，2026-11-28 克隆）的 README、docs/architecture.md、docs/elastic.md、docs/machine_backends.md、docs/performance.md、csrc/kernels/README.md 与 figures/architecture.svg（图 1 直接采用原图，BSD-2-Clause）；vllm-ascend 侧事实取自 PR 21178（含 deepep_comm.py 全文）与 issue 8550。上游指 deepseek-ai/DeepEP。仓库明示：Decode 性能图当前标注「待补充」，文中未引用任何吞吐/时延数字；接口开关与参数以仓库随附文档及所用版本为准。
+</div>
+
+</div>
+
+<script src="https://cdn.jsdmirror.com/npm/mermaid@11.4.1/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({startOnLoad:true,theme:'neutral',flowchart:{useMaxWidth:false},
+  themeVariables:{fontSize:'22px',primaryColor:'#eff6ff',primaryBorderColor:'#2563eb',lineColor:'#64748b'}});
+</script>
+</body>
+</html>
