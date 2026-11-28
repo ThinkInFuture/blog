@@ -121,6 +121,12 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <button class="carousel-arrow next" onclick="moveCarousel(1)">&rsaquo;</button>
 <div class="carousel-track" id="carouselTrack">
 <div class="carousel-card">
+<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-11-28</span></div>
+<div class="cc-title">DeepEP 昇腾版解读 · MoE 专家并行通信的实现与 CANN、vllm-ascend 衔接</div>
+<div class="cc-desc">一条 ElasticBuffer.dispatch/combine 接口双路径（HT 自动估容 / LL 固定 8 GiB），MegaMoE 把分发、两次 GMM、SwiGLU、归并融成一次前向；vllm-ascend 集成 PR 21178 实验未合入，框架侧 213 行演示了路由对齐与 SHMEM 符号隔离。</div>
+<a class="cc-link" href="学习html/DeepEP 昇腾版 · MoE 专家并行通信的实现与 CANN vllm-ascend 衔接.html">阅读 &rarr;</a>
+</div>
+<div class="carousel-card">
 <div class="cc-meta"><span class="cc-tag">硬件架构</span><span class="cc-date">2026-11-27</span></div>
 <div class="cc-title">Ascend 950 msProf 采集链路 · 从应用打点到 AI Core PMU 的六层落位</div>
 <div class="cc-desc">六层泳道图逐层对齐层级、组件与采集项，彩色圆点标出每个采集项在硬件上的取数位置；950 的三个变化：syscnt 替代 cycle 计数、CV 直通让 L2 读数变小、1 AIC : 2 AIV 必须分泳道看。</div>
@@ -144,19 +150,13 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="cc-desc">KDA 固定状态 + NoPE 稀疏 MLA + KeyPool 两段式索引：三类状态 × 五条链路（prefix/MTP/图执行/长上下文/并行）逐格校验矩阵；核心路径已通，PCP/细粒度 prefix/torch.compile/LI 量化仍 open；附关键源码逐行注释</div>
 <a class="cc-link" href="学习html/RFC15665-GLM53F适配路线全读.html">阅读 &rarr;</a>
 </div>
-<div class="carousel-card">
-<div class="cc-meta"><span class="cc-tag">vLLM 源码</span><span class="cc-date">2026-10-31</span></div>
-<div class="cc-title">DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡</div>
-<div class="cc-desc">主流 MoE 部署的卡位网格：专家权重按 DP×PCP×TP 池切分（例3 整机 32 卡每卡 1/32 专家），dense 部分按 TP 切；TP 切 dense 层时每 Block 两次 AllReduce；纯 dense 模型作附录对照</div>
-<a class="cc-link" href="学习html/DP 与 TP 与 PCP 卡位关系 · 输入切分和权重切分如何落到每张卡.html">阅读 &rarr;</a>
-</div>
 </div>
 <div class="carousel-dots" id="carouselDots"></div>
 </div>
 
 <div class="wrap">
 <div class="metrics">
-<div class="metric"><div class="mv">58</div><div class="ml">学习专区</div></div>
+<div class="metric"><div class="mv">59</div><div class="ml">学习专区</div></div>
 <div class="metric"><div class="mv">6</div><div class="ml">实验专区</div></div>
 <div class="metric"><div class="mv">2</div><div class="ml">模型专区</div></div>
 </div>
@@ -164,22 +164,22 @@ footer{padding:40px 0;border-top:1px solid #eee}
 <div class="sec" id="learning">
 <div class="sec-head">
 <div class="sec-title">学习专区</div>
-<div class="sec-badge">58 篇 · 9 个专题</div>
+<div class="sec-badge">59 篇 · 9 个专题</div>
 </div>
 <div class="sec-desc">系统化的 AI 推理优化技术学习记录，按发布时间倒序</div>
 <div class="zone-chips" id="topicChips">
-<button class="chip active" data-topic="all">全部<span class="count">58</span></button>
+<button class="chip active" data-topic="all">全部<span class="count">59</span></button>
 <button class="chip" data-topic="soul">灵魂拷问<span class="count">2</span></button>
 <button class="chip" data-topic="evolve">模型演进<span class="count">3</span></button>
 <button class="chip" data-topic="accel">推理加速<span class="count">8</span></button>
-<button class="chip" data-topic="vllm">vLLM 源码<span class="count">19</span></button>
+<button class="chip" data-topic="vllm">vLLM 源码<span class="count">20</span></button>
 <button class="chip" data-topic="dsinfer">DeepSeek 推理<span class="count">4</span></button>
 <button class="chip" data-topic="quant">量化与格式<span class="count">3</span></button>
 <button class="chip" data-topic="ops">算子与编程<span class="count">6</span></button>
 <button class="chip" data-topic="hw">硬件架构<span class="count">5</span></button>
 <button class="chip" data-topic="theory">基础理论<span class="count">8</span></button>
 </div>
-<ul class="list" id="learningList"><li class="li" data-topic="hw" data-ts="20261127"><a href="学习html/Ascend 950 msProf 采集链路 · 从应用打点到 AI Core PMU 的六层落位.html"><span class="li-date">2026-11-27</span><span class="li-main"><span class="li-title">Ascend 950 msProf 采集链路：从应用打点到 AI Core PMU 的六层落位<span class="li-tag">硬件架构</span></span><span class="li-desc">六层泳道图逐层对齐层级、组件与采集项：L1 应用打点 → L2 CANN 参数收敛 → L3 驱动通道 → L4 STARS2.0 调度 → L5 AI Core PMU（AIC/AIV 分离）→ L6 L2 与片上内存；并说明 syscnt 替代 cycle、CV 直通使 L2 读数变小、1 AIC : 2 AIV 必须分泳道看三个变化</span></span></a></li><li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/DS41F-显存逐卡账两形态.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash 显存拆解：PCP4 / DP4 / 8 卡 P 与 D 形态逐卡对照<span class="li-tag">vLLM 源码</span></span><span class="li-desc">16 并发逐卡显存账：单副本权重 292.8 GiB（专家 278.9 可 EP 切 · 稠密 8.1 · 词嵌入 5.8）；PCP4/DP4 单机 4 卡每卡 103.54/107.35 GiB，PCP8/DP8 8 卡每卡 61.17/64.18 GiB；50%/无/32K 最坏三种 prefix 场景与 kv_cache_memory_bytes 配置建议</span></span></a></li>
+<ul class="list" id="learningList"><li class="li" data-topic="vllm" data-ts="20261128"><a href="学习html/DeepEP 昇腾版 · MoE 专家并行通信的实现与 CANN vllm-ascend 衔接.html"><span class="li-date">2026-11-28</span><span class="li-main"><span class="li-title">DeepEP 昇腾版解读：MoE 专家并行通信的实现与 CANN、vllm-ascend 衔接<span class="li-tag">vLLM 源码</span></span><span class="li-desc">lueelu/DeepEP 源码全景：ElasticBuffer 的 dispatch/combine 与 handle 复用、HT/LL 双路径分档、MegaMoE 把 Dispatch+GMM1+SwiGLU+GMM2+Combine 融成一次前向；三种拓扑入口共踩 CANN SHMEM；vllm-ascend 的实验集成 PR 21178（RTLD_DEEPBIND 隔离 memfabric_hybrid）尚未合入</span></span></a></li><li class="li" data-topic="hw" data-ts="20261127"><a href="学习html/Ascend 950 msProf 采集链路 · 从应用打点到 AI Core PMU 的六层落位.html"><span class="li-date">2026-11-27</span><span class="li-main"><span class="li-title">Ascend 950 msProf 采集链路：从应用打点到 AI Core PMU 的六层落位<span class="li-tag">硬件架构</span></span><span class="li-desc">六层泳道图逐层对齐层级、组件与采集项：L1 应用打点 → L2 CANN 参数收敛 → L3 驱动通道 → L4 STARS2.0 调度 → L5 AI Core PMU（AIC/AIV 分离）→ L6 L2 与片上内存；并说明 syscnt 替代 cycle、CV 直通使 L2 读数变小、1 AIC : 2 AIV 必须分泳道看三个变化</span></span></a></li><li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/DS41F-显存逐卡账两形态.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash 显存拆解：PCP4 / DP4 / 8 卡 P 与 D 形态逐卡对照<span class="li-tag">vLLM 源码</span></span><span class="li-desc">16 并发逐卡显存账：单副本权重 292.8 GiB（专家 278.9 可 EP 切 · 稠密 8.1 · 词嵌入 5.8）；PCP4/DP4 单机 4 卡每卡 103.54/107.35 GiB，PCP8/DP8 8 卡每卡 61.17/64.18 GiB；50%/无/32K 最坏三种 prefix 场景与 kv_cache_memory_bytes 配置建议</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/DS41F-PD部署参数逐条拆解.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">DeepSeek V4.1-Flash PD 分离部署 · 参数逐条详解<span class="li-tag">vLLM 源码</span></span><span class="li-desc">950DT 实战 PD 分离逐参数讲解：P 端 TP1×PCP8×DP1+EP8 推 KV，D 端 DP8×TP1+EP8 拉 KV 走 FULL_DECODE_ONLY（TPOT 218→16.4ms）；proxy 两腿转发与 kv_transfer_params 红线；15 张参数表 + P/D 差异速查 + 1P/2P/3P 实测口径</span></span></a></li>
 <li class="li" data-topic="vllm" data-ts="20261113"><a href="学习html/RFC15665-GLM53F适配路线全读.html"><span class="li-date">2026-11-13</span><span class="li-main"><span class="li-title">vllm-ascend RFC 15665 解读：GLM-5.3-Flash 适配路线图<span class="li-tag">vLLM 源码</span></span><span class="li-desc">GLM-5.3-Flash 官方总跟踪单逐段解读：KDA 固定状态 + NoPE 稀疏 MLA + KeyPool 两段式索引——三类状态 × 五条链路校验矩阵；50+ 已合并 / 20+ open，8 步实施顺序 4/8；末尾附 indexer 解耦与 KDA/SFA 关键源码带逐行注释</span></span></a></li>
 <li class="li" data-topic="dsinfer" data-ts="20261108"><a href="学习html/扩散草稿树复现加速记.html"><span class="li-date">2026-11-08</span><span class="li-main"><span class="li-title">扩散模型混进投机解码：FlashMap 给大模型当草稿，昇腾复现 4.70x<span class="li-tag">DeepSeek 推理</span></span><span class="li-desc">用 DiT 扩散模型一步跳出 16 Token 草稿：多层隐状态+Anchor+KV Cache 三路条件、单步 Flow Map、复用 Target lm_head；Qwen3-8B + FlashMap 昇腾 10k 实测平均加速 4.696x、平均接受 8.55 Token——对比 DSpark 的先并行后修正，FlashMap 靠架构原生自洽</span></span></a></li>
